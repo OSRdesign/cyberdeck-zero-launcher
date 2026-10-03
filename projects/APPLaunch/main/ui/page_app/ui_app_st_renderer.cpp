@@ -15,17 +15,22 @@ void UISTPage::create_ui()
     if (!terminal_container_) return;
     lv_obj_add_event_cb(terminal_container_, static_renderer_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_remove_style_all(terminal_container_);
-    lv_obj_set_size(terminal_container_, TERM_W, TERM_H);
+    lv_obj_set_size(terminal_container_, term_w_, term_h_);
     lv_obj_set_pos(terminal_container_, 0, 0);
     lv_obj_set_style_bg_color(terminal_container_, palette(DEFAULT_BG), 0);
     lv_obj_set_style_bg_opa(terminal_container_, LV_OPA_COVER, 0);
     lv_obj_clear_flag(terminal_container_,
                       static_cast<lv_obj_flag_t>(LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE));
+    if (native_) {
+        // Touch: dragging the terminal scrolls through the scrollback history.
+        lv_obj_add_flag(terminal_container_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(terminal_container_, UISTPage::static_drag_cb, LV_EVENT_ALL, this);
+    }
 
     term_canvas_ = lv_obj_create(terminal_container_);
     if (!term_canvas_) return;
     lv_obj_add_event_cb(term_canvas_, static_renderer_delete_cb, LV_EVENT_DELETE, this);
-    lv_obj_set_size(term_canvas_, TERM_W, TERM_H);
+    lv_obj_set_size(term_canvas_, term_w_, term_h_);
     lv_obj_set_pos(term_canvas_, 0, 0);
     lv_obj_set_style_bg_color(term_canvas_, palette(DEFAULT_BG), 0);
     lv_obj_set_style_bg_opa(term_canvas_, LV_OPA_COVER, 0);
@@ -50,26 +55,26 @@ void UISTPage::create_ui()
                                                      LV_OBJ_FLAG_SCROLLABLE));
         lv_obj_add_flag(*object, LV_OBJ_FLAG_HIDDEN);
     };
-    create_scrollbar(&scrollbar_track_, SCROLLBAR_W, TERM_H,
-                     TERM_W - SCROLLBAR_W - 1, 0, 0x30363D);
+    create_scrollbar(&scrollbar_track_, SCROLLBAR_W, term_h_,
+                     term_w_ - SCROLLBAR_W - 1, 0, 0x30363D);
     create_scrollbar(&scrollbar_thumb_, SCROLLBAR_W, 8,
-                     TERM_W - SCROLLBAR_W - 1, TERM_H - 8, 0x8B949E);
-    create_scrollbar(&hscrollbar_track_, TERM_W - SCROLLBAR_W - 2, 3,
-                     0, BIG_VIEW_ROWS * CHAR_H, 0x30363D);
+                     term_w_ - SCROLLBAR_W - 1, term_h_ - 8, 0x8B949E);
+    create_scrollbar(&hscrollbar_track_, term_w_ - SCROLLBAR_W - 2, 3,
+                     0, big_view_rows() * char_h_, 0x30363D);
     create_scrollbar(&hscrollbar_thumb_, 18, 3,
-                     0, BIG_VIEW_ROWS * CHAR_H, 0x8B949E);
+                     0, big_view_rows() * char_h_, 0x8B949E);
 
     static constexpr const char *BOTTOM_TEXT[BOTTOM_BAR_SLOTS] = {
         "F4 " LV_SYMBOL_LEFT, "F5 " LV_SYMBOL_UP, "F6 normal",
         "F7 " LV_SYMBOL_DOWN, "F8 " LV_SYMBOL_RIGHT,
     };
-    constexpr int SLOT_WIDTH = TERM_W / BOTTOM_BAR_SLOTS;
+    const int SLOT_WIDTH = term_w_ / BOTTOM_BAR_SLOTS;
     for (int index = 0; index < BOTTOM_BAR_SLOTS; ++index) {
         size_t slot = static_cast<size_t>(index);
         bottom_labels_[slot] = lv_label_create(terminal_container_);
         if (bottom_labels_[slot]) {
             lv_obj_add_event_cb(bottom_labels_[slot], static_renderer_delete_cb, LV_EVENT_DELETE, this);
-            lv_obj_set_pos(bottom_labels_[slot], index * SLOT_WIDTH, TERM_H - BIG_BOTTOM_H);
+            lv_obj_set_pos(bottom_labels_[slot], index * SLOT_WIDTH, term_h_ - BIG_BOTTOM_H);
             lv_obj_set_size(bottom_labels_[slot], SLOT_WIDTH, BIG_BOTTOM_H);
             lv_obj_set_style_text_font(bottom_labels_[slot], &lv_font_montserrat_12, 0);
             lv_obj_set_style_text_color(bottom_labels_[slot], lv_color_hex(0xF0F6FC), 0);
@@ -82,7 +87,7 @@ void UISTPage::create_ui()
         bottom_indicators_[slot] = lv_label_create(terminal_container_);
         if (bottom_indicators_[slot]) {
             lv_obj_add_event_cb(bottom_indicators_[slot], static_renderer_delete_cb, LV_EVENT_DELETE, this);
-            lv_obj_set_pos(bottom_indicators_[slot], index * SLOT_WIDTH, TERM_H - 4);
+            lv_obj_set_pos(bottom_indicators_[slot], index * SLOT_WIDTH, term_h_ - 4);
             lv_obj_set_size(bottom_indicators_[slot], SLOT_WIDTH, 4);
             lv_obj_set_style_text_font(bottom_indicators_[slot], &lv_font_montserrat_12, 0);
             lv_obj_set_style_text_color(bottom_indicators_[slot], lv_color_hex(0x8B949E), 0);
@@ -93,13 +98,13 @@ void UISTPage::create_ui()
     }
 
     lv_font_t *primary = launcher_fonts().get(
-        "JetBrainsMono-Bold.ttf", font_size(FontSize::Terminal),
+        "JetBrainsMono-Bold.ttf", font_px_,
         LV_FREETYPE_FONT_STYLE_NORMAL, LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
     lv_font_t *cjk = launcher_fonts().get(
-        "AlibabaPuHuiTi-3-55-Regular.ttf", font_size(FontSize::Terminal),
+        "AlibabaPuHuiTi-3-55-Regular.ttf", font_px_,
         LV_FREETYPE_FONT_STYLE_NORMAL, LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
     lv_font_t *symbols = launcher_fonts().get(
-        "DejaVuSansMono.ttf", font_size(FontSize::Terminal),
+        "DejaVuSansMono.ttf", font_px_,
         LV_FREETYPE_FONT_STYLE_NORMAL, LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
     if (cjk && symbols && cjk != symbols) cjk->fallback = symbols;
     if (primary && cjk && primary != cjk) primary->fallback = cjk;
@@ -115,7 +120,7 @@ void UISTPage::create_ui()
     lv_obj_set_style_pad_top(cursor_label_, TEXT_Y_PAD, 0);
     lv_obj_set_style_text_letter_space(cursor_label_, 0, 0);
     lv_label_set_long_mode(cursor_label_, LV_LABEL_LONG_CLIP);
-    lv_obj_set_size(cursor_label_, CHAR_W, CHAR_H);
+    lv_obj_set_size(cursor_label_, char_w_, char_h_);
     lv_label_set_text(cursor_label_, " ");
     lv_obj_add_flag(cursor_label_, LV_OBJ_FLAG_HIDDEN);
 }
@@ -397,7 +402,7 @@ lv_obj_t *UISTPage::create_segment_label()
     lv_obj_set_style_text_letter_space(label, 0, 0);
     lv_obj_set_style_text_line_space(label, 0, 0);
     lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_size(label, CHAR_W, CHAR_H);
+    lv_obj_set_size(label, char_w_, char_h_);
     lv_label_set_text(label, " ");
     lv_obj_add_flag(label, LV_OBJ_FLAG_HIDDEN);
     return label;
@@ -474,7 +479,7 @@ void UISTPage::render_row(int row)
         RenderSegment &current = rendered[index];
         if (!current.label) current.label = create_segment_label();
         if (!current.label) continue;
-        int width = wanted.columns * CHAR_W;
+        int width = wanted.columns * char_w_;
         bool changed = current.hidden || current.x != wanted.x || current.width != width ||
                        current.fg != wanted.fg || current.bg != wanted.bg ||
                        current.text != wanted.text;
@@ -487,8 +492,8 @@ void UISTPage::render_row(int row)
         current.bg = wanted.bg;
         current.text = wanted.text;
         lv_obj_clear_flag(current.label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(current.label, wanted.x * CHAR_W, row * CHAR_H);
-        lv_obj_set_size(current.label, width, CHAR_H);
+        lv_obj_set_pos(current.label, wanted.x * char_w_, row * char_h_);
+        lv_obj_set_size(current.label, width, char_h_);
         lv_obj_set_style_text_color(current.label, palette(wanted.fg), 0);
         lv_obj_set_style_bg_color(current.label, palette(wanted.bg), 0);
         lv_label_set_text(current.label, wanted.text.c_str());
@@ -506,7 +511,7 @@ void UISTPage::render_row(int row)
 void UISTPage::render_all()
 {
     int visible_row_count = visible_rows();
-    for (int row = 0; row < ROWS; ++row) {
+    for (int row = 0; row < normal_rows_; ++row) {
         if (row >= visible_row_count) {
             if (dirty_[row]) {
                 for (auto &segment : row_segments_[row]) {
@@ -556,8 +561,8 @@ void UISTPage::update_cursor()
     lv_label_set_text(cursor_label_, text.c_str());
     lv_obj_set_style_text_color(cursor_label_, palette(background), 0);
     lv_obj_set_style_bg_color(cursor_label_, palette(foreground), 0);
-    lv_obj_set_pos(cursor_label_, x * CHAR_W, y * CHAR_H);
-    lv_obj_set_size(cursor_label_, std::max<int>(1, glyph.columns) * CHAR_W, CHAR_H);
+    lv_obj_set_pos(cursor_label_, x * char_w_, y * char_h_);
+    lv_obj_set_size(cursor_label_, std::max<int>(1, glyph.columns) * char_w_, char_h_);
     lv_obj_move_foreground(cursor_label_);
 }
 

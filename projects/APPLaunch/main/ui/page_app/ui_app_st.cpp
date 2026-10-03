@@ -16,6 +16,7 @@
 UISTPage::UISTPage(TerminalHelpFactory help_factory)
     : AppPage(), help_factory_(help_factory)
 {
+    init_geometry();
     set_page_title("CLI");
     reset_terminal();
     create_ui();
@@ -58,8 +59,8 @@ void UISTPage::exec(const std::string &command, const std::list<std::string> &ar
     waiting_key_to_exit_ = false;
     hide_help();
     big_mode_ = false;
-    term_cols_ = NORMAL_COLS;
-    term_rows_ = NORMAL_ROWS;
+    term_cols_ = normal_cols_;
+    term_rows_ = normal_rows_;
     viewport_x_ = 0;
     viewport_y_ = 0;
     big_view_locked_ = false;
@@ -77,6 +78,91 @@ void UISTPage::exec(const std::string &command, const std::list<std::string> &ar
     }
 
     start_command(command, arguments, command.c_str(), "Error: openpty/fork failed\r\n");
+}
+
+// On a display wider than the compat 320x170 the terminal fills the whole panel: the
+// font cell is measured from the actual font and the grid is derived from the pixels.
+void UISTPage::init_geometry()
+{
+    lv_display_t *display = root_screen_ ? lv_obj_get_display(root_screen_) : lv_display_get_default();
+    native_ = display && lv_display_get_horizontal_resolution(display) > COMPAT_TERM_W;
+    if (!native_) return;
+
+    term_w_ = lv_display_get_horizontal_resolution(display);
+    term_h_ = lv_display_get_vertical_resolution(display);
+    font_px_ = 20;
+    if (const char *requested = std::getenv("APPLAUNCH_TERM_FONT")) {
+        const int value = std::atoi(requested);
+        if (value >= 10 && value <= 48) font_px_ = value;
+    }
+    if (const lv_font_t *font = terminal_font()) {
+        const int advance = static_cast<int>(lv_font_get_glyph_width(font, 'M', 0));
+        const int height = static_cast<int>(lv_font_get_line_height(font));
+        if (advance > 0) char_w_ = advance;
+        if (height > 0) char_h_ = height;
+    }
+    normal_cols_ = clamp(term_w_ / char_w_, 20, MAX_COLS);
+    normal_rows_ = clamp(term_h_ / char_h_, 8, MAX_ROWS);
+    term_cols_ = normal_cols_;
+    term_rows_ = normal_rows_;
+    scroll_bot_ = normal_rows_ - 1;
+
+    // No top bar: the container takes the whole screen.
+    disable_top_bar();
+    if (ui_APP_Container) {
+        lv_obj_set_size(ui_APP_Container, term_w_, term_h_);
+        lv_obj_set_pos(ui_APP_Container, 0, 0);
+    }
+    SLOGI("[ST] native terminal %dx%d px, font %d px, cell %dx%d, grid %dx%d", term_w_, term_h_,
+          font_px_, char_w_, char_h_, normal_cols_, normal_rows_);
+}
+
+// rows > 0 scrolls towards older output (finger dragged down), rows < 0 towards the newest.
+void UISTPage::scroll_by_rows(int rows)
+{
+    if (big_mode_ || rows == 0) return;
+    const int limit = static_cast<int>(scrollback_.size());
+    const int target = clamp(scrollback_offset_ + rows, 0, limit);
+    if (target == scrollback_offset_) return;
+    scrollback_offset_ = target;
+    dirty_all();
+    render_all();
+    update_scrollbar();
+}
+
+void UISTPage::drag_cb(lv_event_t *event)
+{
+    switch (lv_event_get_code(event)) {
+    case LV_EVENT_PRESSED:
+        drag_accum_ = 0;
+        break;
+    case LV_EVENT_PRESSING: {
+        lv_indev_t *indev = lv_indev_active();
+        if (!indev) break;
+        lv_point_t vector{};
+        lv_indev_get_vect(indev, &vector);
+        drag_accum_ += vector.y;
+        const int rows = drag_accum_ / char_h_;
+        if (rows != 0) {
+            drag_accum_ -= rows * char_h_;
+            scroll_by_rows(rows);
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void UISTPage::static_drag_cb(lv_event_t *event) noexcept
+{
+    auto *self = static_cast<UISTPage *>(lv_event_get_user_data(event));
+    if (!self) return;
+    try {
+        self->drag_cb(event);
+    } catch (...) {
+        self->recover_callback_failure();
+    }
 }
 
 int UISTPage::clamp(int value, int low, int high)
@@ -105,9 +191,9 @@ lv_color_t UISTPage::palette(uint32_t color)
     return lv_color_hex(COLORS[color < 16 ? color : DEFAULT_FG]);
 }
 
-const lv_font_t *UISTPage::terminal_font()
+const lv_font_t *UISTPage::terminal_font() const
 {
-    return launcher_fonts().get("JetBrainsMono-Bold.ttf", font_size(FontSize::Terminal),
+    return launcher_fonts().get("JetBrainsMono-Bold.ttf", font_px_,
                                 LV_FREETYPE_FONT_STYLE_NORMAL,
                                 LV_FREETYPE_FONT_RENDER_MODE_BITMAP);
 }
@@ -158,7 +244,7 @@ void UISTPage::dirty_row(int row)
         if (view_row >= 0 && view_row < visible_rows()) dirty_[view_row] = true;
         return;
     }
-    if (row >= 0 && row < ROWS) dirty_[row] = true;
+    if (row >= 0 && row < normal_rows_) dirty_[row] = true;
 }
 
 void UISTPage::dirty_all()
@@ -177,17 +263,17 @@ void UISTPage::dirty_all()
 
 int UISTPage::visible_cols() const
 {
-    return NORMAL_COLS;
+    return normal_cols_;
 }
 
 int UISTPage::visible_rows() const
 {
-    return big_mode_ ? BIG_VIEW_ROWS : NORMAL_ROWS;
+    return big_mode_ ? big_view_rows() : normal_rows_;
 }
 
 int UISTPage::visible_h() const
 {
-    return visible_rows() * CHAR_H;
+    return visible_rows() * char_h_;
 }
 
 int UISTPage::max_viewport_x() const

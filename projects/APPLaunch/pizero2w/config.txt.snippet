@@ -1,0 +1,24 @@
+# Waveshare 2.8" DPI LCD (480x640 native) on a Raspberry Pi Zero 2W - the panel part of config.txt that
+# the launcher port was developed and tested with (Raspberry Pi OS Lite, 64-bit, Debian 13 "trixie").
+# Legacy firmware framebuffer (no KMS): /dev/fb0 comes up as 640x480 landscape, 32 bpp.
+# Append this to /boot/firmware/config.txt BEFORE running install.sh, then reboot.
+[all]
+gpio=0-9=a2
+gpio=12-17=a2
+gpio=20-25=a2
+dtoverlay=dpi24
+enable_dpi_lcd=1
+display_default_lcd=1
+extra_transpose_buffer=2
+dpi_group=2
+dpi_mode=87
+dpi_output_format=0x7F216
+hdmi_timings=480 0 26 16 10 640 0 25 10 15 0 0 0 60 0 32000000 1
+dtoverlay=waveshare-28dpi-3b-4b
+dtoverlay=waveshare-28dpi-3b
+dtoverlay=waveshare-28dpi-4b
+display_rotate=1
+
+# install.sh adds, right after the Waveshare overlays above, the PWM backlight (GPIO18):
+#   dtoverlay=pwm,pin=18,func=2
+#   dtoverlay=waveshare-pwm-backlight

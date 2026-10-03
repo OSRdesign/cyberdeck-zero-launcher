@@ -10,6 +10,7 @@
 #include "builtin_app_registry.hpp"
 #include "desktop_app_loader.hpp"
 #include "esc_hold_hint_controller.h"
+#include "native_ui.hpp"
 #include "ui.h"
 #include "generated/page_app.h"
 #include "ui_launch_page.h"
@@ -51,11 +52,29 @@ void Launch::bind_ui()
     esc_hold_hint_controller().set_force_home_callback(esc_force_home_cb, this);
 }
 
+void Launch::launch_index(std::size_t index)
+{
+    const int normalized = normalized_app_index(static_cast<int>(index));
+    if (normalized < 0) return;
+    current_app = normalized;
+    launch_app();
+}
+
+void Launch::show_home()
+{
+    if (native_ui::enabled()) {
+        native_ui::show_home();
+        return;
+    }
+    if (auto page = launch_page_.lock()) page->show_home_screen();
+}
+
 void Launch::launch_app()
 {
     const app *selected = app_at_index(current_app);
     if (!selected) return;
 
+    native_ui::set_launching_app(selected->Name); // touch behaviour follows Settings > Touch
     try {
         selected->launch(this);
     } catch (const std::exception &error) {
@@ -75,7 +94,7 @@ void Launch::lv_go_back_home(void *arg) noexcept
         esc_hold_hint_controller().set_return_home_enabled(false);
         SLOGI("[HOME] lv_go_back_home executing (page=%p)", self->app_Page.get());
         lv_timer_enable(true);
-        if (auto page = self->launch_page_.lock()) page->show_home_screen();
+        self->show_home();
         lv_refr_now(nullptr);
         self->app_Page.reset();
         self->esc_ui_watchdog_.disarm();
@@ -116,7 +135,7 @@ void Launch::abort_page_launch() noexcept
 
     try {
         esc_hold_hint_controller().set_return_home_enabled(false);
-        if (auto page = launch_page_.lock()) page->show_home_screen();
+        show_home();
         app_Page.reset();
     } catch (...) {
         app_Page.reset();
@@ -133,6 +152,7 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause,
                                      TerminalHelpFactory help_factory)
 {
     if (!begin_page_launch()) return;
+    native_ui::begin_page(true); // the terminal fills the whole panel
     SLOGI("Launching terminal app: %s", exec.c_str());
     ui_loading::show("Loading...");
     lv_refr_now(nullptr);
@@ -149,6 +169,21 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause,
 
 void Launch::launch_Exec(const std::string &exec, bool keep_root)
 {
+    // Pi port: run the stock (320x170 framebuffer) app in the scaled compat window. The UI stays
+    // alive while it runs; this returns immediately and the callback brings the home grid back.
+    if (native_ui::enabled()) {
+        ui_screensaver_set_foreground(0);
+        const bool started = native_ui::run_external(exec, keep_root, [this] {
+            show_home();
+            ui_screensaver_set_foreground(1);
+        });
+        if (!started) {
+            ui_screensaver_set_foreground(1);
+            show_home();
+        }
+        return;
+    }
+    native_ui::begin_page(false); // external apps own the framebuffer; keep the compat chrome
     SLOGI("Launching external app: %s (keep_root=%d)", exec.c_str(), keep_root);
     ui_loading::show("Loading...");
     lv_disp_t *disp = lv_disp_get_default();
@@ -173,7 +208,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
 
     lv_timer_enable(true);
     if (indev) lv_indev_set_group(indev, UILaunchPage::home_input_group());
-    if (auto page = launch_page_.lock()) page->show_home_screen();
+    show_home();
     ui_loading::hide();
     lv_obj_invalidate(lv_screen_active());
     lv_refr_now(disp);
@@ -223,6 +258,7 @@ void Launch::refresh_home_carousel()
     if (normalized < 0) return;
     current_app = normalized;
     if (auto page = launch_page_.lock()) page->refresh_carousel();
+    native_ui::refresh_apps();
 }
 
 void Launch::reload_home_icons()
@@ -235,6 +271,7 @@ void Launch::reload_home_icons()
     for (const app &item : app_list)
         icon_paths.push_back(item.Icon);
     if (auto page = launch_page_.lock()) page->reload_home_icons(icon_paths);
+    native_ui::refresh_apps();
 }
 
 void Launch::applications_reload()

@@ -1,0 +1,13 @@
+# Network time is the default at every boot: a manually set clock (Settings > Date & Time >
+# Set Manually) lasts for the session only, because the Pi has no hardware RTC.
+# Install to /etc/systemd/system/ and: systemctl enable launcher-ntp-default.service
+[Unit]
+Description=Enable network time at boot (launcher default)
+After=dbus.service systemd-timedated.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/timedatectl set-ntp true
+
+[Install]
+WantedBy=multi-user.target

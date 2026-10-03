@@ -230,6 +230,22 @@ int suspend_backlight()
     return previous;
 }
 
+int dim_backlight(int percent)
+{
+    std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
+    const int maximum = backlight_max();
+    int previous = read_backlight_raw(maximum);
+    if (previous <= 0) {
+        const int fallback_index = setup_values::brightness_step_index(
+            model.brightness_or(setup_values::kBrightnessMaxPercent));
+        previous = setup_values::brightness_step_value(fallback_index, maximum);
+    }
+    const int target = std::max(1, maximum * std::clamp(percent, 1, 100) / 100);
+    if (previous <= target) return previous; // already at least that dark: leave it alone
+    if (write_backlight_raw(target) < 0) return -1;
+    return previous;
+}
+
 void restore_backlight(int raw)
 {
     if (raw <= 0) return;

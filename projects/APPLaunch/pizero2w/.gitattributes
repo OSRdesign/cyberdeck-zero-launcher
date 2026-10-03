@@ -1,0 +1,7 @@
+# Files that run on the Pi must keep LF line endings even when checked out on Windows.
+*.sh text eol=lf
+*.rules text eol=lf
+*.service text eol=lf
+*.dts text eol=lf
+*.snippet text eol=lf
+*.c text eol=lf

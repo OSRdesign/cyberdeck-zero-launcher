@@ -1,0 +1,4 @@
+# pwm-backlight starts "powered down" unless the bootloader had enabled the PWM, which leaves
+# the Waveshare panel dark after every boot. Unblank it as soon as the device appears and let the
+# video group change it (the launcher's screen-off handling writes bl_power).
+SUBSYSTEM=="backlight", KERNEL=="backlight", ACTION=="add", RUN+="/bin/sh -c 'echo 0 > /sys/class/backlight/backlight/bl_power; chgrp video /sys/class/backlight/backlight/bl_power; chmod g+w /sys/class/backlight/backlight/bl_power'"

@@ -1,0 +1,18 @@
+/* The launcher runs as a background user service, which polkit does not treat as an "active"
+ * local session, so Settings > Date & Time and Settings > System > Reboot/Shutdown are refused
+ * ("Interactive authentication required"). Allow administrators (group sudo) to change the
+ * clock settings and to reboot/power off from any session. Nothing else is opened up. */
+polkit.addRule(function(action, subject) {
+    if (!subject.isInGroup("sudo"))
+        return;
+    var power = [
+        "org.freedesktop.login1.reboot",
+        "org.freedesktop.login1.reboot-multiple-sessions",
+        "org.freedesktop.login1.reboot-ignore-inhibit",
+        "org.freedesktop.login1.power-off",
+        "org.freedesktop.login1.power-off-multiple-sessions",
+        "org.freedesktop.login1.power-off-ignore-inhibit"
+    ];
+    if (action.id.indexOf("org.freedesktop.timedate1.") == 0 || power.indexOf(action.id) >= 0)
+        return polkit.Result.YES;
+});

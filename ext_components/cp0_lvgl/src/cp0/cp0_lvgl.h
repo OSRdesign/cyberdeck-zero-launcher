@@ -11,6 +11,8 @@ extern "C" {
 #endif
 
 void init_freambuffer_disp();
+struct _lv_display_t;
+struct _lv_display_t *cp0_dpi_scaled_create(void);
 void init_input();
 void deinit_input(void);
 void init_filesystem(void);

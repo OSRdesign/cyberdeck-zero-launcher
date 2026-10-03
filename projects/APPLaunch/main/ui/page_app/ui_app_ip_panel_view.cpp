@@ -6,6 +6,7 @@
 
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_ip_panel.hpp"
+#include "../settings/settings_hw_profile.hpp"
 
 void UIIpPanelPage::create_ui()
 {
@@ -41,7 +42,7 @@ void UIIpPanelPage::create_ui()
 
     lv_obj_t *hint = lv_label_create(title_bar);
     if (!hint) { lv_obj_delete(background); return; }
-    lv_label_set_text(hint, "Fn+H:Help");
+    lv_label_set_text(hint, APPLAUNCH_TXT_HELP_HINT);
     lv_obj_set_align(hint, LV_ALIGN_RIGHT_MID);
     lv_obj_set_x(hint, -4);
     lv_obj_set_style_text_color(hint, lv_color_hex(0x7EA8D8), LV_PART_MAIN | LV_STATE_DEFAULT);

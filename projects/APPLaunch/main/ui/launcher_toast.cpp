@@ -19,6 +19,16 @@ constexpr lv_coord_t kWidth = 280;
 constexpr lv_coord_t kHeight = 22;
 constexpr lv_coord_t kMultilineHeight = 38;
 constexpr lv_coord_t kTopOffset = 4;
+constexpr int kDesignWidthPx = 320; // the layout above is designed for the 320 px wide display
+
+// The toast is laid out for 320 px; on a wider (native) display it is scaled up so it keeps
+// the same apparent size as the 2x-upscaled compat window.
+int scale_for(const lv_obj_t *object)
+{
+    lv_display_t *display = object ? lv_obj_get_display(object) : lv_display_get_default();
+    const int width = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : kDesignWidthPx;
+    return width / kDesignWidthPx >= 1 ? width / kDesignWidthPx : 1;
+}
 
 } // namespace
 
@@ -35,13 +45,14 @@ bool LauncherToast::ensure_created() noexcept
     container_ = lv_obj_create(parent);
     if (!container_)
         return false;
+    const int scale = scale_for(parent);
     lv_obj_add_event_cb(container_, container_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_remove_style_all(container_);
-    lv_obj_set_size(container_, kWidth, kHeight);
-    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, kTopOffset);
+    lv_obj_set_size(container_, kWidth * scale, kHeight * scale);
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, kTopOffset * scale);
     lv_obj_set_style_bg_color(container_, lv_color_hex(kBackgroundColor), 0);
     lv_obj_set_style_bg_opa(container_, LV_OPA_80, 0);
-    lv_obj_set_style_radius(container_, 6, 0);
+    lv_obj_set_style_radius(container_, 6 * scale, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_shadow_width(container_, 0, 0);
@@ -57,9 +68,9 @@ bool LauncherToast::ensure_created() noexcept
     lv_obj_add_event_cb(label_, label_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_set_style_text_color(label_, lv_color_hex(kTextColor), 0);
     lv_obj_set_style_text_font(
-        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", 12,
+        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", 12 * scale,
                                     LV_FREETYPE_FONT_STYLE_BOLD), 0);
-    lv_obj_set_width(label_, kWidth - 12);
+    lv_obj_set_width(label_, (kWidth - 12) * scale);
     lv_label_set_long_mode(label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label_);
@@ -76,13 +87,17 @@ bool LauncherToast::ensure_created() noexcept
 void LauncherToast::show(const char *text) noexcept
 {
     try {
+    // Follow the active display: the toast lives on a display's top layer.
+    if (container_ && lv_obj_get_display(container_) != lv_display_get_default())
+        lv_obj_delete(container_); // the delete callback clears our handles and timer
     if (!ensure_created())
         return;
 
+    const int scale = scale_for(container_);
     lv_label_set_text(label_, text ? text : "");
-    lv_obj_set_height(container_, text && std::strchr(text, '\n') ? kMultilineHeight : kHeight);
+    lv_obj_set_height(container_, (text && std::strchr(text, '\n') ? kMultilineHeight : kHeight) * scale);
     lv_obj_center(label_);
-    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, kTopOffset);
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, kTopOffset * scale);
     lv_obj_move_foreground(container_);
     lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
     if (!hide_timer_)

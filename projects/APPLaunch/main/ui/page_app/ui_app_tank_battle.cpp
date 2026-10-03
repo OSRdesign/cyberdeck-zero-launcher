@@ -6,6 +6,7 @@
 
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_tank_battle.hpp"
+#include "../settings/settings_hw_profile.hpp"
 
 #include "input_keys.h"
 
@@ -152,7 +153,8 @@ void UITankBattlePage::event_handler(lv_event_t *e)
 
     const key_item *item = launcher_ui::events::keyboard_item(e);
     const bool help_key = item &&
-                          (item->key_code == KEY_HELP || item->semantic_key == KEY_HELP);
+                          (item->key_code == KEY_HELP || item->semantic_key == KEY_HELP ||
+                           (APPLAUNCH_HELP_PLAIN_H && (item->key_code == KEY_H || item->semantic_key == KEY_H)));
     if (help_key && launcher_ui::events::is_key_pressed(e)) {
         toggle_help_view();
         return;

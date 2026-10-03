@@ -1,0 +1,38 @@
+/*
+ * Waveshare 2.8" DPI LCD: replace the on/off gpio-backlight (GPIO18) with a real
+ * PWM backlight so the launcher's Brightness setting and screen-off timeout work.
+ *
+ * Build:   dtc -@ -I dts -O dtb -o waveshare-pwm-backlight.dtbo waveshare-pwm-backlight.dts
+ * Install: copy the .dtbo to /boot/firmware/overlays/ and add to config.txt, AFTER the
+ *          Waveshare overlays:
+ *              dtoverlay=pwm,pin=18,func=2
+ *              dtoverlay=waveshare-pwm-backlight
+ * Revert:  remove those two lines (config.txt.bak-before-pwm keeps the original).
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2835";
+
+	/* the Waveshare overlay adds this node; it owns GPIO18 as an on/off switch */
+	fragment@0 {
+		target-path = "/rpi_backlight";
+		__overlay__ {
+			status = "disabled";
+		};
+	};
+
+	fragment@1 {
+		target-path = "/";
+		__overlay__ {
+			/* named "backlight" -> /sys/class/backlight/backlight, the path the launcher uses */
+			backlight: backlight {
+				compatible = "pwm-backlight";
+				pwms = <&pwm 0 100000 0>; /* PWM0 (GPIO18), 10 kHz, normal polarity */
+				brightness-levels = <0 1 2 3 4 5 6 7 8 9 10>;
+				default-brightness-level = <10>;
+			};
+		};
+	};
+};

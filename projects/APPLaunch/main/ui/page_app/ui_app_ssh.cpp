@@ -6,6 +6,7 @@
 
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_ssh.hpp"
+#include "../native_ui.hpp"
 
 #include "input_keys.h"
 #include "../keyboard_text_input.hpp"
@@ -57,15 +58,20 @@ void UISSHPage::do_connect()
     if (!restore_token_)
         return;
 
+    // The terminal fills the whole panel like the CLI: it takes its layout from the display it is
+    // created on, so switch to the native display first (restore_input_view() switches back).
+    native_ui::begin_page(true);
     try {
         terminal_page_ = std::make_shared<UISTPage>();
     } catch (...) {
+        native_ui::begin_page(false);
         restore_operation_.abort(restore_token_);
         set_status("Unable to create SSH terminal", true);
         return;
     }
     if (!terminal_page_ || !terminal_page_->screen()) {
         terminal_page_.reset();
+        native_ui::begin_page(false);
         restore_operation_.abort(restore_token_);
         set_status("Unable to create SSH screen", true);
         return;
@@ -107,6 +113,7 @@ void UISSHPage::do_connect()
     } catch (...) {
         terminal_page_->navigate_home = nullptr;
         terminal_page_.reset();
+        native_ui::begin_page(false);
         restore_operation_.abort(restore_token_);
         set_status("Unable to start SSH", true);
         return;
@@ -168,6 +175,7 @@ void UISSHPage::save_profile()
 
 void UISSHPage::restore_input_view()
 {
+    native_ui::begin_page(false); // back to the compat window (and its toolbar) for the form
     if (screen()) lv_disp_load_scr(screen());
     if (lv_indev_t *input = lv_indev_get_next(nullptr)) {
         lv_indev_set_group(input, input_group());

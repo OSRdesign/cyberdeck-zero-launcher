@@ -5,6 +5,8 @@
  */
 
 #include "ui_screensaver.h"
+#include "native_screensaver.hpp"
+#include "native_ui.hpp"
 #include "ui_low_battery.h"
 
 #include "cp0_lvgl_app.h"
@@ -548,6 +550,11 @@ void timer_cb(lv_timer_t *timer) noexcept
 
 extern "C" void ui_screensaver_init(void)
 {
+    // The dpi-scaled (Raspberry Pi) port uses the native clock screensaver instead.
+    if (native_ui::enabled()) {
+        native_screensaver::init();
+        return;
+    }
     try {
     if (s_timer)
         return;
@@ -565,6 +572,10 @@ extern "C" void ui_screensaver_init(void)
 
 extern "C" void ui_screensaver_deinit(void)
 {
+    if (native_ui::enabled()) {
+        native_screensaver::shutdown();
+        return;
+    }
     if (s_timer) {
         lv_timer_delete(s_timer);
         s_timer = nullptr;
@@ -585,6 +596,8 @@ extern "C" void ui_screensaver_deinit(void)
 
 extern "C" int ui_screensaver_filter_key(const struct key_item *item)
 {
+    if (native_ui::enabled())
+        return native_screensaver::filter_key(item) ? 1 : 0;
     try {
     if (!item)
         return 0;
@@ -633,11 +646,16 @@ extern "C" int ui_screensaver_filter_key(const struct key_item *item)
 
 extern "C" int ui_screensaver_is_active(void)
 {
+    if (native_ui::enabled()) return native_screensaver::active() ? 1 : 0;
     return s_model.active() || s_exiting;
 }
 
 extern "C" void ui_screensaver_set_foreground(int foreground)
 {
+    if (native_ui::enabled()) {
+        native_screensaver::set_enabled(foreground != 0);
+        return;
+    }
     try {
     stop_screensaver();
     s_model.set_foreground(foreground != 0, lv_tick_get());

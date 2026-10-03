@@ -5,6 +5,11 @@
  */
 
 #include "settings_rtc_page.hpp"
+#include "settings_hw_profile.hpp"
+#if APPLAUNCH_SETTINGS_TIME_NO_SUDO && defined(__linux__) && !defined(HAL_PLATFORM_SDL)
+#include "cp0_timedate_client.hpp"
+#define APPLAUNCH_RTC_USE_DBUS 1
+#endif
 #include "settings_fonts.hpp"
 #include "settings_static_info_page.hpp"
 
@@ -781,6 +786,39 @@ int submit_privileged(std::list<std::string> arguments,
     return 0;
 }
 
+#ifdef APPLAUNCH_RTC_USE_DBUS
+// PolicyKit authorizes the launcher's user for timedate1 (see pizero2w/51-launcher-time-power.rules),
+// so network time and the clock are set over D-Bus: no sudo password, and no `hwclock -w`, which
+// fails on a board without a hardware RTC. The result is delivered like the sudo path's, from a
+// worker thread (the pages marshal it back to the LVGL thread).
+int submit_timedate_dbus(bool ntp, std::string value, PrivilegedCallback callback,
+                         RequestStartedCallback started)
+{
+    if (!callback) return api_error_code(ApiError::InvalidArgument);
+    try {
+        std::thread([ntp, value = std::move(value), callback = std::move(callback),
+                     started = std::move(started)]() mutable {
+            if (started) {
+                try {
+                    started(0, 0); // nothing to cancel: the D-Bus call is short
+                } catch (...) {
+                }
+            }
+            const int rc = ntp ? cp0_timedate_set_ntp(value == "1" ? 1 : 0)
+                               : cp0_timedate_set_time(value.c_str());
+            PrivilegedResult result;
+            result.result_code = rc == 0 ? 0 : 5; // 0 = success, anything else = exec failure
+            result.exit_code = rc == 0 ? 0 : 1;
+            result.kind = classify_privileged_result(result.result_code, result.exit_code);
+            invoke_noexcept(callback, std::move(result));
+        }).detach();
+    } catch (...) {
+        return api_error_code(ApiError::Invocation);
+    }
+    return 0;
+}
+#endif
+
 struct RefreshState {
     std::mutex mutex;
     int remaining = 2;
@@ -875,7 +913,11 @@ int set_ntp_async(bool enabled, PrivilegedCallback callback, RequestStartedCallb
     // unprivileged session with InteractiveAuthorizationRequired, so the write
     // has to go through the sudo coordinator - which also hands back a real,
     // cancellable request id and writes the hardware RTC via `hwclock -w`.
+#ifdef APPLAUNCH_RTC_USE_DBUS
+    return submit_timedate_dbus(true, enabled ? "1" : "0", std::move(callback), std::move(started));
+#else
     return submit_privileged({"NtpSet", enabled ? "1" : "0"}, std::move(callback), std::move(started));
+#endif
 }
 
 int set_time_async(std::string timestamp, PrivilegedCallback callback, RequestStartedCallback started)
@@ -883,7 +925,11 @@ int set_time_async(std::string timestamp, PrivilegedCallback callback, RequestSt
     if (!callback) return api_error_code(ApiError::InvalidArgument);
     RtcValues parsed{};
     if (!RtcStateModel::parse_timestamp(timestamp, parsed)) return api_error_code(ApiError::InvalidArgument);
+#ifdef APPLAUNCH_RTC_USE_DBUS
+    return submit_timedate_dbus(false, std::move(timestamp), std::move(callback), std::move(started));
+#else
     return submit_privileged({"TimeSet", std::move(timestamp)}, std::move(callback), std::move(started));
+#endif
 }
 
 int cancel_request(std::uint64_t request_id)
@@ -1165,17 +1211,17 @@ void LvSettingRtcPage3::install_actions()
             if (command != SettingApiActivate) return SettingApiResult::NotHandled;
             auto *value_page = static_cast<LvSettingValuePage3Base *>(data);
             if (!value_page || value_page->selected_index < 0) {
-                set_error("Invalid RTC value");
+                set_error(APPLAUNCH_TXT_RTC_INVALID_VALUE);
                 return SettingApiResult::Failure;
             }
 
             auto &workflow = settings_rtc::session();
             if (impl_->refresh_pending) {
-                set_error("Reading RTC status");
+                set_error(APPLAUNCH_TXT_RTC_READING_STATUS);
                 return SettingApiResult::Failure;
             }
             if (workflow.pending()) {
-                set_error("RTC operation is pending");
+                set_error(APPLAUNCH_TXT_RTC_OP_PENDING);
                 return SettingApiResult::Failure;
             }
             if (workflow.state().ntp_on()) {
@@ -1232,7 +1278,7 @@ void LvSettingRtcPage3::start_refresh()
     impl_->refresh_pending = true;
     if (!ensure_async_dispatch()) {
         impl_->refresh_pending = false;
-        set_error("RTC refresh unavailable");
+        set_error(APPLAUNCH_TXT_RTC_REFRESH_UNAVAILABLE);
         return;
     }
 
@@ -1257,20 +1303,20 @@ void LvSettingRtcPage3::start_refresh()
                         keep_edits ||
                         (result.time.valid && workflow.load_local_time(result.time.payload));
                     if (!result.ntp.available) set_error("NTP status unavailable");
-                    else if (!time_ok) set_error("RTC time unavailable");
+                    else if (!time_ok) set_error(APPLAUNCH_TXT_RTC_TIME_UNAVAILABLE);
                     else clear_error();
                     select(initial_selection());
                 });
         });
     if (start_result != 0) {
         impl_->refresh_pending = false;
-        set_error("Unable to read RTC status");
+        set_error(APPLAUNCH_TXT_RTC_READ_STATUS_FAILED);
     }
 }
 
 void LvSettingRtcPage3::set_error(const char *message)
 {
-    impl_->last_error = message ? message : "RTC operation failed";
+    impl_->last_error = message ? message : APPLAUNCH_TXT_RTC_OP_FAILED;
     if (impl_->status_label) {
         lv_label_set_text(impl_->status_label, impl_->last_error.c_str());
         lv_obj_clear_flag(impl_->status_label, LV_OBJ_FLAG_HIDDEN);
@@ -1354,7 +1400,7 @@ SettingApiResult LvSettingRtcConfirmPage3::discard_and_leave()
     // request_state is only set between begin_save() and its outcome, which is
     // exactly the condition we want.
     if (impl_->request_state) {
-        set_error("RTC write in progress");
+        set_error(APPLAUNCH_TXT_RTC_WRITE_IN_PROGRESS);
         return SettingApiResult::Failure;
     }
     cancel_backend_request();
@@ -1556,7 +1602,7 @@ SettingApiResult LvSettingRtcConfirmPage3::begin_save(bool allow_before_factory_
     auto &workflow = settings_rtc::session();
     const auto eligibility = workflow.commit_eligibility();
     if (eligibility == settings_rtc::CommitEligibility::NTP_ENABLED) {
-        set_error("Disable NTP before writing RTC");
+        set_error(APPLAUNCH_TXT_RTC_DISABLE_NTP_FIRST);
         return SettingApiResult::Failure;
     }
     if (eligibility == settings_rtc::CommitEligibility::NO_EDITS) {
@@ -1571,7 +1617,7 @@ SettingApiResult LvSettingRtcConfirmPage3::begin_save(bool allow_before_factory_
     }
 
     if (!workflow.begin_time_commit()) {
-        set_error("RTC write is already pending");
+        set_error(APPLAUNCH_TXT_RTC_WRITE_ALREADY_PENDING);
         return SettingApiResult::Failure;
     }
 
@@ -1599,7 +1645,7 @@ SettingApiResult LvSettingRtcConfirmPage3::begin_save(bool allow_before_factory_
     if (start_result != 0) {
         workflow.finish_time_commit(false);
         impl_->request_state.reset();
-        set_error("Unable to start RTC write");
+        set_error(APPLAUNCH_TXT_RTC_WRITE_START_FAILED);
         return SettingApiResult::Failure;
     }
     clear_error();
@@ -1643,13 +1689,13 @@ void LvSettingRtcConfirmPage3::Impl::enqueue_outcome(
 const char *LvSettingRtcConfirmPage3::Impl::error_message(settings_rtc::PrivilegedResultKind result) noexcept
 {
     switch (result) {
-    case settings_rtc::PrivilegedResultKind::AUTH_FAILED: return "RTC authentication failed";
-    case settings_rtc::PrivilegedResultKind::CANCELLED: return "RTC write cancelled";
-    case settings_rtc::PrivilegedResultKind::TIMED_OUT: return "RTC write timed out";
-    case settings_rtc::PrivilegedResultKind::EXEC_FAILED: return "RTC write failed";
+    case settings_rtc::PrivilegedResultKind::AUTH_FAILED: return APPLAUNCH_TXT_RTC_AUTH_FAILED;
+    case settings_rtc::PrivilegedResultKind::CANCELLED: return APPLAUNCH_TXT_RTC_WRITE_CANCELLED;
+    case settings_rtc::PrivilegedResultKind::TIMED_OUT: return APPLAUNCH_TXT_RTC_WRITE_TIMED_OUT;
+    case settings_rtc::PrivilegedResultKind::EXEC_FAILED: return APPLAUNCH_TXT_RTC_WRITE_FAILED;
     case settings_rtc::PrivilegedResultKind::SUCCESS: break;
     }
-    return "RTC write failed";
+    return APPLAUNCH_TXT_RTC_WRITE_FAILED;
 }
 
 void LvSettingRtcConfirmPage3::create_status_label()
@@ -1676,7 +1722,7 @@ void LvSettingRtcConfirmPage3::create_status_label()
 
 void LvSettingRtcConfirmPage3::set_error(const char *message)
 {
-    impl_->last_error = message ? message : "RTC write failed";
+    impl_->last_error = message ? message : APPLAUNCH_TXT_RTC_WRITE_FAILED;
     if (impl_->status_label) {
         lv_label_set_text(impl_->status_label, impl_->last_error.c_str());
         lv_obj_clear_flag(impl_->status_label, LV_OBJ_FLAG_HIDDEN);
@@ -1725,7 +1771,7 @@ void settings_rtc_discard_edits() noexcept
 const ActivationBlock *settings_rtc_manual_edit_block() noexcept
 {
     static constexpr ActivationBlock kInFlight{
-        "RTC operation in progress", "Wait for it to finish, then try again."};
+        APPLAUNCH_TXT_RTC_OP_IN_PROGRESS, "Wait for it to finish, then try again."};
     static constexpr ActivationBlock kUnavailable{
         "Network Time status unavailable", "Cannot change the clock right now."};
     static constexpr ActivationBlock kNetworkTimeOn{

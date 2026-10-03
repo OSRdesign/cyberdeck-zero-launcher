@@ -1,0 +1,9 @@
+/* The launcher runs as a background user service, which polkit does not treat as an "active"
+ * local session, so NetworkManager refuses Wi-Fi scan/connect/enable for it
+ * ("org.freedesktop.NetworkManager.wifi.scan request failed: not authorized").
+ * Allow members of the netdev group to manage NetworkManager from any session. */
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 && subject.isInGroup("netdev")) {
+        return polkit.Result.YES;
+    }
+});

@@ -20,6 +20,11 @@
 
 class UITankBattlePage : public AppPageRoot
 {
+public:
+    // Touch: a swipe is the arrow key for its direction, a tap is Enter.
+    static constexpr bool kTouchSwipe = true;
+    static constexpr unsigned short kSwipeTapKey = 57; // KEY_SPACE: a tap fires
+
 private:
     struct TankVisual {
         lv_obj_t *root = nullptr;

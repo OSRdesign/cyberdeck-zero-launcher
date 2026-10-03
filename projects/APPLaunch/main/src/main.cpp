@@ -27,6 +27,9 @@ int main(void)
     system(bash_init);
     Cp0LvglRunOptions options;
     options.after_resource_init = []() {
+        const char *display_mode = std::getenv("APPLAUNCH_DISPLAY");
+        if (display_mode != nullptr && std::string(display_mode) == "dpi-scaled")
+            return; // Pi Zero 2W: no M5IOE1 backlight GPIO; leave the DPI backlight as-is
         cp0_signal_settings_api({"GpioSet", "BACKLIGHT", "0"}, [](int code, std::string data) {
             if (code == 0)
                 SLOGI("[BOOT] set m5ioe1 line 9 low");

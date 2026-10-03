@@ -10,6 +10,7 @@
 #include "cp0_lvgl_app.h"
 #include "app_directory_watcher.h"
 #include "ui_loading.h"
+#include "native_ui.hpp"
 #include "esc_ui_watchdog.h"
 #include "model/launcher_navigation_model.hpp"
 #include "terminal_help_factory.hpp"
@@ -34,6 +35,56 @@ struct page_t
 
 template <class PageT>
 inline constexpr page_t<PageT> page_v{};
+
+// A page class can opt in to a full-panel (native display) layout with
+// `static constexpr bool kNativeDisplay = true;`.
+template <class PageT, class = void>
+struct page_prefers_native : std::false_type
+{
+};
+
+template <class PageT>
+struct page_prefers_native<PageT, std::void_t<decltype(PageT::kNativeDisplay)>>
+    : std::bool_constant<PageT::kNativeDisplay>
+{
+};
+
+// A page class can ask for key-gesture touch handling (drag = Up/Down, tap = Enter) with
+// `static constexpr bool kTouchList = true;`.
+template <class PageT, class = void>
+struct page_touch_list : std::false_type
+{
+};
+
+template <class PageT>
+struct page_touch_list<PageT, std::void_t<decltype(PageT::kTouchList)>>
+    : std::bool_constant<PageT::kTouchList>
+{
+};
+
+// A game page can ask for swipe/tap touch handling with `static constexpr bool kTouchSwipe = true;`.
+template <class PageT, class = void>
+struct page_touch_swipe : std::false_type
+{
+};
+
+template <class PageT>
+struct page_touch_swipe<PageT, std::void_t<decltype(PageT::kTouchSwipe)>>
+    : std::bool_constant<PageT::kTouchSwipe>
+{
+};
+
+// Optional `static constexpr unsigned short kSwipeTapKey = KEY_...;` picks the key a tap sends.
+template <class PageT, class = void>
+struct page_swipe_tap_key : std::integral_constant<unsigned short, 0>
+{
+};
+
+template <class PageT>
+struct page_swipe_tap_key<PageT, std::void_t<decltype(PageT::kSwipeTapKey)>>
+    : std::integral_constant<unsigned short, PageT::kSwipeTapKey>
+{
+};
 
 struct app
 {
@@ -68,12 +119,15 @@ public:
     std::size_t app_count() const;
     std::size_t current_app_index() const;
     const app *carousel_slot_app(size_t slot) const;
+    const app *app_at(std::size_t index) const { return app_at_index(static_cast<int>(index)); }
     void launch_app();
+    void launch_index(std::size_t index);
 
 private:
     friend struct app;
 
     void go_back_home();
+    void show_home();
     bool begin_page_launch();
     void abort_page_launch() noexcept;
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true,
@@ -108,6 +162,8 @@ app::app(std::string name, std::string icon, page_t<PageT>)
 {
     launch = [](Launch *owner) {
         if (!owner->begin_page_launch()) return;
+        native_ui::begin_page(page_prefers_native<PageT>::value, page_touch_list<PageT>::value,
+                              page_touch_swipe<PageT>::value, page_swipe_tap_key<PageT>::value);
         ui_loading::show("Loading...");
         lv_refr_now(nullptr);
         auto page = std::make_shared<PageT>();
@@ -126,6 +182,8 @@ app::app(std::string name, std::string icon, page_t<PageT>, TerminalHelpFactory 
 {
     launch = [help_factory](Launch *owner) {
         if (!owner->begin_page_launch()) return;
+        native_ui::begin_page(page_prefers_native<PageT>::value, page_touch_list<PageT>::value,
+                              page_touch_swipe<PageT>::value, page_swipe_tap_key<PageT>::value);
         ui_loading::show("Loading...");
         lv_refr_now(nullptr);
         std::shared_ptr<PageT> page;

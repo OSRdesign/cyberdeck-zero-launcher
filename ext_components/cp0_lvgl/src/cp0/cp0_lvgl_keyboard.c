@@ -53,6 +53,10 @@ volatile int LVGL_RUN_FLAGE = 1;
 volatile uint32_t LV_EVENT_KEYBOARD;
 
 static volatile int keyboard_paused_flag = 0;
+/* A standard (PC/Bluetooth) keyboard sends ordinary evdev codes. The Cardputer's matrix keymap reuses
+ * the same numbers for other symbols (52 = '*', 53 = '(' ...), so it must not be applied to them:
+ * APPLAUNCH_STD_KEYBOARD=1 turns it off. */
+static int g_std_keyboard = 0;
 static atomic_bool keyboard_shutdown_requested = false;
 static pthread_t keyboard_read_thread_id;
 static cp0_keyboard_thread_lifecycle_t keyboard_thread_lifecycle = {0};
@@ -201,6 +205,7 @@ struct kbd_ctx {
     bool fn_pressed;
     uint64_t fn_pressed_at_ms;
     unsigned int input_context_generation;
+    uint64_t dev_gone_ms;              /* when our keyboard last disappeared */
 };
 
 static uint64_t monotonic_ms(void)
@@ -263,7 +268,7 @@ static void update_leds(struct kbd_ctx *kc) {
         leds |= LIBINPUT_LED_CAPS_LOCK;
     if (xkb_state_led_name_is_active(kc->state, XKB_LED_NAME_SCROLL) > 0)
         leds |= LIBINPUT_LED_SCROLL_LOCK;
-    libinput_device_led_update(kc->dev, leds);
+    if (kc->dev) libinput_device_led_update(kc->dev, leds);
 }
 
 /* ============================================================
@@ -369,7 +374,7 @@ static void process_key(struct kbd_ctx *kc, uint32_t code, int pressed)
     }
 
     /* ---------- 1. TCA8418 custom keycodes first ---------- */
-    const struct cp0_keyboard_keymap_entry *mapped = cp0_keyboard_keymap_lookup(code);
+    const struct cp0_keyboard_keymap_entry *mapped = g_std_keyboard ? NULL : cp0_keyboard_keymap_lookup(code);
     if (mapped) {
         xkb_keysym_t sym = xkb_keysym_from_name(mapped->sym_name,
                                                 XKB_KEYSYM_NO_FLAGS);
@@ -562,6 +567,22 @@ static void kbd_wake_up(struct kbd_ctx *kc) {
 /* ============================================================
  *  Thread main loop
  * ============================================================ */
+/* Add the keyboard to the libinput path context. Returns NULL (without
+ * logging noise) while the node does not exist, e.g. a Bluetooth keyboard that
+ * is asleep or between reconnects. */
+static struct libinput_device *keyboard_try_add(struct libinput *li, const char *path)
+{
+    if (access(path, R_OK) != 0) return NULL;
+    struct libinput_device *dev = libinput_path_add_device(li, path);
+    if (!dev) return NULL;
+    if (!libinput_device_has_capability(dev, LIBINPUT_DEVICE_CAP_KEYBOARD)) {
+        fprintf(stderr, "%s is not a keyboard device\n", path);
+        libinput_path_remove_device(dev);
+        return NULL;
+    }
+    return dev;
+}
+
 void *keyboard_read_thread(void *argv) {
     char *device_path_arg = argv ? (char *)argv : NULL;
     const char *device_path = device_path_arg ? device_path_arg
@@ -574,15 +595,9 @@ void *keyboard_read_thread(void *argv) {
     kc.li = libinput_path_create_context(&interface, NULL);
     if (!kc.li) { fprintf(stderr, "failed to create libinput context\n"); goto out; }
 
-    kc.dev = libinput_path_add_device(kc.li, device_path);
-    if (!kc.dev) {
-        fprintf(stderr, "Failed to add device %s (root permissions may be required)\n", device_path);
-        goto out;
-    }
-    if (!libinput_device_has_capability(kc.dev, LIBINPUT_DEVICE_CAP_KEYBOARD)) {
-        fprintf(stderr, "%s is not a keyboard device\n", device_path);
-        goto out;
-    }
+    /* The keyboard may not be present yet (Bluetooth); the loop below keeps
+     * retrying and re-attaches after a disconnect. */
+    kc.dev = keyboard_try_add(kc.li, device_path);
 
     /* ---------- 2. xkbcommon ---------- */
     if (init_xkb(&kc, "us", NULL) < 0) goto out;
@@ -598,6 +613,18 @@ void *keyboard_read_thread(void *argv) {
         { .fd = kc.repeat_fd, .events = POLLIN },
     };
 
+    /* A standard keyboard has no Fn key: APPLAUNCH_FN_KEY=<evdev code> makes one of its keys act as
+     * the Cardputer's Fn (e.g. 100 = Right Alt) for the Fn+key shortcuts shown in the apps. */
+    {
+        const char *std_env = getenv("APPLAUNCH_STD_KEYBOARD");
+        g_std_keyboard = std_env && std_env[0] && std_env[0] != '0';
+    }
+    uint32_t fn_alias = 0;
+    {
+        const char *fn_env = getenv("APPLAUNCH_FN_KEY");
+        if (fn_env && fn_env[0]) fn_alias = (uint32_t)strtoul(fn_env, NULL, 0);
+    }
+
     g_libinput = kc.li;
     SLOGI("Start listening for keyboard input (%s)", device_path);
     libinput_dispatch(kc.li);
@@ -608,15 +635,24 @@ void *keyboard_read_thread(void *argv) {
             usleep(50000);
             continue;
         }
+        /* Re-attach only after the device has been gone for a while. libinput
+         * reports a suspend (keyboard_pause) as a removal and re-adds the same
+         * device itself on resume; adding it here too would leave the node
+         * open twice and every key would be delivered twice. */
+        if (!kc.dev && monotonic_ms() - kc.dev_gone_ms >= 1500u) {
+            kc.dev = keyboard_try_add(kc.li, device_path);
+            if (kc.dev) SLOGI("Keyboard attached (%s)", device_path);
+            else kc.dev_gone_ms = monotonic_ms() - 1000u; /* retry in ~0.5 s */
+        }
         int pr = poll(pfds, 2, 100);
         if (pr < 0) {
             if (errno == EINTR) continue;
             perror("poll"); break;
         }
-        if (pr == 0) continue;
 
-        /* keyboard event */
-        if (pfds[0].revents & POLLIN) {
+        /* keyboard events: libinput queues add/remove events internally, so
+         * drain it on every pass and not only when its fd is readable */
+        {
             libinput_dispatch(kc.li);
             struct libinput_event *ev;
             while ((ev = libinput_get_event(kc.li)) != NULL) {
@@ -624,10 +660,23 @@ void *keyboard_read_thread(void *argv) {
                     struct libinput_event_keyboard *kev =
                         libinput_event_get_keyboard_event(ev);
                     uint32_t code = libinput_event_keyboard_get_key(kev);
+                    if (fn_alias != 0 && code == fn_alias) code = KEY_FN;
                     enum libinput_key_state ks =
                         libinput_event_keyboard_get_key_state(kev);
                     process_key(&kc, code,
                                 ks == LIBINPUT_KEY_STATE_PRESSED ? 1 : 0);
+                } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_ADDED) {
+                    /* initial add or libinput's own re-add after a resume */
+                    struct libinput_device *added = libinput_event_get_device(ev);
+                    if (libinput_device_has_capability(added, LIBINPUT_DEVICE_CAP_KEYBOARD))
+                        kc.dev = added;
+                } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_REMOVED &&
+                           libinput_event_get_device(ev) == kc.dev) {
+                    /* Our keyboard went away (Bluetooth sleep, or a suspend). */
+                    kc.dev = NULL;
+                    kc.repeating = false;
+                    kc.dev_gone_ms = monotonic_ms();
+                    SLOGI("Keyboard removed; waiting for %s", device_path);
                 }
                 libinput_event_destroy(ev);
             }

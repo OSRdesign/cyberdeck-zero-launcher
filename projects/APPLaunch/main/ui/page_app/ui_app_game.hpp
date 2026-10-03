@@ -31,6 +31,11 @@
 // ============================================================
 class UIGamePage : public AppPageRoot
 {
+public:
+    // Touch: a swipe is the arrow key for its direction, a tap is Enter.
+    static constexpr bool kTouchSwipe = true;
+
+private:
     // ---- Screen constants ----
     static constexpr int SCREEN_W    = 320;  // Overall screen width
     static constexpr int SCREEN_H    = 170;  // Overall screen height

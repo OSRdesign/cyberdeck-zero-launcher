@@ -38,32 +38,21 @@
 // ============================================================
 class UISTPage : public AppPage
 {
-    enum class FontSize : uint8_t {
-        Terminal = 12,
-    };
-
-    static constexpr int font_size(FontSize size)
-    {
-        return static_cast<int>(size);
-    }
-
-    static constexpr int TERM_W = 320;
-    static constexpr int TERM_H = 150;
+    // Compat (320x170 display) geometry. A native display overrides these at runtime
+    // (see init_geometry()): the terminal then fills the whole panel.
+    static constexpr int COMPAT_FONT_PX = 12;
+    static constexpr int COMPAT_TERM_W = 320;
+    static constexpr int COMPAT_TERM_H = 150;
     // JetBrains Mono Bold at 12px resolves to a 7px advance and 15px line height in LVGL.
-    static constexpr int CHAR_W = 7;
-    static constexpr int CHAR_H = 15;
+    static constexpr int COMPAT_CHAR_W = 7;
+    static constexpr int COMPAT_CHAR_H = 15;
     // Descenders in the 12px Bold face need the full 15px cell height.
     static constexpr int TEXT_Y_PAD = 0;
-    static constexpr int NORMAL_COLS = TERM_W / CHAR_W;
-    static constexpr int NORMAL_ROWS = TERM_H / CHAR_H;
     static constexpr int BIG_COLS = 80;
     static constexpr int BIG_ROWS = 24;
     static constexpr int BIG_BOTTOM_H = 15;
-    static constexpr int BIG_VIEW_ROWS = (TERM_H - BIG_BOTTOM_H) / CHAR_H;
     static constexpr int MAX_COLS = BIG_COLS;
     static constexpr int MAX_ROWS = BIG_ROWS;
-    static constexpr int COLS = NORMAL_COLS;
-    static constexpr int ROWS = NORMAL_ROWS;
     static constexpr int SCROLLBACK_MAX_ROWS = 200;
     static constexpr int SCROLLBAR_W = 3;
     static constexpr int BOTTOM_BAR_SLOTS = 5;
@@ -131,6 +120,9 @@ class UISTPage : public AppPage
     };
 
 public:
+    // Launcher hint: this page lays itself out on the native (full-panel) display.
+    static constexpr bool kNativeDisplay = true;
+
     bool terminal_sysplause = true;
 
     explicit UISTPage(TerminalHelpFactory help_factory = nullptr);
@@ -140,20 +132,31 @@ public:
     void exec(const std::string &command, const std::list<std::string> &arguments);
 
 private:
+    // Runtime geometry (compat defaults until init_geometry()).
+    bool native_ = false;
+    int font_px_ = COMPAT_FONT_PX;
+    int term_w_ = COMPAT_TERM_W;
+    int term_h_ = COMPAT_TERM_H;
+    int char_w_ = COMPAT_CHAR_W;
+    int char_h_ = COMPAT_CHAR_H;
+    int normal_cols_ = COMPAT_TERM_W / COMPAT_CHAR_W;
+    int normal_rows_ = COMPAT_TERM_H / COMPAT_CHAR_H;
+    int drag_accum_ = 0;
+
     std::array<std::array<Glyph, MAX_COLS>, MAX_ROWS> screen_{};
-    std::array<std::vector<RenderSegment>, ROWS> row_segments_{};
-    std::array<bool, ROWS> dirty_{};
+    std::array<std::vector<RenderSegment>, MAX_ROWS> row_segments_{};
+    std::array<bool, MAX_ROWS> dirty_{};
     std::vector<std::array<Glyph, MAX_COLS>> scrollback_;
     int scrollback_offset_ = 0;
-    int term_cols_ = NORMAL_COLS;
-    int term_rows_ = NORMAL_ROWS;
+    int term_cols_ = normal_cols_;
+    int term_rows_ = normal_rows_;
     int viewport_x_ = 0;
     int viewport_y_ = 0;
     bool big_view_locked_ = false;
     Cursor cursor_{};
     Cursor saved_cursor_{};
     int scroll_top_ = 0;
-    int scroll_bot_ = NORMAL_ROWS - 1;
+    int scroll_bot_ = normal_rows_ - 1;
     uint16_t mode_ = MODE_WRAP;
 
     ParseState parse_state_ = ParseState::Normal;
@@ -193,7 +196,12 @@ private:
     static int clamp(int v, int lo, int hi);
     static std::string printable(uint32_t u);
     static lv_color_t palette(uint32_t color);
-    static const lv_font_t *terminal_font();
+    const lv_font_t *terminal_font() const;
+    int big_view_rows() const { return (term_h_ - BIG_BOTTOM_H) / char_h_; }
+    void init_geometry();
+    void scroll_by_rows(int rows);
+    void drag_cb(lv_event_t *event);
+    static void static_drag_cb(lv_event_t *event) noexcept;
     static uint32_t xterm256_to_palette(int color);
     static uint32_t rgb_to_palette(int r, int g, int b);
 

@@ -5,6 +5,8 @@
  */
 
 #include "settings_page.hpp"
+#include "settings_hw_profile.hpp"
+#include "settings_touch_page.hpp"
 
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -235,6 +237,13 @@ static std::unique_ptr<DComponens::LvglComponensBase> roller_page_factory(lv_obj
         if (tree) {
             settings_t12b::populate_launcher_children(*tree, page_node);
         }
+    }
+#endif
+#if APPLAUNCH_SETTINGS_TOUCH
+    if (page_node->label == "Touch") {
+        // the list follows the installed apps: rebuilt every time the section is opened
+        Tree *tree = settings_tree_factory_context();
+        if (tree) settings_t12b::populate_touch_children(*tree, page_node);
     }
 #endif
     if (page_node->label == "Date & Time") {
@@ -623,6 +632,7 @@ void UISettingTreePage::create_page_detail()
         }
     }
 
+#if APPLAUNCH_SETTINGS_SPEAKER  // no speaker on a Pi Zero 2W
     {
         NodeIter speaker = mode_tree.append_child(
             root, SettingEntry{"Speaker", volume_page3_factory, PageType::FullCustom});
@@ -631,6 +641,7 @@ void UISettingTreePage::create_page_detail()
                 speaker, SettingEntry{std::to_string(setup_values::volume_percent(index)) + "%"});
         }
     }
+#endif  // APPLAUNCH_SETTINGS_SPEAKER
 
     {
         NodeIter wifi = mode_tree.append_child(root, SettingEntry{"Wi-Fi", roller_page_factory});
@@ -640,6 +651,7 @@ void UISettingTreePage::create_page_detail()
                                SettingEntry{"Join Hidden Network", wifi_add_hidden_page_factory, PageType::FullCustom});
     }
 
+#if APPLAUNCH_SETTINGS_ETHERNET  // no wired Ethernet port
     {
         NodeIter ethernet = mode_tree.append_child(root, SettingEntry{"Ethernet", roller_page_factory});
         NodeIter ethernet_enable =
@@ -648,6 +660,7 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(
             ethernet, SettingEntry{"Info", settings_ethernet_page_factory, PageType::FullCustom});
     }
+#endif  // APPLAUNCH_SETTINGS_ETHERNET
 
     {
         NodeIter bluetooth = mode_tree.append_child(root, SettingEntry{"Bluetooth", bluetooth_roller_page_factory});
@@ -660,6 +673,7 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(bluetooth, SettingEntry{"Scan", bluetooth_scan_page_factory, PageType::FullCustom});
     }
 
+#if APPLAUNCH_SETTINGS_EXTPORT  // M5IOE1 expander (Cardputer only)
     {
         NodeIter ext_port = mode_tree.append_child(root, SettingEntry{"ExtPort", roller_page_factory});
         mode_tree.append_child(
@@ -671,7 +685,9 @@ void UISettingTreePage::create_page_detail()
             SettingEntry{"Grove 5V", std::bind(&ext_port_com, "GROVE5V", std::placeholders::_1,
                                                 std::placeholders::_2), true});
     }
+#endif  // APPLAUNCH_SETTINGS_EXTPORT
 
+#if APPLAUNCH_SETTINGS_BATTERY  // bq27220 battery gauge (Cardputer only)
     {
         NodeIter info = mode_tree.append_child(root, SettingEntry{"Battery", roller_page_factory});
         mode_tree.append_child(info, SettingEntry{"Info", settings_battery_info_page_factory, PageType::FullCustom});
@@ -683,11 +699,16 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(bq_calibrate, SettingEntry{"Exit CAL"});
 #endif
     }
+#endif  // APPLAUNCH_SETTINGS_BATTERY
 
 #ifdef LAUNCHER_BUILD
     mode_tree.append_child(root, SettingEntry{"Launcher", roller_page_factory});
 #endif
+#if APPLAUNCH_SETTINGS_TOUCH  // per-app swipe/tap behaviour (touch panel)
+    mode_tree.append_child(root, SettingEntry{"Touch", roller_page_factory});
+#endif
 
+#if APPLAUNCH_SETTINGS_DEVELOPER  // ADB gadget mode (Cardputer only)
     {
         NodeIter developer = mode_tree.append_child(root, SettingEntry{"Developer", roller_page_factory});
         SettingEntry adb_entry{"ADB", LvSettingAdbGuidePage3::toggle_setting, true};
@@ -695,6 +716,7 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(developer, std::move(adb_entry));
         mode_tree.append_child(developer, SettingEntry{"ADB guide", adb_guide_page_factory, PageType::FullCustom});
     }
+#endif  // APPLAUNCH_SETTINGS_DEVELOPER
 
     {
         mode_tree.append_child(root, SettingEntry{"User", settings_account_page_factory, PageType::FullCustom});
@@ -734,7 +756,7 @@ void UISettingTreePage::create_page_detail()
         }
         {
             NodeIter write_rtc = mode_tree.append_child(
-                manual, SettingEntry{"Write RTC?", settings_rtc_confirm_page_factory});
+                manual, SettingEntry{APPLAUNCH_TXT_RTC_WRITE_PROMPT, settings_rtc_confirm_page_factory});
             mode_tree.append_child(write_rtc, SettingEntry{"Yes"});
             mode_tree.append_child(write_rtc, SettingEntry{"No"});
         }
@@ -742,14 +764,20 @@ void UISettingTreePage::create_page_detail()
 
     {
         NodeIter system = mode_tree.append_child(root, SettingEntry{"System", roller_page_factory});
+#if APPLAUNCH_SETTINGS_SOFTWARE_UPDATE  // update source is Cardputer specific
         mode_tree.append_child(system,
                                SettingEntry{"Software", settings_update_page_factory, PageType::FullCustom});
+#endif  // APPLAUNCH_SETTINGS_SOFTWARE_UPDATE
         mode_tree.append_child(system,
                                SettingEntry{"Storage", settings_storage_page_factory, PageType::FullCustom});
         mode_tree.append_child(system,
                                SettingEntry{"Licenses", settings_credit_page_factory, PageType::FullCustom});
         settings_t12b::append_boot_action_child(
             mode_tree, system, settings_t12b::boot_actions::Action::Reboot, confirm_page3_factory);
+#if APPLAUNCH_SETTINGS_SHUTDOWN
+        settings_t12b::append_boot_action_child(
+            mode_tree, system, settings_t12b::boot_actions::Action::Shutdown, confirm_page3_factory);
+#endif
     }
 
 }

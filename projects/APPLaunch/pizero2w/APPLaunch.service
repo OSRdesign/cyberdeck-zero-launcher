@@ -1,0 +1,26 @@
+# Install to ~/.config/systemd/user/APPLaunch.service
+# then: loginctl enable-linger $USER && systemctl --user enable --now APPLaunch.service
+[Unit]
+Description=APPLaunch (Pi Zero 2W / Waveshare 2.8 DPI)
+
+[Service]
+Environment=APPLAUNCH_DISPLAY=dpi-scaled
+Environment=LV_LINUX_FBDEV_DEVICE=/dev/fb0
+Environment=APPLAUNCH_ROTATE=0
+# Bluetooth keyboard evdev node: find with `ls -l /dev/input/by-id/` or `evtest`
+Environment=LV_LINUX_KEYBOARD_DEVICE=/dev/input/bt-keyboard
+# (firmware display_rotate=1 already makes fb0 640x480 landscape, so ROTATE=0)
+# Touch panel is transposed + inverted vs. the picture (measured on this deck):
+Environment=APPLAUNCH_TOUCH_SWAP_XY=1
+Environment=APPLAUNCH_TOUCH_INVERT_X=0
+Environment=APPLAUNCH_TOUCH_INVERT_Y=1
+# line-buffered output so log lines survive a hard exit (watchdog) and reach the journal at once
+# Optional: APPLAUNCH_FN_KEY=<evdev code> makes a key act as the Cardputer Fn (left unset: Right Alt is AltGr for symbols)
+# Standard (non-Cardputer) keyboard: do not apply the Cardputer matrix keymap to its keycodes
+Environment=APPLAUNCH_STD_KEYBOARD=1
+WorkingDirectory=/usr/share/APPLaunch
+ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

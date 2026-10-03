@@ -1,0 +1,6 @@
+# Virtual keyboard hub used to feed stock (framebuffer) apps: the launcher forwards the physical
+# keyboard and the on-screen toolbar keys into one uinput device that the app reads.
+# - let the input group create uinput devices (osrde is in it);
+# - give the device a stable name for the app (LV_LINUX_KEYBOARD_DEVICE).
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", OPTIONS+="static_node=uinput"
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="applaunch-vkbd", SYMLINK+="input/applaunch-vkbd"

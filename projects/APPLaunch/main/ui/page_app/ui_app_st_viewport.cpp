@@ -15,14 +15,14 @@ void UISTPage::update_scrollbar()
         lv_obj_clear_flag(scrollbar_track_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(scrollbar_thumb_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_size(scrollbar_track_, SCROLLBAR_W, visible_h());
-        lv_obj_set_pos(scrollbar_track_, TERM_W - SCROLLBAR_W - 1, 0);
+        lv_obj_set_pos(scrollbar_track_, term_w_ - SCROLLBAR_W - 1, 0);
 
         int thumb_height = std::max(8, visible_h() * visible_rows() / std::max(term_rows_, 1));
         thumb_height = std::min(visible_h(), thumb_height);
         int range = visible_h() - thumb_height;
         int thumb_y = max_y > 0 ? viewport_y_ * range / max_y : 0;
         lv_obj_set_size(scrollbar_thumb_, SCROLLBAR_W, thumb_height);
-        lv_obj_set_pos(scrollbar_thumb_, TERM_W - SCROLLBAR_W - 1, thumb_y);
+        lv_obj_set_pos(scrollbar_thumb_, term_w_ - SCROLLBAR_W - 1, thumb_y);
         lv_obj_move_foreground(scrollbar_track_);
         lv_obj_move_foreground(scrollbar_thumb_);
         return;
@@ -37,15 +37,15 @@ void UISTPage::update_scrollbar()
 
     lv_obj_clear_flag(scrollbar_track_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(scrollbar_thumb_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_size(scrollbar_track_, SCROLLBAR_W, TERM_H);
-    lv_obj_set_pos(scrollbar_track_, TERM_W - SCROLLBAR_W - 1, 0);
+    lv_obj_set_size(scrollbar_track_, SCROLLBAR_W, term_h_);
+    lv_obj_set_pos(scrollbar_track_, term_w_ - SCROLLBAR_W - 1, 0);
     int total_rows = history_rows + term_rows_;
-    int thumb_height = std::max(8, TERM_H * term_rows_ / std::max(total_rows, 1));
-    thumb_height = std::min(TERM_H, thumb_height);
-    int range = TERM_H - thumb_height;
+    int thumb_height = std::max(8, term_h_ * term_rows_ / std::max(total_rows, 1));
+    thumb_height = std::min(term_h_, thumb_height);
+    int range = term_h_ - thumb_height;
     int thumb_y = range - scrollback_offset_ * range / std::max(1, history_rows);
     lv_obj_set_size(scrollbar_thumb_, SCROLLBAR_W, thumb_height);
-    lv_obj_set_pos(scrollbar_thumb_, TERM_W - SCROLLBAR_W - 1, thumb_y);
+    lv_obj_set_pos(scrollbar_thumb_, term_w_ - SCROLLBAR_W - 1, thumb_y);
     lv_obj_move_foreground(scrollbar_track_);
     lv_obj_move_foreground(scrollbar_thumb_);
 }
@@ -62,7 +62,7 @@ void UISTPage::update_hscrollbar()
     lv_obj_clear_flag(hscrollbar_track_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(hscrollbar_thumb_, LV_OBJ_FLAG_HIDDEN);
     int y = visible_h();
-    int width = TERM_W - SCROLLBAR_W - 2;
+    int width = term_w_ - SCROLLBAR_W - 2;
     lv_obj_set_size(hscrollbar_track_, width, 3);
     lv_obj_set_pos(hscrollbar_track_, 0, y);
     int max_x = max_viewport_x();
@@ -106,8 +106,8 @@ void UISTPage::switch_big_mode(bool enable)
     stop_timers();
     stop_pty();
     big_mode_ = enable;
-    term_cols_ = big_mode_ ? BIG_COLS : NORMAL_COLS;
-    term_rows_ = big_mode_ ? BIG_ROWS : NORMAL_ROWS;
+    term_cols_ = big_mode_ ? BIG_COLS : normal_cols_;
+    term_rows_ = big_mode_ ? BIG_ROWS : normal_rows_;
     viewport_x_ = 0;
     viewport_y_ = 0;
     big_view_locked_ = false;

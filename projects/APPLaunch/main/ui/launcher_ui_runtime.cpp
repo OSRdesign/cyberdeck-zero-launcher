@@ -7,6 +7,10 @@
 #include "launcher_ui_runtime.h"
 
 #include "launch.h"
+#include "native_ui.hpp"
+#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
+#include "cp0_display.h"
+#endif
 #include "ui_launch_page.h"
 
 #include "hal_lvgl_bsp.h"
@@ -19,6 +23,10 @@ void LauncherUiRuntime::create_display()
     theme_ = lv_theme_default_init(dispp_, lv_palette_main(LV_PALETTE_BLUE), lv_palette_main(LV_PALETTE_RED),
                                    false, LV_FONT_DEFAULT);
     lv_disp_set_theme(dispp_, theme_);
+#if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
+    if (native_ui::enabled())
+        lv_disp_set_theme(cp0_display_native(), theme_);
+#endif
 }
 
 void LauncherUiRuntime::build_launcher_home()
@@ -30,6 +38,10 @@ void LauncherUiRuntime::build_launcher_home()
 
 void LauncherUiRuntime::show_initial_screen()
 {
+    if (native_ui::enabled()) {
+        native_ui::show_home();
+        return;
+    }
 #ifndef APPLAUNCH_STARTUP_ANIMATION
     launch_page_->load_home_screen();
 #else
@@ -54,6 +66,7 @@ LauncherUiRuntime::LauncherUiRuntime()
     create_display();
 
     launch_ = std::make_unique<Launch>();
+    native_ui::attach(launch_.get());
     launch_page_ = std::make_shared<UILaunchPage>(launch_.get());
     launch_->set_launch_page(launch_page_);
 }

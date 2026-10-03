@@ -30,4 +30,9 @@ bool restore_startup_backlight();
 int suspend_backlight();
 void restore_backlight(int raw);
 
+/* Lower the backlight to `percent` of its maximum (never to zero) without persisting
+ * anything, for the clock screensaver. Returns the raw value to pass to
+ * restore_backlight(), or -1 when the backlight could not be changed. */
+int dim_backlight(int percent);
+
 } // namespace launcher_media_controls

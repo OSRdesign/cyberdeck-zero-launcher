@@ -16,6 +16,9 @@ class LvSettingRoller;
 
 class UISettingTreePage : public AppPage {
 public:
+    // Key-only list pages: on a touch display, drags/taps are turned into Up/Down/Enter.
+    static constexpr bool kTouchList = true;
+
     UISettingTreePage();
     ~UISettingTreePage() override;
 

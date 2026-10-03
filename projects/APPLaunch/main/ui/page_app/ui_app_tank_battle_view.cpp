@@ -6,6 +6,7 @@
 
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_tank_battle.hpp"
+#include "../settings/settings_hw_profile.hpp"
 
 void UITankBattlePage::creat_UI()
 {
@@ -46,7 +47,7 @@ void UITankBattlePage::creat_UI()
 
     lv_obj_t *hint_label = lv_label_create(title);
     if (hint_label) {
-        lv_label_set_text(hint_label, "Fn+H:Help");
+        lv_label_set_text(hint_label, APPLAUNCH_TXT_HELP_HINT);
         lv_obj_set_align(hint_label, LV_ALIGN_RIGHT_MID);
         lv_obj_set_x(hint_label, -4);
         lv_obj_set_style_text_color(hint_label, lv_color_hex(0xB7D1E6), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -170,7 +171,7 @@ bool UITankBattlePage::build_help_view()
                       "Classic tank game inspired by Battle City.\n\n"
                       "F / X / Z / C: move\n"
                       "Space: fire\n\n"
-                      "Fn+H: close");
+                      APPLAUNCH_TXT_HELP_CLOSE);
     lv_obj_set_pos(help_label_, 12, 10);
     lv_obj_set_width(help_label_, SCREEN_W - 24);
     lv_label_set_long_mode(help_label_, LV_LABEL_LONG_WRAP);

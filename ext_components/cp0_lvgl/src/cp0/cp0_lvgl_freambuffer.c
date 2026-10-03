@@ -54,6 +54,13 @@ void init_freambuffer_disp()
         pthread_mutex_unlock(&init_mutex);
         return;
     }
+    const char *display_mode = getenv("APPLAUNCH_DISPLAY");
+    if (display_mode != NULL && strcmp(display_mode, "dpi-scaled") == 0) {
+        if (cp0_dpi_scaled_create() == NULL)
+            fprintf(stderr, "Failed to create DPI scaled display\n");
+        pthread_mutex_unlock(&init_mutex);
+        return;
+    }
 #if LV_USE_LINUX_DRM
     const char *device = getenv("LV_LINUX_DRM_DEVICE");
     char *detected_device = NULL;
