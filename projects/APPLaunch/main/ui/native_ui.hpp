@@ -15,11 +15,16 @@
 #include <string>
 
 class Launch;
+typedef struct _lv_obj_t lv_obj_t;
 
 namespace native_ui {
 
 /* True when the dpi-scaled backend (two displays) is active. */
 bool enabled();
+
+/* Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native 640x480 screen
+ * (same as the home grid); updates itself and is freed with the parent. */
+void add_status_icons(lv_obj_t *parent);
 
 /* Remember the launcher whose app list drives the home grid. */
 void attach(Launch *launch);

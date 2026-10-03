@@ -57,11 +57,6 @@ std::string s_launching_app; // display name of the app being launched
 
 lv_obj_t *s_home = nullptr;     // native home screen (native display)
 lv_obj_t *s_grid = nullptr;
-lv_obj_t *s_clock = nullptr;
-lv_timer_t *s_clock_timer = nullptr;
-lv_obj_t *s_wifi_bars[4] = {};
-lv_obj_t *s_bt_icon = nullptr;
-lv_timer_t *s_status_timer = nullptr;
 lv_obj_t *s_chrome = nullptr;   // toolbar screen shown in compat mode (native display)
 lv_obj_t *s_idle = nullptr;     // empty screen parked on the compat display while at home
 std::vector<lv_obj_t *> s_tiles;
@@ -96,17 +91,6 @@ lv_obj_t *make_black_screen()
 }
 
 // ------------------------------------------------------------------ home
-
-void update_clock(lv_timer_t *)
-{
-    if (!s_clock) return;
-    const std::time_t now = std::time(nullptr);
-    std::tm local{};
-    localtime_r(&now, &local);
-    char text[16];
-    std::strftime(text, sizeof(text), "%H:%M", &local);
-    lv_label_set_text(s_clock, text);
-}
 
 void select_tile(int index, bool scroll)
 {
@@ -178,21 +162,52 @@ int signal_percent(int signal)
     return std::clamp(2 * (signal + 100), 0, 100); // -100 dBm -> 0, -50 dBm -> 100
 }
 
-void update_status(lv_timer_t *)
+// Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native screen. One instance per
+// screen: it owns its timers and frees itself when the parent is deleted.
+struct StatusIcons {
+    lv_obj_t *parent = nullptr;
+    lv_obj_t *clock = nullptr;
+    lv_obj_t *wifi_bars[4] = {};
+    lv_obj_t *bt_icon = nullptr;
+    lv_timer_t *clock_timer = nullptr;
+    lv_timer_t *status_timer = nullptr;
+};
+
+bool status_screen_active(const StatusIcons *icons)
 {
-    // Nothing to do (and no work to pay for) while an app owns the screen.
-    if (!s_home || lv_display_get_screen_active(cp0_display_native()) != s_home) return;
+    lv_obj_t *screen = lv_obj_get_screen(icons->parent);
+    lv_display_t *display = screen ? lv_obj_get_display(screen) : nullptr;
+    return display && lv_display_get_screen_active(display) == screen;
+}
+
+void update_clock(lv_timer_t *timer)
+{
+    auto *icons = static_cast<StatusIcons *>(lv_timer_get_user_data(timer));
+    if (!icons || !icons->clock) return;
+    const std::time_t now = std::time(nullptr);
+    std::tm local{};
+    localtime_r(&now, &local);
+    char text[16];
+    std::strftime(text, sizeof(text), "%H:%M", &local);
+    lv_label_set_text(icons->clock, text);
+}
+
+void update_status(lv_timer_t *timer)
+{
+    auto *icons = static_cast<StatusIcons *>(lv_timer_get_user_data(timer));
+    // Nothing to do (and no work to pay for) while another screen owns the display.
+    if (!icons || !status_screen_active(icons)) return;
 
     int percent = 0;
     cp0_wifi_status_t wifi{};
     if (cp0_wifi_status_read(&wifi) == 0 && wifi.connected) percent = std::max(1, signal_percent(wifi.signal));
     static constexpr int kThresholds[4] = {1, 30, 60, 80};
     for (int i = 0; i < 4; ++i)
-        if (s_wifi_bars[i])
-            lv_obj_set_style_bg_color(s_wifi_bars[i],
+        if (icons->wifi_bars[i])
+            lv_obj_set_style_bg_color(icons->wifi_bars[i],
                                       lv_color_hex(percent >= kThresholds[i] ? kBarOn : kBarOff), 0);
 
-    if (!s_bt_icon) return;
+    if (!icons->bt_icon) return;
     // The callbacks may complete on another thread, so they only touch process-wide atomics.
     static std::atomic<bool> bt_powered{false};
     static std::atomic<bool> bt_connected{false};
@@ -205,18 +220,25 @@ void update_status(lv_timer_t *)
     });
     const bool powered = bt_powered.load();
     const bool connected = bt_connected.load();
-    if (powered) lv_obj_remove_flag(s_bt_icon, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(s_bt_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_text_color(s_bt_icon, lv_color_hex(connected ? kBtConnected : kBtIdle), 0);
+    if (powered) lv_obj_remove_flag(icons->bt_icon, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(icons->bt_icon, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_text_color(icons->bt_icon, lv_color_hex(connected ? kBtConnected : kBtIdle), 0);
 }
 
-void build_status_bar(lv_obj_t *parent)
+void status_icons_delete_cb(lv_event_t *event)
 {
-    lv_obj_t *title = lv_label_create(parent);
-    lv_label_set_text(title, "ZERO");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_32, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(kGold), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 20, 10);
+    auto *icons = static_cast<StatusIcons *>(lv_event_get_user_data(event));
+    if (!icons) return;
+    if (icons->clock_timer) lv_timer_delete(icons->clock_timer);
+    if (icons->status_timer) lv_timer_delete(icons->status_timer);
+    delete icons;
+}
+
+StatusIcons *build_status_icons(lv_obj_t *parent)
+{
+    auto *icons = new StatusIcons();
+    icons->parent = parent;
+    lv_obj_add_event_cb(parent, status_icons_delete_cb, LV_EVENT_DELETE, icons);
 
     lv_obj_t *pill = lv_obj_create(parent);
     lv_obj_remove_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
@@ -228,14 +250,14 @@ void build_status_bar(lv_obj_t *parent)
     lv_obj_set_style_pad_all(pill, 0, 0);
     lv_obj_align(pill, LV_ALIGN_TOP_RIGHT, -16, 8);
 
-    s_clock = lv_label_create(pill);
-    lv_label_set_text(s_clock, "--:--");
-    lv_obj_set_style_text_font(s_clock, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(s_clock, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(s_clock);
+    icons->clock = lv_label_create(pill);
+    lv_label_set_text(icons->clock, "--:--");
+    lv_obj_set_style_text_font(icons->clock, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(icons->clock, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_center(icons->clock);
 
-    s_clock_timer = lv_timer_create(update_clock, 1000, nullptr);
-    update_clock(nullptr);
+    icons->clock_timer = lv_timer_create(update_clock, 1000, icons);
+    update_clock(icons->clock_timer);
 
     // Wi-Fi: four bars, left of the clock.
     lv_obj_t *wifi = lv_obj_create(parent);
@@ -245,25 +267,38 @@ void build_status_bar(lv_obj_t *parent)
     lv_obj_remove_flag(wifi, LV_OBJ_FLAG_CLICKABLE);
     static constexpr int kBarHeights[4] = {9, 15, 21, 28};
     for (int i = 0; i < 4; ++i) {
-        s_wifi_bars[i] = lv_obj_create(wifi);
-        lv_obj_remove_style_all(s_wifi_bars[i]);
-        lv_obj_set_size(s_wifi_bars[i], 8, kBarHeights[i]);
-        lv_obj_set_pos(s_wifi_bars[i], i * 12, 30 - kBarHeights[i]);
-        lv_obj_set_style_bg_opa(s_wifi_bars[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(s_wifi_bars[i], lv_color_hex(kBarOff), 0);
-        lv_obj_set_style_radius(s_wifi_bars[i], 3, 0);
+        lv_obj_t *bar = icons->wifi_bars[i] = lv_obj_create(wifi);
+        lv_obj_remove_style_all(bar);
+        lv_obj_set_size(bar, 8, kBarHeights[i]);
+        lv_obj_set_pos(bar, i * 12, 30 - kBarHeights[i]);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(kBarOff), 0);
+        lv_obj_set_style_radius(bar, 3, 0);
     }
 
     // Bluetooth: left of the Wi-Fi bars (hidden while Bluetooth is off).
-    s_bt_icon = lv_label_create(parent);
-    lv_label_set_text(s_bt_icon, LV_SYMBOL_BLUETOOTH);
-    lv_obj_set_style_text_font(s_bt_icon, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(s_bt_icon, lv_color_hex(kBtIdle), 0);
-    lv_obj_align(s_bt_icon, LV_ALIGN_TOP_RIGHT, -(16 + 104 + 16 + 44 + 16), 12);
-    lv_obj_add_flag(s_bt_icon, LV_OBJ_FLAG_HIDDEN);
+    icons->bt_icon = lv_label_create(parent);
+    lv_label_set_text(icons->bt_icon, LV_SYMBOL_BLUETOOTH);
+    lv_obj_set_style_text_font(icons->bt_icon, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(icons->bt_icon, lv_color_hex(kBtIdle), 0);
+    lv_obj_align(icons->bt_icon, LV_ALIGN_TOP_RIGHT, -(16 + 104 + 16 + 44 + 16), 12);
+    lv_obj_add_flag(icons->bt_icon, LV_OBJ_FLAG_HIDDEN);
 
-    s_status_timer = lv_timer_create(update_status, 2000, nullptr);
-    update_status(nullptr);
+    icons->status_timer = lv_timer_create(update_status, 2000, icons);
+    update_status(icons->status_timer);
+    return icons;
+}
+
+StatusIcons *s_home_icons = nullptr;
+
+void build_status_bar(lv_obj_t *parent)
+{
+    lv_obj_t *title = lv_label_create(parent);
+    lv_label_set_text(title, "ZERO");
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_color(title, lv_color_hex(kGold), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 20, 10);
+    s_home_icons = build_status_icons(parent);
 }
 
 void ensure_home()
@@ -592,6 +627,8 @@ bool run_external(const std::string &command, bool keep_root, std::function<void
     return true;
 }
 
+void add_status_icons(lv_obj_t *parent) { build_status_icons(parent); }
+
 bool enabled()
 {
     return cp0_display_available() != 0;
@@ -637,7 +674,7 @@ void show_home()
     cp0_display_set_mode(CP0_DISPLAY_MODE_NATIVE);
     lv_screen_load(s_home);
     lv_obj_invalidate(s_home);
-    update_status(nullptr); // icons are current as soon as the grid is visible
+    if (s_home_icons) update_status(s_home_icons->status_timer); // icons are current as soon as the grid is visible
 }
 
 void begin_page(bool native_layout, bool touch_list, bool touch_swipe, unsigned short swipe_tap_key)
@@ -683,6 +720,7 @@ void enter_compat()
 namespace native_ui {
 
 bool enabled() { return false; }
+void add_status_icons(lv_obj_t *) {}
 void attach(Launch *) {}
 void set_launching_app(const std::string &) {}
 void show_home() {}

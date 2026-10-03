@@ -338,6 +338,7 @@ protected:
 
 private:
     static void child_delete_cb(lv_event_t *event);
+    lv_obj_t *bt_label_ = nullptr;
     lv_obj_t *ethernet_image_ = nullptr;
     lv_obj_t *wifi_panel_ = nullptr;
     lv_obj_t *wifi_bars_[4] = {};

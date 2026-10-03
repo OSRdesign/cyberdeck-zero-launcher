@@ -12,6 +12,7 @@
 #include <sstream>
 
 #include "keyboard_input.h"
+#include "native_ui.hpp"
 #include "input_keys.h"
 
 namespace {
@@ -213,6 +214,7 @@ void UICalculatorPage::build_ui(int width, int height)
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xF0B400), 0);
     lv_obj_set_pos(title, 16, 6);
+    native_ui::add_status_icons(parent);
 
     // display: small source line above the big result line
     source_label_ = lv_label_create(parent);

@@ -9,6 +9,14 @@
 #include "cp0_pointer_lifecycle.hpp"
 #include "cp0_status_lifecycle.hpp"
 #include "cp0_status_component_contract.hpp"
+#include "hal_lvgl_bsp.h"
+
+#include <atomic>
+#include <chrono>
+#include <cstdio>
+#include <thread>
+#include <cstdlib>
+#include <cstring>
 
 namespace {
 
@@ -397,6 +405,53 @@ lv_obj_t *create_centered_status_label(lv_obj_t *obj)
     return label;
 }
 
+// The Pi port shows clock, Wi-Fi and Bluetooth like the native home grid (no battery gauge).
+bool pi_status_bar()
+{
+    static const bool on = [] {
+        const char *display = std::getenv("APPLAUNCH_DISPLAY");
+        return display && std::strcmp(display, "dpi-scaled") == 0;
+    }();
+    return on;
+}
+
+// Bluetooth state for processes that do not run the Bluetooth backend themselves (stock apps such
+// as the Store): a background thread asks bluetoothctl every few seconds.
+struct BtState {
+    std::atomic<bool> powered{false};
+    std::atomic<bool> connected{false};
+};
+
+BtState &bt_poll_state()
+{
+    static BtState state;
+    static const bool started = [] {
+        std::thread([] {
+            auto run = [](const char *command) {
+                std::string out;
+                if (FILE *pipe = popen(command, "r")) {
+                    char buffer[256];
+                    while (std::fgets(buffer, sizeof(buffer), pipe)) out += buffer;
+                    pclose(pipe);
+                }
+                return out;
+            };
+            for (;;) {
+                const std::string show = run("bluetoothctl show 2>/dev/null");
+                BtState &state = bt_poll_state();
+                state.powered = show.find("Powered: yes") != std::string::npos;
+                state.connected =
+                    state.powered &&
+                    run("bluetoothctl devices Connected 2>/dev/null").find("Device ") != std::string::npos;
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+            }
+        }).detach();
+        return true;
+    }();
+    (void)started;
+    return state;
+}
+
 } // namespace
 
 AppTopBarTimeComponent::AppTopBarTimeComponent()
@@ -624,6 +679,16 @@ void AppTopBarNetworkComponent::on_create(lv_obj_t *obj)
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_set_style_pad_column(obj, 4, 0);
 
+    if (pi_status_bar()) {
+        bt_label_ = lv_label_create(obj);
+        if (!bt_label_) return;
+        lv_obj_add_event_cb(bt_label_, child_delete_cb, LV_EVENT_DELETE, this);
+        lv_label_set_text(bt_label_, LV_SYMBOL_BLUETOOTH);
+        lv_obj_set_style_text_font(bt_label_, &lv_font_montserrat_14, 0);
+        lv_obj_set_style_text_color(bt_label_, lv_color_hex(0x5A5A5A), 0);
+        lv_obj_add_flag(bt_label_, LV_OBJ_FLAG_HIDDEN);
+    }
+
     ethernet_image_ = lv_image_create(obj);
     if (!ethernet_image_) return;
     lv_obj_add_event_cb(ethernet_image_, child_delete_cb, LV_EVENT_DELETE, this);
@@ -654,6 +719,7 @@ void AppTopBarNetworkComponent::child_delete_cb(lv_event_t *event)
     auto *self = static_cast<AppTopBarNetworkComponent *>(lv_event_get_user_data(event));
     auto *deleted = static_cast<lv_obj_t *>(lv_event_get_target(event));
     if (!self) return;
+    cp0::clear_if_deleted(self->bt_label_, deleted);
     cp0::clear_if_deleted(self->ethernet_image_, deleted);
     cp0::clear_if_deleted(self->wifi_panel_, deleted);
     for (lv_obj_t *&bar : self->wifi_bars_)
@@ -678,13 +744,39 @@ void AppTopBarNetworkComponent::refresh()
     else lv_obj_add_flag(ethernet_image_, LV_OBJ_FLAG_HIDDEN);
     if (status.connected) lv_obj_remove_flag(wifi_panel_, LV_OBJ_FLAG_HIDDEN);
     else lv_obj_add_flag(wifi_panel_, LV_OBJ_FLAG_HIDDEN);
-    set_width(status.ethernet && status.connected ? 54 :
-              (status.ethernet ? 28 : recommended_width()));
-    set_visible(status.connected || status.ethernet);
+    bool bt_shown = false;
+    if (bt_label_) {
+        static std::atomic<bool> bt_powered{false};
+        static std::atomic<bool> bt_connected{false};
+        if (cp0_signal_bt_api.empty()) {
+            // no Bluetooth backend in this process (e.g. the Store): poll bluetoothctl instead
+            bt_powered = bt_poll_state().powered.load();
+            bt_connected = bt_poll_state().connected.load();
+        } else {
+            cp0_signal_bt_api({"BtStatus"}, [](int code, std::string data) {
+                bt_powered = code == 0 && !data.empty() && data[0] == '1';
+            });
+            cp0_signal_bt_api({"BtConnectedList"}, [](int code, std::string data) {
+                bt_connected = code >= 0 && data.find(':') != std::string::npos;
+            });
+        }
+        bt_shown = bt_powered.load();
+        if (bt_shown) lv_obj_remove_flag(bt_label_, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(bt_label_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_text_color(
+            bt_label_, lv_color_hex(bt_connected.load() ? 0x3B9DFF : 0x5A5A5A), 0);
+    }
+    int width = status.ethernet && status.connected ? 54 :
+                (status.ethernet ? 28 : recommended_width());
+    if (!status.connected && !status.ethernet) width = 0;
+    if (bt_shown) width += 18;
+    set_width(width);
+    set_visible(status.connected || status.ethernet || bt_shown);
 }
 
 void AppTopBarNetworkComponent::on_object_deleted()
 {
+    bt_label_ = nullptr;
     ethernet_image_ = nullptr;
     wifi_panel_ = nullptr;
     for (lv_obj_t *&bar : wifi_bars_) bar = nullptr;
@@ -765,6 +857,10 @@ lv_obj_t *UIAppTopBar::create(lv_obj_t *parent)
         !battery_->mount(container_)) {
         lv_obj_delete(container_);
         return nullptr;
+    }
+    if (pi_status_bar()) {
+        lv_obj_add_flag(battery_->obj(), LV_OBJ_FLAG_HIDDEN);   // no battery gauge on the Pi
+        lv_obj_move_to_index(custom_container_, 0);             // transient badges (SYNC) at the far left
     }
     lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
     return container_;
