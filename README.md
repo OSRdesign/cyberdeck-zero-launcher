@@ -12,6 +12,20 @@ apps, a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time 
 > and M5Stack teams and of the open-source projects listed in the credits below. My changes are the Pi port
 > (see [`projects/APPLaunch/pizero2w/`](projects/APPLaunch/pizero2w/)) and were written together with Claude.
 
+## Screenshots
+
+Captured from the deck's own framebuffer (640x480).
+
+| Home grid | Settings |
+| --- | --- |
+| ![Home grid](docs/screenshots/home.png) | ![Settings](docs/screenshots/settings.png) |
+| **Settings > Wi-Fi** | **Settings > Bluetooth** |
+| ![Wi-Fi settings](docs/screenshots/settings-wifi.png) | ![Bluetooth settings](docs/screenshots/settings-bluetooth.png) |
+
+The Store (stock CardputerZero app, upscaled 2x) while it syncs its catalog:
+
+![Store syncing](docs/screenshots/store-sync.png)
+
 ## Inspiration and credits
 
 This project exists only because of other people's generous work. Huge thanks to all of them, from a hobbyist
