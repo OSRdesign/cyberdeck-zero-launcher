@@ -11,6 +11,7 @@
 #include "../cp0_external_process_group.hpp"
 #include "cp0_process_commands.hpp"
 
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -56,23 +57,24 @@ int run(const char *command, bool keep_root)
     keyboard_pause();
     const bool subreaper = cp0_process_group::enable_subreaper();
 
-    const int keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK);
-    if (keyboard_fd < 0) {
-        std::perror("[cp0] open evdev");
-        keyboard_resume();
-        return -1;
-    }
-    std::printf("[cp0] Opened evdev %s (no EVIOCGRAB; shared with child)\n", keyboard_device());
+    // A Bluetooth keyboard may be asleep (its device node is gone) when the app starts: that must not
+    // prevent the launch. The Esc watcher then attaches later, when the keyboard wakes up.
+    int keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK);
+    if (keyboard_fd < 0)
+        std::printf("[cp0] evdev %s not available yet: starting the app anyway\n", keyboard_device());
+    else
+        std::printf("[cp0] Opened evdev %s (no EVIOCGRAB; shared with child)\n", keyboard_device());
     std::fflush(stdout);
+    std::uint64_t next_reopen_ms = 0;
 
     const pid_t pid = fork();
     if (pid < 0) {
-        close(keyboard_fd);
+        if (keyboard_fd >= 0) close(keyboard_fd);
         keyboard_resume();
         return -1;
     }
     if (pid == 0) {
-        close(keyboard_fd);
+        if (keyboard_fd >= 0) close(keyboard_fd);
         setpgid(0, 0);
         if (keep_root)
             execlp("/bin/sh", "sh", "-c", command, static_cast<char *>(nullptr));
@@ -96,13 +98,28 @@ int run(const char *command, bool keep_root)
         cp0_process_group::reap_available(pid, pid, status, leader_reaped);
         if (!cp0_process_group::exists(pid)) break;
 
-        struct input_event event;
-        while (read(keyboard_fd, &event, sizeof(event)) == static_cast<ssize_t>(sizeof(event))) {
-            if (event.type == EV_KEY && event.code == KEY_ESC) {
-                if (event.value == 1)
-                    cp0_esc_state_write(1);
-                else if (event.value == 0)
-                    cp0_esc_state_write(0);
+        if (keyboard_fd < 0 && monotonic_ms() >= next_reopen_ms) {
+            next_reopen_ms = monotonic_ms() + 500;
+            keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK);
+            if (keyboard_fd >= 0)
+                std::printf("[cp0] Opened evdev %s (keyboard back)\n", keyboard_device());
+        }
+        if (keyboard_fd >= 0) {
+            struct input_event event;
+            ssize_t got;
+            while ((got = read(keyboard_fd, &event, sizeof(event))) == static_cast<ssize_t>(sizeof(event))) {
+                if (event.type == EV_KEY && event.code == KEY_ESC) {
+                    if (event.value == 1)
+                        cp0_esc_state_write(1);
+                    else if (event.value == 0)
+                        cp0_esc_state_write(0);
+                }
+            }
+            if (got < 0 && errno != EAGAIN && errno != EINTR) {
+                // the keyboard went to sleep or disconnected: wait for it to come back
+                close(keyboard_fd);
+                keyboard_fd = -1;
+                cp0_esc_state_write(0);
             }
         }
 
@@ -127,7 +144,7 @@ int run(const char *command, bool keep_root)
                  "[process] external app group drained pgid=%d leader_reaped=%d\n",
                  static_cast<int>(pid),
                  leader_reaped ? 1 : 0);
-    close(keyboard_fd);
+    if (keyboard_fd >= 0) close(keyboard_fd);
     keyboard_resume();
     cp0_esc_state_reset();
     std::printf("[cp0] Returned to launcher\n");
