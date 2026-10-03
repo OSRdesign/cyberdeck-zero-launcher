@@ -1,4 +1,4 @@
-# zero7 — a touch launcher for a Raspberry Pi Zero 2W cyberdeck
+# cyberdeck-zero-launcher — a touch launcher for a Raspberry Pi Zero 2W cyberdeck
 
 I ordered two **CardputerZero** from M5Stack, but they have not been delivered yet and I could not wait any
 longer to try the software. Sitting on my desk was the cyberdeck I built from this Reddit post:
