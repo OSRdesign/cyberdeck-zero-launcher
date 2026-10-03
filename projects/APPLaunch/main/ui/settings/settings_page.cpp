@@ -7,6 +7,7 @@
 #include "settings_page.hpp"
 #include "settings_hw_profile.hpp"
 #include "settings_touch_page.hpp"
+#include "settings_apps_page.hpp"
 
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -706,6 +707,9 @@ void UISettingTreePage::create_page_detail()
 #endif
 #if APPLAUNCH_SETTINGS_TOUCH  // per-app swipe/tap behaviour (touch panel)
     mode_tree.append_child(root, SettingEntry{"Touch", roller_page_factory});
+#endif
+#if APPLAUNCH_SETTINGS_APPS  // install / remove apps from GitHub sources
+    mode_tree.append_child(root, SettingEntry{"Apps", settings_apps_page_factory, PageType::FullCustom});
 #endif
 
 #if APPLAUNCH_SETTINGS_DEVELOPER  // ADB gadget mode (Cardputer only)

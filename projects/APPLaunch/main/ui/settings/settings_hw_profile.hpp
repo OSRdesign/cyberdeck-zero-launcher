@@ -54,6 +54,10 @@
 #ifndef APPLAUNCH_SETTINGS_TOUCH
 #define APPLAUNCH_SETTINGS_TOUCH 1
 #endif
+// Settings > Apps: install / remove apps from GitHub-hosted sources (needs the Store's backend).
+#ifndef APPLAUNCH_SETTINGS_APPS
+#define APPLAUNCH_SETTINGS_APPS 1
+#endif
 #define APPLAUNCH_TXT_HELP_HINT "H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "H: close"
 #define APPLAUNCH_TXT_SSH_HELP_HINT "F1:Help"
@@ -112,6 +116,9 @@
 #endif
 #ifndef APPLAUNCH_SETTINGS_TOUCH
 #define APPLAUNCH_SETTINGS_TOUCH 0 // stock: no touch panel
+#endif
+#ifndef APPLAUNCH_SETTINGS_APPS
+#define APPLAUNCH_SETTINGS_APPS 0 // stock: apps are managed in the Store
 #endif
 #define APPLAUNCH_TXT_HELP_HINT "Fn+H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "Fn+H: close"

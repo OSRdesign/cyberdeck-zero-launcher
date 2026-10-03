@@ -42,3 +42,6 @@ runpool*
 RUNPOOL-VERDICT.md
 council
 .venv-pizero2w/
+
+# LanScan keeps its OUI table generator
+!projects/LanScan/tools

@@ -60,6 +60,13 @@ who learns a lot from open source:
 Thank you all for your contribution to open source, and for making it possible for hobbyists like me to build
 and tinker with things like this.
 
+## Your own apps
+
+**Settings > Apps** installs and removes apps from any public GitHub repository you add as a source
+(`owner/repo`), so you can sideload your own. The first apps (LAN Scan, ...) are in
+[cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps), which is also the template to host
+your own: see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
+
 ## What is in this repository
 
 - The CardputerZero launcher tree, with the Pi port on top. The original project README is kept in

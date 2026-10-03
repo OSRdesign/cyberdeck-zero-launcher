@@ -17,6 +17,7 @@ behaviour is unchanged when neither is set.
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings pages and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
 | Settings | Hardware profile (`settings_hw_profile.hpp`) hides what a Pi lacks (speaker, Ethernet, ExtPort, battery, ADB, software update) and adds Shutdown; real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. |
+| Apps | **Settings > Apps** installs/removes apps from GitHub sources you add (`settings_apps_page.cpp`); LAN Scan is the first one (`projects/LanScan`). See `docs/HOSTING-APPS.md`. |
 | Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the Cardputer matrix keymap); the Bluetooth keyboard re-attaches after sleep. |
 
 ## Install on a Pi
