@@ -1,7 +1,7 @@
 # 003 - viz1090 touch screen detection
 
-Status: done pending the user's finger test (verifier PASS in report 006; viz1090 0.1.1 installed on the deck;
-apps README updated). Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck.
+Status: done (verifier PASS in report 006; viz1090 0.1.1 installed on the deck; apps README updated; finger touch
+accepted by the user). Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck.
 
 ## Goal
 Touch must work in viz1090 (intro screen and map) whatever the order of the input devices, including when the
