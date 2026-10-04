@@ -1,7 +1,6 @@
 # 001 - Wi-Fi survey (pilot)
 
-Status: accepting (verifier PASS in report 005; README entry done; waiting for the user, who still has to try touch
-and the real Bluetooth keyboard).
+Status: done (verifier PASS in report 005; README entry done; accepted by the user on the deck).
 
 Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck.
 
