@@ -1,7 +1,7 @@
 # 002 - Move LanScan source into the apps repo
 
-Status: done pending the user's touch acceptance (verifier PASS in report 006; lanscan 0.1.1 installed on the deck;
-README updated; `projects/LanScan` removal is the follow-up for launcher-dev, after the user agrees). Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck.
+Status: done (verifier PASS in report 006; lanscan 0.1.1 installed on the deck; README updated; touch accepted by the
+user; `projects/LanScan` removed from the launcher repo). Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck.
 
 ## Goal
 LanScan's source moves from the launcher repo (`projects/LanScan`) to the apps repo (`apps/lanscan/src`), built the
