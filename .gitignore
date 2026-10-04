@@ -44,5 +44,3 @@ council
 .venv-pizero2w/
 
 # ADS-B Radar: generated map data and its download cache
-projects/AdsbRadar/APPLaunch/share/adsb-map.bin
-projects/AdsbRadar/map/.cache
