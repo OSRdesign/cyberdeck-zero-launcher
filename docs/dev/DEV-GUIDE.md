@@ -6,7 +6,7 @@ Read this first. It holds the facts every agent needs, so nobody has to rediscov
 
 | Repo | Local path | GitHub | Holds |
 | --- | --- | --- | --- |
-| launcher | `C:\CLAUDE\zero7\launcher` | `OSRdesign/cyberdeck-zero-launcher` (remote `github`, local branch `pizero2w-port` pushed to `main`) | The launcher (C++/LVGL/SCons), the Pi bundle and installer, generic capabilities, the dev docs |
+| launcher | `C:\CLAUDE\zero7\launcher` | `OSRdesign/cyberdeck-zero-launcher` (remote `github`, branch `main`; changes go through a short-lived branch and a pull request) | The launcher (C++/LVGL/SCons), the Pi bundle and installer, generic capabilities, the dev docs |
 | apps | `C:\CLAUDE\zero7\cyberdeck-zero-apps` | `OSRdesign/cyberdeck-zero-apps` (remote `origin`, branch `main`) | One folder per app under `apps/<id>/` (`app.json`, `icon.png`, `root/` tree, optional `src/` and `build/`), `tools/` (pure Python `build_deb.py`, `make_registry.py`), `packages/`, `registry.json` |
 
 **The rule:** apps live in the apps repo and are installed from the deck's Settings > Apps. The launcher only gets
