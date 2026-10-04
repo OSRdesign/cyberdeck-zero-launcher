@@ -14,8 +14,8 @@ The complete, step by step guide, the build tools and a working example live in 
 ## In short
 
 1. Create a **public** GitHub repository (default branch `main`) from the template.
-2. Build your app as an **aarch64 Linux executable** drawing a 320x170 picture (copy
-   [`projects/LanScan`](../projects/LanScan) as a starting point; the launcher shows it scaled 2x), or any
+2. Build your app as an **aarch64 Linux executable** drawing a 320x170 picture (copy the
+   `apps/lanscan/src` project of the apps repo as a starting point; the launcher shows it scaled 2x), or any
    program that runs on the Pi.
 3. Describe it in `apps/<id>/app.json` (name, version, description) and lay its files out in
    `apps/<id>/root/` exactly as they must be on the device:
@@ -64,5 +64,5 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | --- | --- |
 | Settings > Apps page | `projects/APPLaunch/main/ui/settings/settings_apps_page.{hpp,cpp}` |
 | Backend access (sources, catalogue, install flow) | `projects/APPLaunch/main/ui/settings/apps_backend.{hpp,cpp}` |
-| Example app | `projects/LanScan/` |
+| Example app | `apps/lanscan/` in the apps repo |
 | Switch (off on the original CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |

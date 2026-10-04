@@ -43,9 +43,6 @@ RUNPOOL-VERDICT.md
 council
 .venv-pizero2w/
 
-# LanScan keeps its OUI table generator
-!projects/LanScan/tools
-
 # ADS-B Radar: generated map data and its download cache
 projects/AdsbRadar/APPLaunch/share/adsb-map.bin
 projects/AdsbRadar/map/.cache
