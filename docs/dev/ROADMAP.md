@@ -6,7 +6,7 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 
 | # | Task | Owner | Status | Brief |
 | --- | --- | --- | --- | --- |
-| 001 | **Wi-Fi survey** app (pilot of the agent setup) | apps-dev | accepting | `tasks/001-wifi-survey.md` |
+| 001 | **Wi-Fi survey** app (pilot of the agent setup) | apps-dev | done | `tasks/001-wifi-survey.md` |
 
 ## Next (ideas, order not fixed)
 
@@ -25,5 +25,5 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 v0.1.0 first port; v0.2.0 Settings > Apps + LAN Scan; v0.3.0 full-screen apps, shared top bar, clean boot; viz1090
 as an installable app (apps repo).
 
-2026-10-04: Wi-Fi Survey 0.1.0 passed deck verification (report 005), documented in the apps README; waiting for the
-user's acceptance (touch and real Bluetooth keyboard checks are left to the user).
+2026-10-04: Wi-Fi Survey 0.1.0 passed deck verification (report 005), documented in the apps README, and accepted by
+the user on the deck.
