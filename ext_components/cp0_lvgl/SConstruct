@@ -97,6 +97,10 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
             REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
         PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'dbus-1.0'),
                             toolchain_path('usr', 'lib', env.get('GCC_DUMPMACHINE', ''), 'dbus-1.0', 'include')]
+        # cp0_statusbar.c (the shared status-bar renderer) draws its text and icon with FreeType
+        PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'freetype2'),
+                            toolchain_path('usr', 'include', 'libpng16')]
+        REQUIREMENTS += ['freetype']
 
         if 'CONFIG_CP0_LVGL_USE_ZMQ_LOG' in os.environ:
             DEFINITIONS += ['-DCP0_LVGL_USE_ZMQ_LOG=1']

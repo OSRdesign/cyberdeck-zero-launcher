@@ -13,6 +13,7 @@
 #include "ui_global_hint.h"
 
 #include "cp0_display.h"
+#include "cp0_statusbar.h"
 #include "hal_lvgl_bsp.h"
 #include "cp0_esc_state.h"
 #include "input_keys.h"
@@ -162,16 +163,41 @@ int signal_percent(int signal)
     return std::clamp(2 * (signal + 100), 0, 100); // -100 dBm -> 0, -50 dBm -> 100
 }
 
-// Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native screen. One instance per
-// screen: it owns its timers and frees itself when the parent is deleted.
+// Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native screen. They are drawn by the
+// shared renderer (cp0_statusbar.c, the same code the display bridge of full-screen apps uses) into a
+// transparent canvas, so every screen and every full-screen app shows exactly the same bar.
+// One instance per screen: it owns its timers and frees itself when the parent is deleted.
+constexpr int kStatusW = 320;
+
 struct StatusIcons {
     lv_obj_t *parent = nullptr;
-    lv_obj_t *clock = nullptr;
-    lv_obj_t *wifi_bars[4] = {};
-    lv_obj_t *bt_icon = nullptr;
+    lv_obj_t *canvas = nullptr;
+    std::vector<uint32_t> pixels;            // ARGB8888, kStatusW x CP0_STATUSBAR_HEIGHT
+    cp0_statusbar_state_t state{};
+    cp0_statusbar_state_t shown{};
+    bool drawn = false;
     lv_timer_t *clock_timer = nullptr;
     lv_timer_t *status_timer = nullptr;
 };
+
+cp0_statusbar_t *shared_status_bar()
+{
+    static cp0_statusbar_t *bar = cp0_statusbar_create(cp0_file_path_c("share/font/Montserrat-Medium.ttf"),
+                                                       cp0_file_path_c("share/font/FontAwesome5-Solid+Brands+Regular.woff"));
+    return bar;
+}
+
+void redraw_status(StatusIcons *icons)
+{
+    cp0_statusbar_t *bar = shared_status_bar();
+    if (!bar || !icons->canvas) return;
+    if (icons->drawn && std::memcmp(&icons->state, &icons->shown, sizeof(icons->state)) == 0) return;
+    std::fill(icons->pixels.begin(), icons->pixels.end(), 0u);
+    cp0_statusbar_render(bar, icons->pixels.data(), kStatusW, kStatusW, 0, 8, 0, &icons->state);
+    icons->shown = icons->state;
+    icons->drawn = true;
+    lv_obj_invalidate(icons->canvas);
+}
 
 bool status_screen_active(const StatusIcons *icons)
 {
@@ -183,13 +209,12 @@ bool status_screen_active(const StatusIcons *icons)
 void update_clock(lv_timer_t *timer)
 {
     auto *icons = static_cast<StatusIcons *>(lv_timer_get_user_data(timer));
-    if (!icons || !icons->clock) return;
+    if (!icons) return;
     const std::time_t now = std::time(nullptr);
     std::tm local{};
     localtime_r(&now, &local);
-    char text[16];
-    std::strftime(text, sizeof(text), "%H:%M", &local);
-    lv_label_set_text(icons->clock, text);
+    std::strftime(icons->state.clock, sizeof(icons->state.clock), "%H:%M", &local);
+    redraw_status(icons);
 }
 
 void update_status(lv_timer_t *timer)
@@ -201,13 +226,9 @@ void update_status(lv_timer_t *timer)
     int percent = 0;
     cp0_wifi_status_t wifi{};
     if (cp0_wifi_status_read(&wifi) == 0 && wifi.connected) percent = std::max(1, signal_percent(wifi.signal));
-    static constexpr int kThresholds[4] = {1, 30, 60, 80};
-    for (int i = 0; i < 4; ++i)
-        if (icons->wifi_bars[i])
-            lv_obj_set_style_bg_color(icons->wifi_bars[i],
-                                      lv_color_hex(percent >= kThresholds[i] ? kBarOn : kBarOff), 0);
+    icons->state.wifi_up = percent > 0;
+    icons->state.wifi_pct = percent;
 
-    if (!icons->bt_icon) return;
     // The callbacks may complete on another thread, so they only touch process-wide atomics.
     static std::atomic<bool> bt_powered{false};
     static std::atomic<bool> bt_connected{false};
@@ -218,11 +239,9 @@ void update_status(lv_timer_t *timer)
         // List commands report the device count as their code (negative on error).
         bt_connected = code >= 0 && data.find(':') != std::string::npos; // any listed device
     });
-    const bool powered = bt_powered.load();
-    const bool connected = bt_connected.load();
-    if (powered) lv_obj_remove_flag(icons->bt_icon, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(icons->bt_icon, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_text_color(icons->bt_icon, lv_color_hex(connected ? kBtConnected : kBtIdle), 0);
+    icons->state.bt_on = bt_powered.load();
+    icons->state.bt_connected = bt_connected.load();
+    redraw_status(icons);
 }
 
 void status_icons_delete_cb(lv_event_t *event)
@@ -238,53 +257,20 @@ StatusIcons *build_status_icons(lv_obj_t *parent)
 {
     auto *icons = new StatusIcons();
     icons->parent = parent;
+    icons->pixels.assign(static_cast<size_t>(kStatusW) * CP0_STATUSBAR_HEIGHT, 0u);
     lv_obj_add_event_cb(parent, status_icons_delete_cb, LV_EVENT_DELETE, icons);
 
-    lv_obj_t *pill = lv_obj_create(parent);
-    lv_obj_remove_flag(pill, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_size(pill, 104, 40);
-    lv_obj_set_style_bg_color(pill, lv_color_hex(kClockBg), 0);
-    lv_obj_set_style_bg_opa(pill, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(pill, 10, 0);
-    lv_obj_set_style_border_width(pill, 0, 0);
-    lv_obj_set_style_pad_all(pill, 0, 0);
-    lv_obj_align(pill, LV_ALIGN_TOP_RIGHT, -16, 8);
-
-    icons->clock = lv_label_create(pill);
-    lv_label_set_text(icons->clock, "--:--");
-    lv_obj_set_style_text_font(icons->clock, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(icons->clock, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_center(icons->clock);
+    lv_display_t *display = lv_obj_get_display(parent);
+    const int screen_w = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : 640;
+    icons->canvas = lv_canvas_create(parent);
+    lv_canvas_set_buffer(icons->canvas, icons->pixels.data(), kStatusW, CP0_STATUSBAR_HEIGHT, LV_COLOR_FORMAT_ARGB8888);
+    lv_obj_set_pos(icons->canvas, screen_w - kStatusW, 0);
+    lv_obj_remove_flag(icons->canvas, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(icons->canvas, LV_OBJ_FLAG_SCROLLABLE);
 
     icons->clock_timer = lv_timer_create(update_clock, 1000, icons);
-    update_clock(icons->clock_timer);
-
-    // Wi-Fi: four bars, left of the clock.
-    lv_obj_t *wifi = lv_obj_create(parent);
-    lv_obj_remove_style_all(wifi);
-    lv_obj_set_size(wifi, 44, 30);
-    lv_obj_align(wifi, LV_ALIGN_TOP_RIGHT, -(16 + 104 + 16), 13);
-    lv_obj_remove_flag(wifi, LV_OBJ_FLAG_CLICKABLE);
-    static constexpr int kBarHeights[4] = {9, 15, 21, 28};
-    for (int i = 0; i < 4; ++i) {
-        lv_obj_t *bar = icons->wifi_bars[i] = lv_obj_create(wifi);
-        lv_obj_remove_style_all(bar);
-        lv_obj_set_size(bar, 8, kBarHeights[i]);
-        lv_obj_set_pos(bar, i * 12, 30 - kBarHeights[i]);
-        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(bar, lv_color_hex(kBarOff), 0);
-        lv_obj_set_style_radius(bar, 3, 0);
-    }
-
-    // Bluetooth: left of the Wi-Fi bars (hidden while Bluetooth is off).
-    icons->bt_icon = lv_label_create(parent);
-    lv_label_set_text(icons->bt_icon, LV_SYMBOL_BLUETOOTH);
-    lv_obj_set_style_text_font(icons->bt_icon, &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(icons->bt_icon, lv_color_hex(kBtIdle), 0);
-    lv_obj_align(icons->bt_icon, LV_ALIGN_TOP_RIGHT, -(16 + 104 + 16 + 44 + 16), 12);
-    lv_obj_add_flag(icons->bt_icon, LV_OBJ_FLAG_HIDDEN);
-
     icons->status_timer = lv_timer_create(update_status, 2000, icons);
+    update_clock(icons->clock_timer);
     update_status(icons->status_timer);
     return icons;
 }

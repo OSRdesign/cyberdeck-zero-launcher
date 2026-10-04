@@ -11,6 +11,7 @@
 #include "desktop_app_loader.hpp"
 #include "esc_hold_hint_controller.h"
 #include "native_ui.hpp"
+#include "cp0_display.h"
 #include "ui.h"
 #include "generated/page_app.h"
 #include "ui_launch_page.h"
@@ -167,11 +168,11 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause,
     p->exec(exec);
 }
 
-void Launch::launch_Exec(const std::string &exec, bool keep_root)
+void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscreen)
 {
     // Pi port: run the stock (320x170 framebuffer) app in the scaled compat window. The UI stays
     // alive while it runs; this returns immediately and the callback brings the home grid back.
-    if (native_ui::enabled()) {
+    if (native_ui::enabled() && !fullscreen) {
         ui_screensaver_set_foreground(0);
         const bool started = native_ui::run_external(exec, keep_root, [this] {
             show_home();
@@ -183,7 +184,9 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
         }
         return;
     }
-    native_ui::begin_page(false); // external apps own the framebuffer; keep the compat chrome
+    // external apps own the framebuffer; keep the compat chrome (a full-screen app on the Pi port
+    // simply takes over the whole panel: nothing of ours draws while it runs)
+    if (!fullscreen) native_ui::begin_page(false);
     SLOGI("Launching external app: %s (keep_root=%d)", exec.c_str(), keep_root);
     ui_loading::show("Loading...");
     lv_disp_t *disp = lv_disp_get_default();
@@ -208,6 +211,8 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root)
 
     lv_timer_enable(true);
     if (indev) lv_indev_set_group(indev, UILaunchPage::home_input_group());
+    // a full-screen app is closed with a touch (its X button): that touch must not click anything here
+    if (fullscreen && native_ui::enabled()) cp0_display_set_touch_swallow(2);
     show_home();
     ui_loading::hide();
     lv_obj_invalidate(lv_screen_active());

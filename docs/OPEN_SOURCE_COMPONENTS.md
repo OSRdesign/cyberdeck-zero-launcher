@@ -58,6 +58,7 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | libjpeg / libjpeg-turbo | Camera/image encoding | IJG, BSD and zlib notices by source file |
 | ZeroMQ | Optional log publisher and automation RPC | MPL-2.0 for current libzmq; verify selected package |
 | OpenSSL | AppStore/ZClaw TLS | OpenSSL 3 Apache-2.0; older releases differ |
+| FreeType; Montserrat Medium, Font Awesome 5 Free (fonts) | Status bar of the Pi port (cp0_statusbar), shared with full-screen apps | FreeType FTL/GPL-2.0; fonts SIL OFL 1.1; Font Awesome icons CC BY 4.0 |
 | libcrypt, libc, libstdc++ | Account setup and runtime | Package-specific LGPL/GPL with runtime exceptions |
 
 Packaging must preserve notices for the selected configuration, including static libraries, fonts and audio. tree.hh GPL terms, SimpleBLE restrictions and the selection of libv4l objects must be checked against the shipped artifact; this source inventory does not resolve those release-specific questions.

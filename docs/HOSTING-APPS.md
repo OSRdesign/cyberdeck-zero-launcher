@@ -44,6 +44,15 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 * Accepted source addresses: `owner/repo`, `github.com/owner/repo`, `https://github.com/owner/repo` (optionally
   `/tree/<branch>`), or the direct address of a `registry.json`.
 
+## Full-screen apps (Pi port)
+
+An app can take over the whole 640x480 panel instead of running in the scaled 320x170 window with the toolbar:
+add `X-Fullscreen=true` to its `.desktop` file. The launcher then stops drawing and waits for the app to exit
+(the Esc-hold watchdog still applies). The launcher's top bar (clock, Wi-Fi bars, Bluetooth) is one shared
+renderer, `ext_components/cp0_lvgl/{include/cp0_statusbar.h,src/cp0/cp0_statusbar.c}`, so a full-screen app can
+draw exactly the same bar into its own frame. The viz1090 package in the apps repository is a complete
+example (SDL2 programs run through a small display and input bridge; it also draws a close button).
+
 ## Trust
 
 An installed package runs as root during installation and the app runs with the deck user's rights. Only add

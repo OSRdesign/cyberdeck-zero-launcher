@@ -80,6 +80,7 @@ std::optional<DesktopEntry> parse_desktop_entry(std::string_view contents)
         else if (key == "Exec") entry.exec = std::move(value);
         else if (key == "Terminal") entry.terminal = parse_bool(value);
         else if (key == "Sysplause") entry.sysplause = parse_bool(value);
+        else if (key == "X-Fullscreen") entry.fullscreen = parse_bool(value);
         else if (key == "Hidden" || key == "NoDisplay") hidden = hidden || parse_bool(value);
         else if (key == "Type") valid_type = value == "Application";
     }

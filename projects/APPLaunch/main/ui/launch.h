@@ -96,6 +96,9 @@ struct app
     app(std::string name, std::string icon, std::string exec, bool terminal);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root);
+    // fullscreen: the app owns the whole panel while it runs (no scaled window, no toolbar)
+    app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root,
+        bool fullscreen);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause,
         bool run_as_root, TerminalHelpFactory help_factory);
 
@@ -132,7 +135,7 @@ private:
     void abort_page_launch() noexcept;
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true,
                                  TerminalHelpFactory help_factory = nullptr);
-    void launch_Exec(const std::string &exec, bool keep_root = false);
+    void launch_Exec(const std::string &exec, bool keep_root = false, bool fullscreen = false);
     void applications_load();
     void refresh_home_carousel();
     void reload_home_icons();

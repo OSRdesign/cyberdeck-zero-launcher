@@ -16,6 +16,7 @@ struct DesktopEntry
     std::string exec;
     bool terminal = false;
     bool sysplause = true;
+    bool fullscreen = false;   // X-Fullscreen=true: the app owns the whole panel, no toolbar (Pi port)
 };
 
 inline constexpr std::size_t DESKTOP_ENTRY_MAX_NAME_BYTES = 128;

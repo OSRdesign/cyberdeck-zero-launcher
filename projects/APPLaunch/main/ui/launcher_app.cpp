@@ -49,6 +49,22 @@ app::app(std::string name,
          bool terminal,
          bool sysplause,
          bool run_as_root,
+         bool fullscreen)
+    : Name(std::move(name)), Icon(std::move(icon)), Exec(exec)
+{
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root, fullscreen](Launch *owner) {
+        if (!owner || exec.empty()) return;
+        if (terminal) owner->launch_Exec_in_terminal(exec, sysplause);
+        else owner->launch_Exec(exec, run_as_root, fullscreen);
+    };
+}
+
+app::app(std::string name,
+         std::string icon,
+         std::string exec,
+         bool terminal,
+         bool sysplause,
+         bool run_as_root,
          TerminalHelpFactory help_factory)
     : Name(std::move(name)), Icon(std::move(icon)), Exec(exec)
 {
