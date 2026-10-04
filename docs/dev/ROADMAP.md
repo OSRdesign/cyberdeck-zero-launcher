@@ -9,19 +9,18 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | 001 | **Wi-Fi survey** app (pilot of the agent setup) | apps-dev | done | `tasks/001-wifi-survey.md` |
 | 002 | **LanScan source move** to the apps repo (lanscan 0.1.1) | apps-dev | done | `tasks/002-lanscan-move.md` |
 | 003 | **viz1090 0.1.1**: touch screen found by capabilities | apps-dev | done | `tasks/003-viz1090-touch.md` |
+| 005 | **LanScan 0.1.2**: copyright file for the bundled IEEE OUI list | apps-dev | done | `tasks/005-lanscan-copyright.md` |
 
 ## Next (ideas, order not fixed)
 
 | Task | Owner | Notes |
 | --- | --- | --- |
-| Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | **done 2026-10-04** (task 004, `reports/004-handoff.md`): `projects/LanScan` removed, references cleaned, launcher builds; awaits commit |
-| Add a copyright / licence notice to the lanscan package for the bundled IEEE OUI list (`oui.tsv`) | apps-dev | seen in report 006: the package has no `usr/share/doc/lanscan/copyright` |
+| Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | **done 2026-10-04** (task 004, `reports/004-handoff.md`): `projects/LanScan` removed, references cleaned, launcher builds; merged in pull request #4 |
 | Keep ADS-B Radar (native LVGL app, untracked in `projects/AdsbRadar`) for later, or drop it; viz1090 covers the display | Controller + user | user said "keep for later" |
 | LoRa messaging (Meshtastic / MeshCore over a USB board) | apps-dev | needs the user's firmware choice and hardware |
 | Packet capture viewer | apps-dev | PacketScope from the Store covers part of it |
 | Drift check of `cp0_statusbar.*` between the launcher and `apps/viz1090/build` | deck-verifier | part of every release check |
 | Launcher: Settings > Apps polish (upgrade flow, per-source sync progress) | launcher-dev | |
-| Docs: one screenshot per shipped app in the apps README | docs-writer | |
 
 ## Done (recent)
 
@@ -35,3 +34,6 @@ the user on the deck.
 screen found by capabilities and name, with retry, instead of a fixed `/dev/input/event1`) passed deck verification
 (report 006) and are documented in the apps README. Both are installed on the deck and accepted by the user
 (real touch works on both). `projects/LanScan` was removed from the launcher repo.
+
+2026-10-05: LanScan 0.1.2 adds a Debian copyright file (MIT, cp0_lvgl, IEEE OUI data source and shortening noted) to the
+package; verified on the deck (report 007). The apps README now has one child page per app, with screenshots for each.
