@@ -2,6 +2,16 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-10-04: a touch screen is found by its capabilities, never by a fixed `/dev/input/eventN`.** The numbers move
+  (the RTL-SDR dongle's infrared node and the Bluetooth keyboard take event1 or event2). viz1090 0.1.1 scans
+  `event*` for a device with multitouch X/Y and no keyboard keys, prefers a name with "goodix" or "touchscreen", and
+  retries every second. `VIZ_TOUCH` stays as an override. Any new app that reads input does the same.
+- **Known issue, 2026-10-04: `deck.py sudo` exposes the sudo password.** It builds `echo '<pw>' | sudo -S ...` as the
+  remote command line, so `ps` on the deck, or a shell error that echoes the command, shows it (it happened twice in
+  report 006; nothing was written to a file). Recommended fix: send the password on the ssh stdin (`sudo -S` reading
+  stdin, or `ssh ... sudo -S -p '' cmd` with the password written to the process's stdin), never in the command
+  text; and rotate the password if the tool logs of those runs are kept. Also: `deck.py put` with a Git Bash path
+  such as `/tmp/x` is rewritten by MSYS, use `MSYS_NO_PATHCONV=1`.
 - **2026-10-04: apps run in the launcher's 640x340 window**, under the shared top bar (320x170 drawing scaled 2x),
   not in X-Fullscreen. Decided by the user for Wi-Fi Survey. Full-screen stays an opt-in for apps like viz1090.
 - **2026-10-04: a detail view follows the item's identity, not its list position.** Wi-Fi Survey tracks the access
