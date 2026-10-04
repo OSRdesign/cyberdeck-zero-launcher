@@ -29,7 +29,7 @@ screenshot path). A FAIL goes back to the owner; the Controller is told. Do not 
 - [ ] No passwords, tokens or personal data in the diff (`git diff` and new files).
 - [ ] Right repo for each file (apps in the apps repo; the launcher only generic code).
 - [ ] No large or binary files that should not be tracked; line endings LF.
-- [ ] `cp0_statusbar.[ch]` in `apps/viz1090/build` identical to the launcher's copy (diff them).
+- [ ] `cp0_statusbar.[ch]` in `apps/viz1090/build` identical to the launcher's copy (`python docs/dev/deck/check_statusbar_drift.py`, exit 0).
 
 ## E. Licences and credits
 - [ ] Every bundled component has its notice and a source link (code, fonts, map data, libraries).

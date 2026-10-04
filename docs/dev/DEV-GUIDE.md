@@ -22,7 +22,7 @@ request with the Controller.
   `.deb` packages; their `.desktop` files are in `/usr/share/APPLaunch/applications/`.
 - Passwords are never written to a file, a commit or a prompt that is saved: the Controller gives the password to
   the device operator through the `PIPW` environment variable.
-- Helper: `docs/dev/deck/deck.py` (run, sudo, put, get, install, shot). **Only the device operator touches the deck.**
+- Helpers: `docs/dev/deck/deck.py` (run, sudo, put, get, install, shot); `docs/dev/deck/check_statusbar_drift.py` (no deck needed: are the apps' copies of the top bar identical to the launcher's). **Only the device operator touches the deck.**
 - Screens: the launcher draws two displays. Stock apps run in a 320x170 window scaled 2x with a toolbar; a
   full-screen app (`X-Fullscreen=true`) owns all 640x480. The top bar (clock, Wi-Fi, Bluetooth) is one shared
   renderer (`ext_components/cp0_lvgl/.../cp0_statusbar.*`); use it, never redraw your own.

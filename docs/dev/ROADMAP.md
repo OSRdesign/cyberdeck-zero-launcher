@@ -19,7 +19,6 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | Keep ADS-B Radar (native LVGL app, untracked in `projects/AdsbRadar`) for later, or drop it; viz1090 covers the display | Controller + user | user said "keep for later" |
 | LoRa messaging (Meshtastic / MeshCore over a USB board) | apps-dev | needs the user's firmware choice and hardware |
 | Packet capture viewer | apps-dev | PacketScope from the Store covers part of it |
-| Drift check of `cp0_statusbar.*` between the launcher and `apps/viz1090/build` | deck-verifier | part of every release check |
 | Launcher: Settings > Apps polish (upgrade flow, per-source sync progress) | launcher-dev | |
 
 ## Done (recent)
@@ -37,3 +36,6 @@ screen found by capabilities and name, with retry, instead of a fixed `/dev/inpu
 
 2026-10-05: LanScan 0.1.2 adds a Debian copyright file (MIT, cp0_lvgl, IEEE OUI data source and shortening noted) to the
 package; verified on the deck (report 007). The apps README now has one child page per app, with screenshots for each.
+
+2026-10-05: `docs/dev/deck/check_statusbar_drift.py` checks the apps' copies of `cp0_statusbar.[ch]` against the launcher (exit 0 =
+identical); it is part of the verification and release checklists. No drift found today.
