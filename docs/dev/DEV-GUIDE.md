@@ -36,8 +36,8 @@ build in `flock /tmp/wsl-build.lock ...`. Use your own git worktree so build dir
 wsl -e sh -c 'cd /mnt/c/CLAUDE/zero7/launcher/projects/APPLaunch && export PATH=/mnt/c/CLAUDE/zero7/launcher/.venv-pizero2w/bin:$PATH \
   APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk && scons -j$(nproc)'
 ```
-The binary is `dist/M5CardputerZero-APPLaunch`. An LVGL app project (like `projects/LanScan`) builds the same way and
-produces `dist/<Name>`. The full bundle is `projects/APPLaunch/pizero2w/build.sh --with-store`.
+The binary is `dist/M5CardputerZero-APPLaunch`. An LVGL app project builds the same way and produces `dist/<Name>`; app sources
+live in the apps repo (`apps/<id>/src`, built by `apps/<id>/build/build.sh` in a scratch project under `projects/`). The full bundle is `projects/APPLaunch/pizero2w/build.sh --with-store`.
 
 Packages: write `apps/<id>/app.json`, put the files in `apps/<id>/root/` exactly as they must land on the device,
 then `python tools/make_registry.py --owner OSRdesign --repo cyberdeck-zero-apps` (builds every `.deb` and

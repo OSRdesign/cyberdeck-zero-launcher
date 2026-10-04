@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=LAN Scan
-Exec=/usr/share/APPLaunch/bin/M5CardputerZero-LanScan
-Terminal=false
-Icon=share/images/lanscan.png
-Type=Application

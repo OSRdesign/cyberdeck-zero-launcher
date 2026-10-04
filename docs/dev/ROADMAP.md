@@ -14,7 +14,7 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 
 | Task | Owner | Notes |
 | --- | --- | --- |
-| Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | after the user accepts 002; removes the last app source from the launcher repo |
+| Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | **done 2026-10-04** (task 004, `reports/004-handoff.md`): `projects/LanScan` removed, references cleaned, launcher builds; awaits commit |
 | Add a copyright / licence notice to the lanscan package for the bundled IEEE OUI list (`oui.tsv`) | apps-dev | seen in report 006: the package has no `usr/share/doc/lanscan/copyright` |
 | Fix `deck.py sudo` so the password is not on the remote command line (see decisions.md) | Controller | known issue |
 | Keep ADS-B Radar (native LVGL app, untracked in `projects/AdsbRadar`) for later, or drop it; viz1090 covers the display | Controller + user | user said "keep for later" |
