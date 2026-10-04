@@ -19,6 +19,11 @@ Environment=APPLAUNCH_TOUCH_INVERT_Y=1
 # Standard (non-Cardputer) keyboard: do not apply the Cardputer matrix keymap to its keycodes
 Environment=APPLAUNCH_STD_KEYBOARD=1
 WorkingDirectory=/usr/share/APPLaunch
+# Let the boot finish first: its console lines keep scrolling on the panel, and once systemd reports the system
+# running nothing prints over the launcher any more (it starts on a clean screen). "-" ignores a degraded boot;
+# the timeout keeps a stuck unit from holding the launcher back for ever.
+TimeoutStartSec=180
+ExecStartPre=-/usr/bin/timeout 150 /usr/bin/systemctl is-system-running --wait
 ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch
 Restart=on-failure
 
