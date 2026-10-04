@@ -16,7 +16,6 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | Task | Owner | Notes |
 | --- | --- | --- |
 | Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | **done 2026-10-04** (task 004, `reports/004-handoff.md`): `projects/LanScan` removed, references cleaned, launcher builds; merged in pull request #4 |
-| Keep ADS-B Radar (native LVGL app, untracked in `projects/AdsbRadar`) for later, or drop it; viz1090 covers the display | Controller + user | user said "keep for later" |
 | LoRa messaging (Meshtastic / MeshCore over a USB board) | apps-dev | needs the user's firmware choice and hardware |
 | Packet capture viewer | apps-dev | PacketScope from the Store covers part of it |
 | Launcher: Settings > Apps polish (upgrade flow, per-source sync progress) | launcher-dev | |
@@ -39,3 +38,7 @@ package; verified on the deck (report 007). The apps README now has one child pa
 
 2026-10-05: `docs/dev/deck/check_statusbar_drift.py` checks the apps' copies of `cp0_statusbar.[ch]` against the launcher (exit 0 =
 identical); it is part of the verification and release checklists. No drift found today.
+
+2026-10-05: ADS-B Radar (native LVGL app, never published) dropped by the user; viz1090 is the ADS-B app. The source was
+archived outside the repos (`C:\CLAUDE\zero7rchive\AdsbRadar-source.zip`, build output left out) and the untracked
+`projects/AdsbRadar` folder deleted.

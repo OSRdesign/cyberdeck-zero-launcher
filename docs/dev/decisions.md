@@ -26,4 +26,4 @@ Short, dated, never re-argued without the user. Newest first.
 - **2026-10-03: the built-in CardputerZero Hub stays in the Store**, not in Settings > Apps.
 - **2026-10-03: no root-free package installs.** Installing from Settings > Apps asks for the sudo password.
 - **Releases and pushes need the user's explicit go-ahead.**
-- **ADS-B Radar (native LVGL) is not published**; viz1090 is the ADS-B app.
+- **ADS-B Radar (native LVGL) was dropped on 2026-10-05**; viz1090 is the ADS-B app. Source archived outside the repos.
