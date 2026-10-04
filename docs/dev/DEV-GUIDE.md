@@ -49,7 +49,7 @@ then `python tools/make_registry.py --owner OSRdesign --repo cyberdeck-zero-apps
   tools, or build such strings from byte values (`bytes([92, 98])`). Check the result when it contains escapes.
 - Windows Python needs `C:/...` paths; Git Bash `/c/...` paths do not work there.
 - Never `pkill -f` over ssh (it kills your own shell): use `pkill -x <name>`.
-- `sudo` over ssh needs the password piped (`deck.py sudo` does it); `~` inside `sudo sh -c` is root's home: use
+- `sudo` over ssh needs the password (`deck.py sudo` sends it on stdin, never in the command line); `~` inside `sudo sh -c` is root's home: use
   absolute paths.
 - A backgrounded remote process must have stdin, stdout and stderr redirected or the ssh call never returns.
 - Line endings: the repos use LF (`.gitattributes`); upstream viz1090 uses CRLF, so patch it with `sed`.

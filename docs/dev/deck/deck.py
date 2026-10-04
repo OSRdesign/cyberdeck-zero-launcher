@@ -13,6 +13,7 @@ Rules: use C:/ style paths for LOCAL on Windows; never `pkill -f` through here (
 `pkill -x name`); a long command should be started in the background and polled.
 """
 import os
+import shlex
 import sys
 import time
 
@@ -39,8 +40,12 @@ def connect():
 
 def run(client, command, sudo=False):
     if sudo:
-        command = "echo '%s' | sudo -S -p '' sh -c %s" % (os.environ["PIPW"], repr(command))
-    _, out, err = client.exec_command(command)
+        command = "sudo -S -p '' sh -c %s" % shlex.quote(command)      # the password goes in on stdin, never in the command line
+    stdin, out, err = client.exec_command(command)
+    if sudo:
+        stdin.write(os.environ["PIPW"] + "\n")
+        stdin.flush()
+        stdin.channel.shutdown_write()
     return out.read().decode("utf-8", "replace") + err.read().decode("utf-8", "replace")
 
 
