@@ -67,6 +67,14 @@ and tinker with things like this.
 [cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps), which is also the template to host
 your own: see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
+Settings > Apps shows the installed and the available version of each app (an update is marked in yellow, for
+example `0.1.2>0.1.3`), with **Update** for one app and **Update all** when several have one. An upgraded app
+keeps its tile where it was on the home grid (the order is stored in `~/.config/cardputerzero/config.json` as
+`app_order`); a new app goes last. A sync shows each source live (`waiting`, `syncing...`, `done` or a red
+`failed` with the reason), and installs, updates and removals show the step and the seconds taken, then a plain
+success or failure message. With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
+plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
+
 ## What is in this repository
 
 - The CardputerZero launcher tree, with the Pi port on top. The original project README is kept in

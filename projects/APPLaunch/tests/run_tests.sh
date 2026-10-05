@@ -220,9 +220,20 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -o "$build_dir/test_app_registry_callback"
 "$build_dir/test_app_registry_callback"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_settings_apps_model.cpp" \
+    "$test_root/../main/ui/settings/apps_backend.cpp" \
+    "$test_root/../main/ui/settings/apps_status_model.cpp" \
+    -o "$build_dir/test_settings_apps_model"
+"$build_dir/test_settings_apps_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_dynamic_app_registry.cpp" \
     -o "$build_dir/test_dynamic_app_registry"
 "$build_dir/test_dynamic_app_registry" "$test_root/../main/ui/desktop_app_loader.cpp"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_desktop_app_order.cpp" \
+    "$test_root/../main/ui/model/desktop_app_order.cpp" \
+    -o "$build_dir/test_desktop_app_order"
+"$build_dir/test_desktop_app_order"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/test_launcher_media_model.cpp" \
     "$(dirname "$0")/../main/ui/model/launcher_media_model.cpp" \

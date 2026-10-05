@@ -10,6 +10,7 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | 002 | **LanScan source move** to the apps repo (lanscan 0.1.1) | apps-dev | done | `tasks/002-lanscan-move.md` |
 | 003 | **viz1090 0.1.1**: touch screen found by capabilities | apps-dev | done | `tasks/003-viz1090-touch.md` |
 | 005 | **LanScan 0.1.2**: copyright file for the bundled IEEE OUI list | apps-dev | done | `tasks/005-lanscan-copyright.md` |
+| 006 | **Settings > Apps polish** (tile order kept on upgrade, upgrade flow, sync progress, install feedback) | launcher-dev | done | `tasks/006-settings-apps-polish.md`, `reports/010.md` |
 
 ## Next (ideas, order not fixed)
 
@@ -18,7 +19,6 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | **done 2026-10-04** (task 004, `reports/004-handoff.md`): `projects/LanScan` removed, references cleaned, launcher builds; merged in pull request #4 |
 | LoRa messaging (Meshtastic / MeshCore over a USB board) | apps-dev | needs the user's firmware choice and hardware |
 | Packet capture viewer | apps-dev | PacketScope from the Store covers part of it |
-| Launcher: Settings > Apps polish (upgrade flow, per-source sync progress) | launcher-dev | |
 
 ## Done (recent)
 
@@ -42,3 +42,8 @@ identical); it is part of the verification and release checklists. No drift foun
 2026-10-05: ADS-B Radar (native LVGL app, never published) dropped by the user; viz1090 is the ADS-B app. The source was
 archived outside the repos (`C:\CLAUDE\zero7rchive\AdsbRadar-source.zip`, build output left out) and the untracked
 `projects/AdsbRadar` folder deleted.
+
+2026-10-05: Settings > Apps polish (task 006) passed deck verification (report 010) and was accepted by the user: tile
+order kept on upgrade, installed vs available version with Update / Update all, per-source sync progress with
+failure reasons, install/remove feedback, letter shortcuts U/S/A/D. This changes the launcher binary
+(`M5CardputerZero-APPLaunch`); the Store backend is unchanged. Documented in `docs/HOSTING-APPS.md`.

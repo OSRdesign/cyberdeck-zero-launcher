@@ -1,8 +1,9 @@
 /*
  * Settings > Apps: install and remove apps from GitHub-hosted sources, and manage those sources.
  *
- * Two tabs: "Apps" (the catalogue of all enabled sources) and "Sources" (add / enable / remove a GitHub
- * repository). It drives the Store's native backend, so any registry the Store understands works.
+ * Two tabs: "Apps" (the catalogue of all enabled sources: install, update, update all, remove; installed vs
+ * available version) and "Sources" (add / enable / remove a GitHub repository, per-source sync progress and
+ * failure reason). It drives the Store's native backend, so any registry the Store understands works.
  * Hosting your own: see docs/HOSTING-APPS.md.
  */
 
@@ -15,6 +16,7 @@
 #include <vector>
 
 #include "apps_backend.hpp"
+#include "apps_status_model.hpp"
 #include "cp0_lvgl_app.h"
 #include "lvgl_components.hpp"
 #include "settings_tree_types.hpp"
@@ -38,6 +40,12 @@ private:
     static constexpr int kRows = 6;
 
     int row_count() const;
+    int upgradable_count() const;
+    bool update_all_row() const;                    // the "Update all (N)" row heads the list when N > 1
+    const apps_backend::App *selected_app() const;  // nullptr on the "Update all" row or outside the list
+    void start_update_all();
+    void show_message(const std::string &title, const std::string &detail);
+    void dismiss_message();
     void move_selection(int delta);
     void set_tab(Tab tab);
     void activate();
@@ -47,8 +55,10 @@ private:
     void end_edit(bool submit);
     void edit_key(const struct key_item *item);
     void render();
-    void set_status(const std::string &text);
+    void set_status(const std::string &text, bool error = false, bool warn = false);
     void handle_key(lv_event_t *event);
+    void shortcut_key(const struct key_item *item);   // U, S, A, D from the raw keyboard event
+    void start_sync();
     void poll();
     void start_sudo();
     void enter_text_mode();
@@ -73,6 +83,13 @@ private:
     int previous_context_ = 0;
     int previous_intercept_ = 0;
     bool backend_missing_ = false;
+    apps_status::SyncProgress sync_;     // copy of the worker's per-source sync progress
+    std::string notice_;                 // last success message, shown in the footer until a key or tap
+    std::string shown_status_;
+    bool message_showing_ = false;
+    bool loaded_ = false;                // the first list has arrived (before that: "Loading...")
+    bool raw_letter_ = false;            // a W/E/R/T press was just seen (their codes equal the arrows' LVGL codes)
+    uint32_t raw_letter_tick_ = 0;
 
     lv_obj_t *tab_apps_ = nullptr;
     lv_obj_t *tab_sources_ = nullptr;
@@ -82,6 +99,10 @@ private:
     lv_obj_t *edit_title_ = nullptr;
     lv_obj_t *edit_value_ = nullptr;
     lv_obj_t *edit_hint_ = nullptr;
+    lv_obj_t *msg_panel_ = nullptr;
+    lv_obj_t *msg_title_ = nullptr;
+    lv_obj_t *msg_detail_ = nullptr;
+    lv_obj_t *msg_hint_ = nullptr;
     std::array<lv_obj_t *, kRows> rows_{};
     std::array<lv_obj_t *, kRows> left_{};
     std::array<lv_obj_t *, kRows> right_{};

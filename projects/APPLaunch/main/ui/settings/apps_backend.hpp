@@ -22,15 +22,21 @@ struct App {
     std::string description;
     std::string source;        // name of the registry the entry comes from
     std::string package;
+    std::string size;          // download size as the catalogue states it (bytes, "1.4 MB" or "online")
     bool installed = false;
 
-    bool upgradable() const { return installed && !installed_version.empty() && installed_version != version; }
+    /* True when the catalogue offers a newer version than the installed one (Debian version order). */
+    bool upgradable() const;
+    /* True when the app is installed and shows its own version only (nothing newer on offer). */
+    bool current() const { return installed && !upgradable(); }
 };
 
 struct Source {
     std::string url;
     std::string name;
-    std::string status;        // "ok", "error", "not synced" ...
+    std::string status;        // "ok", "cached", "error", "not synced" ...
+    std::string synced_at;
+    std::string error;         // why the last sync failed (empty when it did not)
     int apps = 0;
     bool enabled = true;
     bool builtin = false;
@@ -55,6 +61,13 @@ struct PackageJob {
 std::string backend_path();
 bool available();
 
+/* Debian version order (dpkg --compare-versions): epoch, upstream version, revision, "~" sorts before
+ * anything. Returns <0, 0 or >0. */
+int compare_versions(const std::string &a, const std::string &b);
+
+/* Runs any program with `args` (same capture and timeout rules as run()). */
+Result run_program(const std::string &binary, const std::vector<std::string> &args, int timeout_s);
+
 /* Runs the backend with `args`, waits for it (at most timeout_s seconds) and captures its output. */
 Result run(const std::vector<std::string> &args, int timeout_s);
 
@@ -68,6 +81,16 @@ bool normalize_source(const std::string &input, std::string &url, std::string &n
 bool parse_package_job(const std::string &prepare_output, PackageJob &job);
 /* The privileged command (run through sudo) that applies a prepared package job. */
 std::vector<std::string> privileged_argv(const PackageJob &job);
+
+/* The backend keeps one "pending package transaction" file in its state directory (M5APPSTORE_STATE_DIR, else
+ * ~/.local/share/cardputerzero-appstore). After a failed dpkg step the half-installed package stays in that file
+ * and the backend refuses every install of a different app until it is finished. These two calls keep the
+ * Store backend unchanged: `park_pending_transaction` moves the file aside under a name that holds the app id and
+ * action, `restore_pending_transaction` puts it back before that same app is retried (so the retry resumes from
+ * the saved download as before). Both return true when a file was moved. */
+std::string state_dir();
+bool park_pending_transaction(const std::string &app_id, const std::string &action);
+bool restore_pending_transaction(const std::string &app_id, const std::string &action);
 
 /* Text of the last "ERROR" record of a backend output, or a fallback. */
 std::string error_text(const std::string &output, const std::string &fallback);
