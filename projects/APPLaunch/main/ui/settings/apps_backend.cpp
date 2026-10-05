@@ -11,10 +11,14 @@
 #include <cstring>
 #include <sstream>
 
+#include <cstdio>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pwd.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -68,8 +72,12 @@ bool available()
 
 Result run(const std::vector<std::string> &args, int timeout_s)
 {
+    return run_program(backend_path(), args, timeout_s);
+}
+
+Result run_program(const std::string &binary, const std::vector<std::string> &args, int timeout_s)
+{
     Result result;
-    const std::string binary = backend_path();
     int pipe_fd[2];
     if (::pipe2(pipe_fd, O_CLOEXEC) != 0) return result;
 
@@ -90,7 +98,7 @@ Result run(const std::vector<std::string> &args, int timeout_s)
         ::dup2(pipe_fd[1], STDERR_FILENO);
         const int null_fd = ::open("/dev/null", O_RDONLY);
         if (null_fd >= 0) ::dup2(null_fd, STDIN_FILENO);
-        ::execv(binary.c_str(), argv.data());
+        ::execvp(binary.c_str(), argv.data());   // searches PATH for a bare name such as "curl"
         ::_exit(127);
     }
     ::close(pipe_fd[1]);
@@ -128,6 +136,88 @@ Result run(const std::vector<std::string> &args, int timeout_s)
     return result;
 }
 
+namespace {
+
+// dpkg's character order: "~" before the end of the string, the end before letters, letters before others.
+int version_char_order(const std::string &text, size_t index)
+{
+    if (index >= text.size()) return 0;
+    const unsigned char c = static_cast<unsigned char>(text[index]);
+    if (std::isdigit(c)) return 0;
+    if (std::isalpha(c)) return c;
+    if (c == '~') return -1;
+    return c + 256;
+}
+
+int compare_version_part(const std::string &a, const std::string &b)
+{
+    size_t i = 0, j = 0;
+    while (i < a.size() || j < b.size()) {
+        int first_diff = 0;
+        while ((i < a.size() && !std::isdigit(static_cast<unsigned char>(a[i]))) ||
+               (j < b.size() && !std::isdigit(static_cast<unsigned char>(b[j])))) {
+            const int ac = version_char_order(a, i);
+            const int bc = version_char_order(b, j);
+            if (ac != bc) return ac - bc;
+            ++i;
+            ++j;
+        }
+        while (i < a.size() && a[i] == '0') ++i;
+        while (j < b.size() && b[j] == '0') ++j;
+        while (i < a.size() && std::isdigit(static_cast<unsigned char>(a[i])) &&
+               j < b.size() && std::isdigit(static_cast<unsigned char>(b[j]))) {
+            if (!first_diff) first_diff = static_cast<unsigned char>(a[i]) - static_cast<unsigned char>(b[j]);
+            ++i;
+            ++j;
+        }
+        if (i < a.size() && std::isdigit(static_cast<unsigned char>(a[i]))) return 1;
+        if (j < b.size() && std::isdigit(static_cast<unsigned char>(b[j]))) return -1;
+        if (first_diff) return first_diff;
+    }
+    return 0;
+}
+
+struct VersionParts {
+    unsigned long epoch = 0;
+    std::string upstream;
+    std::string revision;
+};
+
+VersionParts split_version(const std::string &text)
+{
+    VersionParts parts;
+    std::string rest = text;
+    const size_t colon = rest.find(':');
+    if (colon != std::string::npos) {
+        parts.epoch = std::strtoul(rest.substr(0, colon).c_str(), nullptr, 10);
+        rest.erase(0, colon + 1);
+    }
+    const size_t dash = rest.rfind('-');
+    if (dash != std::string::npos) {
+        parts.revision = rest.substr(dash + 1);
+        rest.erase(dash);
+    }
+    parts.upstream = rest;
+    return parts;
+}
+
+} // namespace
+
+int compare_versions(const std::string &a, const std::string &b)
+{
+    const VersionParts left = split_version(a);
+    const VersionParts right = split_version(b);
+    if (left.epoch != right.epoch) return left.epoch < right.epoch ? -1 : 1;
+    if (const int upstream = compare_version_part(left.upstream, right.upstream)) return upstream < 0 ? -1 : 1;
+    const int revision = compare_version_part(left.revision, right.revision);
+    return revision < 0 ? -1 : (revision > 0 ? 1 : 0);
+}
+
+bool App::upgradable() const
+{
+    return installed && !installed_version.empty() && !version.empty() && compare_versions(version, installed_version) > 0;
+}
+
 std::vector<App> parse_apps(const std::string &summary_output)
 {
     std::vector<App> apps;
@@ -142,6 +232,7 @@ std::vector<App> parse_apps(const std::string &summary_output)
         app.version = field(v, 3);
         app.category = field(v, 4);
         app.installed = field(v, 5) == "1";
+        app.size = field(v, 7);
         app.description = field(v, 8);
         app.author = field(v, 9);
         app.source = field(v, 14);
@@ -168,6 +259,8 @@ std::vector<Source> parse_sources(const std::string &registries_output)
         source.url = field(v, 1);
         source.status = field(v, 2);
         source.apps = std::atoi(field(v, 3).c_str());
+        source.synced_at = field(v, 4);
+        source.error = field(v, 5);
         source.enabled = field(v, 6) != "0";
         source.name = field(v, 7);
         source.builtin = field(v, 8) == "1";
@@ -293,6 +386,51 @@ std::string error_text(const std::string &output, const std::string &fallback)
         if (v.size() > 1 && !v[1].empty()) found = v[1];
     }
     return found.empty() ? fallback : found;
+}
+
+std::string state_dir()
+{
+    const char *configured = std::getenv("M5APPSTORE_STATE_DIR");
+    if (configured && configured[0]) return configured;
+    std::string home;
+    if (const char *env = std::getenv("HOME"); env && env[0]) home = env;
+    else if (const passwd *user = ::getpwuid(::getuid()); user && user->pw_dir) home = user->pw_dir;
+    return home + "/.local/share/cardputerzero-appstore";
+}
+
+namespace {
+
+std::string parked_path(const std::string &app_id, const std::string &action)
+{
+    auto clean = [](const std::string &text) {
+        std::string out;
+        for (unsigned char c : text) out.push_back(std::isalnum(c) || c == '-' || c == '_' || c == '.' ? static_cast<char>(c) : '_');
+        return out.empty() ? std::string("x") : out;
+    };
+    return state_dir() + "/pending-package.parked." + clean(app_id) + "." + clean(action) + ".json";
+}
+
+bool file_exists(const std::string &path)
+{
+    struct stat info {};
+    return ::stat(path.c_str(), &info) == 0;
+}
+
+} // namespace
+
+bool park_pending_transaction(const std::string &app_id, const std::string &action)
+{
+    const std::string pending = state_dir() + "/pending-package.json";
+    if (!file_exists(pending)) return false;
+    return std::rename(pending.c_str(), parked_path(app_id, action).c_str()) == 0;
+}
+
+bool restore_pending_transaction(const std::string &app_id, const std::string &action)
+{
+    const std::string pending = state_dir() + "/pending-package.json";
+    const std::string parked = parked_path(app_id, action);
+    if (file_exists(pending) || !file_exists(parked)) return false;
+    return std::rename(parked.c_str(), pending.c_str()) == 0;
 }
 
 } // namespace apps_backend

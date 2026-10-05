@@ -13,6 +13,7 @@
 #include "desktop_entry.h"
 #include "launch.h"
 #include "launcher_platform.hpp"
+#include "model/desktop_app_order.hpp"
 #include "model/preinstalled_app_manifest.hpp"
 
 #include <algorithm>
@@ -55,6 +56,46 @@ void sort_desktop_candidates(std::vector<DesktopAppCandidate> &candidates)
         if (left.has_modified_time && left.modified_time != right.modified_time)
             return left.modified_time < right.modified_time;
         return left.directory_sequence < right.directory_sequence;
+    });
+}
+
+// The .desktop file time is only the first-run and first-install order (see model/desktop_app_order.hpp): an
+// upgrade or a reinstall replaces the file and stamps it with the package build time, which used to move the
+// tile to the end. The launcher keeps the order itself, in the config.
+void apply_saved_desktop_order(std::vector<DesktopAppCandidate> &candidates)
+{
+    std::vector<std::uint32_t> keys;
+    for (const auto &candidate : candidates) keys.push_back(desktop_app_order::key_of(candidate.filename));
+
+    std::string stored;
+    for (std::size_t chunk = 0; chunk < desktop_app_order::kChunks; ++chunk) {
+        std::string value;
+        cp0_signal_config_api({"GetStr", desktop_app_order::chunk_name(chunk), ""},
+                              [&](int code, std::string data) {
+                                  if (code == 0) value = std::move(data);
+                              });
+        if (value.empty()) break;
+        if (!stored.empty()) stored.push_back(',');
+        stored += value;
+    }
+    const std::vector<std::uint32_t> before = desktop_app_order::parse(stored);
+    const desktop_app_order::Result arranged = desktop_app_order::arrange(keys, before);
+
+    std::vector<DesktopAppCandidate> ordered;
+    ordered.reserve(candidates.size());
+    for (const std::size_t index : arranged.order) ordered.push_back(std::move(candidates[index]));
+    candidates = std::move(ordered);
+
+    if (arranged.saved == before) return;
+    std::list<std::string> request = {"SetManyAndSave"};
+    const std::vector<std::string> chunks = desktop_app_order::split_chunks(arranged.saved);
+    for (std::size_t chunk = 0; chunk < chunks.size(); ++chunk) {
+        if (chunks[chunk].empty() && before.size() <= chunk * desktop_app_order::kChunkKeys) continue;
+        request.push_back(desktop_app_order::chunk_name(chunk));
+        request.push_back(chunks[chunk]);
+    }
+    cp0_signal_config_api(std::move(request), [](int code, std::string) {
+        if (code != 0) std::fprintf(stderr, "applications_load: cannot save the app order\n");
     });
 }
 
@@ -195,6 +236,7 @@ void launcher_append_desktop_apps(std::list<app> &apps)
         }
 
         sort_desktop_candidates(candidates);
+        apply_saved_desktop_order(candidates);
         std::size_t appended = 0;
         std::unordered_set<std::string> registered_execs;
         for (auto &candidate : candidates) {

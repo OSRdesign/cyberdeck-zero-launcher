@@ -2,6 +2,21 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-10-05: Settings > Apps decisions (task 006).**
+  - The home grid order is stored in the launcher's own config (`app_order` in `~/.config/cardputerzero/config.json`,
+    FNV-1a keys of the `.desktop` names), because the Store backend (`projects/AppStore` submodule) cannot be changed.
+  - Versions are compared the Debian way (`dpkg --compare-versions` semantics), never as text.
+  - Sync failure reasons come from a curl probe of the source, because `--edit-registry` exits 0 for an unreachable
+    source (it prints `REGISTRY UPDATED ... cached`). A source counts as synced only on a positive `ok`. The probe
+    needed `execvp` in `run_program`: `execv` does not search PATH, so a bare `curl` never started.
+  - After a failed install the backend's `pending-package.json` is parked aside
+    (`pending-package.parked.<id>.<action>.json`) so other apps install, and it is restored before a retry of the
+    same app, which then resumes. Deleting it would break that retry. After a wrong password or Esc the file may stay
+    until the next operation; it blocks nothing.
+  - Letter shortcuts compare the physical key code, not the ASCII value. W, E, R, T have evdev codes 17 to 20, equal
+    to LVGL's up/down/right/left, so a real W/E/R/T press is recorded and the matching native key within 300 ms is
+    ignored (same approach as Wi-Fi Survey). Real arrows and F/X/Z/C still work.
+
 - **2026-10-04: a touch screen is found by its capabilities, never by a fixed `/dev/input/eventN`.** The numbers move
   (the RTL-SDR dongle's infrared node and the Bluetooth keyboard take event1 or event2). viz1090 0.1.1 scans
   `event*` for a device with multitouch X/Y and no keyboard keys, prefers a name with "goodix" or "touchscreen", and

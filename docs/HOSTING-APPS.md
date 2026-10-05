@@ -44,6 +44,57 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 * Accepted source addresses: `owner/repo`, `github.com/owner/repo`, `https://github.com/owner/repo` (optionally
   `/tree/<branch>`), or the direct address of a `registry.json`.
 
+## Using Settings > Apps on the deck
+
+**Versions and updates.** The Apps tab shows each app's installed version and the version the sources offer. When
+the offered one is newer (compared the Debian way, as `dpkg --compare-versions` does, not as text) the row shows
+both, for example `0.1.2>0.1.3`, in yellow, and Enter runs **Update**. When more than one app has an update, an
+**Update all (N)** row appears (key `U`); it updates the apps one after the other and asks for the sudo
+password once per app. An app that is current shows only its version.
+
+**Tile position.** An upgraded or reinstalled app keeps its place on the home grid. The launcher stores the tile
+order as `app_order` (a list of keys made from the `.desktop` file names) in
+`~/.config/cardputerzero/config.json`. An app that is new goes last.
+
+**Sync progress.** Syncing (Sync row or key `S`) goes through the sources one by one. Each row shows `waiting`,
+`syncing...`, then `done` or a red `failed`; the footer shows `Syncing 3/7 <source>`. Selecting a failed row shows
+the reason, followed by `(cached list)` when the apps of the last good sync stay listed:
+
+| Shown | Meaning |
+| --- | --- |
+| `HTTP <code>` | the server answered with an error, for example `HTTP 404` (file not found) |
+| `Connection refused` | nothing listens at that address and port |
+| `Timed out` | no answer within the time limit |
+| `No network` | the host name cannot be resolved, or there is no route |
+| `Bad JSON` | the answer is not a valid registry (an HTML page, for example) |
+| `Connection failed` | any other network error (connection reset, empty reply) |
+
+A failed source never hides the apps of the other sources. When every source is finished the footer is green
+(`Synced N sources`), amber if some failed (`Synced 2 of 7 sources`) or red if all failed (`Sync failed (5)`).
+
+**Install, update and remove.** The footer shows the current step with a counter and the seconds, for example
+`Downloading LAN Scan (1/2) 5s`, then a success line (`Installed ...`, `Updated ... to ...`, `Removed ...`). A
+failure opens a panel with a short headline and the reason (a key press or a tap closes it): `Not enough space`,
+`Download failed`, `Unfinished install`, `Could not prepare`, a checksum mismatch, or `dpkg error` with the reason
+dpkg gave. A wrong sudo password is asked again up to three times, then the line turns red (`Wrong password`);
+Esc at the password prompt gives a red `Cancelled`.
+
+**Keys.**
+
+| Key | Action |
+| --- | --- |
+| Up / Down | move the selection |
+| Left / Right | Apps tab / Sources tab |
+| Enter | install, update or remove (Apps); on/off (Sources); yes in a confirmation |
+| Esc | back, or no in a confirmation |
+| `U` | update all (Apps tab) |
+| `S` | sync (either tab) |
+| `A` | add a source (Sources tab) |
+| `D` or Del | remove the selected source after a confirmation (Sources tab; the built-in source cannot be removed) |
+
+The letters are read from the physical key, so `W`, `E`, `R` and `T` no longer move the selection or switch tabs,
+as they did before. `F`, `X`, `Z` and `C` still act as up, down, left and right.
+
 ## Full-screen apps (Pi port)
 
 An app can take over the whole 640x480 panel instead of running in the scaled 320x170 window with the toolbar:
