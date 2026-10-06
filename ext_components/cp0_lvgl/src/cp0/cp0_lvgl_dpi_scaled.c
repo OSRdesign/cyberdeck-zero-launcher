@@ -282,6 +282,9 @@ typedef struct {
 } list_gesture_t;
 
 static list_gesture_t lg;
+static int list_drag_inverted;
+
+void cp0_display_set_list_drag_inverted(int inverted) { list_drag_inverted = inverted != 0; }
 
 static cp0_display_key_sink_t key_sink;
 static uint32_t swipe_tap_key = KEY_ENTER;
@@ -355,12 +358,12 @@ static void list_gesture(void)
         if (travel > lg.max_travel) lg.max_travel = travel;
         /* the list follows the finger: dragging up brings later rows up, i.e. selects "down" */
         while (lg.acc <= -list_row_h) {
-            tap_key(KEY_DOWN);
+            tap_key(list_drag_inverted ? KEY_UP : KEY_DOWN);
             lg.acc += list_row_h;
             lg.stepped = true;
         }
         while (lg.acc >= list_row_h) {
-            tap_key(KEY_UP);
+            tap_key(list_drag_inverted ? KEY_DOWN : KEY_UP);
             lg.acc -= list_row_h;
             lg.stepped = true;
         }

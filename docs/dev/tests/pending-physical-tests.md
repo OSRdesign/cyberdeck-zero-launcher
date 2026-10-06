@@ -28,13 +28,11 @@ Wake the M4 keyboard first; do not send on air unless you want to. Answer per st
 12. Optional (writes the board's channel table): add a hashtag channel, see it in Chats, remove it with two-tap Remove and with Del.
 Open code questions: channel text limit with a long node name (needs one real near-limit message); whether the official apps lower-case a #name before hashing (ours hashes it as typed, like meshcore-cli).
 
-## C. Settings > Apps polish (task 006): still open from the user's side
-- Tap the app rows, tabs, sources rows, "+ Add", "Sync my sources", "Update all"; close the failure panel by tap.
-- Scroll with more than six rows.
-- The real M4 keyboard with the letter shortcuts U / S / A / D.
-- A real "No network" (cut Wi-Fi, then sync) and a real 404 on a real source.
-- The first Sources row label looked cut off in two screenshots taken right after scrolling: look at it.
-- Delete nothing else: the two launcher backups on the deck were already removed.
+## C. Settings > Apps polish (task 006): done 2026-10-06
+Passed on the deck: touch (tabs, sources, add, sync, update all, failure panel), scrolling, the first Sources row label,
+the U / S / A / D shortcuts and real failures (no network, 404). Two findings were fixed the same day: Enter and a tap on
+an up-to-date app no longer ask to remove it (D or Del does, with a confirmation), and the drag direction on the Apps
+list was reversed (`cp0_display_set_list_drag_inverted`).
 
 ## D. Environment note
 `deck.py` needs the PIPW environment variable (the deck password) in the Claude Code session; it was missing in the

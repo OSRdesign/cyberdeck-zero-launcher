@@ -85,12 +85,12 @@ Esc at the password prompt gives a red `Cancelled`.
 | --- | --- |
 | Up / Down | move the selection |
 | Left / Right | Apps tab / Sources tab |
-| Enter | install, update or remove (Apps); on/off (Sources); yes in a confirmation |
+| Enter | install or update (Apps); on/off (Sources); yes in a confirmation |
 | Esc | back, or no in a confirmation |
 | `U` | update all (Apps tab) |
 | `S` | sync (either tab) |
 | `A` | add a source (Sources tab) |
-| `D` or Del | remove the selected source after a confirmation (Sources tab; the built-in source cannot be removed) |
+| `D` or Del | remove the selected app (Apps tab) or source (Sources tab) after a confirmation; the built-in source cannot be removed. A tap on an up-to-date app does nothing |
 
 The letters are read from the physical key, so `W`, `E`, `R` and `T` no longer move the selection or switch tabs,
 as they did before. `F`, `X`, `Z` and `C` still act as up, down, left and right.

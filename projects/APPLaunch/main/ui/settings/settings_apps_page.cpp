@@ -6,6 +6,7 @@
 
 #include "settings_fonts.hpp"
 
+#include "cp0_display.h"
 #include "cp0_lvgl_app.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
@@ -342,6 +343,7 @@ LvSettingAppsPage3::LvSettingAppsPage3(lv_obj_t *parent, const NodeIter &, std::
 
 LvSettingAppsPage3::~LvSettingAppsPage3()
 {
+    cp0_display_set_list_drag_inverted(0);
     if (timer_) {
         lv_timer_delete(timer_);
         timer_ = nullptr;
@@ -377,6 +379,7 @@ void LvSettingAppsPage3::LeaveNextPage()
 void LvSettingAppsPage3::create_ui(lv_obj_t *parent)
 {
     if (!parent) return;
+    cp0_display_set_list_drag_inverted(1);     // the highlight moves here, so the drag direction is reversed
     ComponensObj = lv_obj_create(parent);
     if (!ComponensObj) return;
     lv_obj_set_size(ComponensObj, kWidth, 150);
@@ -438,6 +441,7 @@ void LvSettingAppsPage3::create_ui(lv_obj_t *parent)
             auto *self = static_cast<LvSettingAppsPage3 *>(lv_event_get_user_data(e));
             const int row = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(lv_event_get_target_obj(e))));
             if (self->offset_ + row >= self->row_count()) return;
+            self->pending_ = Pending::None;       // a tap elsewhere cancels a pending remove
             self->selected_ = self->offset_ + row;
             self->activate();
         }, LV_EVENT_CLICKED, this);
@@ -734,8 +738,8 @@ void LvSettingAppsPage3::render()
         else if (!chosen) hint = "Enter: update all   Right: sources   Esc: back";
         else if (!chosen->installed) hint = "Enter: install   Right: sources   Esc: back";
         else if (chosen->upgradable())
-            hint = "Enter: update" + std::string(update_all_row() ? "   U: update all" : "") + "   Esc: back";
-        else hint = "Enter: remove   Right: sources   Esc: back";
+            hint = "Enter: update   D: remove" + std::string(update_all_row() ? "   U: update all" : "");
+        else hint = "D: remove   Right: sources   Esc: back";
     } else {
         hint = "Enter: on/off   D: delete   A: add   S: sync";
     }
@@ -746,6 +750,18 @@ void LvSettingAppsPage3::render()
         if (editing_) lv_obj_remove_flag(edit_panel_, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(edit_panel_, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+void LvSettingAppsPage3::request_remove_app()
+{
+    {
+        std::lock_guard<std::mutex> lock(shared_->mutex);
+        if (shared_->busy) return;
+    }
+    const apps_backend::App *chosen = update_all_row() && selected_ == 0 ? nullptr : selected_app();
+    if (!chosen || !chosen->installed) return;
+    pending_ = Pending::Remove;
+    render();
 }
 
 void LvSettingAppsPage3::activate()
@@ -770,8 +786,7 @@ void LvSettingAppsPage3::activate()
         else if (app.upgradable()) action = "upgrade";
         else if (pending_ == Pending::Remove) action = "uninstall";
         else {
-            pending_ = Pending::Remove;
-            render();
+            render();                 // an up-to-date app: Enter and a tap do nothing, D asks to remove it
             return;
         }
         pending_ = Pending::None;
@@ -964,6 +979,8 @@ void LvSettingAppsPage3::shortcut_key(const key_item *item)
     } else if (item->key_code == KEY_S) {
         pending_ = Pending::None;
         start_sync();
+    } else if (tab_ == Tab::Apps && item->key_code == KEY_D) {
+        request_remove_app();
     } else if (tab_ == Tab::Sources && item->key_code == KEY_A) {
         begin_edit();
     } else if (tab_ == Tab::Sources && item->key_code == KEY_D) {
@@ -1019,6 +1036,8 @@ void LvSettingAppsPage3::handle_key(lv_event_t *event)
         } else {
             activate();
         }
+    } else if (tab_ == Tab::Apps && key == LV_KEY_DEL) {
+        request_remove_app();
     } else if (tab_ == Tab::Sources && key == LV_KEY_DEL) {
         if (selected_ < static_cast<int>(sources_.size()) && !sources_[static_cast<size_t>(selected_)].builtin) {
             pending_ = Pending::RemoveSource;
