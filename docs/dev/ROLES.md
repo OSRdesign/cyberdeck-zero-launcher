@@ -11,6 +11,7 @@ parallel (one **apps-dev** per app, for example).
 | `apps-dev` | `.claude/agents/apps-dev.md` | the apps repo: an app, its `.deb`, registry entry, licence notice | a package in `packages/`, the registry diff, the test plan |
 | `deck-verifier` | `.claude/agents/deck-verifier.md` | the physical deck **and** the quality gate | deploy results, screenshots, a pass/fail verification report |
 | `docs-writer` | `.claude/agents/docs-writer.md` | READMEs, guides, credits, release notes | the updated docs and a link/credit check |
+| `x86-architect` | `.claude/agents/x86-architect.md` | the design of the x86 port (target: Panasonic FZ-M1, Atom x5, Armbian x86 / Ubuntu 26.04) | a port report with options, pros/cons, token cost and a recommendation; no code |
 
 The builder of a change never signs it off: `deck-verifier` does, and it has a veto on any release.
 
