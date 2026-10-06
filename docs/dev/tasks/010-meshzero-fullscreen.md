@@ -1,6 +1,6 @@
 # 010 - MeshZero full-screen UI (design brief)
 
-Status: DRAFT for the user's decisions (2026-10-06). Nothing is built. Owner (when approved): apps-dev. Verifier: deck-verifier.
+Status: decisions taken 2026-10-06 (see "Decisions"), nothing built yet. Owner (when approved): apps-dev. Verifier: deck-verifier.
 Docs: docs-writer. Acceptance: the user, on the deck with the board.
 
 ## Why
@@ -13,10 +13,18 @@ and said the UI does not suit messaging and that MeshCore's usual features are m
   protocol, client, model, history store, clock policy, SHA-256 for hashtag channels, the simulator
   `tools/meshcore_sim.py`. Nothing in `core/` knows about LVGL.
 - **New:** a full-screen UI (`X-Fullscreen=true`, the app owns all 640x480, see docs/HOSTING-APPS.md) written against
-  `core/`. Same package id `meshzero`, still a draft until the user accepts it.
+  `core/`. New package id **`mesh-hop`** (title "Mesh Hop"), a draft until the user accepts it. `apps/meshzero` stays as it is until then.
 - **Not a web app, not a port of a GUI:** meshcore-gui (Python + NiceGUI + browser) and app.meshcore.nz need a browser and
   far more RAM than the deck has (414 MB); Meshy needs GTK. They are feature references only (see `ref/README.md`).
   Never copy GPL code (wadamesh, Meshy): UX ideas only.
+
+## Decisions (user, 2026-10-06)
+1. Map: **tile-less plot first** (design A below); real offline tiles are not planned.
+2. Emoji: use an **existing open-licence emoji font** (not a hand-made set), see "Emoji".
+3. Terminal: a meshcore-cli style command line plus the remote CLI of a repeater, as described below.
+4. Layout: **two panes** as drawn.
+5. Phase 4 content: **route view** and **repeater polling** (search, channel QR and auto-reply are not wanted for now).
+6. Package id: **`mesh-hop`**, a new package next to `meshzero` while the old UI exists.
 
 ## Fixed rules (from the user, do not reopen)
 - Text is typed on the **Bluetooth keyboard only**. No on-screen keyboard (see memory "no virtual keyboard"). Touch =
@@ -64,7 +72,7 @@ Sources: meshcore-gui (MIT), MeshCore Open (MIT), the official apps, wadamesh (i
 | 1 | Two-pane Chats (channels + direct) on 640x480, unread, delivery status, history, Contacts table, Status in the footer/Settings, Settings parity with 0.1.0, key + touch navigation. All existing `core/` features. | low |
 | 2 | **Terminal** and **emoji** (below). | medium |
 | 3 | **Map** (below). | the heaviest; see open question 1 |
-| 4 | Candidates, user picks: path/route view for a message, repeater login + status polling (battery, uptime), message search, channel QR (shown on screen), keyword auto-reply, read-only export. | each small |
+| 4 | **Route view** (the path a message took, hop by hop, with signal where known; on the map when positions exist) and **repeater polling** (login to chosen repeaters, poll battery/uptime on an interval, keep a log). Later candidates, not wanted now: search, channel QR, auto-reply, export. | each small |
 
 ### Terminal
 The companion radio firmware has no shell of its own: the console users know is (a) the **meshcore-cli style command
@@ -75,11 +83,14 @@ command set is the model. To check in the references before building: exactly wh
 exposes and how remote CLI replies are returned.
 
 ### Emoji in conversations
-Needs a colour or monochrome emoji font. LVGL can draw emoji as inline bitmaps from a bounded set. Plan: a fixed set
-(about 100 to 200 common emoji, one size, bitmap font generated offline from an open-licence emoji font such as Noto
-Emoji), shortcode entry (`:smile:` converts as you type on the keyboard) plus a tap-to-pick strip of recent emoji
-(touch buttons, not a keyboard). Messages received with emoji outside the set show a placeholder box. To measure: font
-size on disk and in RAM, and how the glyphs look at the chosen size.
+Use an existing open-licence font, no custom set. First step is a **spike** (before phase 2) to pick the route:
+- **Noto Color Emoji** (OFL, colour bitmaps, about 10 MB, Debian package `fonts-noto-color-emoji`): full set and the
+  real look, if LVGL's FreeType layer can draw colour bitmap glyphs (to test; if not, decode the glyphs ourselves).
+- **Noto Emoji** (OFL, monochrome outline, small): always renders through FreeType, tinted like text; the fallback.
+Either way load glyphs on demand through a bounded glyph cache (RAM check in the spike), keep the font file in the
+package or as an apt dependency (licence in `copyright`). Entering emoji on the keyboard: `:shortcode:` converts as
+you type, and a tap-to-pick strip of recent emoji (touch buttons, no keyboard). Sequences (skin tones, flags, ZWJ)
+are the part to look at in the spike; unsupported ones show a placeholder box.
 
 ### Map
 The deck is often offline and has little RAM, so there are two designs:
@@ -109,10 +120,7 @@ Recommendation: build A in phase 3, keep the drawing layer so B can be added.
 each screen; the user tests with the real board using a protocol written by the controller (see
 `tests/pending-physical-tests.md`); docs-writer updates the app README.
 
-## Open questions for the user
-1. **Map:** plot without tiles (A) first, or do you need real offline map tiles from the start (B)?
-2. **Emoji:** is a fixed set of about 150 common emoji with shortcodes enough, or do you need the full set (heavier)?
-3. **Terminal:** is a meshcore-cli style command line plus remote repeater CLI what you expect, or something else?
-4. **Layout:** two panes as drawn, or one full-width view at a time?
-5. **Phase 4:** which of the candidates do you want (route view, repeater polling, search, channel QR, auto-reply)?
-6. **Name/package:** keep `meshzero` (rebuild in place) or a new package id while the old UI exists?
+## Open points (not blocking phase 1)
+- Emoji spike result (colour or monochrome) and the glyph cache size.
+- Which terminal commands the companion protocol exposes, and how remote repeater CLI replies come back.
+- Package metadata for `mesh-hop`: icon, description, copyright (MeshCore MIT, meshcore_py MIT as reference).
