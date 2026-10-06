@@ -1,0 +1,147 @@
+from enum import Enum
+
+class AdvType(Enum):
+    NONE = 0x00
+    CHAT = 0x01
+    REPEATER = 0x02
+    ROOM = 0x03
+    SENSOR = 0x04
+
+class TxtType(Enum):
+    PLAIN = 0x00
+    CLI_DATA = 0x01
+    SIGNED_PLAIN = 0x02
+    CLI_CMD = 0x03
+
+class AnonReqType(Enum):
+    REGIONS = 0x01
+    OWNER = 0x02
+    BASIC = 0x03 # just remote clock
+
+class BinaryReqType(Enum):
+    STATUS = 0x01
+    KEEP_ALIVE = 0x02
+    TELEMETRY = 0x03
+    MMA = 0x04
+    ACL = 0x05
+    NEIGHBOURS = 0x06
+
+class ControlType(Enum):
+    NODE_DISCOVER_REQ = 0x80
+    NODE_DISCOVER_RESP = 0x90
+
+class CommandType(Enum):
+    APP_START = 1
+    SEND_TXT_MSG = 2
+    SEND_CHANNEL_TXT_MSG = 3
+    GET_CONTACTS = 4 # with optional 'since' (for efficient sync)
+    GET_DEVICE_TIME = 5
+    SET_DEVICE_TIME = 6
+    SEND_SELF_ADVERT = 7
+    SET_ADVERT_NAME = 8
+    ADD_UPDATE_CONTACT = 9
+    SYNC_NEXT_MESSAGE = 10
+    SET_RADIO_PARAMS = 11
+    SET_RADIO_TX_POWER = 12
+    RESET_PATH = 13
+    SET_ADVERT_LATLON = 14
+    REMOVE_CONTACT = 15
+    SHARE_CONTACT = 16
+    EXPORT_CONTACT = 17
+    IMPORT_CONTACT = 18
+    REBOOT = 19
+    GET_BATT_AND_STORAGE = 20   # was CMD_GET_BATTERY_VOLTAGE
+    SET_TUNING_PARAMS = 21
+    DEVICE_QEURY = 22
+    EXPORT_PRIVATE_KEY = 23
+    IMPORT_PRIVATE_KEY = 24
+    SEND_RAW_DATA = 25
+    SEND_LOGIN = 26
+    SEND_STATUS_REQ = 27
+    HAS_CONNECTION = 28
+    LOGOUT = 29 # 'Disconnect'
+    GET_CONTACT_BY_KEY = 30
+    GET_CHANNEL = 31
+    SET_CHANNEL = 32
+    SIGN_START = 33
+    SIGN_DATA = 34
+    SIGN_FINISH = 35
+    SEND_TRACE_PATH = 36
+    SET_DEVICE_PIN = 37
+    SET_OTHER_PARAMS = 38
+    SEND_TELEMETRY_REQ = 39  # can deprecate this
+    GET_CUSTOM_VARS = 40
+    SET_CUSTOM_VAR = 41
+    GET_ADVERT_PATH = 42
+    GET_TUNING_PARAMS = 43
+    # NOTE: CMD range 44..49 parked, potentially for WiFi operations
+    BINARY_REQ = 50
+    FACTORY_RESET = 51
+    PATH_DISCOVERY = 52
+    SET_FLOOD_SCOPE = 54
+    SEND_CONTROL_DATA = 55
+    SEND_ANON_REQ = 57
+    SET_AUTOADD_CONFIG = 58
+    GET_AUTOADD_CONFIG = 59
+    GET_ALLOWED_REPEAT_FREQ = 60
+    GET_STATS = 56  # R04: CMD_GET_STATS — used by get_stats_core/radio/packets
+    SET_PATH_HASH_MODE = 61
+    SEND_CHANNEL_DATA = 62
+    SET_DEFAULT_FLOOD_SCOPE = 63
+    GET_DEFAULT_FLOOD_SCOPE = 64
+    SEND_RAW_PACKET = 65
+    RUN_CLI_COMMAND = 66
+
+# Packet prefixes for the protocol
+class PacketType(Enum):
+    OK = 0
+    ERROR = 1
+    CONTACT_START = 2
+    CONTACT = 3
+    CONTACT_END = 4
+    SELF_INFO = 5
+    MSG_SENT = 6
+    CONTACT_MSG_RECV = 7
+    CHANNEL_MSG_RECV = 8
+    CURRENT_TIME = 9
+    NO_MORE_MSGS = 10
+    CONTACT_URI = 11
+    BATTERY = 12
+    DEVICE_INFO = 13
+    PRIVATE_KEY = 14
+    DISABLED = 15
+    CONTACT_MSG_RECV_V3 = 16
+    CHANNEL_MSG_RECV_V3 = 17
+    CHANNEL_INFO = 18
+    SIGN_START = 19
+    SIGNATURE = 20
+    CUSTOM_VARS = 21
+    ADVERT_PATH = 22
+    TUNING_PARAMS = 23
+    STATS = 24
+    AUTOADD_CONFIG = 25
+    ALLOWED_REPEAT_FREQ = 26
+    CHANNEL_DATA_RECV = 27
+    DEFAULT_FLOOD_SCOPE = 28
+    CLI_REPLY = 29
+
+    # Push notifications
+    ADVERTISEMENT = 0x80
+    PATH_UPDATE = 0x81
+    ACK = 0x82
+    MESSAGES_WAITING = 0x83
+    RAW_DATA = 0x84
+    LOGIN_SUCCESS = 0x85
+    LOGIN_FAILED = 0x86
+    STATUS_RESPONSE = 0x87
+    LOG_DATA = 0x88
+    TRACE_DATA = 0x89
+    PUSH_CODE_NEW_ADVERT = 0x8A
+    TELEMETRY_RESPONSE = 0x8B
+    BINARY_RESPONSE = 0x8C
+    PATH_DISCOVERY_RESPONSE = 0x8D
+    CONTROL_DATA = 0x8E
+    CONTACT_DELETED = 0x8F
+    CONTACTS_FULL = 0x90  # N02: MyMesh::onContactsFull() — 1-byte push, no payload
+    # Note: 0x90 == ControlType.NODE_DISCOVER_RESP in a different namespace.
+    # Not a literal conflict (PacketType vs ControlType), but a maintenance hazard.

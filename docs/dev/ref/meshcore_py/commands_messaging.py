@@ -1,0 +1,486 @@
+import asyncio
+import logging
+import random
+from typing import Optional, Union
+from hashlib import sha256
+
+from ..events import Event, EventType
+from ..packets import CommandType, TxtType, AdvType
+from .base import CommandHandlerBase, DestinationType, _validate_destination
+
+logger = logging.getLogger("meshcore")
+
+
+class MessagingCommands(CommandHandlerBase):
+    async def get_msg(self, timeout: Optional[float] = None) -> Event:
+        logger.debug("Requesting pending messages")
+        return await self.send(
+            b"\x0a",
+            [
+                EventType.CONTACT_MSG_RECV,
+                EventType.CHANNEL_MSG_RECV,
+                EventType.CHANNEL_DATA_RECV,
+                EventType.ERROR,
+                EventType.NO_MORE_MSGS,
+            ],
+            timeout,
+        )
+
+    async def _send_login_raw(self, dst: DestinationType, pwd: str) -> Event:
+        dst_bytes = _validate_destination(dst, prefix_length=32)
+        logger.debug(f"Sending login request to: {dst_bytes.hex()}")
+        data = b"\x1a" + dst_bytes + pwd.encode("utf-8")
+        return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def send_login(self, dst: DestinationType, pwd: str) -> Event:
+        logger.warning("*** please consider using send_login_sync instead of send_login")
+        return await self._send_login_raw(dst, pwd)
+
+    async def send_login_sync(self, dst: DestinationType, pwd: str, timeout=0, min_timeout=0) -> Optional[Event]:
+        """Send login to a remote node and wait for the response."""
+        async with self._mesh_request_lock:
+            result = await self._send_login_raw(dst, pwd)
+            if result is None or result.type == EventType.ERROR:
+                return None
+            timeout = result.payload["suggested_timeout"] / 800 if timeout == 0 else timeout
+            timeout = timeout if timeout > min_timeout else min_timeout
+            login_event = await self.dispatcher.wait_for_event(
+                EventType.LOGIN_SUCCESS,
+                timeout=timeout,
+            )
+            return login_event
+
+    async def send_logout(self, dst: DestinationType) -> Event:
+        dst_bytes = _validate_destination(dst, prefix_length=32)
+        data = b"\x1d" + dst_bytes
+        return await self.send(data, [EventType.OK, EventType.ERROR])
+
+    async def send_statusreq(self, dst: DestinationType) -> Event:
+        logger.warning("*** please consider using req_status_sync instead of send_statusreq")
+        dst_bytes = _validate_destination(dst, prefix_length=32)
+        logger.debug(f"Sending status request to: {dst_bytes.hex()}")
+        data = b"\x1b" + dst_bytes
+        return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def send_cmd(
+        self, dst: DestinationType, cmd: str, timestamp: Optional[int] = None,
+        dst_type = None # if None, will have to get a contact to know this
+    ) -> Event:
+        dst_bytes = _validate_destination(dst)
+        logger.debug(f"Sending command to {dst_bytes.hex()}: {cmd}")
+
+        if timestamp is None:
+            import time
+            timestamp = int(time.time())
+
+        if dst_type is None:
+            if isinstance(dst, dict) and "type" in dst:
+                dst_type = dst["type"]
+            else: # assume destination is a repeater
+                logger.warning("Can't determine destination type, please ensure contacts first or specify dst_type when calling `send_cmd`. Assuming it's a repeater.")
+                dst_type = AdvType.REPEATER.value
+
+        cmd_data = bytearray([CommandType.SEND_TXT_MSG.value])
+        if dst_type == AdvType.CHAT.value :
+            cmd_data.append(TxtType.CLI_CMD.value)
+        else:
+            cmd_data.append(TxtType.CLI_DATA.value)
+        cmd_data.append(0) # first and only attempt
+        cmd_data.extend(timestamp.to_bytes(4, "little"))
+        cmd_data.extend(dst_bytes)
+        cmd_data.extend(cmd.encode("utf-8"))
+        return await self.send(cmd_data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def send_msg(
+        self, dst: DestinationType, msg: str, timestamp: Optional[int] = None,
+        attempt=0
+    ) -> Event:
+        dst_bytes = _validate_destination(dst)
+        logger.debug(f"Sending message to {dst_bytes.hex()}: {msg}")
+
+        if timestamp is None:
+            import time
+
+            timestamp = int(time.time())
+
+        data = (
+            b"\x02\x00"
+            + attempt.to_bytes(1, "little")
+            + timestamp.to_bytes(4, "little")
+            + dst_bytes
+            + msg.encode("utf-8")
+        )
+        return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def send_msg_with_retry (
+        self, dst: DestinationType, msg: str, timestamp: Optional[int] = None,
+        max_attempts=3, max_flood_attempts=2, flood_after=2, timeout=0, min_timeout=0
+    ) -> Optional[Event]:
+
+        # try to get a 32 bytes key (for flood reset), fallback to 6
+        try:
+            dst_bytes = _validate_destination(dst, prefix_length=32)
+        except ValueError:
+            dst_bytes = _validate_destination(dst, prefix_length=6)
+        contact = self._get_contact_by_prefix(dst_bytes.hex())
+        if not contact is None and len(dst_bytes) < 32 :
+            # if we have a contact then we can get full key
+            dst_bytes = _validate_destination(contact, prefix_length=32)
+
+        attempts = 0
+        flood_attempts = 0
+        flood = False # by default consider we sent direct (will be overriden after send)
+        if timestamp is None:
+            # same timestamp on every attempt, the attempt number is what
+            # makes each packet unique (and lets receivers spot retries)
+            import time
+            timestamp = int(time.time())
+
+        # expected ack code -> MSG_SENT of the attempt that expects it
+        # the device keeps codes of earlier attempts, so a late ack for
+        # any of them still means the message got through
+        sent = {}
+        early_acks = set()
+        acked = asyncio.get_running_loop().create_future()
+
+        def on_ack(event):
+            code = event.attributes.get("code")
+            if code in sent:
+                if not acked.done():
+                    acked.set_result(code)
+            else:
+                # ack dispatched before send_msg returned its code
+                early_acks.add(code)
+
+        # subscribe before sending, the ack can be queued right behind MSG_SENT
+        ack_sub = self.dispatcher.subscribe(EventType.ACK, on_ack)
+        try:
+            while attempts < max_attempts and not acked.done() \
+                        and (not flood or flood_attempts < max_flood_attempts):
+                if attempts == flood_after and not flood : # change path to flood
+                    if len(dst_bytes) < 32: # can only reset with full key
+                        logger.info("Don't have full key, retreiving contacts so we can reset path")
+                        await self.get_contacts()
+                        contact = self._get_contact_by_prefix(dst_bytes.hex())
+                        if not contact is None:
+                            dst_bytes = _validate_destination(contact, prefix_length=32)
+                    logger.info("Resetting path")
+                    rp_res = await self.reset_path(dst_bytes)
+                    if rp_res.type == EventType.ERROR:
+                        logger.error(f"Couldn't reset path {rp_res} continuing ...")
+                    else:
+                        flood = True
+                        if not contact is None:
+                            contact["out_path"] = ""
+                            contact["out_path_len"] = -1
+
+                if attempts > 0:
+                    logger.info(f"Retry sending msg: {attempts + 1}")
+
+                result = await self.send_msg(dst, msg, timestamp, attempt=attempts)
+                if result.is_error():
+                    logger.error(f"Failed to send message: {result.payload}")
+                    attempts += 1
+                    if flood:
+                        flood_attempts += 1
+                    continue
+
+                flood = result.payload["type"] == 1 # we can sync flood flag from result ...
+                exp_ack = result.payload["expected_ack"].hex()
+                sent[exp_ack] = result
+                if exp_ack in early_acks and not acked.done():
+                    acked.set_result(exp_ack)
+
+                atimeout = result.payload["suggested_timeout"] / 1000 * 1.2 if timeout==0 else timeout
+                atimeout = atimeout if atimeout > min_timeout else min_timeout
+                await asyncio.wait([acked], timeout=atimeout)
+
+                attempts = attempts + 1
+                if flood :
+                    flood_attempts = flood_attempts + 1
+        finally:
+            ack_sub.unsubscribe()
+
+        return sent[acked.result()] if acked.done() else None
+
+    async def send_chan_msg(self, chan: int, msg: str, timestamp: Optional[int|bytes] = None) -> Event:
+        logger.debug(f"Sending channel message to channel {chan}: {msg}")
+
+        if timestamp is None:
+            # Default to current time if timestamp not provided
+            import time
+            timestamp_bytes = int(time.time()).to_bytes(4, "little")
+        elif isinstance(timestamp, int):
+            timestamp_bytes = timestamp.to_bytes(4, "little")
+        elif isinstance(timestamp, bytes) and len(timestamp) == 4:
+            # expected bytes format
+            timestamp_bytes = timestamp
+        else:
+            if isinstance(timestamp, bytes):
+                logger.error(f"Invalid timestamp format: got bytes of length {len(timestamp)} but expected bytes of length 4")
+            else:
+                logger.error(f"Invalid timestamp format: got {type(timestamp)} but expected int or 4 bytes")
+            return Event(EventType.ERROR, {"reason": "invalid_timestamp_format"})
+
+        data = (
+            b"\x03\x00" + chan.to_bytes(1, "little") + timestamp_bytes + msg.encode("utf-8")
+        )
+        return await self.send(data, [EventType.OK, EventType.ERROR])
+
+    async def send_telemetry_req(self, dst: DestinationType) -> Event:
+        logger.warning("*** please consider using req_telemetry_sync instead of send_telemetry_req")
+        dst_bytes = _validate_destination(dst, prefix_length=32)
+        logger.debug(f"Asking telemetry to {dst_bytes.hex()}")
+        data = b"\x27\x00\x00\x00" + dst_bytes
+        return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def _send_path_discovery_raw(self, dst: DestinationType) -> Event:
+        dst_bytes = _validate_destination(dst, prefix_length=32)
+        logger.debug(f"Path discovery request for {dst_bytes.hex()}")
+        data = b"\x34\x00" + dst_bytes
+        return await self.send(data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def send_path_discovery(self, dst: DestinationType) -> Event:
+        logger.warning("*** please consider using send_path_discovery_sync instead of send_path_discovery")
+        return await self._send_path_discovery_raw(dst)
+
+    async def send_path_discovery_sync(self, dst: DestinationType, timeout=0, min_timeout=0) -> Optional[Event]:
+        """Send path discovery request and wait for the response."""
+        async with self._mesh_request_lock:
+            result = await self._send_path_discovery_raw(dst)
+            if result is None or result.type == EventType.ERROR:
+                return None
+            timeout = result.payload["suggested_timeout"] / 800 if timeout == 0 else timeout
+            timeout = timeout if timeout > min_timeout else min_timeout
+            path_event = await self.dispatcher.wait_for_event(
+                EventType.PATH_RESPONSE,
+                timeout=timeout,
+            )
+            return path_event
+
+    async def send_trace(
+        self,
+        auth_code: int = 0,
+        tag: Optional[int] = None,
+        flags = None,
+        path: Optional[Union[str, bytes, bytearray]] = None,
+    ) -> Event:
+        """
+        Send a trace packet to test routing through specific repeaters
+
+        Args:
+            auth_code: 32-bit authentication code (default: 0)
+            tag: 32-bit integer to identify this trace (default: random)
+            flags: 8-bit flags field (default: None)
+                 lower two bytes set the path hash size (1 << s) => 1, 2, 4 bytes
+            path: Optional string with comma-separated hex values representing repeater pubkeys (e.g. "23,5f,3a")
+                 or a bytes/bytearray object with the raw path data
+
+        Returns:
+            Event object with sent status, tag, and estimated timeout in milliseconds
+        """
+        # Generate random tag if not provided
+        if tag is None:
+            tag = random.randint(1, 0xFFFFFFFF)
+        if auth_code is None:
+            auth_code = random.randint(1, 0xFFFFFFFF)
+
+        path_hash_len = 1 # default
+        if flags is None:
+            if isinstance(path, str): # get flags from path string
+                path_hash_len = int(len(path.split(",")[0]) / 2)
+                if path_hash_len == 1 :
+                    flags = 0
+                elif path_hash_len == 2 :
+                    flags = 1
+                elif path_hash_len == 4 :
+                    flags = 2
+                elif path_hash_len == 8 :
+                    flags = 3
+                else :
+                    logger.error(f"Invalid path format: unknown path_hash_len {path_hash_len}")
+                    return Event(EventType.ERROR, {"reason": "invalid_path_format"})
+            else:
+                flags = 0
+        else:
+            path_hash_len = 1 << (flags & 3)
+
+        # Process path if provided
+        path_bytes = bytearray()
+        if path:
+            if isinstance(path, str):
+                # Convert comma-separated hex values to bytes
+                try:
+                    for hex_val in path.split(","):
+                        hex_val = hex_val.strip()
+                        if hex_val == "":
+                            break
+                        elif len(hex_val) != path_hash_len * 2 :
+                           raise(ValueError())
+                        path_bytes.extend(bytes.fromhex(hex_val))
+                except ValueError as e:
+                    logger.error(f"Invalid path format: {e}")
+                    return Event(EventType.ERROR, {"reason": "invalid_path_format"})
+            elif isinstance(path, (bytes, bytearray)):
+                path_bytes = path
+            else:
+                logger.error(f"Unsupported path type: {type(path)}")
+                return Event(EventType.ERROR, {"reason": "unsupported_path_type"})
+
+        # Prepare the command packet: CMD(1) + tag(4) + auth_code(4) + flags(1) + [path]
+        cmd_data = bytearray([CommandType.SEND_TRACE_PATH.value])  # CMD_SEND_TRACE_PATH
+        cmd_data.extend(tag.to_bytes(4, "little"))
+        cmd_data.extend(auth_code.to_bytes(4, "little"))
+        cmd_data.append(flags)
+        cmd_data.extend(path_bytes)
+
+        # N05: Firmware requires strict len > 10 (MyMesh.cpp:1620).
+        # When path is empty, cmd(1)+tag(4)+auth(4)+flags(1) = 10 bytes exactly,
+        # which is silently rejected. Pad with one zero byte to reach 11.
+        if len(cmd_data) <= 10:
+            cmd_data.append(0x00)
+
+        logger.debug(
+            f"Sending trace: tag={tag}, auth={auth_code}, flags={flags}, path={path_bytes.hex()}"
+        )
+
+        return await self.send(cmd_data, [EventType.MSG_SENT, EventType.ERROR])
+
+    async def send_raw_data(self, payload: bytes, path: bytes = b"") -> Event:
+        """N09: Send raw data via CMD_SEND_RAW_DATA (25).
+
+        Sends an arbitrary raw-data payload directly (no flood support yet).
+
+        Command format:
+            0x19 | path_len(1) | path(path_len bytes) | payload(>=4 bytes)
+
+        Args:
+            payload: Raw bytes to send (minimum 4 bytes).
+            path:    Optional path bytes for intermediate hops (default: empty = zero-hop direct).
+
+        Returns:
+            Event with OK or ERROR.
+        """
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes-like")
+        if len(payload) < 4:
+            raise ValueError("payload must be at least 4 bytes")
+        path = bytes(path)
+        data = bytes([CommandType.SEND_RAW_DATA.value, len(path)]) + path + bytes(payload)
+        return await self.send(data, [EventType.OK, EventType.ERROR])
+
+    async def send_channel_data(
+        self, chan: int, data_type: int, payload: bytes, path: Optional[bytes] = None
+    ) -> Event:
+        """Send a binary datagram to a channel via CMD_SEND_CHANNEL_DATA (0x3E).
+
+        Command format:
+            0x3E | channel_idx(1) | path_len(1) | path(path_len bytes) | data_type(2, LE) | payload
+
+        Args:
+            chan:      Channel index (0-255, must fit in one byte; the firmware rejects unknown channels).
+            data_type: Application identifier, 0x0001-0xFFFF (0xFFFF is the developer namespace).
+            payload:   Binary payload, at most 163 bytes (MAX_CHANNEL_DATA_LENGTH).
+            path:      Optional path bytes to send along (default None = flood, path_len 0xFF).
+
+        Returns:
+            Event with OK or ERROR.
+        """
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload must be bytes-like")
+        if not 0 <= chan <= 0xFF:
+            raise ValueError("chan must fit in one byte (0-255)")
+        if not 0x0001 <= data_type <= 0xFFFF:
+            raise ValueError("data_type must be between 0x0001 and 0xFFFF")
+        if len(payload) > 163:
+            raise ValueError("payload must be at most 163 bytes")
+        if path is None:
+            path_bytes = b"\xff"
+        else:
+            path = bytes(path)
+            if len(path) >= 0xFF:
+                raise ValueError("path must be shorter than 255 bytes")
+            path_bytes = bytes([len(path)]) + path
+        data = bytes([CommandType.SEND_CHANNEL_DATA.value, chan]) + path_bytes + data_type.to_bytes(2, "little") + bytes(payload)
+        return await self.send(data, [EventType.OK, EventType.ERROR])
+
+    async def set_flood_scope(self, scope, force_unscoped=False):
+        if scope is None:
+            logger.debug(f"Resetting scope")
+            scope_key = b"\0"*16
+        elif isinstance (scope, str):
+            if scope == "0" or scope == "None" or scope == "": # revert to default
+                logger.debug(f"Resetting scope")
+                scope_key = b"\0"*16
+                logger.debug("revert to default_scope")
+            elif scope == "*":
+                force_unscoped = True
+                logger.debug("forcing unscoped msgs")
+            else:
+                logger.debug(f"Setting scope from string {scope}")
+                if scope[0] != "#":     # no hashtag as first char
+                    scope = "#" + scope # adding hashtag
+                scope_key = sha256(scope.encode("utf-8")).digest()[0:16]
+        elif isinstance (scope, bytes): # scope has been sent directly as byte
+                logger.debug(f"Directly setting scope to {scope}")
+                scope_key = scope
+        else:
+            raise TypeError(f"set_flood_scope: unsupported scope type {type(scope).__name__}")
+
+        if force_unscoped:
+            logger.debug("Forcing unscoped messages")
+        elif scope_key is None:
+            logger.debug(f"Resetting scope")
+        else:
+            logger.debug(f"Setting scope to {scope_key.hex()}")
+
+        cmd_data = bytearray([CommandType.SET_FLOOD_SCOPE.value])
+        if force_unscoped:
+            cmd_data.append(0x01)
+        else:
+            cmd_data.extend(b"\0")
+            cmd_data.extend(scope_key)
+
+        return await self.send(cmd_data, [EventType.OK, EventType.ERROR])
+
+    async def reset_flood_scope(self):
+        return await self.set_flood_scope(b"")
+
+    async def force_unscoped(self):
+        return await self.set_flood_scope(b"", force_unscoped=True)
+
+    async def set_default_flood_scope(self, scope):
+        if scope is None:
+            logger.debug(f"Resetting default scope")
+            scope_key = b"\0"*16
+            scope_name = ""
+        elif isinstance (scope, str):
+            if scope == "0" or scope == "None" or scope == "*" or scope == "": # disable
+                logger.debug ("Resetting default scope")
+                scope_key = b"\0"*16
+                scope_name = ""
+            else:
+                logger.debug (f"Setting scope to {scope}")
+                if scope[0] != "#":
+                    scope = "#" + scope
+                scope_name = scope
+                scope_key = sha256(scope.encode("utf-8")).digest()[0:16]
+        else:
+            raise TypeError(f"set_flood_scope: unsupported scope type {type(scope).__name__}")
+
+        logger.debug(f"Setting scope key to {scope_key.hex()}")
+
+        cmd_data = bytearray([CommandType.SET_DEFAULT_FLOOD_SCOPE.value])
+        cmd_data.extend(scope_name.encode("utf-8"))
+        cmd_data.extend((31-len(scope))*b'\0')
+        cmd_data.extend(scope_key)
+
+        return await self.send(cmd_data, [EventType.OK, EventType.ERROR])
+
+    async def reset_default_flood_scope(self):
+        return await self.set_default_flood_scope(None)
+
+    async def get_default_flood_scope(self):
+        logger.debug(f"Getting default flood scope")
+        cmd_data = bytearray([CommandType.GET_DEFAULT_FLOOD_SCOPE.value])
+        return await self.send(cmd_data, [EventType.DEFAULT_FLOOD_SCOPE, EventType.ERROR])
