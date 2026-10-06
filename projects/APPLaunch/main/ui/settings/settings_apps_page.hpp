@@ -49,6 +49,7 @@ private:
     void move_selection(int delta);
     void set_tab(Tab tab);
     void activate();
+    void request_remove_app();
     void toggle_source();
     void remove_selected_source();
     void begin_edit();

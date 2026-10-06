@@ -52,6 +52,10 @@ void cp0_display_set_key_sink(cp0_display_key_sink_t sink);
 /* Key sent by a tap in SWIPE mode (0 = Enter), e.g. Space to fire in a game. */
 void cp0_display_set_swipe_tap_key(unsigned short code);
 
+/* LIST mode: reverse the drag direction (1 = dragging up selects the row above), for pages whose highlight moves
+ * instead of the list. Reset to 0 by the page when it closes. */
+void cp0_display_set_list_drag_inverted(int inverted);
+
 /* center_y / row_h describe the highlighted row (compat 320x170 coordinates); ignored for POINTER. */
 void cp0_display_set_touch_mode(cp0_display_touch_mode_t mode, int center_y, int row_h);
 
