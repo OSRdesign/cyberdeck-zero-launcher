@@ -59,6 +59,7 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | ZeroMQ | Optional log publisher and automation RPC | MPL-2.0 for current libzmq; verify selected package |
 | OpenSSL | AppStore/ZClaw TLS | OpenSSL 3 Apache-2.0; older releases differ |
 | IEEE OUI registry (data) | Vendor names in the LAN Scan and Wi-Fi Survey apps (apps repo, `share/<app>/oui.tsv`), from <https://standards-oui.ieee.org/> | Public registry published by the IEEE; credited in each package's `copyright` file |
+| MeshCore protocol and firmware (data format only) | Mesh Hop app (apps repo): talks the MeshCore companion protocol over USB serial; written from the protocol docs and meshcore_py as a reference, radio presets from `api.meshcore.nz`; no launcher code involved | MeshCore: MIT (Scott Powell / rippleradios.com); meshcore_py: MIT (Florent de Lamotte); GPL clients (wadamesh, Meshy) not used as code; credited in the package's `copyright` file |
 | FreeType; Montserrat Medium, Font Awesome 5 Free (fonts) | Status bar of the Pi port (cp0_statusbar), shared with full-screen apps | FreeType FTL/GPL-2.0; fonts SIL OFL 1.1; Font Awesome icons CC BY 4.0 |
 | libcrypt, libc, libstdc++ | Account setup and runtime | Package-specific LGPL/GPL with runtime exceptions |
 

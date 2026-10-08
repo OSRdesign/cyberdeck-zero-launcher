@@ -46,6 +46,7 @@ display; no scanner); C6 path edit and reset, manual override, automatic route r
 R1 flood scope on the companion (region admin lives in the repeater terminal, phase 4); P1 map filter by type and time (with
 the tile-less map of task 010); P2 own-location sharing and local custom markers (a privacy confirmation before any advert
 with a position); M2 reactions as short texts (only if the user accepts the convention limits, see questions).
+Position box (from the 0.2.1 deck test, not in 0.2.2): shows the position; Enter/touch opens a box with the board GPS toggle (if the board lists gps) and manual entry of a position (lat/lon typed on the BT keyboard, validated), sets it with SET_ADVERT_LATLON.
 
 ## Phase 4 - remote administration and heavy items
 M10 room server login / logout and history replay (replay depth is decided by the firmware, to test on a real room server);
@@ -118,3 +119,48 @@ next number at load), so the unread counts stay right after deletions and restar
 
 **D.** Every box keeps buttons of 44 px or more (options and confirm buttons 52 to 56 px, arrows 100 px); Esc is unchanged: a short Esc
 closes a box, then goes back one level, never quits; holding Esc for 3 s ends the app (the launcher).
+
+## Phase 2 (built) - mesh-hop 0.2.0, report `reports/017-handoff.md`
+Built 2026-10-08 on the branch `mesh-hop-phase2` of the apps repo (uncommitted), package `mesh-hop_0.2.0_arm64.deb`, still a draft. Protocol facts
+come from `ref/` (meshcore_py, companion_protocol.md, payloads.md, packet_format.md); what the references do not say is marked "inferred" in the report.
+
+**0.1.2 questions answered by the user.** `curl` is now in `Depends`; the silent preset download is tried once more about 60 s after a failed first
+attempt while the deck is online (never more than two tries per launch, no retry when curl is missing, still silent, no "Refresh now").
+
+**Path hash size (new request).** The references show how: DEVICE_INFO carries the mode in byte 81 (firmware level 10 and up, 0 = 1 byte, 1 = 2, 2 = 3 bytes
+per hop hash) and SET_PATH_HASH_MODE (command 61, frame `3D 00 mode`, OK / error) sets it (`meshcore_py commands_device.set_path_hash_mode`;
+`meshcore-cli set path_hash_mode`, which refuses values of 3 and more). The user's board (v1.15.0, level 11) reports mode 1 (2-byte hashes) in the frame
+of report 013. Settings > Radio has a **Path hash size** row with the arrow popup (1 / 2 / 3 bytes, one line: larger hash = fewer collisions, less room
+per message); the board status shows the current size; the contact detail shows the hash size of a route. A board below level 10 gets the
+"Firmware too old for this feature" notice row. `packet_format.md` says firmware 1.12.0 and older only handled 1-byte hashes: repeaters on such a firmware
+may not forward packets that use more (not tested here; see the risks of the report).
+
+**C3.** Select mode in Contacts (check boxes, Select... menu: all shown, none, not heard for 7 / 30 days, never heard, invert), Delete n with a Yes / No box that
+names the count, then REMOVE_CONTACT one by one (the next only after the answer to the last) with a progress box and Stop; the contact cache is written once.
+Auto-add: Settings > Contacts, "Add nodes by itself" (SET_OTHER_PARAMS manual add flag, the 5-byte form with a fallback to the 4-byte one) and "Still added
+by itself" (GET / SET_AUTOADD_CONFIG: chat, repeater, room, sensor, replace-oldest).
+**C4.** Nearby list (button on the Contacts toolbar, badge with the number of waiting nodes): pending contacts (NEW_ADVERT while manual add is on), adverts parsed
+from the radio log (LOG_DATA, the advert packet: key, type, name, position, SNR, RSSI, hops and hash size), ADVERT pushes, and the zero-hop discover
+(SEND_CONTROL_DATA, DISCOVER_REQ with the full-key flag cleared, answers as CONTROL_DATA / DISCOVER_RESP for 8 s). Add = ADD_UPDATE_CONTACT; Ignore is kept on the deck.
+**C8.** Contact detail for every contact (the "i" box of a row, key I, the Details button of a direct chat). **C1.** Groups on the deck (`groups.jsonl` + `groups.bak`),
+a Group filter button and the Group... assignment in select mode (a button + pick list rather than chips). **M7.** Search messages (words, chat, dates, direction;
+the result opens the conversation at the message); retention and export are NOT built (they were in the roadmap line, not in this phase's brief).
+**D2.** TX power (existed), repeat on / off where GET_ALLOWED_REPEAT_FREQ allows, scheduled self advert (off / 1 / 3 / 6 / 12 h, flood or zero-hop, an app timer).
+**D5.** Reboot (`13 "reboot"`) and factory reset (two Yes / No boxes, 3 s wait on the second; no power-off command exists and none is offered).
+**D6.** Position in the board status. **D9.** Statistics screen (core, radio, packets; Refresh and an automatic refresh every 5 s).
+
+**BLE** (mandatory, scheduled after this phase) is not implemented: the design note and a one-day spike plan are in the report.
+
+**Found on the way.** A notice set in the same tick as the client's answer could vanish at once (an unsigned time difference): fixed (`App::tick`); the
+buttons drawn inside a list row swallowed the tap meant for the row: they are not clickable any more (the x of the tap says which button).
+
+## Phase 2 fix round (built) - mesh-hop 0.2.2, report `reports/018-handoff.md`
+From the user's deck test of 0.2.0 / 0.2.1 (steps 2-17 passed except these). **Settings:** the Position row shows only the position (or "not set"); the path hash size is
+only in the Radio section (the top info line is gone). **Per-board app data (bug: a swapped board kept the previous board's chats):** the board is identified by the public key of
+SELF_INFO; messages, read marks, mute flags, groups, ignored Nearby nodes, the scheduled advert and the contact / channel caches live in
+`~/.local/share/mesh-hop/boards/<first 12 hex of the key>/`; the presets cache, the last port, the log and the retry rules stay global. Plugging another board shows that board's own
+data, plugging the first one back restores it; with no board known yet the Chats list is empty ("No board yet"). The old flat files are moved into the folder of the board connected at
+the first start of the new layout (originals kept as `*.pre-boards.bak`). Old board folders are kept; Settings > History has "Forget this board's data" and "Other boards' data".
+**Factory reset:** the frame is `33 "reset"` (the firmware checks the word, see the report); the frame sent and the answer are logged; the wait for the answer is 60 s (the ESP32 format is
+slow); the outcome is judged by the identity the board reports when it comes back ("Board reset" or "not reset"), never "failed".
+
