@@ -41,6 +41,7 @@ who learns a lot from open source:
 - **SCons** — [SCons/scons](https://github.com/SCons/scons), the build system
 - **The cyberdeck that started it** — the author of the Reddit build post linked above
 - **Waveshare** — the 2.8" DPI LCD and its overlays ([Waveshare wiki](https://www.waveshare.com/wiki/2.8inch_DPI_LCD))
+- **MeshCore** — [meshcore-dev/MeshCore](https://github.com/meshcore-dev/MeshCore) (firmware and protocol, MIT) and [meshcore_py](https://github.com/meshcore-dev/meshcore_py) (MIT), the base of the Mesh Hop app in the apps repository; [MeshCore Open](https://github.com/zjs81/meshcore-open) and meshcore-gui (MIT), wadamesh and Meshy (GPL) were feature references only, no code copied from the GPL ones
 - **Raspberry Pi** — [raspberrypi/linux](https://github.com/raspberrypi/linux) and [raspberrypi/firmware](https://github.com/raspberrypi/firmware)
 - **EXKnight M4** Bluetooth keyboard, whose layout I mapped
 - Libraries bundled by the launcher (full list and licences in
