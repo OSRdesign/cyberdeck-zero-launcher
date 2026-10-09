@@ -164,3 +164,17 @@ the first start of the new layout (originals kept as `*.pre-boards.bak`). Old bo
 **Factory reset:** the frame is `33 "reset"` (the firmware checks the word, see the report); the frame sent and the answer are logged; the wait for the answer is 60 s (the ESP32 format is
 slow); the outcome is judged by the identity the board reports when it comes back ("Board reset" or "not reset"), never "failed".
 
+## Phase 3 part 1 (built, in test) - mesh-hop 0.3.0, report `reports/019-mesh-hop-0.3.0.md`
+Done (0.3.0, in test; deck protocol `tests/mesh-hop-0.3.0-deck-tests.md`):
+- [x] LOG_DATA parser in `core/logdata.*` (PUSH_LOG_RX_DATA: route, payload type, path, hops, SNR, RSSI, channel hash).
+- [x] "Heard back by N repeaters" on own **channel** messages (N = distinct routes of the echoes, matched by channel hash and size, live for 60 s then saved). Direct messages keep their delivered / no ack status.
+- [x] D8 packet log (`core/packet_log.*`, Settings > Packet log): start / stop / clear, row detail with hex, 500 packets in memory, off at every start, no export.
+- [x] Position box (`core/position.*`): manual lat/lon with '.' or ',' and validation, Clear, board GPS switch when the firmware lists `gps`, SET_ADVERT_LATLON then SELF_INFO read back.
+
+Remaining in phase 3:
+- [ ] C5 share contact (`meshcore://` text, QR display).
+- [ ] C6 path edit / reset / override / rotation; C7 trace path and ping.
+- [ ] R1 flood scope on the companion.
+- [ ] P1 map filters (type, time); P2 own-location sharing and local markers (privacy confirmation).
+- [ ] M2 reactions as short texts.
+- [ ] BLE spike on the deck (then the BLE transport).
