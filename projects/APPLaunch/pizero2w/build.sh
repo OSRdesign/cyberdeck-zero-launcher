@@ -4,7 +4,7 @@
 # Run on a Linux x86_64 host (or WSL) from anywhere inside the repository:
 #     projects/APPLaunch/pizero2w/build.sh [--with-store]
 # Output: projects/APPLaunch/pizero2w/bundle/  and  pizero2w-bundle.tar.gz
-# Copy the tarball to the Pi, unpack it and run  sudo ./install.sh
+# Copy the tarball to the Pi, unpack it and run  sudo ./install.sh   (to remove it again: ./uninstall.sh)
 #
 # Needs: git, python3 (venv), an aarch64 cross toolchain (apt install gcc-aarch64-linux-gnu
 # g++-aarch64-linux-gnu pkg-config libffi-dev libfreetype6-dev), and network access for the first
@@ -67,8 +67,9 @@ for file in APPLaunch.service launcher-ntp-default.service waveshare-pwm-backlig
             50-networkmanager-netdev.rules 51-launcher-time-power.rules; do
     cp "$HERE/$file" "$OUT/payload/etc/"
 done
-cp "$HERE/install.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
-chmod +x "$OUT/install.sh"
+( cd "$OUT/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$OUT/payload/share.manifest"   # for uninstall.sh
+cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
+chmod +x "$OUT/install.sh" "$OUT/uninstall.sh"
 
 tar -C "$HERE" -czf "$HERE/pizero2w-bundle.tar.gz" bundle
 echo "== done: $HERE/pizero2w-bundle.tar.gz"

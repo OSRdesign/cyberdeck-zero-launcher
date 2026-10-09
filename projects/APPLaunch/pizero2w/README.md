@@ -34,13 +34,48 @@ behaviour is unchanged when neither is set.
 `install.sh` is idempotent. It installs the launcher and assets under `/usr/share/APPLaunch`, the udev
 and PolicyKit rules, the user service (with lingering, so it starts at boot), the boot-time Network Time
 service, masks the text console on tty1 and adds the PWM backlight overlay (original files are kept as
-`*.bak-applaunch`).
+`*.bak-applaunch`). To take it all off again, see [Uninstall](#uninstall).
+
+## Uninstall
+
+`uninstall.sh` (in the bundle next to `install.sh`) removes what `install.sh` added. Run it as the deck user over
+ssh, not from the launcher's own terminal; it asks for `sudo` only for the system parts and never stores a password.
+
+```
+./uninstall.sh --dry-run            # print every action, change nothing
+./uninstall.sh                      # summary, one confirmation, then act
+./uninstall.sh --yes --purge-config # no prompt; also delete the user's launcher data
+```
+
+It stops, disables and deletes `APPLaunch.service` (through systemd, no `pkill`) and `launcher-ntp-default.service`,
+removes the binaries, the framebuffer shim, the launcher assets under `/usr/share/APPLaunch` (only the files of the
+bundle, listed in `payload/share.manifest`), the udev rules (then `udevadm control --reload`) and the PolicyKit rules,
+unmasks and enables `getty@tty1` if it is masked, and takes the PWM backlight out of the boot configuration: the exact
+lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `config.txt` (a timestamped
+`config.txt.bak-uninstall-<time>` is made first and the removed lines are printed), the `.dtbo`, and the
+`vt.global_cursor_default=0` / `consoleblank=0` arguments in `cmdline.txt` when the `*.bak-applaunch` backup shows that
+`install.sh` added them. Reboot afterwards.
+
+It keeps by default: `~/.config/cardputerzero`, the Settings > Apps sources and install records
+(`~/.local/share/cardputerzero-appstore`), the download cache, every installed app package and its data (`/opt/...`),
+the packages `install.sh` pulled in with apt, the user's groups and lingering, and the backup files.
+
+| Option | Effect |
+| --- | --- |
+| `--dry-run` | Print every action and change nothing. |
+| `--yes` | No confirmation prompt (without it the script asks once, after printing what it removes and keeps). |
+| `--purge-config` | Also delete `~/.config/cardputerzero`, `~/.local/share/cardputerzero-appstore` and `~/.cache/cardputerzero-appstore`. |
+| `--remove-apps` | Also `apt-get remove` the app packages installed from Settings > Apps / the Store, taken from the launcher's `installed.json` and listed first. No record: skipped. With `--purge-config` the packages are purged. |
+| `--restore-config` | Restore `config.txt` from `config.txt.bak-before-pwm` instead of removing the two lines (loses any other later edit; the current file is backed up first). |
+| `--no-boot-config` | Leave `config.txt`, `cmdline.txt` and the overlay alone. |
+| `--disable-linger` | Also run `loginctl disable-linger` (`install.sh` enabled it; it may have been on before). |
+| `--user NAME`, `--payload DIR` | The user that ran `install.sh`; where the bundle's `payload/` is, if it is not next to the script. |
 
 ## Files in this folder
 
 | File | Purpose |
 | --- | --- |
-| `build.sh` / `install.sh` | Build the bundle (host) / install it (Pi). |
+| `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host) / install it (Pi) / remove it again (Pi). |
 | `APPLaunch.service` | systemd **user** service: display, touch axes, keyboard device, working directory. |
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
@@ -71,4 +106,5 @@ per-app touch choice `touch_<app>`, app switches).
 ## Reverting the PWM backlight
 
 Remove the `dtoverlay=pwm,...` and `dtoverlay=waveshare-pwm-backlight` lines from `config.txt` (a backup is
-`config.txt.bak-applaunch`) and delete `/etc/udev/rules.d/90-backlight-unblank.rules`.
+`config.txt.bak-applaunch`) and delete `/etc/udev/rules.d/90-backlight-unblank.rules`. `uninstall.sh` does this (and
+the rest) for you.
