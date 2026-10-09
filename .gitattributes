@@ -1,0 +1,5 @@
+# Files that run on the Linux deck must keep LF line endings, even when checked out on Windows (autocrlf)
+*.sh text eol=lf
+*.rules text eol=lf
+*.service text eol=lf
+*.desktop text eol=lf
