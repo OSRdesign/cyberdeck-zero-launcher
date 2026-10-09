@@ -10,6 +10,8 @@
 #   --no-boot-config       do not touch /boot/firmware/config.txt and cmdline.txt (no PWM backlight)
 #   --force                continue even if this does not look like a Pi Zero 2W
 #
+# To remove everything this script adds, run ./uninstall.sh (see README.md, "Uninstall").
+#
 # Prerequisites that this script does NOT do:
 #   - Waveshare DPI panel overlays in config.txt (see config.txt.snippet and the Waveshare wiki);
 #   - pairing the Bluetooth keyboard (bluetoothctl).
@@ -25,7 +27,7 @@ while [ $# -gt 0 ]; do
         --user) TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
         --force) FORCE=1; shift ;;
-        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
