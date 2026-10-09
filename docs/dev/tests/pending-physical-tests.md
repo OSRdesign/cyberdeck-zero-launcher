@@ -2,7 +2,7 @@
 
 Testing is led by the Controller with the user (see ROLES.md): Claude does the code checks and deploys a build, the user
 does the physical tests below and answers "OK" or what was wrong per step, and Claude routes the findings to the right
-developer agent. Last updated 2026-10-06.
+developer agent. Last updated 2026-10-10.
 
 ## A. Esc rule on LanScan 0.1.3 and Wi-Fi Survey 0.1.1 (built, code-checked, NOT yet deployed: needs PIPW)
 Rule: a short Esc is always Back and never quits; the app quits only on a 3 s hold of Esc (launcher behaviour).
@@ -33,6 +33,11 @@ Passed on the deck: touch (tabs, sources, add, sync, update all, failure panel),
 the U / S / A / D shortcuts and real failures (no network, 404). Two findings were fixed the same day: Enter and a tap on
 an up-to-date app no longer ask to remove it (D or Del does, with a confirmation), and the drag direction on the Apps
 list was reversed (`cp0_display_set_list_drag_inverted`).
+
+## E. Mesh Hop 0.3.0 (phase 3): built, code-checked, NOT yet deployed
+Local deb `C:\CLAUDE\zero7\pkg-out\mesh-hop_0.3.0_arm64.deb`, board B (XIAO S3 WIO, fw 1.15.0, `#test` in slot 1) on USB.
+Full protocol: [mesh-hop-0.3.0-deck-tests.md](mesh-hop-0.3.0-deck-tests.md) (21 steps): install over 0.2.2 with data kept,
+Position box, "heard back by N repeaters", packet log. Send back the answers per step and `~/.local/share/mesh-hop/mesh-hop.log`.
 
 ## D. Environment note
 `deck.py` needs the PIPW environment variable (the deck password) in the Claude Code session; it was missing in the
