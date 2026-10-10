@@ -42,10 +42,8 @@
 
 namespace {
 
-constexpr int kBarH = 56;       // status bar height
 constexpr int kCols = 3;        // grid columns
-constexpr int kPad = 16;        // grid padding and gap
-constexpr int kTileH = 188;     // two rows fit exactly under the status bar
+constexpr int kRows = 2;        // grid rows that fit on screen
 constexpr uint32_t kBg = 0x000000;
 constexpr uint32_t kTileBg = 0x1E1E1E;
 constexpr uint32_t kTileBorder = 0x3A3A3A;
@@ -62,6 +60,91 @@ lv_obj_t *s_chrome = nullptr;   // toolbar screen shown in compat mode (native d
 lv_obj_t *s_idle = nullptr;     // empty screen parked on the compat display while at home
 std::vector<lv_obj_t *> s_tiles;
 int s_selected = 0;
+
+// Geometry of the native screens, computed from the native display size. Two profiles: the 640x480
+// deck (the values the UI always had; they must not change) and the compact one for small panels such
+// as the 480x320 Pi 3A+ (status bar 40, padding 10, icon and text about 72 % of the deck sizes).
+struct Layout {
+    bool compact;
+    int screen_w, screen_h;
+    int bar_h;           // status bar height
+    int pad;             // grid padding and gap
+    int tile_w, tile_h;  // two rows fit exactly under the status bar
+    int status_pct;      // scale of the clock / Wi-Fi / Bluetooth strip
+    int status_top;      // y of the clock pill inside the bar
+    int status_w;        // width of the strip canvas
+    int title_x, title_y;
+    const lv_font_t *title_font;
+    int tile_radius, tile_border, tile_border_sel;
+    int icon, icon_top;
+    const lv_font_t *label_font;
+    int label_bottom, label_inset;
+    int tb_pad_x, tb_pad_y, tb_gap, tb_radius;
+    const lv_font_t *tb_text_font, *tb_symbol_font;
+};
+
+constexpr int kCompactBelowH = 400; // a native display shorter than this uses the compact profile
+
+const Layout &layout()
+{
+    static Layout l = [] {
+        Layout v{};
+        lv_display_t *display = cp0_display_native();
+        v.screen_w = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : 640;
+        v.screen_h = display ? static_cast<int>(lv_display_get_vertical_resolution(display)) : 480;
+        v.compact = v.screen_h < kCompactBelowH;
+        if (!v.compact) {
+            v.bar_h = 56;
+            v.pad = 16;
+            v.status_pct = 100;
+            v.status_top = 8;
+            v.title_x = 20;
+            v.title_y = 10;
+            v.title_font = &lv_font_montserrat_32;
+            v.tile_radius = 28;
+            v.tile_border = 3;
+            v.tile_border_sel = 5;
+            v.icon = 128;
+            v.icon_top = 14;
+            v.label_font = &lv_font_montserrat_24;
+            v.label_bottom = 12;
+            v.label_inset = 16;
+            v.tb_pad_x = 10;
+            v.tb_pad_y = 10;
+            v.tb_gap = 8;
+            v.tb_radius = 18;
+            v.tb_text_font = &lv_font_montserrat_24;
+            v.tb_symbol_font = &lv_font_montserrat_32;
+        } else {
+            v.bar_h = 40;
+            v.pad = 10;
+            v.status_pct = 72;
+            v.status_top = 5;
+            v.title_x = 14;
+            v.title_y = 6;
+            v.title_font = &lv_font_montserrat_24;
+            v.tile_radius = 20;
+            v.tile_border = 2;
+            v.tile_border_sel = 4;
+            v.icon = 88;
+            v.icon_top = 6;
+            v.label_font = &lv_font_montserrat_18;
+            v.label_bottom = 5;
+            v.label_inset = 12;
+            v.tb_pad_x = 6;
+            v.tb_pad_y = 5;
+            v.tb_gap = 6;
+            v.tb_radius = 14;
+            v.tb_text_font = &lv_font_montserrat_18;
+            v.tb_symbol_font = &lv_font_montserrat_24;
+        }
+        v.tile_w = (v.screen_w - 2 * v.pad - (kCols - 1) * v.pad) / kCols;
+        v.tile_h = (v.screen_h - v.bar_h - (kRows + 1) * v.pad) / kRows;
+        v.status_w = 320 * v.status_pct / 100;
+        return v;
+    }();
+    return l;
+}
 
 // Creates objects on a specific display regardless of the current default.
 class DefaultDisplayScope
@@ -165,14 +248,12 @@ int signal_percent(int signal)
 
 // Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native screen. They are drawn by the
 // shared renderer (cp0_statusbar.c, the same code the display bridge of full-screen apps uses) into a
-// transparent canvas, so every screen and every full-screen app shows exactly the same bar.
+// transparent canvas (320 px wide at the deck size, scaled down on small panels), so every screen and every full-screen app shows exactly the same bar.
 // One instance per screen: it owns its timers and frees itself when the parent is deleted.
-constexpr int kStatusW = 320;
-
 struct StatusIcons {
     lv_obj_t *parent = nullptr;
     lv_obj_t *canvas = nullptr;
-    std::vector<uint32_t> pixels;            // ARGB8888, kStatusW x CP0_STATUSBAR_HEIGHT
+    std::vector<uint32_t> pixels;            // ARGB8888, status_w x CP0_STATUSBAR_HEIGHT
     cp0_statusbar_state_t state{};
     cp0_statusbar_state_t shown{};
     bool drawn = false;
@@ -193,7 +274,9 @@ void redraw_status(StatusIcons *icons)
     if (!bar || !icons->canvas) return;
     if (icons->drawn && std::memcmp(&icons->state, &icons->shown, sizeof(icons->state)) == 0) return;
     std::fill(icons->pixels.begin(), icons->pixels.end(), 0u);
-    cp0_statusbar_render(bar, icons->pixels.data(), kStatusW, kStatusW, 0, 8, 0, &icons->state);
+    const Layout &l = layout();
+    cp0_statusbar_render_scaled(bar, icons->pixels.data(), l.status_w, l.status_w, 0, l.status_top, 0, &icons->state,
+                                l.status_pct);
     icons->shown = icons->state;
     icons->drawn = true;
     lv_obj_invalidate(icons->canvas);
@@ -257,14 +340,15 @@ StatusIcons *build_status_icons(lv_obj_t *parent)
 {
     auto *icons = new StatusIcons();
     icons->parent = parent;
-    icons->pixels.assign(static_cast<size_t>(kStatusW) * CP0_STATUSBAR_HEIGHT, 0u);
+    const Layout &l = layout();
+    icons->pixels.assign(static_cast<size_t>(l.status_w) * CP0_STATUSBAR_HEIGHT, 0u);
     lv_obj_add_event_cb(parent, status_icons_delete_cb, LV_EVENT_DELETE, icons);
 
     lv_display_t *display = lv_obj_get_display(parent);
-    const int screen_w = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : 640;
+    const int screen_w = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : l.screen_w;
     icons->canvas = lv_canvas_create(parent);
-    lv_canvas_set_buffer(icons->canvas, icons->pixels.data(), kStatusW, CP0_STATUSBAR_HEIGHT, LV_COLOR_FORMAT_ARGB8888);
-    lv_obj_set_pos(icons->canvas, screen_w - kStatusW, 0);
+    lv_canvas_set_buffer(icons->canvas, icons->pixels.data(), l.status_w, l.bar_h, LV_COLOR_FORMAT_ARGB8888);
+    lv_obj_set_pos(icons->canvas, screen_w - l.status_w, 0);
     lv_obj_remove_flag(icons->canvas, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(icons->canvas, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -281,9 +365,9 @@ void build_status_bar(lv_obj_t *parent)
 {
     lv_obj_t *title = lv_label_create(parent);
     lv_label_set_text(title, "ZERO");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_32, 0);
+    lv_obj_set_style_text_font(title, layout().title_font, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(kGold), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 20, 10);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, layout().title_x, layout().title_y);
     s_home_icons = build_status_icons(parent);
 }
 
@@ -298,11 +382,12 @@ void ensure_home()
 
     s_grid = lv_obj_create(s_home);
     lv_obj_remove_style_all(s_grid);
-    lv_obj_set_size(s_grid, LV_PCT(100), lv_display_get_vertical_resolution(cp0_display_native()) - kBarH);
-    lv_obj_set_pos(s_grid, 0, kBarH);
-    lv_obj_set_style_pad_all(s_grid, kPad, 0);
-    lv_obj_set_style_pad_row(s_grid, kPad, 0);
-    lv_obj_set_style_pad_column(s_grid, kPad, 0);
+    const Layout &l = layout();
+    lv_obj_set_size(s_grid, LV_PCT(100), l.screen_h - l.bar_h);
+    lv_obj_set_pos(s_grid, 0, l.bar_h);
+    lv_obj_set_style_pad_all(s_grid, l.pad, 0);
+    lv_obj_set_style_pad_row(s_grid, l.pad, 0);
+    lv_obj_set_style_pad_column(s_grid, l.pad, 0);
     lv_obj_set_flex_flow(s_grid, LV_FLEX_FLOW_ROW_WRAP);
     lv_obj_set_flex_align(s_grid, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
     lv_obj_set_scroll_dir(s_grid, LV_DIR_VER);
@@ -312,22 +397,22 @@ void ensure_home()
 
 void build_tile(int index, const app &item)
 {
-    const int width =
-        (lv_display_get_horizontal_resolution(cp0_display_native()) - 2 * kPad - (kCols - 1) * kPad) / kCols;
+    const Layout &l = layout();
+    const int width = l.tile_w;
 
     lv_obj_t *tile = lv_obj_create(s_grid);
     lv_obj_remove_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(tile, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_set_size(tile, width, kTileH);
-    lv_obj_set_style_radius(tile, 28, 0);
+    lv_obj_set_size(tile, width, l.tile_h);
+    lv_obj_set_style_radius(tile, l.tile_radius, 0);
     lv_obj_set_style_bg_color(tile, lv_color_hex(kTileBg), 0);
     lv_obj_set_style_bg_opa(tile, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(tile, 3, 0);
+    lv_obj_set_style_border_width(tile, l.tile_border, 0);
     lv_obj_set_style_border_color(tile, lv_color_hex(kTileBorder), 0);
     lv_obj_set_style_pad_all(tile, 0, 0);
     // selected (keyboard focus)
     lv_obj_set_style_border_color(tile, lv_color_hex(kAccent), LV_STATE_CHECKED);
-    lv_obj_set_style_border_width(tile, 5, LV_STATE_CHECKED);
+    lv_obj_set_style_border_width(tile, l.tile_border_sel, LV_STATE_CHECKED);
     lv_obj_set_style_bg_color(tile, lv_color_hex(0x262626), LV_STATE_CHECKED);
     // pressed (touch)
     lv_obj_set_style_bg_color(tile, lv_color_hex(0x33414D), LV_STATE_PRESSED);
@@ -336,20 +421,20 @@ void build_tile(int index, const app &item)
 
     lv_obj_t *icon = lv_image_create(tile);
     lv_obj_remove_flag(icon, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(icon, 128, 128);
+    lv_obj_set_size(icon, l.icon, l.icon);
     lv_image_set_inner_align(icon, LV_IMAGE_ALIGN_STRETCH);
     lv_image_set_src(icon, item.Icon.c_str());
-    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, 14);
+    lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, l.icon_top);
 
     lv_obj_t *label = lv_label_create(tile);
     lv_obj_remove_flag(label, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_width(label, width - 16);
+    lv_obj_set_width(label, width - l.label_inset);
     lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
+    lv_obj_set_style_text_font(label, l.label_font, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
     lv_label_set_text(label, item.Name.c_str());
-    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -l.label_bottom);
 
     s_tiles.push_back(tile);
 }
@@ -358,18 +443,18 @@ void build_tile(int index, const app &item)
 
 struct ToolbarKey {
     const char *text;
-    const lv_font_t *font;
+    bool symbol;    // drawn with the larger symbol font
     uint32_t code;
     bool down;
 };
 
 ToolbarKey s_keys[] = {
-    {"Esc", &lv_font_montserrat_24, KEY_ESC, false},
-    {LV_SYMBOL_LEFT, &lv_font_montserrat_32, KEY_LEFT, false},
-    {LV_SYMBOL_UP, &lv_font_montserrat_32, KEY_UP, false},
-    {LV_SYMBOL_DOWN, &lv_font_montserrat_32, KEY_DOWN, false},
-    {LV_SYMBOL_RIGHT, &lv_font_montserrat_32, KEY_RIGHT, false},
-    {LV_SYMBOL_NEW_LINE, &lv_font_montserrat_32, KEY_ENTER, false},
+    {"Esc", false, KEY_ESC, false},
+    {LV_SYMBOL_LEFT, true, KEY_LEFT, false},
+    {LV_SYMBOL_UP, true, KEY_UP, false},
+    {LV_SYMBOL_DOWN, true, KEY_DOWN, false},
+    {LV_SYMBOL_RIGHT, true, KEY_RIGHT, false},
+    {LV_SYMBOL_NEW_LINE, true, KEY_ENTER, false},
 };
 
 bool external_running(); // defined with the external app support below
@@ -418,9 +503,11 @@ void ensure_chrome()
 
     int wx, wy, ww, wh;
     cp0_display_compat_window(&wx, &wy, &ww, &wh);
-    const int screen_w = lv_display_get_horizontal_resolution(cp0_display_native());
-    const int screen_h = lv_display_get_vertical_resolution(cp0_display_native());
-    const int bar_y = wy + wh;
+    const Layout &l = layout();
+    const int screen_w = l.screen_w;
+    const int screen_h = l.screen_h;
+    // The toolbar starts below the window, leaving the same margin as above it (deck: 0, 480x320: 25).
+    const int bar_y = wy + wh + wy;
 
     s_chrome = make_black_screen();
 
@@ -428,17 +515,18 @@ void ensure_chrome()
     lv_obj_remove_style_all(bar);
     lv_obj_set_size(bar, screen_w, screen_h - bar_y);
     lv_obj_set_pos(bar, 0, bar_y);
-    lv_obj_set_style_pad_all(bar, 10, 0);
-    lv_obj_set_style_pad_column(bar, 8, 0);
+    lv_obj_set_style_pad_hor(bar, l.tb_pad_x, 0);
+    lv_obj_set_style_pad_ver(bar, l.tb_pad_y, 0);
+    lv_obj_set_style_pad_column(bar, l.tb_gap, 0);
     lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
     lv_obj_remove_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
 
     constexpr int count = static_cast<int>(sizeof(s_keys) / sizeof(s_keys[0]));
-    const int button_w = (screen_w - 20 - (count - 1) * 8) / count;
+    const int button_w = (screen_w - 2 * l.tb_pad_x - (count - 1) * l.tb_gap) / count;
     for (auto &key : s_keys) {
         lv_obj_t *button = lv_button_create(bar);
-        lv_obj_set_size(button, button_w, screen_h - bar_y - 20);
-        lv_obj_set_style_radius(button, 18, 0);
+        lv_obj_set_size(button, button_w, screen_h - bar_y - 2 * l.tb_pad_y);
+        lv_obj_set_style_radius(button, l.tb_radius, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x2A2A2A), 0);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(kAccent), LV_STATE_PRESSED);
@@ -448,7 +536,7 @@ void ensure_chrome()
 
         lv_obj_t *label = lv_label_create(button);
         lv_label_set_text(label, key.text);
-        lv_obj_set_style_text_font(label, key.font, 0);
+        lv_obj_set_style_text_font(label, key.symbol ? l.tb_symbol_font : l.tb_text_font, 0);
         lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
         lv_obj_center(label);
     }

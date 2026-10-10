@@ -14,6 +14,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <utility>
 
 namespace {
@@ -371,12 +372,13 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_t12b_about_page_factory(
     const NodeIter &page_node,
     std::function<void()> on_back)
 {
+    const char *board = std::getenv("APPLAUNCH_BOARD"); // board profile label, unset on the deck
     return std::make_unique<LvSettingStaticInfoPage3>(
         parent,
         page_node,
         std::move(on_back),
         settings_t12b::about_help::about(
-            build_version(), build_date(), build_channel(), build_commit()));
+            build_version(), build_date(), build_channel(), build_commit(), board ? board : ""));
 }
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_storage_page_factory(

@@ -38,9 +38,10 @@ std::vector<std::string> split_lines(std::string_view text)
 Content about(std::string_view version,
               std::string_view build_date,
               std::string_view channel,
-              std::string_view commit)
+              std::string_view commit,
+              std::string_view board)
 {
-    return {
+    Content content{
         "About",
         {
             "M5CardputerZero",
@@ -51,6 +52,9 @@ Content about(std::string_view version,
             "Commit: " + value_or_unknown(commit),
         },
     };
+    if (!board.empty())
+        content.lines.insert(content.lines.begin() + 1, "Board: " + std::string(board));
+    return content;
 }
 
 Content credit()

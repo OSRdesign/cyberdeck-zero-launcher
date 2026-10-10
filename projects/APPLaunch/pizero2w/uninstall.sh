@@ -59,6 +59,8 @@ BOOT="$ROOT/boot/firmware"
 UDEV_DIR="$ROOT/etc/udev/rules.d"
 POLKIT_DIR="$ROOT/etc/polkit-1/rules.d"
 SYSTEMD_DIR="$ROOT/etc/systemd/system"
+PROFILE_DIR="$ROOT/etc/applaunch"
+PROFILE="$PROFILE_DIR/board.conf"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 
@@ -249,7 +251,8 @@ case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
 esac
-echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 99-bt-keyboard"
+echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 99-bt-keyboard"
+echo "  - board profile $PROFILE (and $PROFILE_DIR if it is then empty)"
 echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power"
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
@@ -282,6 +285,7 @@ echo "  - packages install.sh added with apt (libinput10 libxkbcommon0 libfreety
 echo "  - group membership (input, video, netdev) of $TARGET_USER"
 [ "$DISABLE_LINGER" = 1 ] || echo "  - lingering (add --disable-linger to turn it off)"
 echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm"
+echo "  - $PROFILE.bak if install.sh made one (a replaced or hand-edited profile)"
 [ "$BOOT_CONFIG" = 0 ] || [ -z "$CFG_NOTE$CMD_NOTE" ] || { echo "Notes:"; [ -z "$CFG_NOTE" ] || echo "  - $CFG_NOTE"; [ -z "$CMD_NOTE" ] || echo "  - $CMD_NOTE"; }
 
 if [ "$DRY" = 0 ] && [ "$YES" = 0 ]; then
@@ -334,12 +338,16 @@ fi
 
 say "Removing udev and polkit rules"
 UDEV_CHANGED=0
-for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 99-bt-keyboard.rules; do
+for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlight-gpio.rules 99-bt-keyboard.rules; do
     exists "$UDEV_DIR/$f" && UDEV_CHANGED=1
     rm_sys "$UDEV_DIR/$f"
 done
 [ "$UDEV_CHANGED" = 1 ] && act_try $SUDO udevadm control --reload
 for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules; do rm_sys "$POLKIT_DIR/$f"; done
+
+say "Removing the board profile"
+rm_sys "$PROFILE"
+if [ -d "$PROFILE_DIR" ] && [ -z "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$PROFILE_DIR"; fi
 
 say "Removing the launcher files in $APP_ROOT"
 for f in bin/M5CardputerZero-APPLaunch bin/M5CardputerZero-AppStore lib/libapplaunch_vfb.so; do rm_sys "$APP_ROOT/$f"; done
@@ -457,7 +465,7 @@ for p in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR"; do [ -d "$p" ] && echo "  kept (
 if [ -d "$APP_ROOT" ]; then
     echo "  $APP_ROOT: $(find "$APP_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ') files left (installed apps and their entries)"
 fi
-for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm"; do [ -f "$b" ] && echo "  backup kept: $b"; done
+for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm" "$PROFILE.bak"; do [ -f "$b" ] && echo "  backup kept: $b"; done
 for b in "$BOOT"/config.txt.bak-uninstall-* "$BOOT"/cmdline.txt.bak-uninstall-*; do [ -f "$b" ] && echo "  backup made now: $b"; done
 echo "  apt packages added by install.sh, and the groups input/video/netdev of $TARGET_USER (not recorded by install.sh)"
 if [ "$DISABLE_LINGER" = 0 ]; then echo "  lingering stays on for $TARGET_USER (loginctl disable-linger $TARGET_USER to undo)"; fi

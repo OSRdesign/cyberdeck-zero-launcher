@@ -21,7 +21,10 @@ const char *device_path();
 /* Emit a key press (value 1) or release (value 0) into the virtual keyboard. */
 void send(unsigned short code, int value);
 
-/* Mirror the physical keyboard's key events into the virtual one until stop_forwarding(). */
+/* Mirror the physical keyboard's key events into the virtual one until stop_forwarding(): `physical_device`
+ * (LV_LINUX_KEYBOARD_DEVICE) and, when the launcher reads all keyboards (cp0_keyboard_get_read_all_keyboards),
+ * every real keyboard, including ones plugged in or woken while the app runs. Keys still held by a keyboard
+ * that disappears are released in the virtual one. */
 void start_forwarding(const std::string &physical_device);
 void stop_forwarding();
 

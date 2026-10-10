@@ -58,6 +58,12 @@ public:
         return static_cast<int>(value);
     }
 
+    /* On/off backlight (board profile gpio:<dir>): the page lists "On" and "Off <n> s". Off
+     * switches the panel dark for kOffSeconds only and then back on, with a countdown in the
+     * status label; Enter/tap or leaving the page switches it back on at once. Nothing is
+     * persisted in this mode. */
+    static constexpr int kOffSeconds = 10;
+
     LvSettingBrightnessPage3();
     LvSettingBrightnessPage3(lv_obj_t *parent, const NodeIter &parent_node);
     LvSettingBrightnessPage3(lv_obj_t *parent,
@@ -86,7 +92,14 @@ private:
     void finish_write(const BrightnessWriteResult &result);
     void finish_write_failure();
     bool begin_write();
+    SettingApiResult activate_onoff();
+    void stop_off_countdown(bool switch_on);
+    void show_off_countdown();
+    static void off_countdown_cb(lv_timer_t *timer);
 
+    bool onoff_ = false;
+    lv_timer_t *off_timer_ = nullptr;
+    int off_remaining_ = 0;
     bool destroying_ = false;
     bool back_requested_ = false;
     bool page_alive_ = true;

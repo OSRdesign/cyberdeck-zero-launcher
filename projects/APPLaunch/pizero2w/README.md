@@ -36,6 +36,46 @@ and PolicyKit rules, the user service (with lingering, so it starts at boot), th
 service, masks the text console on tty1 and adds the PWM backlight overlay (original files are kept as
 `*.bak-applaunch`). To take it all off again, see [Uninstall](#uninstall).
 
+It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
+for Debian 13 trixie. `sudo ./install.sh --dry-run` prints the detected board and what would be done.
+
+## Boards
+
+`install.sh` detects the board from `/proc/device-tree/model`, the connected DRM connectors (`/sys/class/drm`) and
+the framebuffers (`/sys/class/graphics`):
+
+| Board | Detected by | Profile |
+| --- | --- | --- |
+| `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `APPLaunch.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
+| `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
+| anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report |
+
+The profile is a systemd `EnvironmentFile` (`EnvironmentFile=-/etc/applaunch/board.conf` in `APPLaunch.service`,
+`-` = optional). systemd lets its values override the service's `Environment=` lines, so the deck's values
+(`/dev/fb0`, rotation 0, touch swap/invert) stay in the service and a profile replaces the ones it names:
+
+```
+APPLAUNCH_BOARD=pi3a-luckfox35       # label, logged at start, shown in Settings > About
+APPLAUNCH_FB=/dev/fb1                # framebuffer device (default /dev/fb0); install.sh writes the detected one
+APPLAUNCH_LOGICAL=480x320            # landscape canvas the UI draws on (default 640x480)
+APPLAUNCH_ROTATE=90                  # 0|90|180|270 clockwise pre-rotation into the buffer (default 0)
+APPLAUNCH_COMPAT_SCALE=1             # 1 or 2: scale of the 320x170 stock-app window (default 2)
+APPLAUNCH_TOUCH_DEV=auto             # auto = pick by capability, or /dev/input/eventN
+APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuffer; legacy = SWAP_XY/INVERT_* env (default legacy)
+APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> brightness | pwm
+```
+
+The `pi3a-luckfox35` profile also sets `LV_LINUX_FBDEV_DEVICE` to the same framebuffer and
+`APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y=0`, so the deck's touch axes from the service do not apply.
+
+- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `--board zero2w` for no profile).
+  `sudo ./install.sh --board-only` only (re)writes the profile and the backlight rule.
+- **Hand edits** are kept: a re-run leaves an edited `board.conf` alone; `--force` replaces it and keeps the old one
+  as `board.conf.bak`. Restart the launcher after an edit: `systemctl --user restart APPLaunch.service`.
+- **Add a board:** probe it with `tools/board-probe/probe-board.sh`, then in `install.sh` add its detection to the
+  `case "$MODEL"` block, its values to `profile_body()` and its name to `--board`; add a fixture under `tests/fixtures/`
+  (fake `proc/` and `sys/` trees) and cases to `tests/test-install-board.sh` (run it with `sh`, no Pi needed).
+
 ## Uninstall
 
 `uninstall.sh` (in the bundle next to `install.sh`) removes what `install.sh` added. Run it as the deck user over
@@ -50,6 +90,7 @@ ssh, not from the launcher's own terminal; it asks for `sudo` only for the syste
 It stops, disables and deletes `APPLaunch.service` (through systemd, no `pkill`) and `launcher-ntp-default.service`,
 removes the binaries, the framebuffer shim, the launcher assets under `/usr/share/APPLaunch` (only the files of the
 bundle, listed in `payload/share.manifest`), the udev rules (then `udevadm control --reload`) and the PolicyKit rules,
+the board profile `/etc/applaunch/board.conf` (and the directory if empty; a `board.conf.bak` is kept),
 unmasks and enables `getty@tty1` if it is masked, and takes the PWM backlight out of the boot configuration: the exact
 lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `config.txt` (a timestamped
 `config.txt.bak-uninstall-<time>` is made first and the removed lines are printed), the `.dtbo`, and the
@@ -76,7 +117,7 @@ the packages `install.sh` pulled in with apt, the user's groups and lingering, a
 | File | Purpose |
 | --- | --- |
 | `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host) / install it (Pi) / remove it again (Pi). |
-| `APPLaunch.service` | systemd **user** service: display, touch axes, keyboard device, working directory. |
+| `APPLaunch.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
 | `90-backlight-unblank.rules` | The PWM backlight starts powered down: unblank it when it appears. |
@@ -84,6 +125,7 @@ the packages `install.sh` pulled in with apt, the user's groups and lingering, a
 | `50-networkmanager-netdev.rules`, `51-launcher-time-power.rules` | PolicyKit: Wi-Fi scan/connect, Network Time / clock, reboot / shutdown from a background session. |
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |
+| `tests/` | `test-install-board.sh`: board detection, profile and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board). |
 
 ## Settings and environment
 

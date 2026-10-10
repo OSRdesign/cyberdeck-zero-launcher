@@ -9,6 +9,7 @@
 #include "../model/brightness_operation.hpp"
 #include "../model/setup_value_policy.hpp"
 
+#include "cp0_backlight_profile.h"
 #include "hal_lvgl_bsp.h"
 
 #include <algorithm>
@@ -271,6 +272,7 @@ LvSettingBrightnessPage3::LvSettingBrightnessPage3(lv_obj_t *parent,
 
 LvSettingBrightnessPage3::~LvSettingBrightnessPage3()
 {
+    stop_off_countdown(true); // never leave the page with the panel dark
     destroying_ = true;
     page_alive_ = false;
     ++generation_;
@@ -288,6 +290,7 @@ int LvSettingBrightnessPage3::initial_selection() const
 
 SettingApiResult LvSettingBrightnessPage3::activate_selected()
 {
+    if (onoff_) return activate_onoff();
     if (pending_) return SettingApiResult::Pending;
     if (!loaded_) {
         begin_load();
@@ -325,9 +328,94 @@ void LvSettingBrightnessPage3::initialize_page(lv_obj_t *parent, std::function<v
 {
     back_callback_ = std::move(back_callback);
     LeaveSelfPage = [this] { request_back(); };
+    onoff_ = cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF;
     initialize(parent);
     create_status_label();
+    if (onoff_) {
+        // Nothing to read: the page opens on "On" (the panel is lit, or it could not be seen).
+        loaded_ = true;
+        saved_index_ = 0;
+        select(saved_index_);
+        restore_focus();
+        set_status("", false);
+        return;
+    }
     begin_load();
+}
+
+SettingApiResult LvSettingBrightnessPage3::activate_onoff()
+{
+    if (off_timer_) {
+        // Enter (or a tap) while the panel is dark: back on at once, stay on the page.
+        stop_off_countdown(true);
+        select(0);
+        restore_focus();
+        return SettingApiResult::Success;
+    }
+    if (selected_index <= 0) {
+        int result = -1;
+        {
+            std::lock_guard<std::mutex> lock(brightness_control::operation_mutex());
+            result = cp0_backlight_profile_set_on(1);
+        }
+        if (result != 0) {
+            set_status("Backlight write failed", true);
+            return SettingApiResult::Failure;
+        }
+        set_status("", false);
+        request_back();
+        return SettingApiResult::Success;
+    }
+
+    int result = -1;
+    {
+        std::lock_guard<std::mutex> lock(brightness_control::operation_mutex());
+        result = cp0_backlight_profile_set_on(0);
+    }
+    if (result != 0) {
+        set_status("Backlight write failed", true);
+        return SettingApiResult::Failure;
+    }
+    off_remaining_ = kOffSeconds;
+    off_timer_ = lv_timer_create(off_countdown_cb, 1000, this);
+    if (!off_timer_) {
+        stop_off_countdown(true); // no timer = no way back: switch on again now
+        set_status("Timer unavailable", true);
+        return SettingApiResult::Failure;
+    }
+    show_off_countdown();
+    return SettingApiResult::Success;
+}
+
+void LvSettingBrightnessPage3::show_off_countdown()
+{
+    set_status("On again in " + std::to_string(off_remaining_) + " s", false);
+}
+
+void LvSettingBrightnessPage3::off_countdown_cb(lv_timer_t *timer)
+{
+    auto *page = timer ? static_cast<LvSettingBrightnessPage3 *>(lv_timer_get_user_data(timer)) : nullptr;
+    if (!page || page->off_timer_ != timer) return;
+    if (--page->off_remaining_ > 0) {
+        page->show_off_countdown();
+        return;
+    }
+    page->stop_off_countdown(true);
+    page->select(0);
+    page->restore_focus();
+}
+
+void LvSettingBrightnessPage3::stop_off_countdown(bool switch_on)
+{
+    if (!off_timer_) return;
+    lv_timer_delete(off_timer_);
+    off_timer_ = nullptr;
+    off_remaining_ = 0;
+    if (switch_on) {
+        std::lock_guard<std::mutex> lock(brightness_control::operation_mutex());
+        (void)cp0_backlight_profile_set_on(1);
+    }
+    if (!destroying_) set_status("", false);
 }
 
 void LvSettingBrightnessPage3::request_back()

@@ -74,6 +74,11 @@ int main()
     const auto about = settings_t12b::about_help::about("1.2.3", "2026-08-24", "stable", "abc123");
     const auto credit = settings_t12b::about_help::credit();
     assert(!about.title.empty() && about.lines.size() >= 4);
+    for (const auto &line : about.lines) assert(line.rfind("Board:", 0) != 0); // no profile: no row
+    const auto about_board =
+        settings_t12b::about_help::about("1.2.3", "2026-08-24", "stable", "abc123", "pi3a-luckfox35");
+    assert(about_board.lines.size() == about.lines.size() + 1);
+    assert(about_board.lines[1] == "Board: pi3a-luckfox35");
     assert(credit.title == "Third-Party Licenses & Credits");
     assert(credit.lines.size() > 300);
     assert(credit.lines.front().find("Kickstarter backers") != std::string::npos);

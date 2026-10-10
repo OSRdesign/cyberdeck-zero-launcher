@@ -6,6 +6,7 @@
 
 #include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_app.h"
+#include "cp0_backlight_profile.h"
 
 #include "cp0_lvgl_log.h"
 #include "../cp0_settings_policy.hpp"
@@ -437,15 +438,30 @@ private:
                    : default_value;
     }
 
+    /* Board profile (cp0_backlight_profile.h): a gpio on/off backlight lives in its own sysfs
+     * directory; the default stays today's /sys/class/backlight/backlight. Every brightness
+     * client (Settings, hotkeys, screensaver, startup restore) goes through these three calls. */
+    static bool backlight_onoff()
+    {
+        return cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF;
+    }
+
+    static std::string backlight_file(const char *name)
+    {
+        if (backlight_onoff())
+            return std::string(cp0_backlight_profile_dir()) + "/" + name;
+        return std::string("/sys/class/backlight/backlight/") + name;
+    }
+
     int backlight_read()
     {
-        return read_int_file("/sys/class/backlight/backlight/brightness", -1, 0,
+        return read_int_file(backlight_file("brightness").c_str(), -1, 0,
                              std::numeric_limits<int>::max());
     }
 
     int backlight_max()
     {
-        return read_int_file("/sys/class/backlight/backlight/max_brightness", 100, 1,
+        return read_int_file(backlight_file("max_brightness").c_str(), backlight_onoff() ? 1 : 100, 1,
                              std::numeric_limits<int>::max());
     }
 
@@ -454,9 +470,9 @@ private:
         if (val < 0)
             val = 0;
         int mx = backlight_max();
-        if (val > mx)
-            val = mx;
-        FILE *f = std::fopen("/sys/class/backlight/backlight/brightness", "w");
+        if (val > mx || (backlight_onoff() && val > 0))
+            val = mx; // on/off: any level above zero is "on"
+        FILE *f = std::fopen(backlight_file("brightness").c_str(), "w");
         if (!f)
             return -1;
         const int written = std::fprintf(f, "%d", val);

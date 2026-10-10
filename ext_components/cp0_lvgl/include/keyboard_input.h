@@ -69,6 +69,12 @@ cp0_keyboard_key_filter_t cp0_keyboard_get_key_filter(void);
 /* Keep LV_EVENT_KEYBOARD delivery while suppressing the LVGL keypad group path. */
 void cp0_keyboard_set_lvgl_keypad_intercept(int intercept);
 int cp0_keyboard_get_lvgl_keypad_intercept(void);
+/* Device builds: make the keyboard thread read every real keyboard (cp0_keyboard_presence.h: USB and
+ * Bluetooth) in addition to LV_LINUX_KEYBOARD_DEVICE. Off by default, so an app built on cp0_lvgl keeps reading
+ * only that device (under the launcher it is the uinput hub, which already mirrors every keyboard). The
+ * launcher turns it on before init_input(); the thread reads it when it starts. */
+void cp0_keyboard_set_read_all_keyboards(int enable);
+int cp0_keyboard_get_read_all_keyboards(void);
 void cp0_keyboard_set_input_context(cp0_keyboard_input_context_t context);
 cp0_keyboard_input_context_t cp0_keyboard_get_input_context(void);
 const char *kbd_state_name(int state);

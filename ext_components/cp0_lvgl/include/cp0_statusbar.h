@@ -49,6 +49,12 @@ void cp0_statusbar_read_state(cp0_statusbar_state_t *state);
 void cp0_statusbar_render(cp0_statusbar_t *bar, uint32_t *argb, int width, int stride_px,
                           int shift_left, int top, int backing_alpha, const cp0_statusbar_state_t *state);
 
+/* Same bar with every dimension (and the font) scaled to pct percent (25..100; 100 = cp0_statusbar_render
+ * exactly), for smaller panels such as the 480x320 one. `top` is in output pixels. */
+void cp0_statusbar_render_scaled(cp0_statusbar_t *bar, uint32_t *argb, int width, int stride_px,
+                                 int shift_left, int top, int backing_alpha, const cp0_statusbar_state_t *state,
+                                 int pct);
+
 #ifdef __cplusplus
 }
 #endif

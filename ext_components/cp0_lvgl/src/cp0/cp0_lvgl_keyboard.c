@@ -10,6 +10,7 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <unistd.h>
 #ifdef __linux__
 #include <poll.h>
@@ -37,6 +38,8 @@
 #include "../cp0_keyboard_queue.h"
 #include "cp0_esc_state.h"
 #include "../cp0_keyboard_text.h"
+#include "cp0_keyboard_presence.h"
+#include "cp0_keyboard_sources.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 #include "../../../../SDK/components/utilities/include/sample_log.h"
@@ -61,17 +64,41 @@ static atomic_bool keyboard_shutdown_requested = false;
 static pthread_t keyboard_read_thread_id;
 static cp0_keyboard_thread_lifecycle_t keyboard_thread_lifecycle = {0};
 static pthread_mutex_t keyboard_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
+/* Read every real keyboard (cp0_keyboard_presence.h), not only LV_LINUX_KEYBOARD_DEVICE. Only the launcher
+ * turns it on: an app built on cp0_lvgl reads the uinput hub, which already carries every keyboard. */
+static atomic_bool g_read_all_keyboards = false;
+
+void cp0_keyboard_set_read_all_keyboards(int enable)
+{
+    atomic_store_explicit(&g_read_all_keyboards, enable != 0, memory_order_release);
+}
+
+int cp0_keyboard_get_read_all_keyboards(void)
+{
+    return atomic_load_explicit(&g_read_all_keyboards, memory_order_acquire) ? 1 : 0;
+}
+
 #ifdef __linux__
 static struct libinput *g_libinput = NULL;
+/* libinput is not thread safe: the keyboard thread holds this lock while it uses the context, and
+ * keyboard_pause()/keyboard_resume() (called from the external-app runner) take it too. */
+static pthread_mutex_t g_libinput_mutex = PTHREAD_MUTEX_INITIALIZER;
 void keyboard_pause(void) {
     keyboard_paused_flag = 1;
+    pthread_mutex_lock(&g_libinput_mutex);
     if (g_libinput) libinput_suspend(g_libinput);
+    pthread_mutex_unlock(&g_libinput_mutex);
     SLOGI("[KBD] keyboard_pause()");
 }
 void keyboard_resume(void) {
-    if (g_libinput) libinput_resume(g_libinput);
+    int rc = 0;
+    pthread_mutex_lock(&g_libinput_mutex);
+    if (g_libinput) rc = libinput_resume(g_libinput);
+    pthread_mutex_unlock(&g_libinput_mutex);
     keyboard_paused_flag = 0;
-    SLOGI("[KBD] keyboard_resume()");
+    /* rc != 0: a keyboard went away during the app; libinput then drops all of them and the thread
+     * re-opens the ones still there once their removal grace is over */
+    SLOGI("[KBD] keyboard_resume()%s", rc != 0 ? ": a keyboard left meanwhile, re-attaching" : "");
 }
 #else
 void keyboard_pause(void) { keyboard_paused_flag = 1; }
@@ -190,7 +217,7 @@ static const struct libinput_interface interface = {
  * ============================================================ */
 struct kbd_ctx {
     struct libinput        *li;
-    struct libinput_device *dev;
+    cp0_kbd_sources_t       sources;   /* the keyboards read, as struct libinput_device pointers */
 
     struct xkb_context        *ctx;
     struct xkb_keymap         *keymap;
@@ -205,7 +232,6 @@ struct kbd_ctx {
     bool fn_pressed;
     uint64_t fn_pressed_at_ms;
     unsigned int input_context_generation;
-    uint64_t dev_gone_ms;              /* when our keyboard last disappeared */
 };
 
 static uint64_t monotonic_ms(void)
@@ -268,7 +294,9 @@ static void update_leds(struct kbd_ctx *kc) {
         leds |= LIBINPUT_LED_CAPS_LOCK;
     if (xkb_state_led_name_is_active(kc->state, XKB_LED_NAME_SCROLL) > 0)
         leds |= LIBINPUT_LED_SCROLL_LOCK;
-    if (kc->dev) libinput_device_led_update(kc->dev, leds);
+    for (int i = 0; i < CP0_KBD_SOURCES_MAX; i++)
+        if (kc->sources.slot[i].used && kc->sources.slot[i].dev)
+            libinput_device_led_update((struct libinput_device *)kc->sources.slot[i].dev, leds);
 }
 
 /* ============================================================
@@ -567,20 +595,118 @@ static void kbd_wake_up(struct kbd_ctx *kc) {
 /* ============================================================
  *  Thread main loop
  * ============================================================ */
-/* Add the keyboard to the libinput path context. Returns NULL (without
+enum { KBD_ADD_OK, KBD_ADD_MISSING, KBD_ADD_NOT_KEYBOARD };
+#define KBD_RESCAN_MS 500u /* retry interval for wanted nodes that are not open yet */
+
+/* Add a keyboard node to the libinput path context. Returns NULL (without
  * logging noise) while the node does not exist, e.g. a Bluetooth keyboard that
  * is asleep or between reconnects. */
-static struct libinput_device *keyboard_try_add(struct libinput *li, const char *path)
+static struct libinput_device *keyboard_try_add(struct libinput *li, const char *path, int *status)
 {
+    *status = KBD_ADD_MISSING;
     if (access(path, R_OK) != 0) return NULL;
     struct libinput_device *dev = libinput_path_add_device(li, path);
     if (!dev) return NULL;
     if (!libinput_device_has_capability(dev, LIBINPUT_DEVICE_CAP_KEYBOARD)) {
         fprintf(stderr, "%s is not a keyboard device\n", path);
         libinput_path_remove_device(dev);
+        *status = KBD_ADD_NOT_KEYBOARD;
         return NULL;
     }
+    *status = KBD_ADD_OK;
     return dev;
+}
+
+/* The nodes to read: the explicit device (LV_LINUX_KEYBOARD_DEVICE, e.g. the /dev/input/bt-keyboard symlink,
+ * resolved to its event node so that it never doubles a listed keyboard) and, when a presence watcher runs,
+ * every real keyboard it lists. */
+static unsigned kbd_wanted_nodes(const char *explicit_path, cp0_kbd_presence_watcher_t *watcher,
+                                 cp0_kbd_presence_list_t *list, char (*wanted)[CP0_KBD_SOURCES_NODE_SIZE])
+{
+    unsigned n = 0;
+    char resolved[PATH_MAX];
+    if (explicit_path && explicit_path[0] && access(explicit_path, R_OK) == 0 &&
+        realpath(explicit_path, resolved) != NULL) {
+        static const char prefix[] = "/dev/input/";
+        const char *base = strrchr(resolved, '/');
+        base = base ? base + 1 : resolved;
+        const size_t base_len = strlen(base);
+        if (base_len + sizeof(prefix) <= CP0_KBD_SOURCES_NODE_SIZE) {
+            memcpy(wanted[n], prefix, sizeof(prefix) - 1);
+            memcpy(wanted[n] + sizeof(prefix) - 1, base, base_len + 1);
+            n++;
+        }
+    }
+    if (watcher) {
+        cp0_kbd_presence_watcher_snapshot(watcher, list);
+        for (unsigned i = 0; i < list->count && n < CP0_KBD_SOURCES_MAX; i++)
+            snprintf(wanted[n++], CP0_KBD_SOURCES_NODE_SIZE, "%s", list->devices[i].path);
+    }
+    return n;
+}
+
+/* Open the wanted nodes no device reads yet, and drop libinput's record of devices that went away and were
+ * not brought back during their grace (see cp0_keyboard_sources.h). Caller holds g_libinput_mutex.
+ * Returns 1 when nothing is left to retry. */
+static int kbd_reconcile(struct kbd_ctx *kc, const char *explicit_path, cp0_kbd_presence_watcher_t *watcher,
+                         cp0_kbd_presence_list_t *list)
+{
+    char wanted[CP0_KBD_SOURCES_MAX][CP0_KBD_SOURCES_NODE_SIZE];
+    const unsigned count = kbd_wanted_nodes(explicit_path, watcher, list, wanted);
+    const char (*wanted_c)[CP0_KBD_SOURCES_NODE_SIZE] = (const char (*)[CP0_KBD_SOURCES_NODE_SIZE])wanted;
+    cp0_kbd_sources_plan_t plan;
+    cp0_kbd_sources_plan(&kc->sources, wanted_c, count, monotonic_ms(), CP0_KBD_SOURCES_GRACE_MS, &plan);
+
+    for (unsigned i = 0; i < plan.purge_count; i++) {
+        cp0_kbd_source_t *slot = &kc->sources.slot[plan.purge[i]];
+        struct libinput_device *ref = (struct libinput_device *)slot->ref;
+        if (ref) {
+            /* libinput keeps the path of a vanished device and would re-open it on the next resume */
+            libinput_path_remove_device(ref);
+            libinput_device_unref(ref);
+        }
+        cp0_kbd_sources_free(&kc->sources, plan.purge[i]);
+    }
+    for (unsigned i = 0; i < plan.add_count; i++) {
+        const char *node = wanted[plan.add[i]];
+        int status = KBD_ADD_MISSING;
+        struct libinput_device *dev = keyboard_try_add(kc->li, node, &status);
+        if (!dev) {
+            if (status == KBD_ADD_NOT_KEYBOARD) (void)cp0_kbd_sources_reject(&kc->sources, node);
+            continue; /* missing or not readable yet (udev permissions): retried */
+        }
+        if (cp0_kbd_sources_track(&kc->sources, node, libinput_device_ref(dev)) < 0) {
+            libinput_path_remove_device(dev);
+            libinput_device_unref(dev);
+            continue;
+        }
+        SLOGI("Keyboard attached (%s, %s)", node, libinput_device_get_name(dev));
+    }
+    return cp0_kbd_sources_settled(&kc->sources, wanted_c, count);
+}
+
+/* DEVICE_ADDED: our own add, or libinput's re-add after a resume. A second device on a node that is already
+ * read would deliver every key twice: it is removed at once. */
+static void kbd_on_device_added(struct kbd_ctx *kc, struct libinput_device *added)
+{
+    if (!libinput_device_has_capability(added, LIBINPUT_DEVICE_CAP_KEYBOARD)) return;
+    char node[CP0_KBD_SOURCES_NODE_SIZE];
+    snprintf(node, sizeof(node), "/dev/input/%s", libinput_device_get_sysname(added));
+    void *release = NULL;
+    switch (cp0_kbd_sources_on_added(&kc->sources, node, added, &release)) {
+    case CP0_KBD_ADDED_ADOPT:
+    case CP0_KBD_ADDED_NEW:
+        libinput_device_ref(added);
+        if (release) libinput_device_unref((struct libinput_device *)release);
+        break;
+    case CP0_KBD_ADDED_DUPLICATE:
+    case CP0_KBD_ADDED_FULL:
+        SLOGW("[KBD] %s is already read: dropping the second copy", node);
+        libinput_path_remove_device(added);
+        break;
+    default:
+        break;
+    }
 }
 
 void *keyboard_read_thread(void *argv) {
@@ -590,14 +716,28 @@ void *keyboard_read_thread(void *argv) {
 
     struct kbd_ctx kc = {0};
     kc.repeat_fd = -1;
+    cp0_kbd_presence_watcher_t *watcher = NULL;
+    cp0_kbd_presence_list_t presence;
+    presence.count = 0;
 
     /* ---------- 1. libinput ---------- */
     kc.li = libinput_path_create_context(&interface, NULL);
     if (!kc.li) { fprintf(stderr, "failed to create libinput context\n"); goto out; }
 
-    /* The keyboard may not be present yet (Bluetooth); the loop below keeps
+    /* The launcher reads every real keyboard (USB, Bluetooth) next to the explicit device; an app reads the
+     * explicit device only. */
+    if (cp0_keyboard_get_read_all_keyboards()) {
+        watcher = cp0_kbd_presence_shared_acquire();
+        if (!watcher) SLOGW("[KBD] keyboard presence watcher unavailable: reading %s only", device_path);
+    }
+    unsigned seen_generation = cp0_kbd_presence_watcher_generation(watcher);
+
+    /* A keyboard may not be present yet (Bluetooth); the loop below keeps
      * retrying and re-attaches after a disconnect. */
-    kc.dev = keyboard_try_add(kc.li, device_path);
+    pthread_mutex_lock(&g_libinput_mutex);
+    const int settled_at_start = kbd_reconcile(&kc, device_path, watcher, &presence);
+    pthread_mutex_unlock(&g_libinput_mutex);
+    uint64_t next_rescan_ms = settled_at_start ? UINT64_MAX : monotonic_ms() + KBD_RESCAN_MS;
 
     /* ---------- 2. xkbcommon ---------- */
     if (init_xkb(&kc, "us", NULL) < 0) goto out;
@@ -625,9 +765,11 @@ void *keyboard_read_thread(void *argv) {
         if (fn_env && fn_env[0]) fn_alias = (uint32_t)strtoul(fn_env, NULL, 0);
     }
 
+    pthread_mutex_lock(&g_libinput_mutex);
     g_libinput = kc.li;
-    SLOGI("Start listening for keyboard input (%s)", device_path);
-    libinput_dispatch(kc.li);
+    pthread_mutex_unlock(&g_libinput_mutex);
+    SLOGI("Start listening for keyboard input (%s%s)", device_path,
+          watcher ? " and every keyboard found" : "");
 
     while (!atomic_load_explicit(&keyboard_shutdown_requested,
                                  memory_order_acquire)) {
@@ -635,21 +777,17 @@ void *keyboard_read_thread(void *argv) {
             usleep(50000);
             continue;
         }
-        /* Re-attach only after the device has been gone for a while. libinput
-         * reports a suspend (keyboard_pause) as a removal and re-adds the same
-         * device itself on resume; adding it here too would leave the node
-         * open twice and every key would be delivered twice. */
-        if (!kc.dev && monotonic_ms() - kc.dev_gone_ms >= 1500u) {
-            kc.dev = keyboard_try_add(kc.li, device_path);
-            if (kc.dev) SLOGI("Keyboard attached (%s)", device_path);
-            else kc.dev_gone_ms = monotonic_ms() - 1000u; /* retry in ~0.5 s */
-        }
         int pr = poll(pfds, 2, 100);
         if (pr < 0) {
             if (errno == EINTR) continue;
             perror("poll"); break;
         }
 
+        pthread_mutex_lock(&g_libinput_mutex);
+        if (keyboard_paused_flag) { /* suspended while we were polling */
+            pthread_mutex_unlock(&g_libinput_mutex);
+            continue;
+        }
         /* keyboard events: libinput queues add/remove events internally, so
          * drain it on every pass and not only when its fd is readable */
         {
@@ -666,21 +804,37 @@ void *keyboard_read_thread(void *argv) {
                     process_key(&kc, code,
                                 ks == LIBINPUT_KEY_STATE_PRESSED ? 1 : 0);
                 } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_ADDED) {
-                    /* initial add or libinput's own re-add after a resume */
-                    struct libinput_device *added = libinput_event_get_device(ev);
-                    if (libinput_device_has_capability(added, LIBINPUT_DEVICE_CAP_KEYBOARD))
-                        kc.dev = added;
-                } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_REMOVED &&
-                           libinput_event_get_device(ev) == kc.dev) {
-                    /* Our keyboard went away (Bluetooth sleep, or a suspend). */
-                    kc.dev = NULL;
-                    kc.repeating = false;
-                    kc.dev_gone_ms = monotonic_ms();
-                    SLOGI("Keyboard removed; waiting for %s", device_path);
+                    /* our own add, or libinput's re-add after a resume */
+                    kbd_on_device_added(&kc, libinput_event_get_device(ev));
+                } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_REMOVED) {
+                    struct libinput_device *removed = libinput_event_get_device(ev);
+                    if (cp0_kbd_sources_on_removed(&kc.sources, removed, monotonic_ms()) >= 0) {
+                        /* One of our keyboards went away (Bluetooth sleep, unplug, or a suspend; libinput has
+                         * already released its pressed keys). It is not re-added for
+                         * CP0_KBD_SOURCES_GRACE_MS: libinput re-adds it itself after a resume, and adding
+                         * it here too would open the node twice and deliver every key twice. */
+                        repeat_stop(&kc);
+                        SLOGI("Keyboard removed (%s); waiting for it", libinput_device_get_sysname(removed));
+                        if (next_rescan_ms > monotonic_ms() + KBD_RESCAN_MS)
+                            next_rescan_ms = monotonic_ms() + KBD_RESCAN_MS;
+                    }
                 }
                 libinput_event_destroy(ev);
             }
         }
+        /* Re-read the wanted nodes when the keyboard list changed, and every KBD_RESCAN_MS while something
+         * is pending: a node not open yet (asleep, udev permissions not set yet) or a removal grace. */
+        {
+            const unsigned generation = cp0_kbd_presence_watcher_generation(watcher);
+            const uint64_t now = monotonic_ms();
+            if (generation != seen_generation || now >= next_rescan_ms) {
+                if (generation != seen_generation) cp0_kbd_sources_clear_rejected(&kc.sources);
+                seen_generation = generation;
+                const int settled = kbd_reconcile(&kc, device_path, watcher, &presence);
+                next_rescan_ms = settled ? UINT64_MAX : now + KBD_RESCAN_MS;
+            }
+        }
+        pthread_mutex_unlock(&g_libinput_mutex);
 
         /* repeat timer triggered */
         if (pfds[1].revents & POLLIN) {
@@ -698,11 +852,20 @@ void *keyboard_read_thread(void *argv) {
     }
 
 out:
+    pthread_mutex_lock(&g_libinput_mutex);
     g_libinput = NULL;
+    pthread_mutex_unlock(&g_libinput_mutex);
     if (kc.repeat_fd >= 0) close(kc.repeat_fd);
     free_xkb(&kc);
-    if (kc.dev) libinput_path_remove_device(kc.dev);
+    for (int i = 0; i < CP0_KBD_SOURCES_MAX; i++) {
+        cp0_kbd_source_t *slot = &kc.sources.slot[i];
+        if (!slot->used) continue;
+        if (slot->dev) libinput_path_remove_device((struct libinput_device *)slot->dev);
+        if (slot->ref) libinput_device_unref((struct libinput_device *)slot->ref);
+        cp0_kbd_sources_free(&kc.sources, i);
+    }
     if (kc.li) libinput_unref(kc.li);
+    if (watcher) cp0_kbd_presence_shared_release();
     free(device_path_arg);
     return NULL;
 }
