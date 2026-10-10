@@ -55,6 +55,9 @@ LVGL_PRIV := -I$(PROJECT)/main/lvgl -I$(LVGL)/src/libs/freetype
 # cp0_lvgl pieces the shell and the pages draw with (real code).
 CP0_SRCS := \
     $(CP0)/src/cp0/cp0_fb_output.c \
+    $(CP0)/src/cp0_ui_metrics.c \
+    $(CP0)/src/cp0_ui_metrics_lvgl.c \
+    $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \
     $(CP0)/src/cp0/cp0_keyboard_lvgl_input.c \
     $(CP0)/src/cp0_keyboard_queue.c \

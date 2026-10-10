@@ -112,16 +112,6 @@ int cp0_fbo_parse_rotation(const char *s, int *rot)
     return 0;
 }
 
-void cp0_fbo_compat_origin(int lw, int lh, int ww, int wh, int *x, int *y)
-{
-    int ox = (lw - ww) / 2;
-    int oy = lh >= CP0_FBO_SMALL_PANEL_H ? 0 : (lh - 100 - wh) / 2;
-    if (ox < 0) ox = 0;
-    if (oy < 0) oy = 0;
-    if (x) *x = ox;
-    if (y) *y = oy;
-}
-
 void cp0_fbo_logical_to_buffer(const cp0_fb_out_t *o, int X, int Y, int *px, int *py)
 {
     switch (o->rot) {

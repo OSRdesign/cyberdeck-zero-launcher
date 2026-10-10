@@ -39,6 +39,7 @@ run --dry-run
 check "pi3a dry-run: exit 0" '[ $RC = 0 ]'
 check "pi3a dry-run: board pi3a-luckfox35" 'has "board: pi3a-luckfox35"'
 check "pi3a dry-run: fb1 picked" 'has "APPLAUNCH_FB=/dev/fb1"'
+check "pi3a dry-run: panel size for the layout service" 'has "APPLAUNCH_PANEL_MM=79x49"'
 check "pi3a dry-run: gpio backlight rule planned" 'has "92-applaunch-backlight-gpio.rules"'
 check "pi3a dry-run: no PWM overlay" 'has "cmdline cursor/consoleblank only"'
 check "pi3a dry-run: nothing written" '[ ! -e "$R/etc" ]'
@@ -51,6 +52,7 @@ APPLAUNCH_FB=/dev/fb1
 APPLAUNCH_LOGICAL=480x320
 APPLAUNCH_ROTATE=90
 APPLAUNCH_COMPAT_SCALE=1
+APPLAUNCH_PANEL_MM=79x49
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio
@@ -61,8 +63,8 @@ APPLAUNCH_TOUCH_INVERT_Y=0'
 GOT=$(grep -v '^#' "$P")
 if [ "$GOT" = "$EXPECT" ]; then ok "pi3a profile: exact keys and values"; else ko "pi3a profile: exact keys and values" "$GOT"; fi
 # shellcheck disable=SC1090
-GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_FB $APPLAUNCH_ROTATE $APPLAUNCH_TOUCH_ORIENT" ) )
-check "pi3a profile: valid sh syntax" '[ "$GOT" = "/dev/fb1 90 buffer" ]'
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_FB $APPLAUNCH_ROTATE $APPLAUNCH_TOUCH_ORIENT $APPLAUNCH_PANEL_MM" ) )
+check "pi3a profile: valid sh syntax" '[ "$GOT" = "/dev/fb1 90 buffer 79x49" ]'
 check "pi3a profile: only KEY=VALUE or comment lines" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null'
 SUM1=$(cksum < "$P")
 run --board-only

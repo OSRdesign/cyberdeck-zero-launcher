@@ -27,6 +27,7 @@
 
 static struct {
     int pw, ph, bpp, stride;
+    int mm_w, mm_h; /* physical size the driver reports (var.width / var.height), 0 = unknown */
     uint8_t *mem;
     size_t size;
     int fb_fd;
@@ -46,6 +47,12 @@ void harness_fb_configure(int pw, int ph, int bpp)
         fprintf(stderr, "[harness] out of memory for a %dx%dx%d framebuffer\n", pw, ph, bpp);
         exit(2);
     }
+}
+
+void harness_fb_set_mm(int mm_w, int mm_h)
+{
+    hf.mm_w = mm_w > 0 ? mm_w : 0;
+    hf.mm_h = mm_h > 0 ? mm_h : 0;
 }
 
 uint8_t *harness_fb_memory(size_t *size, int *stride)
@@ -86,6 +93,8 @@ static void fill_var(struct fb_var_screeninfo *v)
     v->xres = v->xres_virtual = (uint32_t)hf.pw;
     v->yres = v->yres_virtual = (uint32_t)hf.ph;
     v->bits_per_pixel = (uint32_t)hf.bpp;
+    v->width = (uint32_t)hf.mm_w;
+    v->height = (uint32_t)hf.mm_h;
     if (hf.bpp == 16) {
         v->red.offset = 11, v->red.length = 5;
         v->green.offset = 5, v->green.length = 6;

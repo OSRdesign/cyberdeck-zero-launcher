@@ -36,3 +36,12 @@ Controller owns: all visual design (Settings on wide/large classes, keyboard loo
 - Deck capture of `/proc/bus/input/devices` with the RTL-SDR dongle (IR node), still wanted before the keyboard phase.
 - Hold-Esc exit with a USB-only keyboard (small follow-up of phase 0: `cp0_external_app_runner` watches only the old device).
 - Exact panel mm for HyperPixel 4", HackBerry 720x720, uConsole 5" (ruler measurement).
+
+## Home grid design rule (user feedback 2026-10-10, from the HackBerry 720x720 run)
+Tiles must stay close to SQUARE (aspect about 1:1 to 1.2:1) on every screen; the grid dimensions (columns x rows) follow from the available area, they are not fixed at 3x2. Today's 640x480 grid stretched onto 720x720 gives tall 216x305 tiles with dead space: wrong. Rule for P1c (Controller design, to be confirmed on harness mockups):
+- target tile = about 17-24 mm per side (deck today about 17 mm, Pi 3A+ today about 24 mm), minimum 9 mm touch target is already met; columns = round(available width / (target tile + gap)), rows = floor(available height / tile), the leftover is spread as even gaps/margins; the icon scales to about 50 % of the tile, the label sits under it; more apps than cells scroll vertically as today.
+- the deck 640x480 (3x2, 192x188) and the Pi 3A+ 480x320 (3x2, 146x125) stay PINNED as they are.
+- indicative results (available area under the status bar): 800x480 -> 4x2 (about 185x190), 720x720 -> 3x3 (about 218x200), 1280x720 -> 6x3 (about 195x195) or 5x3.
+
+## Toolbar rule (user feedback 2026-10-10, HackBerry 720x720: the toolbar took 370 of 720 px)
+The bottom toolbar has a FIXED physical height from the tokens, never "the rest of the screen": buttons 9 mm (about 90-100 px on the boards seen), plus margins, so about 100-110 px on every screen class (deck 140 and Pi 3A+ 100 stay PINNED). The stock-app window (integer scale of 320x170) is centred in the space above the toolbar, black margins around it; on a square or large screen the leftover room stays black (decision D8: always a bottom bar) until a later design uses it. A native, responsive page (Settings after P2) does not use this toolbar at all: it fills the screen and takes touch directly.

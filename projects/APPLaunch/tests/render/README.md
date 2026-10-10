@@ -55,9 +55,11 @@ Each size runs in its own forked process (the display manager is process-wide). 
 
 | Size | Profile | Framebuffer the display manager sees |
 |---|---|---|
-| 640x480 | `deck` (no board.conf) | 640x480 XRGB8888, no rotation, compat 2x at (0,0) |
-| 480x320 | `pi3a` (board.conf of the Pi 3A+: `APPLAUNCH_BOARD`, rotate 90, compat scale 1, gpio backlight) | 320x480 RGB565, turned 90 deg clockwise, compat 1x at (80,25) |
-| others | `generic` | WxH XRGB8888, no rotation, compat scale = largest that fits |
+| 640x480 | `deck` (no board.conf) | 640x480 XRGB8888, no rotation, no physical size (11.3 px/mm default), compat 2x at (0,0) |
+| 480x320 | `pi3a` (board.conf of the Pi 3A+: `APPLAUNCH_BOARD`, rotate 90, compat scale 1, `APPLAUNCH_PANEL_MM=79x49`, gpio backlight) | 320x480 RGB565, turned 90 deg clockwise, compat 1x at (80,25) |
+| others | `generic` | WxH XRGB8888, no rotation, reports the physical size of the size's density (`var.width/height` in mm), compat window placed by the layout service (`cp0_ui_metrics`) |
+
+`XDG_RUNTIME_DIR` is `out/<WxH>/runtime`, so the `screen.state` the display manager publishes lands there.
 
 Touch uses `APPLAUNCH_TOUCH_ORIENT=buffer` everywhere (exact integer mapping); this is the only profile
 setting that differs from the deck (which uses the legacy swap/invert mapping).
@@ -70,7 +72,7 @@ runs at those sizes only.
 | Command | Meaning |
 |---|---|
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes to render (default the five above) |
-| `profile deck\|pi3a\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100) is only logged: v0.5.0 has no density input yet (P1b) |
+| `profile deck\|pi3a\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings` and `Calculator` open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
 | `home` | build the grid and show it (`native_ui::refresh_apps` + `show_home`) |
@@ -81,11 +83,13 @@ runs at those sizes only.
 | `tap X Y`, `drag X1 Y1 X2 Y2 [STEPS]`, `touch X Y` + `release` | touch through the display manager's touch path (logical coordinates) |
 | `toast TEXT` (`\n` = new line), `screensaver` (+ `wait`) | launcher toast; arm the clock screensaver |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
+| `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, `screen.state`) as `out/<WxH>/NAME.txt` |
 
 Scenes today (18 shots, 90 PNGs): `home`, `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
 `screensaver`, `toast` (one and two lines), `settings` (root, Screen section, root on System, System
 section). Settings runs where it runs on the device: in the compat window, scaled by the display manager.
+`metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 
 ## Goldens and fidelity
 

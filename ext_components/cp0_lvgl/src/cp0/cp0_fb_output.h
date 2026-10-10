@@ -66,12 +66,7 @@ int cp0_fbo_parse_size(const char *s, int *w, int *h);
 /* "0" | "90" | "180" | "270" -> 0 and *rot; -1 otherwise. */
 int cp0_fbo_parse_rotation(const char *s, int *rot);
 
-/* Where the ww x wh compat window sits in the logical canvas: centred horizontally; vertically at
- * the top on a canvas at least CP0_FBO_SMALL_PANEL_H high (the 640x480 deck: y 0, toolbar 140 px),
- * otherwise centred in the area above a 100 px toolbar (480x320 scale 1: y 25, so 25 px of black
- * above and 25 px between window and toolbar). Never negative. */
-#define CP0_FBO_SMALL_PANEL_H 400
-void cp0_fbo_compat_origin(int lw, int lh, int ww, int wh, int *x, int *y);
+/* Where the compat window sits is decided by the layout service (cp0_ui_metrics.h), not here. */
 
 void cp0_fbo_logical_to_buffer(const cp0_fb_out_t *o, int X, int Y, int *px, int *py);
 void cp0_fbo_buffer_to_logical(const cp0_fb_out_t *o, int px, int py, int *X, int *Y);

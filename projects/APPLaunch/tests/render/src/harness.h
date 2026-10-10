@@ -20,6 +20,8 @@ extern "C" {
  * cp0_lvgl_dpi_scaled.c is compiled unchanged; its references to open/ioctl/mmap are renamed to
  * harness_fb_open/ioctl/mmap with objcopy, so it maps this memory instead of /dev/fbN. */
 void harness_fb_configure(int pw, int ph, int bpp);
+/* Physical size the fake driver reports in var.width / var.height (mm, buffer orientation; 0 = unknown). */
+void harness_fb_set_mm(int mm_w, int mm_h);
 uint8_t *harness_fb_memory(size_t *size, int *stride);
 /* Raw touch report in buffer axes (APPLAUNCH_TOUCH_ORIENT=buffer, range 0..pw-1 / 0..ph-1). */
 void harness_touch_report(int pressed, int raw_x, int raw_y);

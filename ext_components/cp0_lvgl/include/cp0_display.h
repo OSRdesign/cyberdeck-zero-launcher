@@ -31,6 +31,12 @@ lv_display_t *cp0_display_compat(void);
 /* Window of the compat display inside the native coordinate space. */
 void cp0_display_compat_window(int *x, int *y, int *w, int *h);
 
+/* Places the compat window: integer scale of the 320x170 display and top-left corner in the native canvas. The
+ * display manager calls it once at start with the layout service's placement (cp0_ui_metrics.h: compat, with the
+ * toolbar below it); call it again only before the first compat page. LVGL thread. Returns 0, or -1 when the
+ * window would not fit the canvas (nothing changes). */
+int cp0_display_configure_compat(int scale, int x, int y);
+
 /* How touches inside the compat window are handled. */
 typedef enum {
     /* Forwarded to the compat display as an ordinary pointer (pages with clickable widgets). */
