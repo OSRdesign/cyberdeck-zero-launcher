@@ -23,6 +23,7 @@ public:
     ~LvSettingRtcPage3() override;
 
     const std::string &last_error() const noexcept;
+    bool choice_ready() const override; /* false until the clock and Network Time were read */
 
 protected:
     int initial_selection() const override;
@@ -47,6 +48,7 @@ public:
     ~LvSettingRtcConfirmPage3() override;
 
     const std::string &last_error() const noexcept;
+    bool choice_shows_value() const override { return false; } /* Yes / No: no current value */
 
 protected:
     int initial_selection() const override;

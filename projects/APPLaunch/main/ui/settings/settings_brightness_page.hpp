@@ -71,6 +71,8 @@ public:
                              std::function<void()> back_callback);
     ~LvSettingBrightnessPage3() override;
 
+    bool choice_ready() const override { return loaded_; }
+
 protected:
     int initial_selection() const override;
     SettingApiResult activate_selected() override;

@@ -539,3 +539,11 @@ TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_de
     "$root/src/cp0/cp0_ui_state.c" \
     "$root/tests/test_ui_metrics.c" -o "$binary"
 "$binary"
+
+# Task 014 P2a: roller maths and the native Settings page layout (centre row, falloff, snap, width cap, tokens)
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_ui_roller.c" \
+    "$root/tests/test_ui_roller.c" -o "$binary"
+"$binary"

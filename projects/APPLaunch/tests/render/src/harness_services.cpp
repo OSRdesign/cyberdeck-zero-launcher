@@ -164,14 +164,14 @@ void install_services()
         if (command == "GetInt" || command == "GetStr") {
             const auto found = config().find(arg(args, 1));
             if (reply) reply(0, found != config().end() ? found->second : arg(args, 2));
-        } else if (command == "SetInt" || command == "SetStr") {
+        } else if (command == "SetInt" || command == "SetStr") { /* "ok" as the real service (cp0_config_service.cpp) */
             config()[arg(args, 1)] = arg(args, 2);
-            if (reply) reply(0, "");
+            if (reply) reply(0, "ok");
         } else if (command == "SetManyAndSave") {
             for (std::size_t i = 1; i + 1 < args.size(); i += 2) config()[arg(args, i)] = arg(args, i + 1);
-            if (reply) reply(0, "");
+            if (reply) reply(0, "ok");
         } else if (command == "Save" || command == "Init") {
-            if (reply) reply(0, "");
+            if (reply) reply(0, "ok");
         } else {
             unknown("config", args, reply);
         }

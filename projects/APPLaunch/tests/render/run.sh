@@ -3,10 +3,11 @@
 #
 # Render harness: build, render every scene at every size, compare with the goldens.
 #
-#   run.sh            build + render + compare with golden/ (exit 1 on any changed pixel)
+#   run.sh            build + render + compare with golden/ + header (exit 1 on any changed pixel)
 #   run.sh build      build only (build/render-harness)
 #   run.sh render [scene ...]   render scenes (default: all) into out/, contact sheets in out/sheets/
 #   run.sh compare    compare out/ with golden/ (640x480 and 480x320), diff PNGs in out/diff/
+#   run.sh header     page headers (scene command "header") against the home grid: status strip pixels, title origin
 #   run.sh golden     copy out/640x480 and out/480x320 into golden/ (a deliberate baseline change)
 #   run.sh validate   compare the harness with real device captures (reference/, docs/screenshots/)
 #   run.sh twice      render everything twice and check the PNGs are byte-identical
@@ -78,6 +79,10 @@ compare() {
     for size in $golden_sizes; do
         for actual in "$out/$size"/*.png; do
             [[ -f $actual ]] || continue
+            # shots of a review-only scene (scene line "review") have no golden on purpose
+            if [[ -f $out/$size/review.list ]] && grep -qxF "$(basename "$actual")" "$out/$size/review.list"; then
+                continue
+            fi
             if [[ ! -f $golden/$size/$(basename "$actual") ]]; then
                 echo "NEW $size/$(basename "$actual") has no golden (run.sh golden to accept it)"
                 bad=$((bad + 1))
@@ -91,12 +96,56 @@ compare() {
     echo "PASS: $n goldens identical"
 }
 
+header() {
+    # Every page header cut by a scene's "header NAME TITLE..." must show the home grid's status strip pixel for
+    # pixel and its title at the same origin: out/<WxH>/header/<NAME>.png against home.png (render-harness compare),
+    # <NAME>.txt ("x y text") against home.txt.
+    local n=0 bad=0 dir size ref f name line ref_xy xy
+    echo "== header: status strip and title origin against the home grid"
+    for dir in "$out"/*/header; do
+        [[ -d $dir ]] || continue
+        size=$(basename "$(dirname "$dir")")
+        ref="$dir/home"
+        if [[ ! -f $ref.png || ! -f $ref.txt ]]; then
+            echo "MISSING $size/header/home (the scene must take 'header home ZERO' first)"
+            bad=$((bad + 1))
+            continue
+        fi
+        ref_xy=$(cut -d' ' -f1,2 "$ref.txt")
+        for f in "$dir"/*.png; do
+            name=$(basename "$f" .png)
+            [[ $name == home ]] && continue
+            n=$((n + 1))
+            if ! line=$("$bin" compare "$ref.png" "$f" --diff "$out/diff/header/$size/$name.png"); then
+                echo "$size $name status strip: $line"
+                bad=$((bad + 1))
+            fi
+            xy=$(cut -d' ' -f1,2 "$dir/$name.txt" 2>/dev/null || true)
+            if [[ $xy != "$ref_xy" ]]; then
+                echo "$size $name title origin ${xy:-?} ($(cut -d' ' -f3- "$dir/$name.txt" 2>/dev/null)), home $ref_xy"
+                bad=$((bad + 1))
+            fi
+        done
+    done
+    if ((bad)); then
+        echo "FAIL: $bad header check(s) of $n differ"
+        return 1
+    fi
+    echo "PASS: $n headers match the home grid's strip and title origin"
+}
+
 golden() {
-    local size
+    local size f
     for size in $golden_sizes; do
         mkdir -p "$golden/$size"
         rm -f "$golden/$size"/*.png
-        cp "$out/$size"/*.png "$golden/$size/"
+        for f in "$out/$size"/*.png; do
+            # review-only shots (scene line "review") never become goldens
+            if [[ -f $out/$size/review.list ]] && grep -qxF "$(basename "$f")" "$out/$size/review.list"; then
+                continue
+            fi
+            cp "$f" "$golden/$size/"
+        done
     done
     echo "golden/ updated from $out ($(ls "$golden"/*/*.png | wc -l) images): review and commit deliberately"
 }
@@ -141,13 +190,14 @@ twice() {
 mode=${1:-all}
 (($#)) && shift
 case $mode in
-    all) build; render; compare ;;
+    all) build; render; compare; header ;;
     build) build ;;
     render) build; render "$@" ;;
     compare) compare ;;
+    header) header ;;
     golden) golden ;;
     validate) validate ;;
     twice) build; twice ;;
-    -h|--help) sed -n '4,16p' "$0" ;;
-    *) echo "unknown mode $mode (all|build|render|compare|golden|validate|twice)"; exit 2 ;;
+    -h|--help) sed -n '4,17p' "$0" ;;
+    *) echo "unknown mode $mode (all|build|render|compare|header|golden|validate|twice)"; exit 2 ;;
 esac

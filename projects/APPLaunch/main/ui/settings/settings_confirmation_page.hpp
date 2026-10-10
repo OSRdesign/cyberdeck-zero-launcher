@@ -20,6 +20,8 @@ public:
                           const NodeIter &parent_node,
                           std::function<void()> back_callback);
 
+    bool choice_shows_value() const override { return false; } /* Yes / No: no current value */
+
 protected:
     int initial_selection() const override;
 };

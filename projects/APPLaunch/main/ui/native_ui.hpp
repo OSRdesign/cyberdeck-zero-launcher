@@ -26,6 +26,15 @@ bool enabled();
  * (same as the home grid); updates itself and is freed with the parent. */
 void add_status_icons(lv_obj_t *parent);
 
+/* The home grid's title label ("ZERO" there) with another text: same place, font and colour, for native pages
+ * whose header must line up with the home screen (native Settings, task 014 P2a). Returns the label. */
+lv_obj_t *add_title(lv_obj_t *parent, const char *text);
+
+/* Screen x of the leftmost pixel the status strip draws (its Bluetooth icon), measured once with the strip renderer
+ * in its fullest state, so it does not move with the Wi-Fi / Bluetooth state. Native headers put their own controls
+ * left of it. */
+int status_strip_left();
+
 /* Remember the launcher whose app list drives the home grid. */
 void attach(Launch *launch);
 

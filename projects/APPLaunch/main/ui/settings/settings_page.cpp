@@ -6,6 +6,8 @@
 
 #include "settings_page.hpp"
 #include "settings_hw_profile.hpp"
+#include "settings_native_host.hpp"
+#include "settings_native_mode.hpp"
 #include "settings_touch_page.hpp"
 #include "settings_apps_page.hpp"
 
@@ -214,25 +216,8 @@ void refresh_bluetooth_alias(const NodeIter &page_node)
     }
 }
 
-static std::unique_ptr<DComponens::LvglComponensBase> bluetooth_roller_page_factory(lv_obj_t *parent,
-                                                                                    const NodeIter &page_node,
-                                                                                    std::function<void()> on_back)
-{
-#ifdef LAUNCHER_BUILD
-    if (page_node->label == "Launcher") {
-        Tree *tree = settings_tree_factory_context();
-        if (tree) {
-            settings_t12b::populate_launcher_children(*tree, page_node);
-        }
-    }
-#endif
-    system("/usr/sbin/rfkill unblock bluetooth");
-    refresh_bluetooth_alias(page_node);
-    return std::make_unique<LvSettingRollerPage2>(parent, page_node, std::move(on_back));
-}
-
-static std::unique_ptr<DComponens::LvglComponensBase> roller_page_factory(lv_obj_t *parent, const NodeIter &page_node,
-                                                                          std::function<void()> on_back)
+// The refresh a section needs right before it is shown, for both renderers (settings_prepare_section).
+void prepare_section(const NodeIter &page_node)
 {
 #ifdef LAUNCHER_BUILD
     if (page_node->label == "Launcher") {
@@ -256,6 +241,24 @@ static std::unique_ptr<DComponens::LvglComponensBase> roller_page_factory(lv_obj
         // read the value this leaves behind.
         settings_rtc_refresh_ntp();
     }
+    if (page_node->label == "Bluetooth") {
+        system("/usr/sbin/rfkill unblock bluetooth");
+        refresh_bluetooth_alias(page_node);
+    }
+}
+
+static std::unique_ptr<DComponens::LvglComponensBase> bluetooth_roller_page_factory(lv_obj_t *parent,
+                                                                                    const NodeIter &page_node,
+                                                                                    std::function<void()> on_back)
+{
+    prepare_section(page_node);
+    return std::make_unique<LvSettingRollerPage2>(parent, page_node, std::move(on_back));
+}
+
+static std::unique_ptr<DComponens::LvglComponensBase> roller_page_factory(lv_obj_t *parent, const NodeIter &page_node,
+                                                                          std::function<void()> on_back)
+{
+    prepare_section(page_node);
     auto page = std::make_unique<LvSettingRollerPage2>(parent, page_node, std::move(on_back));
     if (page_node->label == "Date & Time") {
         // Manual time edits belong to a single visit to Date & Time; leaving the
@@ -612,7 +615,48 @@ static void append_brightness_options(Tree &tree, const NodeIter &parent)
     }
 }
 
+using PageFactoryFn = std::unique_ptr<DComponens::LvglComponensBase> (*)(lv_obj_t *, const NodeIter &,
+                                                                         std::function<void()>);
+
+bool factory_is(const SettingPageFactory &factory, PageFactoryFn function)
+{
+    const PageFactoryFn *target = factory.target<PageFactoryFn>();
+    return target && *target == function;
+}
+
 }  // namespace
+
+SettingsNodeKind settings_node_kind(const NodeIter &node)
+{
+    const SettingEntry &entry = *node;
+    if (entry.page_factory) {
+        if (entry.page_type == PageType::FullCustom) return SettingsNodeKind::Custom;
+        if (factory_is(entry.page_factory, roller_page_factory) ||
+            factory_is(entry.page_factory, bluetooth_roller_page_factory))
+            return SettingsNodeKind::Section;
+        // value pages: LvSettingValuePage3Base subclasses (SettingsChoiceBinding)
+        for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
+                                         confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory})
+            if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
+        // the Bluetooth alias (text entry), Date & Time "Save?" (its factory-time warning is a dialog) and any
+        // other page of its own: not migrated yet (P3)
+        return SettingsNodeKind::Custom;
+    }
+    if (entry.icon_enabled && entry.has_api()) return SettingsNodeKind::Toggle;
+    if (entry.has_api()) return SettingsNodeKind::Action;
+    return SettingsNodeKind::Plain;
+}
+
+void settings_prepare_section(const NodeIter &node)
+{
+    prepare_section(node);
+}
+
+void settings_leave_section(const NodeIter &node)
+{
+    // what the legacy Date & Time submenu does when it is destroyed (roller_page_factory)
+    if (node->label == "Date & Time") settings_rtc_discard_edits();
+}
 
 bool settings_bluetooth_named_only_enabled()
 {
@@ -841,17 +885,44 @@ void UISettingTreePage::LoadNextPage()
     });
 }
 
+bool UISettingTreePage::native_display_now()
+{
+    return settings_ui::native_selected();
+}
+
 UISettingTreePage::UISettingTreePage() : AppPage()
 {
     set_page_title("Settings");
     lv_obj_set_style_bg_color(screen(), lv_color_black(), LV_PART_MAIN);
     create_page_detail();
+    if (native_display_now()) {
+        build_native();
+        return;
+    }
     LoadNextPage();
+}
+
+// The native Settings host (task 014 P2a): the whole screen, no 320 px top bar, the same tree.
+void UISettingTreePage::build_native()
+{
+    lv_display_t *display = root_screen_ ? lv_obj_get_display(root_screen_) : lv_display_get_default();
+    const int width = static_cast<int>(display ? lv_display_get_horizontal_resolution(display) : 640);
+    const int height = static_cast<int>(display ? lv_display_get_vertical_resolution(display) : 480);
+    disable_top_bar();
+    if (ui_APP_Container) {
+        lv_obj_set_size(ui_APP_Container, width, height);
+        lv_obj_set_pos(ui_APP_Container, 0, 0);
+    }
+    native_host_ = std::make_unique<SettingsNativeHost>(*this, ui_APP_Container ? ui_APP_Container : root_screen_,
+                                                        mode_tree_, [this] {
+                                                            if (navigate_home) navigate_home();
+                                                        });
 }
 
 UISettingTreePage::~UISettingTreePage()
 {
     lv_async_call_cancel(back_home, this);
+    native_host_.reset();
     roller_.reset();
     if (settings_tree_factory_context() == &mode_tree_) settings_tree_factory_context() = nullptr;
 }

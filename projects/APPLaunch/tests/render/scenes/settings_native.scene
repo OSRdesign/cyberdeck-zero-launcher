@@ -1,0 +1,35 @@
+# Native Settings (task 014 P2a, APPLAUNCH_SETTINGS_UI=native): the existing Settings tree full screen on the
+# native display in the roller look, opened from its tile, then by keyboard: the Screen section (Brightness slider,
+# DarkTime with its value), the DarkTime choice list, and the Brightness slider one step darker (on the Pi 3A+,
+# whose backlight is on / off, the Brightness choice list instead).
+# Review only: 640x480 and 480x320 keep the compat Settings goldens (settings.scene); these shots have their own
+# names and no golden. Every header is checked against the home grid's (run.sh header: status strip pixel-identical,
+# title at the same origin).
+title settings native
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+config dark_time 60
+home
+header home ZERO
+launch Settings
+shot settings_native_root
+header settings_native_root Settings
+key ENTER
+shot settings_native_screen
+header settings_native_screen "Settings > Screen" Screen
+key DOWN
+key ENTER
+shot settings_native_darktime
+header settings_native_darktime "Settings > Screen > DarkTime" "Screen > DarkTime" DarkTime
+key ESC
+key UP
+@640x480,800x480,720x720,1280x720 key LEFT
+@480x320 key ENTER
+wait 300
+shot settings_native_brightness
+header settings_native_brightness "Settings > Screen" Screen "Settings > Screen > Brightness" "Screen > Brightness" Brightness

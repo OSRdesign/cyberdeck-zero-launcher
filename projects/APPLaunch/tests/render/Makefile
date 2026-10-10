@@ -57,6 +57,9 @@ CP0_SRCS := \
     $(CP0)/src/cp0/cp0_fb_output.c \
     $(CP0)/src/cp0_ui_metrics.c \
     $(CP0)/src/cp0_ui_metrics_lvgl.c \
+    $(CP0)/src/cp0_ui_roller.c \
+    $(CP0)/src/cp0_ui_roller_widget.cpp \
+    $(CP0)/src/cp0_ui_page.cpp \
     $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \
     $(CP0)/src/cp0/cp0_keyboard_lvgl_input.c \

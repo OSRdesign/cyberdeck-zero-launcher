@@ -49,6 +49,26 @@ struct page_prefers_native<PageT, std::void_t<decltype(PageT::kNativeDisplay)>>
 {
 };
 
+// A page class can also choose at run time with `static bool native_display_now();` (Settings: the
+// APPLAUNCH_SETTINGS_UI switch, task 014 P2a). When it returns true the page gets the native display with plain
+// pointer touch, whatever kNativeDisplay / kTouchList say; when false, or without the function, nothing changes.
+template <class PageT, class = void>
+struct page_native_choice
+{
+    static void apply(bool &, bool &) {}
+};
+
+template <class PageT>
+struct page_native_choice<PageT, std::void_t<decltype(PageT::native_display_now())>>
+{
+    static void apply(bool &native, bool &touch_list)
+    {
+        if (!PageT::native_display_now()) return;
+        native = true;
+        touch_list = false;
+    }
+};
+
 // A page class can ask for key-gesture touch handling (drag = Up/Down, tap = Enter) with
 // `static constexpr bool kTouchList = true;`.
 template <class PageT, class = void>
@@ -165,8 +185,9 @@ app::app(std::string name, std::string icon, page_t<PageT>)
 {
     launch = [](Launch *owner) {
         if (!owner->begin_page_launch()) return;
-        native_ui::begin_page(page_prefers_native<PageT>::value, page_touch_list<PageT>::value,
-                              page_touch_swipe<PageT>::value, page_swipe_tap_key<PageT>::value);
+        bool native = page_prefers_native<PageT>::value, touch_list = page_touch_list<PageT>::value;
+        page_native_choice<PageT>::apply(native, touch_list);
+        native_ui::begin_page(native, touch_list, page_touch_swipe<PageT>::value, page_swipe_tap_key<PageT>::value);
         ui_loading::show("Loading...");
         lv_refr_now(nullptr);
         auto page = std::make_shared<PageT>();
@@ -185,8 +206,9 @@ app::app(std::string name, std::string icon, page_t<PageT>, TerminalHelpFactory 
 {
     launch = [help_factory](Launch *owner) {
         if (!owner->begin_page_launch()) return;
-        native_ui::begin_page(page_prefers_native<PageT>::value, page_touch_list<PageT>::value,
-                              page_touch_swipe<PageT>::value, page_swipe_tap_key<PageT>::value);
+        bool native = page_prefers_native<PageT>::value, touch_list = page_touch_list<PageT>::value;
+        page_native_choice<PageT>::apply(native, touch_list);
+        native_ui::begin_page(native, touch_list, page_touch_swipe<PageT>::value, page_swipe_tap_key<PageT>::value);
         ui_loading::show("Loading...");
         lv_refr_now(nullptr);
         std::shared_ptr<PageT> page;

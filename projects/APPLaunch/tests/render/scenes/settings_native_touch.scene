@@ -1,0 +1,30 @@
+# Native Settings by touch only (task 014 P2a): a tap on the row under the highlight moves the highlight there, a
+# tap on the highlighted row opens it, a drag scrolls and snaps to a row, the header's Esc button goes back one level
+# (it calls the page's back action; no key is injected). Review only, no golden.
+title settings native touch
+review
+sizes 480x320 800x480
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home ZERO
+launch Settings
+# highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 253,5 57x30 / 484,8 83x40
+@480x320 tap 240 224
+@800x480 tap 400 332
+shot settings_touch_moved
+@480x320 tap 240 180
+@800x480 tap 400 268
+shot settings_touch_opened
+header settings_touch_opened "Settings > Wi-Fi" Wi-Fi
+@480x320 drag 240 240 240 180 20
+@800x480 drag 400 340 400 255 20
+shot settings_touch_dragged
+@480x320 tap 281 20
+@800x480 tap 525 28
+shot settings_touch_esc
+header settings_touch_esc Settings

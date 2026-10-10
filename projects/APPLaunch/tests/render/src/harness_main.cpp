@@ -482,6 +482,7 @@ struct Scene {
     std::string path, name, title;
     std::vector<Size> sizes;
     std::vector<Line> lines;
+    bool review = false; /* shots for review only: no golden is expected at 640x480 / 480x320 */
 };
 
 bool load_scene(const std::string &path, Scene &scene)
@@ -534,6 +535,10 @@ bool load_scene(const std::string &path, Scene &scene)
         if (line.words[0] == "title") {
             scene.title.clear();
             for (std::size_t i = 1; i < line.words.size(); ++i) scene.title += (i > 1 ? " " : "") + line.words[i];
+            continue;
+        }
+        if (line.words[0] == "review" && line.words.size() == 1) {
+            scene.review = true;
             continue;
         }
         scene.lines.push_back(line);
@@ -701,6 +706,33 @@ void touch_at(const Run &run, int pressed, int x, int y)
     int px = 0, py = 0;
     cp0_fbo_logical_to_buffer(&run.view, std::clamp(x, 0, run.size.w - 1), std::clamp(y, 0, run.size.h - 1), &px, &py);
     harness_touch_report(pressed, px, py);
+}
+
+/* The first visible label under obj (depth first) whose text is one of texts. */
+lv_obj_t *find_label(lv_obj_t *obj, const std::vector<std::string> &texts)
+{
+    if (!obj || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return nullptr;
+    if (lv_obj_check_type(obj, &lv_label_class)) {
+        const char *text = lv_label_get_text(obj);
+        if (text && std::find(texts.begin(), texts.end(), std::string(text)) != texts.end()) return obj;
+    }
+    const uint32_t count = lv_obj_get_child_count(obj);
+    for (uint32_t i = 0; i < count; ++i)
+        if (lv_obj_t *found = find_label(lv_obj_get_child(obj, static_cast<int32_t>(i)), texts)) return found;
+    return nullptr;
+}
+
+Image crop_image(const Image &in, int x, int y, int w, int h)
+{
+    Image out;
+    out.create(w, h, 0, 0, 0);
+    for (int yy = 0; yy < h; ++yy)
+        for (int xx = 0; xx < w; ++xx) {
+            const unsigned char *s = in.at(x + xx, y + yy);
+            unsigned char *d = out.at(xx, yy);
+            d[0] = s[0], d[1] = s[1], d[2] = s[2];
+        }
+    return out;
 }
 
 bool fail(const Scene &scene, const Line &line, const std::string &why)
@@ -901,6 +933,31 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         out << report;
         if (!out) return fail(scene, line, "cannot write " + path);
         std::printf("%s\n", path.c_str());
+    } else if (cmd == "header") {
+        /* header NAME TITLE [TITLE ...]: the home grid's status strip rectangle (from the strip's leftmost drawn
+         * pixel, its Bluetooth icon, to the right edge, bar_h high) cut out as out/<WxH>/header/NAME.png, and the
+         * screen origin of the title label (the first visible label on the native screen whose text is one of
+         * TITLE ...) as out/<WxH>/header/NAME.txt ("x y text"). run.sh header requires both to equal the home grid's
+         * (header home ZERO). */
+        if (w.size() < 3) return fail(scene, line, "usage: header NAME TITLE [TITLE ...]");
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+        if (!m) return fail(scene, line, "the display manager published no metrics");
+        settle(500);
+        lv_refr_now(nullptr);
+        const int strip_x = std::clamp(native_ui::status_strip_left(), 0, run.size.w - 1);
+        const int strip_h = m->shell.bar_h;
+        const std::string dir = run.out_dir + "/" + run.size.name() + "/header/";
+        if (!save_png(dir + w[1] + ".png", crop_image(grab(run), strip_x, 0, run.size.w - strip_x, strip_h)))
+            return fail(scene, line, "cannot write " + dir + w[1] + ".png");
+        const std::vector<std::string> titles(w.begin() + 2, w.end());
+        lv_obj_t *title = find_label(lv_display_get_screen_active(cp0_display_native()), titles);
+        if (!title) return fail(scene, line, "no title label with the text " + w[2] + " on the native screen");
+        lv_area_t area;
+        lv_obj_get_coords(title, &area);
+        std::ofstream out(dir + w[1] + ".txt");
+        out << area.x1 << " " << area.y1 << " " << lv_label_get_text(title) << "\n";
+        if (!out) return fail(scene, line, "cannot write " + dir + w[1] + ".txt");
+        std::printf("%s%s.png\n", dir.c_str(), w[1].c_str());
     } else if (cmd == "wait") {
         if (w.size() != 2) return fail(scene, line, "usage: wait MS");
         settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))));
@@ -996,6 +1053,13 @@ int cmd_render(int argc, char **argv, const std::string &harness_dir)
                          child.second.name().c_str(), scene.name.c_str());
         }
     }
+    /* A review-only scene lists its shots in out/<WxH>/review.list: run.sh compare expects no golden for them. */
+    if (scene.review)
+        for (const Size &size : scene.sizes) {
+            std::ofstream list(out_dir + "/" + size.name() + "/review.list", std::ios::app);
+            for (const Line &line : scene.lines)
+                if (line.words.size() == 2 && line.words[0] == "shot") list << line.words[1] << ".png\n";
+        }
     /* One contact sheet per scene: a row per shot, a column per size. */
     std::vector<SheetRow> rows;
     for (const Line &line : scene.lines) {
