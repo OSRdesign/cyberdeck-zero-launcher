@@ -85,7 +85,7 @@ runs at those sizes only.
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
 | `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, `screen.state`) as `out/<WxH>/NAME.txt` |
 
-Scenes today (18 shots, 90 PNGs): `home`, `home_status` (offline, weak + BT on, full + BT connected,
+Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
 `screensaver`, `toast` (one and two lines), `settings` (root, Screen section, root on System, System
 section). Settings runs where it runs on the device: in the compat window, scaled by the display manager.

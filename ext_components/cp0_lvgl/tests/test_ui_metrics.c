@@ -440,17 +440,14 @@ static void test_pinned(void)
     m = compute(640, 480, 0, 3);
     check_compat(&m, 2, 0, 0, 340, 140);
 
-    /* other sizes keep today's two home layouts: deck from 400 px of height, compact below */
+    /* other sizes keep the base preset's strip/title/toolbar numbers (deck from 400 px of height, compact below) */
     m = compute(800, 480, 920, 0);
     CHECK(m.shell_preset == CP0_UI_PRESET_DECK);
-    check_shell_deck(&m.shell, 800, 480);
-    m = compute(1280, 720, 1160, 0);
-    check_shell_deck(&m.shell, 1280, 720);
-    m = compute(720, 720, 1000, 0);
-    check_shell_deck(&m.shell, 720, 720);
+    CHECK_EQ(m.shell.status_pct, 100);
+    CHECK_EQ(m.shell.tb_pad_y, 10);
     m = compute(800, 320, 0, 0);
     CHECK(m.shell_preset == CP0_UI_PRESET_COMPACT);
-    check_shell_compact(&m.shell, 800, 320);
+    CHECK_EQ(m.shell.tb_pad_y, 5);
     m = compute(800, 400, 0, 0);
     CHECK(m.shell_preset == CP0_UI_PRESET_DECK);
 
@@ -458,6 +455,85 @@ static void test_pinned(void)
     m = compute(1280, 720, 1160, 2);
     check_compat(&m, 2, 320, 128, 596, 124);
     CHECK_EQ(m.compat.scale_max, 3);
+}
+
+/* ------------------------------------------------------------------ computed home grid (P1c) */
+
+static void check_grid(int w, int h, int ppmm, int cols, int rows, int tile_w, int tile_h, int top_extra)
+{
+    cp0_ui_metrics_t m = compute(w, h, ppmm, 0);
+    const cp0_ui_shell_t *s = &m.shell;
+    CHECK(m.preset == CP0_UI_PRESET_COMPUTED);
+    CHECK_EQ(s->cols, cols);
+    CHECK_EQ(s->rows, rows);
+    CHECK_EQ(s->tile_w, tile_w);
+    CHECK_EQ(s->tile_h, tile_h);
+    CHECK_EQ(s->top_extra, top_extra);
+    CHECK_EQ(s->bar_h, m.tok[CP0_TOK_HEADER_H]);
+    CHECK(s->pad >= 10 && s->pad <= 24);
+    /* the grid fits the area under the bar and is near square (never taller than 1.2) */
+    CHECK(s->cols >= 2 && s->cols <= 8 && s->rows >= 2);
+    CHECK(s->cols * s->tile_w + (s->cols + 1) * s->pad <= w);
+    CHECK(s->top_extra + s->rows * s->tile_h + (s->rows + 1) * s->pad <= h - s->bar_h);
+    CHECK(s->tile_h * 100 <= 120 * s->tile_w);
+    CHECK(s->tile_h * 100 >= 80 * s->tile_w);
+    /* icon about half the short side, label and icon inside the tile */
+    CHECK(s->icon >= 32 && s->icon <= (s->tile_w < s->tile_h ? s->tile_w : s->tile_h) / 2 + 8);
+    CHECK(s->icon_top + s->icon + s->label_bottom < s->tile_h);
+    CHECK_EQ(s->tile_radius, m.tok[CP0_TOK_RADIUS_L]);
+    CHECK(s->label_px >= 14 && s->label_px <= m.text_px[CP0_TEXT_BODY] && (s->label_px & 1) == 0);
+}
+
+static void test_computed_grid(void)
+{
+    /* values the rule gives (docs/dev/tasks/014 "Home grid design rule") */
+    check_grid(800, 480, 920, 4, 2, 177, 185, 0);   /* 1.05 */
+    check_grid(720, 720, 1000, 3, 3, 213, 192, 0);  /* 0.90: the 2-row 298 px tile is too tall */
+    check_grid(1280, 720, 1160, 6, 3, 186, 188, 0); /* 1.01: 5 columns (228x188, 0.82) lose to cols0 + 1 */
+    check_grid(1024, 600, 660, 7, 4, 131, 119, 0);  /* 0.91 at the panel's real 6.6 px/mm */
+
+    /* the deck and the Pi 3A+ never go through the rule, whatever the density */
+    cp0_ui_metrics_t m = compute(640, 480, 1000, 0);
+    CHECK_EQ(m.shell.top_extra, 0);
+    CHECK_EQ(m.shell.tile_w, 192);
+    CHECK_EQ(m.shell.tile_h, 188);
+    m = compute(480, 320, 1000, 0);
+    CHECK_EQ(m.shell.tile_w, 146);
+    CHECK_EQ(m.shell.tile_h, 125);
+
+    /* degenerate canvases: tiles of at least 40 px, or the base preset's grid when they cannot be had */
+    m = compute(200, 100, 0, 0);
+    CHECK((m.shell.cols == 3 && m.shell.rows == 2) || (m.shell.tile_w >= 40 && m.shell.tile_h >= 40));
+    m = compute(320, 170, 0, 0);
+    CHECK((m.shell.cols == 3 && m.shell.rows == 2) || (m.shell.tile_w >= 40 && m.shell.tile_h >= 40));
+
+    /* short, wide canvases: at least one full row, tiles near square, nothing taller than 1.2, vertical scroll as ever */
+    static const int shorts[][3] = {{800, 320, 0}, {1024, 400, 0}, {1280, 400, 0}, {1280, 390, 0}, {1024, 400, 660}};
+    for (size_t i = 0; i < sizeof(shorts) / sizeof(shorts[0]); i++) {
+        m = compute(shorts[i][0], shorts[i][1], shorts[i][2], 0);
+        const cp0_ui_shell_t *g = &m.shell;
+        CHECK(g->rows >= 1 && g->cols >= 2);
+        CHECK(g->tile_w >= 40 && g->tile_h >= 40);
+        CHECK(g->tile_h * 100 <= 120 * g->tile_w);
+        CHECK(g->tile_h * 100 >= 70 * g->tile_w);
+        CHECK(g->top_extra + g->rows * g->tile_h + (g->rows + 1) * g->pad <= m.h - g->bar_h);
+        CHECK(g->icon_top + g->icon + g->label_bottom < g->tile_h);
+        CHECK(g->tile_h + 2 * g->pad <= m.h - g->bar_h); /* one full row fits under the bar */
+        printf("short %dx%d @%d: %dx%d tile %dx%d top %d icon %d\n", m.w, m.h, shorts[i][2], g->cols, g->rows, g->tile_w,
+               g->tile_h, g->top_extra, g->icon);
+    }
+
+    /* every common size gives a sane grid */
+    static const int sizes[][3] = {{800, 480, 0},  {800, 600, 0},  {854, 480, 0},  {1024, 768, 0}, {1280, 800, 0},
+                                   {1920, 1080, 0}, {480, 480, 0},  {720, 720, 0},   {1280, 720, 0}, {1024, 600, 660},
+                                   {800, 480, 300}, {1280, 720, 3000}};
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+        m = compute(sizes[i][0], sizes[i][1], sizes[i][2], 0);
+        CHECK(m.shell.cols >= 2 && m.shell.cols <= 8);
+        CHECK(m.shell.tile_w >= 40 && m.shell.tile_h >= 40);
+        CHECK(m.shell.cols * m.shell.tile_w + (m.shell.cols + 1) * m.shell.pad <= m.w);
+        CHECK(m.shell.tile_h * 100 <= 120 * m.shell.tile_w);
+    }
 }
 
 /* ------------------------------------------------------------------ determinism, current */
@@ -617,6 +693,7 @@ int main(void)
     test_targets();
     test_odd_sizes();
     test_pinned();
+    test_computed_grid();
     test_determinism();
     test_state_text();
     test_publish();
