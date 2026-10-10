@@ -25,6 +25,10 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 v0.1.0 first port; v0.2.0 Settings > Apps + LAN Scan; v0.3.0 full-screen apps, shared top bar, clean boot; viz1090
 as an installable app (apps repo).
 
+2026-10-10: **v0.4.0 released** (commit 71cb402): `uninstall.sh` in the bundle (owner-tested dry run and removal), Settings > Apps
+polish and D removes an app. The new launcher binary was not reinstalled on a deck by deck-verifier for this release.
+Mesh Hop 0.3.0 is published in the apps registry (apps PRs #8 and #9).
+
 2026-10-04: Wi-Fi Survey 0.1.0 passed deck verification (report 005), documented in the apps README, and accepted by
 the user on the deck.
 
