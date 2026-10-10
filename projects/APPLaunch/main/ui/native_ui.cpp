@@ -63,15 +63,16 @@ int s_selected = 0;
 // Geometry of the native screens, from the layout service (cp0_ui_metrics.h) for the native display. The
 // 640x480 deck and the 480x320 Pi 3A+ are pinned presets: the values the UI always had (they must not
 // change; the render harness goldens check it). Other sizes keep today's two layouts (deck from 400 px of
-// height, compact below: status bar 40, padding 10, icon and text about 72 % of the deck sizes) until the
-// grid is drawn from the tokens (task 014 P1c).
+// height, compact below: status bar 40, padding 10, icon and text about 72 % of the deck sizes) for the strip,
+// title and toolbar; the home grid of every other size is computed from the physical tokens (task 014 P1c).
 struct Layout {
     bool compact;
     int screen_w, screen_h;
     int cols, rows;      // grid columns, rows that fit on screen
     int bar_h;           // status bar height
     int pad;             // grid padding and gap
-    int tile_w, tile_h;  // two rows fit exactly under the status bar
+    int tile_w, tile_h;  // two rows fit exactly under the status bar (computed sizes: see cp0_ui_metrics.c)
+    int top_extra;       // extra space above the first row (grid centred vertically; 0 on the pinned presets)
     int status_pct;      // scale of the clock / Wi-Fi / Bluetooth strip
     int status_top;      // y of the clock pill inside the bar
     int status_w;        // width of the strip canvas
@@ -101,6 +102,7 @@ const Layout &layout()
         v.pad = s.pad;
         v.tile_w = s.tile_w;
         v.tile_h = s.tile_h;
+        v.top_extra = s.top_extra;
         v.status_pct = s.status_pct;
         v.status_top = s.status_top;
         v.status_w = s.status_w;
@@ -323,7 +325,7 @@ StatusIcons *build_status_icons(lv_obj_t *parent)
     auto *icons = new StatusIcons();
     icons->parent = parent;
     const Layout &l = layout();
-    icons->pixels.assign(static_cast<size_t>(l.status_w) * CP0_STATUSBAR_HEIGHT, 0u);
+    icons->pixels.assign(static_cast<size_t>(l.status_w) * std::max(l.bar_h, CP0_STATUSBAR_HEIGHT), 0u);
     lv_obj_add_event_cb(parent, status_icons_delete_cb, LV_EVENT_DELETE, icons);
 
     lv_display_t *display = lv_obj_get_display(parent);
@@ -368,6 +370,7 @@ void ensure_home()
     lv_obj_set_size(s_grid, LV_PCT(100), l.screen_h - l.bar_h);
     lv_obj_set_pos(s_grid, 0, l.bar_h);
     lv_obj_set_style_pad_all(s_grid, l.pad, 0);
+    lv_obj_set_style_pad_top(s_grid, l.pad + l.top_extra, 0);
     lv_obj_set_style_pad_row(s_grid, l.pad, 0);
     lv_obj_set_style_pad_column(s_grid, l.pad, 0);
     lv_obj_set_flex_flow(s_grid, LV_FLEX_FLOW_ROW_WRAP);

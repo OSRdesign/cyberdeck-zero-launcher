@@ -1,0 +1,20 @@
+# Computed home grid (task 014 P1c) with a realistic app list at the sizes that are not pinned presets. The pinned
+# sizes (640x480, 480x320) are not rendered here: they have goldens and home/home_status cover them. 1024x600 runs
+# at its real 6.6 px/mm (7" panel).
+title home grid
+sizes 800x480 720x720 1280x720 1024x600
+@1024x600 ppmm 660
+apps Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank Mesh 2048=fixture:2048_128.png Browser
+clock 20:30
+wifi 70
+bt on
+home
+shot home_grid
+key DOWN
+key DOWN
+key RIGHT
+shot home_grid_focus
+key DOWN
+key DOWN
+shot home_grid_scrolled
+metrics home_grid_metrics

@@ -43,5 +43,13 @@ Tiles must stay close to SQUARE (aspect about 1:1 to 1.2:1) on every screen; the
 - the deck 640x480 (3x2, 192x188) and the Pi 3A+ 480x320 (3x2, 146x125) stay PINNED as they are.
 - indicative results (available area under the status bar): 800x480 -> 4x2 (about 185x190), 720x720 -> 3x3 (about 218x200), 1280x720 -> 6x3 (about 195x195) or 5x3.
 
+### Final rule as implemented (P1c, `shell_computed_grid` in cp0_ui_metrics.c; computed sizes only)
+- bar = class header token; pad = clamp(2 mm in px, 10, 24); avail = (w - 2 pad) x (h - bar); target tile = 20 mm (at least 120 px).
+- cols = clamp(round((avail_w + pad) / (target + pad)), 2, 8); tile_w = (avail_w - (cols-1) pad) / cols.
+- rows = max(2, floor((avail_h - pad) / (0.92 tile_w + pad))); tile_h = (avail_h - (rows+1) pad) / rows. If tile_h/tile_w is outside [0.85, 1.2], rows +-1 is taken when it gets closer to 0.95 (one row is allowed, for short wide canvases where two rows are too flat).
+- The rule's cols (cols0) and cols0 +- 1 (2..8) are all evaluated this way: a result inside [0.85, 1.2] beats one outside; among those inside the tile width closest to the 20 mm target wins (a tie keeps cols0), among those outside the aspect closest to 0.95. A tile still above 1.2 tile_w is capped there and the grid is centred vertically (`top_extra`).
+- icon = half the short side, multiple of 8, at least 32 (lv_image stretch, no new assets); label font = min(class body text, tile_w/7), snapped, at least 14; radius = RADIUS_L token; borders, status strip, title and toolbar stay the base preset's (deck from 400 px of height, compact below); a canvas whose tiles would be under 40 px keeps the base grid.
+- Results (harness `home_grid` scene and unit tests): 800x480 @9.2 px/mm 4x2 177x185; 720x720 @10 3x3 213x192; 1280x720 @11.6 6x3 186x188; 1024x600 @6.6 7x4 131x119; short canvases (one row scrolls vertically): 800x320 3x1 236x234, 1024x400 3x1 310x298 (@6.6: 7x2 131x152), 1280x400 4x1 291x298. Arrow navigation and scrolling use the new cols as before.
+
 ## Toolbar rule (user feedback 2026-10-10, HackBerry 720x720: the toolbar took 370 of 720 px)
 The bottom toolbar has a FIXED physical height from the tokens, never "the rest of the screen": buttons 9 mm (about 90-100 px on the boards seen), plus margins, so about 100-110 px on every screen class (deck 140 and Pi 3A+ 100 stay PINNED). The stock-app window (integer scale of 320x170) is centred in the space above the toolbar, black margins around it; on a square or large screen the leftover room stays black (decision D8: always a bottom bar) until a later design uses it. A native, responsive page (Settings after P2) does not use this toolbar at all: it fills the screen and takes touch directly.

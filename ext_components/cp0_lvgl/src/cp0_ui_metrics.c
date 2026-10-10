@@ -56,6 +56,9 @@ static const cp0_ui_shell_t k_shell_compact = {
 #define PINNED_TOOLBAR_DECK 140   /* the toolbars the two shipped boards draw */
 #define PINNED_TOOLBAR_COMPACT 100
 #define LARGE_FROM_H 700
+#define GRID_PAD_MM_X10 20        /* P1c home grid: gap and margin 2 mm (10..24 px) ... */
+#define GRID_TILE_MM_X10 200      /* ... target tile 20 mm ... */
+#define GRID_TILE_FLOOR_PX 120    /* ... at least 120 px */
 #define MAX_MM_X10 100000         /* 10 m: anything larger is a driver's "unknown" */
 
 static int imin(int a, int b) { return a < b ? a : b; }
@@ -240,6 +243,94 @@ static void place_rule(int w, int h, int toolbar_h, int cap, cp0_ui_compat_t *c)
     c->y = imax(0, (h - c->toolbar_h - c->h) / 2);
 }
 
+static int ratio_dist(int r) { return r > 95 ? r - 95 : 95 - r; }
+
+/* Task 014 "Home grid design rule" (P1c), computed sizes only. Everything in px; the status strip, title and toolbar
+ * numbers stay the base preset's (P1b), the grid and what is drawn inside a tile come from the physical tokens:
+ *   pad = clamp(2 mm, 10, 24); bar = the class header token; avail = (w - 2 pad) x (h - bar)
+ *   target tile = 20 mm (at least 120 px); cols0 = clamp(round((avail_w + pad) / (target + pad)), 2, 8)
+ *   tile_w = (avail_w - (cols - 1) pad) / cols; rows = max(2, floor((avail_h - pad) / (0.92 tile_w + pad)))
+ *   tile_h = (avail_h - (rows + 1) pad) / rows; when tile_h / tile_w is outside [0.85, 1.2] the rows change by one in
+ *   the direction that gets closest to 0.95 (one row is allowed when two are too flat); cols0 and cols0 +- 1 are all
+ *   tried: a result inside [0.85, 1.2] with the tile width closest to the target wins, else the aspect closest to 0.95; a tile still taller than 1.2 tile_w is capped there and the grid is
+ *   centred vertically (top_extra). A canvas too small for 40 px tiles keeps the base preset's grid. */
+static void shell_computed_grid(const class_spec_t *k, int w, int h, int ppmm_x100, cp0_ui_shell_t *s)
+{
+    const int pad = imax(10, imin(24, cp0_ui_mm_px(ppmm_x100, GRID_PAD_MM_X10, 0)));
+    const int bar = k->header;
+    const int avail_w = w - 2 * pad, avail_h = h - bar;
+    if (avail_w <= 0 || avail_h <= 0) return;
+    const int target = cp0_ui_mm_px(ppmm_x100, GRID_TILE_MM_X10, GRID_TILE_FLOOR_PX);
+    const int den = target + pad;
+    const int cols0 = imax(2, imin(8, (2 * (avail_w + pad) + den) / (2 * den)));
+
+    /* the rule's columns first, then the neighbours; a candidate replaces the best only when strictly closer to 0.95 */
+    int cols = 0, tile_w = 0, rows = 0, tile_h = 0, best_score = 0;
+    for (int ci = 0; ci < 3; ci++) {
+        const int c = ci == 0 ? cols0 : ci == 1 ? cols0 - 1 : cols0 + 1;
+        if (c < 2 || c > 8) continue;
+        const int tw = (avail_w - (c - 1) * pad) / c;
+        if (tw < 40) continue;
+        int r = imax(2, (avail_h - pad) / (tw * 92 / 100 + pad));
+        int th = (avail_h - (r + 1) * pad) / r;
+        int rt = th * 100 / tw;
+        if (rt < 85 || rt > 120) {
+            for (int r2 = r - 1; r2 <= r + 1; r2 += 2) {
+                if (r2 < 1) continue; /* one row is allowed when two would be too flat (short, wide canvases) */
+                const int th2 = (avail_h - (r2 + 1) * pad) / r2;
+                if (th2 >= 40 && ratio_dist(th2 * 100 / tw) < ratio_dist(rt)) {
+                    r = r2;
+                    th = th2;
+                    rt = th2 * 100 / tw;
+                }
+            }
+        }
+        if (th < 40) continue;
+        /* candidates inside [0.85, 1.2] beat those outside; among them the tile width closest to the target wins,
+         * among the others the aspect closest to 0.95; the first of equals (cols0) is kept */
+        const int in = rt >= 85 && rt <= 120;
+        const int score = in ? imax(tw - target, target - tw) : 100000 + ratio_dist(rt > 120 ? 120 : rt);
+        if (cols == 0 || score < best_score) {
+            best_score = score;
+            cols = c;
+            tile_w = tw;
+            rows = r;
+            tile_h = th;
+        }
+    }
+    if (cols == 0) return;
+    int top_extra = 0;
+    if (tile_h * 100 > 120 * tile_w) {
+        tile_h = tile_w * 120 / 100;
+        top_extra = imax(0, (avail_h - rows * tile_h - (rows + 1) * pad) / 2);
+    }
+
+    const int min_side = imin(tile_w, tile_h);
+    const int body = k->text[2];
+    const int label_px = cp0_ui_font_snap(imax(14, imin(body, tile_w / 7)));
+    const int label_bottom = imax(5, imin(14, tile_h / 16));
+    int icon = (min_side / 2) & ~7; /* half the short side, a multiple of 8 */
+    icon = imax(32, imin(icon, tile_h - label_bottom - label_px * 5 / 4 - 2 * s->tile_border_sel - 4));
+
+    const int base_bar = s->bar_h;
+    s->cols = cols;
+    s->rows = rows;
+    s->bar_h = bar;
+    s->pad = pad;
+    s->tile_w = tile_w;
+    s->tile_h = tile_h;
+    s->top_extra = top_extra;
+    s->tile_radius = k->radius[2];
+    s->icon = icon;
+    s->label_px = label_px;
+    s->label_bottom = label_bottom;
+    s->label_inset = pad;
+    s->icon_top = imax(s->tile_border_sel + 2, (tile_h - label_bottom - label_px * 5 / 4 - icon) / 2);
+    /* the status strip and the title keep their size; they centre in a taller bar */
+    s->status_top += (bar - base_bar) / 2;
+    s->title_y += (bar - base_bar) / 2;
+}
+
 static void shell_fill(cp0_ui_preset_t preset, int w, int h, cp0_ui_shell_t *s)
 {
     *s = preset == CP0_UI_PRESET_COMPACT ? k_shell_compact : k_shell_deck;
@@ -290,6 +381,7 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
                      : h < SHELL_COMPACT_BELOW_H        ? CP0_UI_PRESET_COMPACT
                                                         : CP0_UI_PRESET_DECK;
     shell_fill(m.shell_preset, w, h, &m.shell);
+    if (m.preset == CP0_UI_PRESET_COMPUTED) shell_computed_grid(&k_class[m.cls], w, h, m.ppmm_x100, &m.shell);
 
     if (m.preset != CP0_UI_PRESET_COMPUTED) {
         m.tok[CP0_TOK_TOOLBAR_H] = m.preset == CP0_UI_PRESET_DECK ? PINNED_TOOLBAR_DECK : PINNED_TOOLBAR_COMPACT;
@@ -401,7 +493,7 @@ int cp0_ui_metrics_describe(const cp0_ui_metrics_t *m, char *buf, size_t size)
         "tile_icon %d  dialog_max_w %d\n"
         "text    title %d  heading %d  body %d  caption %d  symbol %d\n"
         "compat  scale %d (rule max %d)  window %dx%d at (%d,%d)  toolbar y %d h %d\n"
-        "shell   %s layout: bar %d pad %d tile %dx%d icon %d title %d label %d status %d%% (%d px) "
+        "shell   %s layout: grid %dx%d bar %d pad %d tile %dx%d top %d icon %d title %d label %d status %d%% (%d px) "
         "toolbar pad %d/%d gap %d radius %d text %d symbol %d\n",
         m->w, m->h, m->rot, cp0_ui_class_name(m->cls),
         m->preset == CP0_UI_PRESET_DECK      ? "pinned deck"
@@ -413,8 +505,8 @@ int cp0_ui_metrics_describe(const cp0_ui_metrics_t *m, char *buf, size_t size)
         t[CP0_TOK_TILE_ICON], t[CP0_TOK_DIALOG_MAX_W], m->text_px[CP0_TEXT_TITLE], m->text_px[CP0_TEXT_HEADING],
         m->text_px[CP0_TEXT_BODY], m->text_px[CP0_TEXT_CAPTION], m->text_px[CP0_TEXT_SYMBOL], c->scale, c->scale_max,
         c->w, c->h, c->x, c->y, c->toolbar_y, c->toolbar_h,
-        m->shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck", s->bar_h, s->pad, s->tile_w, s->tile_h,
-        s->icon, s->title_px, s->label_px, s->status_pct, s->status_w, s->tb_pad_x, s->tb_pad_y, s->tb_gap,
+        m->shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck", s->cols, s->rows, s->bar_h, s->pad, s->tile_w, s->tile_h,
+        s->top_extra, s->icon, s->title_px, s->label_px, s->status_pct, s->status_w, s->tb_pad_x, s->tb_pad_y, s->tb_gap,
         s->tb_radius, s->tb_text_px, s->tb_symbol_px);
     if (n < 0 || (size_t)n >= size) return -1;
     return n;

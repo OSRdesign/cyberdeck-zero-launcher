@@ -14,8 +14,8 @@
  *
  * Pinned presets: a 640x480 canvas (the deck) and a 480x320 canvas (the Pi 3A+) get exactly the numbers the shell
  * always drew (window placement, home grid, toolbar), whatever the density. Other sizes get the computed window
- * placement; their home grid keeps today's two layouts (the deck one from 400 px of height, the compact one below)
- * until P1c draws the grid from the tokens.
+ * placement; their home grid is computed from the physical tokens (task 014 P1c: near-square tiles, columns and rows
+ * from the available area; see shell_computed_grid in cp0_ui_metrics.c).
  *
  * Pure C, no LVGL and no system call in this header's core functions: unit-tested on the PC by
  * tests/test_ui_metrics.c. cp0_ui_metrics_lvgl.h adds the LVGL side (fonts, the native display's metrics).
@@ -118,7 +118,8 @@ typedef struct {
     int cols, rows;       /* grid columns, rows that fit on screen */
     int bar_h;            /* status bar height */
     int pad;              /* grid padding and gap */
-    int tile_w, tile_h;   /* rows fit exactly under the status bar */
+    int tile_w, tile_h;   /* rows fit exactly under the status bar (computed sizes: see cp0_ui_metrics.c) */
+    int top_extra;        /* computed sizes: extra space above the first row (grid centred vertically), else 0 */
     int status_pct;       /* scale of the clock / Wi-Fi / Bluetooth strip */
     int status_top;       /* y of the clock pill inside the bar */
     int status_w;         /* width of the strip canvas */
