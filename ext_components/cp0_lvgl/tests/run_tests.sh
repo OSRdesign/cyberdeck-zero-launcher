@@ -158,6 +158,18 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
     "$root/tests/test_framebuffer_codec.cpp" -o "$binary"
 "$binary"
 
+"${CC:-cc}" -std=c11 -O2 -Wall -Wextra -Werror \
+    -I"$root/src/cp0" \
+    "$root/src/cp0/cp0_fb_output.c" \
+    "$root/tests/test_fb_output.c" -o "$binary"
+"$binary"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread \
+    -I"$root/include" \
+    "$root/src/cp0_backlight_profile.c" \
+    "$root/tests/test_backlight_profile.c" -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" "$root/src/cp0_alsa_parser.cpp" \
     "$root/tests/test_alsa_parser.cpp" -o "$binary"
@@ -484,4 +496,30 @@ TSAN_OPTIONS="halt_on_error=1" "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/include" "$root/tests/test_keyboard_input_context.cpp" -o "$binary"
+"$binary"
+
+# F1 phase 0: keyboard presence (parser against every device seen on the boards, rescan timing, inotify
+# watcher), the keyboard thread's source bookkeeping (no duplicated keys), the input policy file
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread \
+    -I"$root/include" \
+    "$root/src/cp0/cp0_keyboard_presence.c" \
+    "$root/tests/test_keyboard_presence.c" -o "$binary"
+"$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread -fsanitize=thread -g \
+    -I"$root/include" \
+    "$root/src/cp0/cp0_keyboard_presence.c" \
+    "$root/tests/test_keyboard_presence.c" -o "$binary"
+TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/src/cp0" \
+    "$root/src/cp0/cp0_keyboard_sources.c" \
+    "$root/tests/test_keyboard_sources.c" -o "$binary"
+"$binary"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0/cp0_input_state.c" \
+    "$root/tests/test_input_state.c" -o "$binary"
 "$binary"

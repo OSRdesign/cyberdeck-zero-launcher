@@ -148,7 +148,8 @@ const lv_font_t *UICalculatorPage::face(int px)
     if (const lv_font_t *font = launcher_fonts().get("DejaVuSans.ttf", px, LV_FREETYPE_FONT_STYLE_NORMAL,
                                                      LV_FREETYPE_FONT_RENDER_MODE_BITMAP))
         return font;
-    return px >= 48 ? &lv_font_montserrat_48 : px >= 36 ? &lv_font_montserrat_36 : &lv_font_montserrat_28;
+    return px >= 48 ? &lv_font_montserrat_48 : px >= 36 ? &lv_font_montserrat_36 : px >= 28 ? &lv_font_montserrat_28
+           : px >= 20 ? &lv_font_montserrat_20 : &lv_font_montserrat_18;
 }
 
 bool UICalculatorPage::evaluate(const std::string &expression, double &value)
@@ -201,19 +202,21 @@ void UICalculatorPage::build_ui(int width, int height)
     if (!parent) return;
     lv_obj_set_style_bg_color(root_screen_, lv_color_hex(kColorBg), 0);
 
-    constexpr int kPad = 10;
-    constexpr int kTopBar = 44;
-    constexpr int kDisplayH = 104;
-    constexpr int kGap = 6;
+    // 640x480 keeps its original numbers; a short display (480x320) gets a compact keypad.
+    const bool compact = height < 400;
+    const int kPad = compact ? 6 : 10;
+    const int kTopBar = compact ? 36 : 44;
+    const int kDisplayH = compact ? 64 : 104;
+    const int kGap = compact ? 4 : 6;
     constexpr int kRows = 6;
     constexpr int kCols = 4;
 
     // title + close
     lv_obj_t *title = lv_label_create(parent);
     lv_label_set_text(title, "Calculator");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(title, compact ? &lv_font_montserrat_20 : &lv_font_montserrat_28, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(0xF0B400), 0);
-    lv_obj_set_pos(title, 16, 6);
+    lv_obj_set_pos(title, compact ? 10 : 16, compact ? 8 : 6);
     native_ui::add_status_icons(parent);
 
     // display: small source line above the big result line
@@ -222,16 +225,16 @@ void UICalculatorPage::build_ui(int width, int height)
     lv_obj_set_pos(source_label_, kPad, kTopBar + 2);
     lv_label_set_long_mode(source_label_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(source_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(source_label_, face(28), 0);
+    lv_obj_set_style_text_font(source_label_, face(compact ? 18 : 28), 0);
     lv_obj_set_style_text_color(source_label_, lv_color_hex(0x8A8A8A), 0);
     lv_label_set_text(source_label_, "");
 
     main_label_ = lv_label_create(parent);
     lv_obj_set_width(main_label_, width - 2 * kPad - 8);
-    lv_obj_set_pos(main_label_, kPad, kTopBar + 38);
+    lv_obj_set_pos(main_label_, kPad, kTopBar + (compact ? 22 : 38));
     lv_label_set_long_mode(main_label_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(main_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(main_label_, face(48), 0);
+    lv_obj_set_style_text_font(main_label_, face(compact ? 30 : 48), 0);
     lv_obj_set_style_text_color(main_label_, lv_color_hex(0xFFFFFF), 0);
 
     // keypad
@@ -268,7 +271,7 @@ void UICalculatorPage::build_ui(int width, int height)
         lv_obj_set_pos(button, kPad + cell.col * (cell_w + kGap), pad_top + cell.row * (cell_h + kGap));
         lv_obj_set_style_bg_color(button, lv_color_hex(cell.color), 0);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(button, 14, 0);
+        lv_obj_set_style_radius(button, compact ? 8 : 14, 0);
         lv_obj_set_style_shadow_width(button, 0, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x707070), LV_STATE_PRESSED);
         if (cell.key == Key::Esc)
@@ -279,8 +282,10 @@ void UICalculatorPage::build_ui(int width, int height)
         lv_obj_t *label = lv_label_create(button);
         lv_label_set_text(label, cell.text);
         const bool sign = cell.key == Key::Multiply || cell.key == Key::Divide;
-        lv_obj_set_style_text_font(label, sign ? face(32) : cell.key == Key::Esc ? &lv_font_montserrat_28
-                                                                               : &lv_font_montserrat_32, 0);
+        const lv_font_t *label_font = compact ? (sign ? face(20) : &lv_font_montserrat_20)
+                                              : (sign ? face(32) : cell.key == Key::Esc ? &lv_font_montserrat_28
+                                                                                        : &lv_font_montserrat_32);
+        lv_obj_set_style_text_font(label, label_font, 0);
         lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
         lv_obj_center(label);
     }

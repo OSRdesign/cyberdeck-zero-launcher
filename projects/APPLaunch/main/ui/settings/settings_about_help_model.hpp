@@ -21,7 +21,8 @@ struct Content
 Content about(std::string_view version,
               std::string_view build_date,
               std::string_view channel,
-              std::string_view commit);
+              std::string_view commit,
+              std::string_view board = {}); // APPLAUNCH_BOARD label: a "Board:" row when not empty
 Content credit();
 
 } // namespace settings_t12b::about_help

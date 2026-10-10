@@ -18,6 +18,10 @@ Environment=APPLAUNCH_TOUCH_INVERT_Y=1
 # Optional: APPLAUNCH_FN_KEY=<evdev code> makes a key act as the Cardputer Fn (left unset: Right Alt is AltGr for symbols)
 # Standard (non-Cardputer) keyboard: do not apply the Cardputer matrix keymap to its keycodes
 Environment=APPLAUNCH_STD_KEYBOARD=1
+# Board profile written by install.sh for boards other than the deck ("-": optional; the deck has none, so the
+# lines above apply unchanged). systemd lets EnvironmentFile= values override Environment= ones whatever their
+# order, so a profile replaces the deck values it names (fb device, rotation, touch axes) and keeps the rest.
+EnvironmentFile=-/etc/applaunch/board.conf
 WorkingDirectory=/usr/share/APPLaunch
 # Let the boot finish first: its console lines keep scrolling on the panel, and once systemd reports the system
 # running nothing prints over the launcher any more (it starts on a clean screen). "-" ignores a degraded boot;

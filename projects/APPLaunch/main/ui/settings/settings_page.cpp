@@ -9,6 +9,7 @@
 #include "settings_touch_page.hpp"
 #include "settings_apps_page.hpp"
 
+#include "cp0_backlight_profile.h"
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "settings_adb_guide_page.hpp"
@@ -37,6 +38,7 @@
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -595,6 +597,15 @@ static void append_numeric_options(Tree &tree, const NodeIter &parent, int first
 
 static void append_brightness_options(Tree &tree, const NodeIter &parent)
 {
+    if (cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF) {
+        // On/off backlight (board profile gpio:<dir>): no levels. "Off" switches the panel dark
+        // for LvSettingBrightnessPage3::kOffSeconds only, then back on (a dark touch screen
+        // cannot be tapped back on).
+        tree.append_child(parent, SettingEntry{"On"});
+        tree.append_child(parent, SettingEntry{
+            "Off " + std::to_string(LvSettingBrightnessPage3::kOffSeconds) + " s"});
+        return;
+    }
     for (int index = 0; index < setup_values::kBrightnessStepCount; ++index) {
         tree.append_child(parent, SettingEntry{
             std::to_string(setup_values::brightness_step_percent(index)) + "%"});
@@ -776,6 +787,14 @@ void UISettingTreePage::create_page_detail()
                                SettingEntry{"Storage", settings_storage_page_factory, PageType::FullCustom});
         mode_tree.append_child(system,
                                SettingEntry{"Licenses", settings_credit_page_factory, PageType::FullCustom});
+        {
+            // Board profile label (APPLAUNCH_BOARD): only a board with a profile gets the About
+            // page, so the deck menu stays as it is.
+            const char *board = std::getenv("APPLAUNCH_BOARD");
+            if (board && board[0])
+                mode_tree.append_child(system,
+                                       SettingEntry{"About", settings_t12b_about_page_factory, PageType::FullCustom});
+        }
         settings_t12b::append_boot_action_child(
             mode_tree, system, settings_t12b::boot_actions::Action::Reboot, confirm_page3_factory);
 #if APPLAUNCH_SETTINGS_SHUTDOWN

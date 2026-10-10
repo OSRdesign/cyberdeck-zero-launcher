@@ -4,17 +4,35 @@
  * Enabled at runtime with APPLAUNCH_DISPLAY=dpi-scaled. See cp0_display.h for
  * the two-display model (native + 320x170 compat window).
  *
- * Optional tuning (environment):
- *   LV_LINUX_FBDEV_DEVICE       framebuffer node          (default /dev/fb0)
- *   APPLAUNCH_ROTATE            0|90|180|270              (default 0 / 90 if portrait)
- *   APPLAUNCH_TOUCH_DEVICE      evdev node                (default: first "Goodix")
- *   APPLAUNCH_TOUCH_SWAP_XY     1 to swap raw touch axes
+ * Optional tuning (environment, normally from the board profile /etc/applaunch/board.conf; with
+ * none of them set the deck behaviour is unchanged). Read once, when the display is created; the
+ * resolved values are logged on one "[display-profile]" line (stderr / journal).
+ *   APPLAUNCH_BOARD             label, only logged
+ *   APPLAUNCH_FB                framebuffer node          (default LV_LINUX_FBDEV_DEVICE, then /dev/fb0)
+ *   APPLAUNCH_ROTATE            0|90|180|270 clockwise pre-rotation of the landscape canvas into
+ *                               the buffer                (default 0 / 90 if the buffer is portrait)
+ *   APPLAUNCH_LOGICAL           WxH landscape canvas      (default: the buffer size through the
+ *                               rotation; a size that does not match it is logged and ignored)
+ *   APPLAUNCH_COMPAT_SCALE      1|2 scale of the 320x170 window (default: largest that fits, 2 on
+ *                               the deck; a scale that does not fit is lowered)
+ *   APPLAUNCH_TOUCH_ORIENT      legacy (default) | buffer: the touch axes follow the framebuffer;
+ *                               raw values are normalised by the device's ABS range and turned
+ *                               back through APPLAUNCH_ROTATE (SWAP/INVERT below are ignored)
+ *   APPLAUNCH_TOUCH_DEV         evdev node, or "auto" = pick by capability (default: auto in
+ *                               buffer mode, else the legacy discovery below)
+ *   APPLAUNCH_TOUCH_DEVICE      evdev node                (legacy: default first "Goodix")
+ *   APPLAUNCH_TOUCH_SWAP_XY     1 to swap raw touch axes            (legacy mode)
  *   APPLAUNCH_TOUCH_INVERT_X    1 to mirror touch X (after the optional swap)
  *   APPLAUNCH_TOUCH_INVERT_Y    1 to mirror touch Y (after the optional swap)
+ *   APPLAUNCH_BACKLIGHT         see cp0_backlight_profile.h
+ * Depth, channel layout and line length come from the framebuffer ioctls (16 bpp RGB565 layouts
+ * and 32 bpp XRGB8888). All drawing goes through cp0_fb_output.c.
  */
 
 #include "lvgl/lvgl.h"
+#include "cp0_backlight_profile.h"
 #include "cp0_display.h"
+#include "cp0_fb_output.h"
 #include "cp0_lvgl.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
@@ -55,6 +73,9 @@ typedef struct {
     volatile bool blackout;
     volatile bool external;
     bool ready;
+    cp0_fb_out_t out;     /* rotating output stage over the mapping */
+    uint8_t *scratch;     /* work area of the scaled blits */
+    size_t scratch_size;
 } dpi_ctx_t;
 
 static dpi_ctx_t g;
@@ -68,18 +89,7 @@ static int env_int(const char *name, int def)
     return (v && v[0]) ? atoi(v) : def;
 }
 
-/* landscape (X,Y) -> physical (px,py) */
-static inline void land_to_phys(int X, int Y, int *px, int *py)
-{
-    switch (g.rot) {
-    case 90:  *px = g.pw - 1 - Y; *py = X; break;
-    case 180: *px = g.pw - 1 - X; *py = g.ph - 1 - Y; break;
-    case 270: *px = Y; *py = g.lw - 1 - X; break;
-    default:  *px = X; *py = Y; break;
-    }
-}
-
-/* physical (px,py) -> landscape (X,Y) */
+/* physical (px,py) -> landscape (X,Y) (legacy touch mapping) */
 static inline void phys_to_land(int px, int py, int *X, int *Y)
 {
     switch (g.rot) {
@@ -88,13 +98,6 @@ static inline void phys_to_land(int px, int py, int *X, int *Y)
     case 270: *X = g.lw - 1 - py; *Y = px; break;
     default:  *X = px; *Y = py; break;
     }
-}
-
-static inline void put_pixel(int X, int Y, const uint8_t *src)
-{
-    int px, py;
-    land_to_phys(X, Y, &px, &py);
-    memcpy(g.fb + (size_t)py * g.stride + (size_t)px * g.bpp, src, g.bpp);
 }
 
 static inline bool in_window(int X, int Y)
@@ -107,33 +110,25 @@ static inline bool in_window(int X, int Y)
 /* Compat display: integer upscale into the window, only while it is visible. */
 static void flush_compat(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
+    const int aw = lv_area_get_width(area);
+    const int ah = lv_area_get_height(area);
+    const int src_stride = aw * g.bpp;
     if (g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout && g.external && overlay.active) {
         /* the app's picture owns the window; only the overlay rectangle is drawn from LVGL */
-        const int aw = lv_area_get_width(area);
         const int x1 = area->x1 > overlay.x ? area->x1 : overlay.x;
         const int y1 = area->y1 > overlay.y ? area->y1 : overlay.y;
         const int x2 = area->x2 < overlay.x + overlay.w - 1 ? area->x2 : overlay.x + overlay.w - 1;
         const int y2 = area->y2 < overlay.y + overlay.h - 1 ? area->y2 : overlay.y + overlay.h - 1;
-        for (int y = y1; y <= y2; y++)
-            for (int x = x1; x <= x2; x++) {
-                const uint8_t *src = px_map + ((size_t)(y - area->y1) * aw + (size_t)(x - area->x1)) * g.bpp;
-                const int bx = g.ox + x * g.scale, by = g.oy + y * g.scale;
-                for (int dy = 0; dy < g.scale; dy++)
-                    for (int dx = 0; dx < g.scale; dx++) put_pixel(bx + dx, by + dy, src);
-            }
-    } else if (g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout && !g.external) {
-        const int w = lv_area_get_width(area);
-        const int h = lv_area_get_height(area);
-        for (int y = 0; y < h; y++) {
-            const uint8_t *src = px_map + (size_t)y * w * g.bpp;
-            for (int x = 0; x < w; x++, src += g.bpp) {
-                const int bx = g.ox + (area->x1 + x) * g.scale;
-                const int by = g.oy + (area->y1 + y) * g.scale;
-                for (int dy = 0; dy < g.scale; dy++)
-                    for (int dx = 0; dx < g.scale; dx++)
-                        put_pixel(bx + dx, by + dy, src);
-            }
+        if (x2 >= x1 && y2 >= y1) {
+            uint8_t *src = px_map + (size_t)(y1 - area->y1) * src_stride + (size_t)(x1 - area->x1) * g.bpp;
+            cp0_fbo_to_buffer_format(&g.out, src, x2 - x1 + 1, y2 - y1 + 1, src_stride);
+            cp0_fbo_blit_scaled(&g.out, g.ox + x1 * g.scale, g.oy + y1 * g.scale, x2 - x1 + 1, y2 - y1 + 1, src,
+                                src_stride, g.scale, g.scratch, g.scratch_size);
         }
+    } else if (g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout && !g.external) {
+        cp0_fbo_to_buffer_format(&g.out, px_map, aw, ah, src_stride);
+        cp0_fbo_blit_scaled(&g.out, g.ox + area->x1 * g.scale, g.oy + area->y1 * g.scale, aw, ah, px_map,
+                            src_stride, g.scale, g.scratch, g.scratch_size);
     }
     lv_display_flush_ready(disp);
 }
@@ -145,27 +140,11 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
     const int h = lv_area_get_height(area);
     const bool compat = g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout;
 
-    for (int y = 0; y < h; y++) {
-        const int Y = area->y1 + y;
-        const uint8_t *src = px_map + (size_t)y * w * g.bpp;
-        int x0 = 0, x1 = w; /* span [x0,x1) within this row */
-        if (compat && Y >= g.oy && Y < g.oy + g.wh) {
-            /* skip the part of the row that lies inside the window */
-            const int wx0 = g.ox - area->x1, wx1 = g.ox + g.ww - area->x1;
-            if (wx0 <= 0 && wx1 >= w) continue;           /* fully covered */
-            if (wx0 <= 0) x0 = wx1 > w ? w : wx1;         /* left part covered */
-            else if (wx1 >= w) x1 = wx0 < 0 ? 0 : wx0;    /* right part covered */
-            /* a window strictly inside the row is not a layout we use */
-        }
-        if (g.rot == 0) {
-            if (x1 > x0)
-                memcpy(g.fb + (size_t)Y * g.stride + (size_t)(area->x1 + x0) * g.bpp,
-                       src + (size_t)x0 * g.bpp, (size_t)(x1 - x0) * g.bpp);
-        } else {
-            for (int x = x0; x < x1; x++)
-                put_pixel(area->x1 + x, Y, src + (size_t)x * g.bpp);
-        }
-    }
+    cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
+    if (compat)
+        cp0_fbo_blit_except(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp, g.ox, g.oy, g.ww, g.wh);
+    else
+        cp0_fbo_blit(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp);
     lv_display_flush_ready(disp);
 }
 
@@ -184,6 +163,7 @@ typedef struct {
     int min_x, max_x, min_y, max_y;
     bool pressed;
     bool swap, inv_x, inv_y;
+    bool buffer_mode;   /* APPLAUNCH_TOUCH_ORIENT=buffer: axes follow the framebuffer */
     int X, Y;           /* last mapped position in the landscape view */
 } touch_ctx_t;
 
@@ -219,6 +199,105 @@ static int find_touch_device(char *out, size_t n)
     return found;
 }
 
+#define DPI_LONG_BITS (sizeof(unsigned long) * 8)
+#define DPI_NLONGS(n) (((n) + DPI_LONG_BITS - 1) / DPI_LONG_BITS)
+
+static bool has_bit(const unsigned long *bits, int bit)
+{
+    return (bits[bit / DPI_LONG_BITS] >> (bit % DPI_LONG_BITS)) & 1u;
+}
+
+static bool contains_nocase(const char *s, const char *needle)
+{
+    const size_t n = strlen(needle);
+    for (; *s; s++) {
+        size_t i = 0;
+        while (i < n && s[i] && (s[i] | 0x20) == (needle[i] | 0x20)) i++;
+        if (i == n) return true;
+    }
+    return false;
+}
+
+/* How much an evdev node looks like a touch screen: -1 = not one. Needs X/Y (multi-touch or
+ * single) plus INPUT_PROP_DIRECT or BTN_TOUCH; virtual devices (our own uinput keyboard) and
+ * touchpads (INPUT_PROP_POINTER without DIRECT) are skipped. */
+static int touch_score(int fd, char *name, size_t name_size)
+{
+    unsigned long ev[DPI_NLONGS(EV_CNT)] = {0}, abs_bits[DPI_NLONGS(ABS_CNT)] = {0};
+    unsigned long key[DPI_NLONGS(KEY_CNT)] = {0}, prop[DPI_NLONGS(INPUT_PROP_CNT)] = {0};
+    struct input_id id;
+    memset(name, 0, name_size);
+    if (ioctl(fd, EVIOCGNAME(name_size - 1), name) < 0) name[0] = '\0';
+    if (ioctl(fd, EVIOCGID, &id) == 0 && id.bustype == BUS_VIRTUAL) return -1;
+    if (contains_nocase(name, "applaunch")) return -1;
+    if (ioctl(fd, EVIOCGBIT(0, sizeof(ev)), ev) < 0 || !has_bit(ev, EV_ABS)) return -1;
+    if (ioctl(fd, EVIOCGBIT(EV_ABS, sizeof(abs_bits)), abs_bits) < 0) return -1;
+    if (has_bit(ev, EV_KEY)) (void)ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(key)), key);
+    (void)ioctl(fd, EVIOCGPROP(sizeof(prop)), prop);
+    const bool mt = has_bit(abs_bits, ABS_MT_POSITION_X) && has_bit(abs_bits, ABS_MT_POSITION_Y);
+    const bool st = has_bit(abs_bits, ABS_X) && has_bit(abs_bits, ABS_Y);
+    const bool direct = has_bit(prop, INPUT_PROP_DIRECT);
+    const bool btn_touch = has_bit(key, BTN_TOUCH);
+    if (!mt && !st) return -1;
+    if (!direct && !btn_touch) return -1;
+    if (!direct && has_bit(prop, INPUT_PROP_POINTER)) return -1;
+    return (direct ? 4 : 0) + (mt ? 2 : 0) + (btn_touch ? 1 : 0);
+}
+
+/* Best-scoring /dev/input/eventN (lowest N on a tie). */
+static int find_touch_by_capability(char *out, size_t n, char *name, size_t name_size)
+{
+    DIR *d = opendir("/dev/input");
+    if (!d) return -1;
+    struct dirent *e;
+    int best_score = -1, best_num = -1;
+    while ((e = readdir(d)) != NULL) {
+        if (strncmp(e->d_name, "event", 5) != 0) continue;
+        char *end = NULL;
+        const long num = strtol(e->d_name + 5, &end, 10);
+        if (end == e->d_name + 5 || *end != '\0' || num < 0 || num > 1023) continue;
+        char path[64], dev_name[128] = {0};
+        snprintf(path, sizeof(path), "/dev/input/event%ld", num);
+        int fd = open(path, O_RDONLY | O_NONBLOCK);
+        if (fd < 0) continue;
+        const int score = touch_score(fd, dev_name, sizeof(dev_name));
+        close(fd);
+        if (score > best_score || (score == best_score && score >= 0 && num < best_num)) {
+            best_score = score;
+            best_num = (int)num;
+            snprintf(out, n, "%s", path);
+            snprintf(name, name_size, "%s", dev_name);
+        }
+    }
+    closedir(d);
+    return best_score >= 0 ? 0 : -1;
+}
+
+/* Which evdev node to read, and how it was chosen (for the profile log line). */
+static int resolve_touch_device(char *out, size_t n, char *name, size_t name_size, const char **how)
+{
+    name[0] = '\0';
+    const char *dev = getenv("APPLAUNCH_TOUCH_DEV");
+    const bool want_auto = (dev && strcmp(dev, "auto") == 0) || tc.buffer_mode;
+    if (dev && dev[0] && strcmp(dev, "auto") != 0) {
+        snprintf(out, n, "%s", dev);
+        *how = "APPLAUNCH_TOUCH_DEV";
+        return 0;
+    }
+    if (!want_auto) {
+        *how = "legacy discovery";
+        return find_touch_device(out, n); /* today's: APPLAUNCH_TOUCH_DEVICE, else first "Goodix" */
+    }
+    const char *forced = getenv("APPLAUNCH_TOUCH_DEVICE");
+    if (forced && forced[0]) {
+        snprintf(out, n, "%s", forced);
+        *how = "APPLAUNCH_TOUCH_DEVICE";
+        return 0;
+    }
+    *how = "capability";
+    return find_touch_by_capability(out, n, name, name_size);
+}
+
 /* Drain pending evdev events and refresh the mapped landscape position. */
 static void touch_update(void)
 {
@@ -234,18 +313,23 @@ static void touch_update(void)
         }
     }
 
-    const int spanx = tc.max_x - tc.min_x, spany = tc.max_y - tc.min_y;
-    double nx = spanx > 0 ? (double)(tc.raw_x - tc.min_x) / spanx : 0;
-    double ny = spany > 0 ? (double)(tc.raw_y - tc.min_y) / spany : 0;
-    if (tc.swap) { double t = nx; nx = ny; ny = t; } /* normalise each axis first */
-    if (tc.inv_x) nx = 1.0 - nx;
-    if (tc.inv_y) ny = 1.0 - ny;
-    int px = (int)(nx * (g.pw - 1)), py = (int)(ny * (g.ph - 1));
-    if (px < 0) px = 0;
-    if (px >= g.pw) px = g.pw - 1;
-    if (py < 0) py = 0;
-    if (py >= g.ph) py = g.ph - 1;
-    phys_to_land(px, py, &tc.X, &tc.Y);
+    if (tc.buffer_mode) {
+        cp0_fbo_touch_to_logical(&g.out, tc.raw_x, tc.raw_y, tc.min_x, tc.max_x, tc.min_y, tc.max_y, &tc.X,
+                                 &tc.Y);
+    } else {
+        const int spanx = tc.max_x - tc.min_x, spany = tc.max_y - tc.min_y;
+        double nx = spanx > 0 ? (double)(tc.raw_x - tc.min_x) / spanx : 0;
+        double ny = spany > 0 ? (double)(tc.raw_y - tc.min_y) / spany : 0;
+        if (tc.swap) { double t = nx; nx = ny; ny = t; } /* normalise each axis first */
+        if (tc.inv_x) nx = 1.0 - nx;
+        if (tc.inv_y) ny = 1.0 - ny;
+        int px = (int)(nx * (g.pw - 1)), py = (int)(ny * (g.ph - 1));
+        if (px < 0) px = 0;
+        if (px >= g.pw) px = g.pw - 1;
+        if (py < 0) py = 0;
+        if (py >= g.ph) py = g.ph - 1;
+        phys_to_land(px, py, &tc.X, &tc.Y);
+    }
 
     /* One notification per new touch (the second pointer device sees no edge). */
     const bool edge = tc.pressed && !was_pressed;
@@ -433,17 +517,26 @@ static void touch_read_compat(lv_indev_t *indev, lv_indev_data_t *data)
     data->state = (tc.pressed && inside) ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
+static char touch_desc[768] = "none";
+
 static void init_touch(void)
 {
-    char path[300];
-    if (find_touch_device(path, sizeof(path)) != 0) {
+    char path[300], name[128];
+    const char *how = "";
+    if (resolve_touch_device(path, sizeof(path), name, sizeof(name), &how) != 0) {
         fprintf(stderr, "[dpi] no touch device found (set APPLAUNCH_TOUCH_DEVICE)\n");
+        snprintf(touch_desc, sizeof(touch_desc), "none (%s)", how);
         return;
     }
     tc.fd = open(path, O_RDONLY | O_NONBLOCK);
     if (tc.fd < 0) {
         fprintf(stderr, "[dpi] open %s: %s\n", path, strerror(errno));
+        snprintf(touch_desc, sizeof(touch_desc), "%s via %s: open failed", path, how);
         return;
+    }
+    if (tc.buffer_mode && !name[0]) {
+        memset(name, 0, sizeof(name));
+        if (ioctl(tc.fd, EVIOCGNAME(sizeof(name) - 1), name) < 0) name[0] = '\0';
     }
     struct input_absinfo ai;
     if (ioctl(tc.fd, EVIOCGABS(ABS_MT_POSITION_X), &ai) < 0 && ioctl(tc.fd, EVIOCGABS(ABS_X), &ai) < 0)
@@ -467,6 +560,12 @@ static void init_touch(void)
     lv_indev_set_display(compat, g.compat);
 
     printf("[dpi] touch %s raw x[%d..%d] y[%d..%d]\n", path, tc.min_x, tc.max_x, tc.min_y, tc.max_y);
+    if (tc.buffer_mode)
+        snprintf(touch_desc, sizeof(touch_desc), "%s \"%s\" via %s, buffer orientation, raw x[%d..%d] y[%d..%d]",
+                 path, name, how, tc.min_x, tc.max_x, tc.min_y, tc.max_y);
+    else
+        snprintf(touch_desc, sizeof(touch_desc), "%s via %s, legacy swap=%d invert_x=%d invert_y=%d", path, how,
+                 tc.swap, tc.inv_x, tc.inv_y);
 }
 
 /* -------------------------------------------------------------- public API */
@@ -536,20 +635,12 @@ void cp0_display_external_blit(const void *xrgb8888, int width, int height, int 
         free(row);
         return;
     }
-    for (int y = 0; y < height; y++) {
-        const uint8_t *src = (const uint8_t *)xrgb8888 + (size_t)y * stride_bytes;
-        for (int x = 0; x < width; x++, src += 4) {
-            uint8_t px[4];
-            if (g.bpp == 4) {
-                memcpy(px, src, 4);
-            } else {
-                const uint16_t v = (uint16_t)(((src[2] >> 3) << 11) | ((src[1] >> 2) << 5) | (src[0] >> 3));
-                memcpy(px, &v, 2);
-            }
-            for (int dy = 0; dy < s; dy++)
-                for (int dx = 0; dx < s; dx++) put_pixel(g.ox + x * s + dx, g.oy + y * s + dy, px);
-        }
-    }
+    /* rotated and/or 16 bpp: convert, scale and rotate through the output stage, keeping the
+     * overlay (ribbon) rectangle out of it like the fast path */
+    const bool ov = overlay.active;
+    cp0_fbo_blit_xrgb_scaled(&g.out, g.ox, g.oy, width, height, (const uint8_t *)xrgb8888, stride_bytes, s,
+                             ov ? overlay.x : 0, ov ? overlay.y : 0, ov ? overlay.w : 0, ov ? overlay.h : 0,
+                             g.scratch, g.scratch_size);
 }
 void cp0_display_set_touch_swallow(int mode) { swallow_mode = mode; }
 
@@ -577,10 +668,7 @@ void cp0_display_compat_window(int *x, int *y, int *w, int *h)
 
 static void fill_window_black(void)
 {
-    static const uint8_t black[4] = {0, 0, 0, 0};
-    for (int Y = g.oy; Y < g.oy + g.wh; Y++)
-        for (int X = g.ox; X < g.ox + g.ww; X++)
-            put_pixel(X, Y, black);
+    cp0_fbo_fill_black(&g.out, g.ox, g.oy, g.ww, g.wh);
 }
 
 void cp0_display_set_mode(cp0_display_mode_t mode)
@@ -598,9 +686,15 @@ void cp0_display_set_mode(cp0_display_mode_t mode)
     }
 }
 
+static uint8_t fb_channel(uint32_t v)
+{
+    return (uint8_t)(v > 255u ? 255u : v);
+}
+
 lv_display_t *cp0_dpi_scaled_create(void)
 {
-    const char *dev = getenv("LV_LINUX_FBDEV_DEVICE");
+    const char *dev = getenv("APPLAUNCH_FB");
+    if (!dev || !dev[0]) dev = getenv("LV_LINUX_FBDEV_DEVICE");
     if (!dev || !dev[0]) dev = "/dev/fb0";
 
     g.fd = open(dev, O_RDWR);
@@ -624,6 +718,11 @@ lv_display_t *cp0_dpi_scaled_create(void)
     g.stride = fi.line_length;
     g.fb_size = (size_t)fi.line_length * vi.yres_virtual;
     g.fb = mmap(NULL, g.fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, g.fd, 0);
+    if (g.fb == MAP_FAILED && fi.smem_len > 0 && fi.smem_len < g.fb_size) {
+        /* a virtual size beyond the driver's memory: map the memory that exists */
+        g.fb_size = fi.smem_len;
+        g.fb = mmap(NULL, g.fb_size, PROT_READ | PROT_WRITE, MAP_SHARED, g.fd, 0);
+    }
     if (g.fb == MAP_FAILED) {
         fprintf(stderr, "[dpi] mmap: %s\n", strerror(errno));
         return NULL;
@@ -632,17 +731,78 @@ lv_display_t *cp0_dpi_scaled_create(void)
     /* Default: portrait panel shown rotated to landscape. */
     g.rot = env_int("APPLAUNCH_ROTATE", g.pw < g.ph ? 90 : 0);
     if (g.rot != 0 && g.rot != 90 && g.rot != 180 && g.rot != 270) g.rot = 0;
-    const bool swap_dims = g.rot == 90 || g.rot == 270;
-    g.lw = swap_dims ? g.ph : g.pw;
-    g.lh = swap_dims ? g.pw : g.ph;
+    {
+        const char *rot_env = getenv("APPLAUNCH_ROTATE");
+        int parsed;
+        if (rot_env && rot_env[0] && cp0_fbo_parse_rotation(rot_env, &parsed) != 0)
+            fprintf(stderr, "[display-profile] APPLAUNCH_ROTATE=%s is not 0|90|180|270: using %d\n", rot_env, g.rot);
+    }
+
+    /* Output stage: checks the buffer against the rotated logical canvas (never writes outside the
+     * mapping) and takes the 16 bpp channel layout from the driver. */
+    int req_w = 0, req_h = 0;
+    const char *logical = getenv("APPLAUNCH_LOGICAL");
+    if (logical && logical[0] && cp0_fbo_parse_size(logical, &req_w, &req_h) != 0) {
+        fprintf(stderr, "[display-profile] APPLAUNCH_LOGICAL=%s is not WxH: using the framebuffer size\n", logical);
+        req_w = req_h = 0;
+    }
+    const cp0_fb_layout_t layout = {{fb_channel(vi.red.offset), fb_channel(vi.red.length)},
+                                    {fb_channel(vi.green.offset), fb_channel(vi.green.length)},
+                                    {fb_channel(vi.blue.offset), fb_channel(vi.blue.length)}};
+    const int fix = cp0_fbo_setup(&g.out, g.fb, g.fb_size, g.stride, g.bpp, g.pw, g.ph, g.rot, req_w, req_h, &layout);
+    if (fix < 0) {
+        fprintf(stderr, "[display-profile] %s: unusable geometry %dx%d, line length %d, %zu bytes mapped\n", dev,
+                g.pw, g.ph, g.stride, g.fb_size);
+        return NULL;
+    }
+    if (fix & (CP0_FBO_FIX_WIDTH | CP0_FBO_FIX_HEIGHT))
+        fprintf(stderr, "[display-profile] %s: %dx%d does not fit line length %d / %zu bytes: using %dx%d\n", dev,
+                g.pw, g.ph, g.stride, g.fb_size, g.out.pw, g.out.ph);
+    if (fix & CP0_FBO_FIX_LOGICAL)
+        fprintf(stderr,
+                "[display-profile] APPLAUNCH_LOGICAL=%dx%d does not match %s %dx%d at rotate %d: using %dx%d\n",
+                req_w, req_h, dev, g.out.pw, g.out.ph, g.rot, g.out.lw, g.out.lh);
+    if (fix & CP0_FBO_FIX_LAYOUT)
+        fprintf(stderr, "[display-profile] %s: channel layout r%u/%u g%u/%u b%u/%u unusable: RGB565 assumed\n", dev,
+                vi.red.offset, vi.red.length, vi.green.offset, vi.green.length, vi.blue.offset, vi.blue.length);
+    if (g.bpp == 4 && (vi.red.offset != 16 || vi.green.offset != 8 || vi.blue.offset != 0))
+        fprintf(stderr, "[display-profile] %s reports offsets r%u g%u b%u: drawing XRGB8888 as before\n", dev,
+                vi.red.offset, vi.green.offset, vi.blue.offset);
+    g.pw = g.out.pw;
+    g.ph = g.out.ph;
+    g.lw = g.out.lw;
+    g.lh = g.out.lh;
 
     const int sx = g.lw / UI_W, sy = g.lh / UI_H;
     g.scale = sx < sy ? sx : sy;
     if (g.scale < 1) g.scale = 1;
+    {
+        const char *cs = getenv("APPLAUNCH_COMPAT_SCALE");
+        const int want = !cs ? 0 : strcmp(cs, "1") == 0 ? 1 : strcmp(cs, "2") == 0 ? 2 : -1;
+        if (cs && cs[0] && want < 0)
+            fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%s is not 1|2: using %d\n", cs, g.scale);
+        else if (want > g.scale)
+            fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%d does not fit %dx%d: using %d\n", want, g.lw,
+                    g.lh, g.scale);
+        else if (want > 0)
+            g.scale = want;
+    }
     g.ww = UI_W * g.scale;
     g.wh = UI_H * g.scale;
-    g.ox = (g.lw - g.ww) / 2; /* centred horizontally, top aligned */
-    g.oy = 0;
+    /* centred horizontally; at the top on the deck, centred above the toolbar on small panels */
+    cp0_fbo_compat_origin(g.lw, g.lh, g.ww, g.wh, &g.ox, &g.oy);
+
+    /* 16 source rows per pass of the scaled blits */
+    g.scratch_size = (size_t)UI_W * g.scale * g.scale * 16 * g.bpp;
+    g.scratch = malloc(g.scratch_size);
+    if (!g.scratch) return NULL;
+
+    {
+        const char *orient = getenv("APPLAUNCH_TOUCH_ORIENT");
+        tc.buffer_mode = orient && strcmp(orient, "buffer") == 0;
+        if (orient && orient[0] && !tc.buffer_mode && strcmp(orient, "legacy") != 0)
+            fprintf(stderr, "[display-profile] APPLAUNCH_TOUCH_ORIENT=%s is not buffer|legacy: legacy\n", orient);
+    }
 
     memset(g.fb, 0, g.fb_size);
     lv_tick_set_cb(tick_get_cb); /* fbdev/drm drivers normally do this */
@@ -682,5 +842,17 @@ lv_display_t *cp0_dpi_scaled_create(void)
            g.ph, g.bpp * 8, g.rot, g.lw, g.lh, g.ww, g.wh, g.ox, g.oy, g.scale);
 
     init_touch();
+
+    const char *board = getenv("APPLAUNCH_BOARD");
+    char backlight[300] = "default";
+    if (cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF)
+        snprintf(backlight, sizeof(backlight), "gpio:%s (on/off)", cp0_backlight_profile_dir());
+    fprintf(stderr,
+            "[display-profile] board=%s fb=%s %dx%d %dbpp line=%d rgb=%u/%u,%u/%u,%u/%u%s rotate=%d logical=%dx%d "
+            "compat_scale=%d window=%dx%d@(%d,%d) touch=%s backlight=%s\n",
+            board && board[0] ? board : "-", dev, g.pw, g.ph, g.bpp * 8, g.stride, vi.red.offset, vi.red.length,
+            vi.green.offset, vi.green.length, vi.blue.offset, vi.blue.length,
+            g.bpp == 2 && !g.out.rgb565_plain ? " (converted)" : "", g.rot, g.lw, g.lh, g.scale, g.ww, g.wh, g.ox,
+            g.oy, touch_desc, backlight);
     return g.compat;
 }

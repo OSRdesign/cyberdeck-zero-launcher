@@ -6,6 +6,7 @@
 
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
+#include "cp0_backlight_profile.h"
 #include "cp0_display.h"
 #include "hal_lvgl_bsp.h"
 #include "keyboard_input.h"
@@ -25,6 +26,32 @@ namespace {
 constexpr int kDimPercent = 10;
 constexpr uint32_t kIdleCheckMs = 500;
 constexpr int kClockFontPx = 180;
+constexpr int kTimeOffsetY = -30;
+constexpr int kDateOffsetY = 90;
+// The sizes above are designed for the 640x480 deck. A shorter display (the compact profile of
+// native_ui, e.g. 480x320) scales them by the tighter of its width/height ratios to that design.
+constexpr int kDesignW = 640;
+constexpr int kDesignH = 480;
+constexpr int kCompactBelowH = 400;
+
+struct ClockGeometry {
+    int font_px;
+    int time_y;
+    int date_y;
+    const lv_font_t *date_font;
+};
+
+ClockGeometry clock_geometry(int width, int height)
+{
+    if (height >= kCompactBelowH || width <= 0 || height <= 0)
+        return {kClockFontPx, kTimeOffsetY, kDateOffsetY, &lv_font_montserrat_28};
+    // num/den = min(width / 640, height / 480), kept as a fraction for exact integer math.
+    const bool by_height = height * kDesignW <= width * kDesignH;
+    const int num = by_height ? height : width;
+    const int den = by_height ? kDesignH : kDesignW;
+    return {kClockFontPx * num / den, kTimeOffsetY * num / den, kDateOffsetY * num / den,
+            &lv_font_montserrat_18};
+}
 
 lv_obj_t *s_overlay = nullptr;
 lv_obj_t *s_time = nullptr;
@@ -75,8 +102,10 @@ void ensure_overlay()
 
     s_overlay = lv_obj_create(layer);
     lv_obj_remove_style_all(s_overlay);
-    lv_obj_set_size(s_overlay, lv_display_get_horizontal_resolution(display),
-                    lv_display_get_vertical_resolution(display));
+    const int width = static_cast<int>(lv_display_get_horizontal_resolution(display));
+    const int height = static_cast<int>(lv_display_get_vertical_resolution(display));
+    const ClockGeometry geo = clock_geometry(width, height);
+    lv_obj_set_size(s_overlay, width, height);
     lv_obj_set_pos(s_overlay, 0, 0);
     lv_obj_set_style_bg_color(s_overlay, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(s_overlay, LV_OPA_COVER, 0);
@@ -84,20 +113,20 @@ void ensure_overlay()
 
     s_time = lv_label_create(s_overlay);
     lv_obj_set_style_text_color(s_time, lv_color_hex(0xFFFFFF), 0);
-    if (lv_font_t *font = launcher_fonts().get("Montserrat-Bold.ttf", kClockFontPx,
+    if (lv_font_t *font = launcher_fonts().get("Montserrat-Bold.ttf", geo.font_px,
                                                LV_FREETYPE_FONT_STYLE_NORMAL,
                                                LV_FREETYPE_FONT_RENDER_MODE_BITMAP))
         lv_obj_set_style_text_font(s_time, font, 0);
     else
         lv_obj_set_style_text_font(s_time, &lv_font_montserrat_48, 0);
     lv_label_set_text(s_time, "--:--");
-    lv_obj_align(s_time, LV_ALIGN_CENTER, 0, -30);
+    lv_obj_align(s_time, LV_ALIGN_CENTER, 0, geo.time_y);
 
     s_date = lv_label_create(s_overlay);
     lv_obj_set_style_text_color(s_date, lv_color_hex(0x9A9A9A), 0);
-    lv_obj_set_style_text_font(s_date, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(s_date, geo.date_font, 0);
     lv_label_set_text(s_date, "--/--/----");
-    lv_obj_align(s_date, LV_ALIGN_CENTER, 0, 90);
+    lv_obj_align(s_date, LV_ALIGN_CENTER, 0, geo.date_y);
 
     lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
 }
@@ -125,7 +154,11 @@ void activate()
     ensure_overlay();
     if (!s_overlay) return;
     s_active = true;
-    s_saved_backlight = launcher_media_controls::dim_backlight(kDimPercent);
+    // An on/off backlight (board profile gpio:<dir>) has no dim level: the clock shows at full
+    // backlight instead of risking a dark panel.
+    s_saved_backlight = cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF
+                            ? -1
+                            : launcher_media_controls::dim_backlight(kDimPercent);
     // The compat window is drawn straight to the panel: stop that so the overlay covers everything.
     if (cp0_display_get_mode() == CP0_DISPLAY_MODE_COMPAT) cp0_display_set_blackout(1);
     update_clock(nullptr);

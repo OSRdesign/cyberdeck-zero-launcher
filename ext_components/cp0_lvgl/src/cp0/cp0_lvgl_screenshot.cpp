@@ -8,6 +8,7 @@
 #include "../cp0_callback_contract.hpp"
 #include "../cp0_display_screenshot_contract.hpp"
 #include "../cp0_init_once.hpp"
+#include "cp0_fb_output.h"
 
 #include <functional>
 #include <list>
@@ -59,7 +60,9 @@ private:
     static int save_to_bmp(const char *dir, std::string &saved_path)
     {
         saved_path.clear();
-        const char *fbdev = getenv("APPLAUNCH_LINUX_FBDEV_DEVICE");
+        // Board profile: APPLAUNCH_FB names the panel framebuffer (unset on the deck).
+        const char *fbdev = getenv("APPLAUNCH_FB");
+        if (!fbdev || !fbdev[0]) fbdev = getenv("APPLAUNCH_LINUX_FBDEV_DEVICE");
         if (!fbdev) fbdev = "/dev/fb0";
 
         int fd = open(fbdev, O_RDONLY);
@@ -119,6 +122,30 @@ private:
             return -4;
         }
 
+        /* The display backend pre-rotates its landscape canvas into the buffer (APPLAUNCH_ROTATE,
+         * default 0, or 90 for a portrait buffer: cp0_lvgl_dpi_scaled.c). Turn the picture back
+         * so the BMP shows what the user sees. Rotation 0 (the deck) keeps the plain copy. */
+        cp0_fb_out_t rot_out;
+        int rot = h > w ? 90 : 0;
+        {
+            const char *rs = getenv("APPLAUNCH_ROTATE");
+            int parsed = 0;
+            if (rs && rs[0] && cp0_fbo_parse_rotation(rs, &parsed) == 0) rot = parsed;
+        }
+        if (rot != 0 && cp0_fbo_setup(&rot_out, static_cast<uint8_t *>(fbmem), layout.mapped_size, fb_line_len,
+                                      bpp / 8, w, h, rot, 0, 0, nullptr) < 0)
+            rot = 0;
+        const int out_w = rot != 0 ? rot_out.lw : w;
+        const int out_h = rot != 0 ? rot_out.lh : h;
+        uint32_t bmp_row_size = layout.bmp_row_size;
+        uint32_t bmp_image_size = layout.bmp_image_size;
+        uint32_t bmp_file_size = layout.bmp_file_size;
+        if (rot != 0) {
+            bmp_row_size = (static_cast<uint32_t>(out_w) * 3u + 3u) & ~3u;
+            bmp_image_size = bmp_row_size * static_cast<uint32_t>(out_h);
+            bmp_file_size = 54u + bmp_image_size;
+        }
+
         FILE *fp = fopen(filename.c_str(), "wb");
         if (!fp) {
             munmap(fbmem, layout.mapped_size);
@@ -126,35 +153,37 @@ private:
             return -4;
         }
 
-        int row_size = w * 3;
-        int pad = static_cast<int>(layout.bmp_row_size) - row_size;
+        int row_size = out_w * 3;
+        int pad = static_cast<int>(bmp_row_size) - row_size;
 
         fputc('B', fp); fputc('M', fp);
-        write_le32(fp, layout.bmp_file_size);
+        write_le32(fp, bmp_file_size);
         write_le16(fp, 0); write_le16(fp, 0);
         write_le32(fp, 54);
         write_le32(fp, 40);
-        write_le32(fp, w);
-        write_le32(fp, h);
+        write_le32(fp, out_w);
+        write_le32(fp, out_h);
         write_le16(fp, 1);
         write_le16(fp, 24);
         write_le32(fp, 0);
-        write_le32(fp, layout.bmp_image_size);
+        write_le32(fp, bmp_image_size);
         write_le32(fp, 2835); write_le32(fp, 2835);
         write_le32(fp, 0); write_le32(fp, 0);
 
         uint8_t padding[3] = {0};
-        for (int y = h - 1; y >= 0; --y) {
-            uint8_t *row = (uint8_t *)fbmem + y * fb_line_len;
-            for (int x = 0; x < w; ++x) {
+        for (int y = out_h - 1; y >= 0; --y) {
+            for (int x = 0; x < out_w; ++x) {
+                int bx = x, by = y;
+                if (rot != 0) cp0_fbo_logical_to_buffer(&rot_out, x, y, &bx, &by);
+                const uint8_t *row = (const uint8_t *)fbmem + by * fb_line_len;
                 uint8_t r, g, b;
                 if (bpp == 16) {
-                    uint16_t px = ((uint16_t *)row)[x];
+                    uint16_t px = ((const uint16_t *)row)[bx];
                     r = ((px >> 11) & 0x1F) << 3;
                     g = ((px >> 5) & 0x3F) << 2;
                     b = (px & 0x1F) << 3;
                 } else if (bpp == 32) {
-                    uint32_t px = ((uint32_t *)row)[x];
+                    uint32_t px = ((const uint32_t *)row)[bx];
                     r = (px >> vinfo.red.offset) & 0xFF;
                     g = (px >> vinfo.green.offset) & 0xFF;
                     b = (px >> vinfo.blue.offset) & 0xFF;
@@ -174,7 +203,10 @@ private:
 
         if (write_failed) return -5;
 
-        printf("[SCREENSHOT] Saved: %s (%dx%d %dbpp)\n", filename.c_str(), w, h, bpp);
+        if (rot != 0)
+            printf("[SCREENSHOT] Saved: %s (%dx%d %dbpp, de-rotated %d)\n", filename.c_str(), out_w, out_h, bpp, rot);
+        else
+            printf("[SCREENSHOT] Saved: %s (%dx%d %dbpp)\n", filename.c_str(), w, h, bpp);
         saved_path = filename;
         return 0;
     }

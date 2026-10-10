@@ -134,6 +134,12 @@ def test_system_replaces_about_with_requested_entries():
         r'append_child\(\s*system,\s*SettingEntry\{"([^"]+)"',
         system,
     )
+    # About comes back only for a board profile (APPLAUNCH_BOARD set): the stock menu is unchanged.
+    if "About" in system_entries:
+        guarded = system[system.index('std::getenv("APPLAUNCH_BOARD")') :]
+        assert re.search(r'if \(board && board\[0\]\)\s*mode_tree\.append_child\(\s*system,\s*SettingEntry\{"About"',
+                         guarded)
+        system_entries.remove("About")
     assert system_entries == ["Software", "Storage", "Licenses"]
     assert "settings_update_page_factory" in system
     assert "settings_storage_page_factory" in system

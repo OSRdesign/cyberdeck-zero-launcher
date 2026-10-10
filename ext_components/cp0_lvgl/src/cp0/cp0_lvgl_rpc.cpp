@@ -68,7 +68,9 @@ void secure_clear(std::string &value)
 
 bool capture_ppm(std::vector<uint8_t> &out, std::string &error)
 {
-    const char *device = env_or_default("APPLAUNCH_LINUX_FBDEV_DEVICE", "/dev/fb0");
+    // Board profile APPLAUNCH_FB first (unset on the deck). Raw buffer: not de-rotated.
+    const char *device = env_or_default("APPLAUNCH_FB",
+                                        env_or_default("APPLAUNCH_LINUX_FBDEV_DEVICE", "/dev/fb0"));
     int fd = open(device, O_RDONLY | O_CLOEXEC);
     if (fd < 0) {
         error = std::string("open framebuffer: ") + std::strerror(errno);

@@ -192,44 +192,65 @@ static int text_advance(FT_Face face, const char *text)
     return total;
 }
 
-void cp0_statusbar_render(cp0_statusbar_t *bar, uint32_t *argb, int width, int stride_px,
-                          int shift_left, int top, int backing_alpha, const cp0_statusbar_state_t *state)
+/* Scales a design pixel value by pct percent (exact at 100). */
+#define SC(v) (((v) * pct + 50) / 100)
+
+void cp0_statusbar_render_scaled(cp0_statusbar_t *bar, uint32_t *argb, int width, int stride_px,
+                                 int shift_left, int top, int backing_alpha, const cp0_statusbar_state_t *state,
+                                 int pct)
 {
     if (!bar || !argb || !state) return;
-    const int pill_x = width - EDGE - PILL_W - shift_left;
+    if (pct < 25 || pct > 100) pct = 100;
+    if (pct != 100) {
+        FT_Set_Pixel_Sizes(bar->text_face, 0, SC(FONT_PX));
+        if (bar->icon_face) FT_Set_Pixel_Sizes(bar->icon_face, 0, SC(FONT_PX));
+    }
+    const int pill_w = SC(PILL_W), pill_h = SC(PILL_H);
+    const int pill_x = width - SC(EDGE) - pill_w - shift_left;
     const int pill_y = top;
-    const int wifi_x = pill_x - WIFI_GAP - WIFI_W;
-    const int wifi_y = pill_y + WIFI_Y_OFFSET;
-    const int bt_right = wifi_x - BT_GAP;
+    const int wifi_x = pill_x - SC(WIFI_GAP) - SC(WIFI_W);
+    const int wifi_y = pill_y + SC(WIFI_Y_OFFSET);
+    const int bt_right = wifi_x - SC(BT_GAP);
 
     if (backing_alpha > 0)
-        round_rect(argb, width, stride_px, bt_right - 34, pill_y - 2, pill_x + PILL_W + 6 - (bt_right - 34), PILL_H + 4, 12, 0x000000u, backing_alpha);
+        round_rect(argb, width, stride_px, bt_right - SC(34), pill_y - SC(2), pill_x + pill_w + SC(6) - (bt_right - SC(34)),
+                   pill_h + SC(4), SC(12), 0x000000u, backing_alpha);
 
     /* clock pill with the time centred like an lv_label (line height = ascender - descender) */
-    round_rect(argb, width, stride_px, pill_x, pill_y, PILL_W, PILL_H, PILL_RADIUS, PILL_COLOR, 255);
+    round_rect(argb, width, stride_px, pill_x, pill_y, pill_w, pill_h, SC(PILL_RADIUS), PILL_COLOR, 255);
     const FT_Size_Metrics *m = &bar->text_face->size->metrics;
     const int ascent = (int)((m->ascender + 63) >> 6);
     const int descent = (int)((-m->descender + 63) >> 6);
     const int line_height = ascent + descent;
-    const int baseline = pill_y + (PILL_H - line_height) / 2 + ascent;
-    int pen = pill_x + (PILL_W - text_advance(bar->text_face, state->clock)) / 2;
+    const int baseline = pill_y + (pill_h - line_height) / 2 + ascent;
+    int pen = pill_x + (pill_w - text_advance(bar->text_face, state->clock)) / 2;
     for (const char *c = state->clock; *c; ++c)
         pen += draw_glyph(bar->text_face, (unsigned char)*c, argb, width, stride_px, pen, baseline, 0xFFFFFFu);
 
     /* Wi-Fi bars */
     for (int i = 0; i < 4; ++i) {
         const int on = state->wifi_up && state->wifi_pct >= kBarThresholds[i];
-        round_rect(argb, width, stride_px, wifi_x + i * BAR_PITCH, wifi_y + WIFI_H - kBarHeights[i], BAR_W, kBarHeights[i],
-                   BAR_RADIUS, on ? BAR_ON : BAR_OFF, 255);
+        round_rect(argb, width, stride_px, wifi_x + i * SC(BAR_PITCH), wifi_y + SC(WIFI_H) - SC(kBarHeights[i]), SC(BAR_W),
+                   SC(kBarHeights[i]), SC(BAR_RADIUS), on ? BAR_ON : BAR_OFF, 255);
     }
 
     /* Bluetooth glyph: right edge at bt_right, same baseline as the clock text (an lv_label at the pill's row) */
     if (state->bt_on && bar->icon_face) {
         if (FT_Load_Char(bar->icon_face, BT_CODEPOINT, FT_LOAD_DEFAULT) == 0) {
             const int advance = (int)(bar->icon_face->glyph->advance.x >> 6);
-            const int label_top = pill_y + BT_Y_OFFSET;
+            const int label_top = pill_y + SC(BT_Y_OFFSET);
             draw_glyph(bar->icon_face, BT_CODEPOINT, argb, width, stride_px, bt_right - advance, label_top + ascent,
                        state->bt_connected ? BT_CONNECTED : BT_IDLE);
         }
     }
+    if (pct != 100) {
+        FT_Set_Pixel_Sizes(bar->text_face, 0, FONT_PX);
+        if (bar->icon_face) FT_Set_Pixel_Sizes(bar->icon_face, 0, FONT_PX);
+    }
+}
+
+void cp0_statusbar_render(cp0_statusbar_t *bar, uint32_t *argb, int width, int stride_px,
+                          int shift_left, int top, int backing_alpha, const cp0_statusbar_state_t *state)
+{
+    cp0_statusbar_render_scaled(bar, argb, width, stride_px, shift_left, top, backing_alpha, state, 100);
 }

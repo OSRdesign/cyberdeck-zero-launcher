@@ -6,6 +6,7 @@
 
 #include "cp0_lvgl_app_runner.hpp"
 #include "sample_log.h"
+#include "ui/input_presence.hpp"
 #include "ui/launcher_media_controls.h"
 #include "ui/ui.h"
 #include "ui/ui_screensaver.h"
@@ -48,5 +49,11 @@ int main(void)
         return true;
     };
     options.teardown = []() { launcher_ui::deinit(); };
-    return cp0_lvgl_run(std::move(options));
+    // Every keyboard (USB, Bluetooth) types in the launcher; its presence is published for apps. Before
+    // cp0_lvgl_run(): the keyboard thread starts inside it.
+    input_presence::configure();
+    input_presence::start();
+    const int rc = cp0_lvgl_run(std::move(options));
+    input_presence::stop();
+    return rc;
 }

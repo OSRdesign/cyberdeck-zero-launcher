@@ -21,13 +21,22 @@ constexpr lv_coord_t kMultilineHeight = 38;
 constexpr lv_coord_t kTopOffset = 4;
 constexpr int kDesignWidthPx = 320; // the layout above is designed for the 320 px wide display
 
-// The toast is laid out for 320 px; on a wider (native) display it is scaled up so it keeps
-// the same apparent size as the 2x-upscaled compat window.
-int scale_for(const lv_obj_t *object)
+// The toast is laid out for 320 px; on a wider (native) display it is scaled up by
+// width / 320 so it keeps the same apparent size as the upscaled compat window
+// (exactly 2x on the 640 px deck, 1.5x on a 480 px panel). Never scaled down.
+struct ToastScale {
+    int width;
+    lv_coord_t operator()(int design_px) const
+    {
+        return static_cast<lv_coord_t>(design_px * width / kDesignWidthPx);
+    }
+};
+
+ToastScale scale_for(const lv_obj_t *object)
 {
     lv_display_t *display = object ? lv_obj_get_display(object) : lv_display_get_default();
     const int width = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : kDesignWidthPx;
-    return width / kDesignWidthPx >= 1 ? width / kDesignWidthPx : 1;
+    return ToastScale{width > kDesignWidthPx ? width : kDesignWidthPx};
 }
 
 } // namespace
@@ -45,14 +54,14 @@ bool LauncherToast::ensure_created() noexcept
     container_ = lv_obj_create(parent);
     if (!container_)
         return false;
-    const int scale = scale_for(parent);
+    const ToastScale scale = scale_for(parent);
     lv_obj_add_event_cb(container_, container_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_remove_style_all(container_);
-    lv_obj_set_size(container_, kWidth * scale, kHeight * scale);
-    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, kTopOffset * scale);
+    lv_obj_set_size(container_, scale(kWidth), scale(kHeight));
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, scale(kTopOffset));
     lv_obj_set_style_bg_color(container_, lv_color_hex(kBackgroundColor), 0);
     lv_obj_set_style_bg_opa(container_, LV_OPA_80, 0);
-    lv_obj_set_style_radius(container_, 6 * scale, 0);
+    lv_obj_set_style_radius(container_, scale(6), 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_shadow_width(container_, 0, 0);
@@ -68,9 +77,9 @@ bool LauncherToast::ensure_created() noexcept
     lv_obj_add_event_cb(label_, label_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_set_style_text_color(label_, lv_color_hex(kTextColor), 0);
     lv_obj_set_style_text_font(
-        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", 12 * scale,
+        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", scale(12),
                                     LV_FREETYPE_FONT_STYLE_BOLD), 0);
-    lv_obj_set_width(label_, (kWidth - 12) * scale);
+    lv_obj_set_width(label_, scale(kWidth - 12));
     lv_label_set_long_mode(label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label_);
@@ -93,11 +102,11 @@ void LauncherToast::show(const char *text) noexcept
     if (!ensure_created())
         return;
 
-    const int scale = scale_for(container_);
+    const ToastScale scale = scale_for(container_);
     lv_label_set_text(label_, text ? text : "");
-    lv_obj_set_height(container_, (text && std::strchr(text, '\n') ? kMultilineHeight : kHeight) * scale);
+    lv_obj_set_height(container_, scale(text && std::strchr(text, '\n') ? kMultilineHeight : kHeight));
     lv_obj_center(label_);
-    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, kTopOffset * scale);
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, scale(kTopOffset));
     lv_obj_move_foreground(container_);
     lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
     if (!hide_timer_)
