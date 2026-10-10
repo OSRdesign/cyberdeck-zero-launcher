@@ -1,0 +1,16 @@
+# Settings, opened from its tile: it runs in the 320x170 compat window (scaled by the display
+# manager) with the native toolbar below. Root menu, then the Screen and System sections.
+title settings
+apps Settings Store CLI SSH Calculator
+clock 20:30
+bt on
+home
+launch Settings
+shot settings_root
+key ENTER
+shot settings_screen
+key ESC
+key UP
+shot settings_root_system
+key ENTER
+shot settings_system

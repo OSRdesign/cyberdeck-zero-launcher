@@ -1,0 +1,23 @@
+# Home grid status strip (clock, Wi-Fi bars, Bluetooth glyph) in its states, then keyboard focus
+# moved off the first tile. The strip polls every 2 s, so each state change waits 2.1 s.
+title home status
+apps Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank
+clock 09:41
+wifi off
+bt off
+home
+shot status_offline
+wifi 25
+bt on
+wait 2100
+shot status_weak_bt_on
+wifi 95
+bt connected
+clock 23:59
+wait 2100
+shot status_full_bt_connected
+key DOWN
+key RIGHT
+shot home_focus_moved
+key DOWN
+shot home_scrolled

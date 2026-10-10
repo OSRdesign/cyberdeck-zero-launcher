@@ -1,0 +1,12 @@
+# A stock (framebuffer) app in the compat window with the native toolbar below it, as
+# native_ui::run_external() sets it up. The app itself is a flat 320x170 placeholder picture fed
+# through the real external blit (no process runs). Then the hold-Esc ribbon over it, and a
+# toolbar key held down.
+title toolbar
+apps Settings Store CLI SSH Calculator
+clock 20:30
+home
+stockapp
+shot toolbar_stockapp
+ribbon
+shot toolbar_ribbon

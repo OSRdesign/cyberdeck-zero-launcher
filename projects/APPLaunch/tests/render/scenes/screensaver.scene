@@ -1,0 +1,9 @@
+# Native clock screensaver (DarkTime): idle on the home grid until the dark_time timeout fires.
+title screensaver
+apps Settings Store CLI SSH Calculator
+clock 21:07 2026-10-10
+config dark_time 10
+home
+screensaver
+wait 10600
+shot screensaver
