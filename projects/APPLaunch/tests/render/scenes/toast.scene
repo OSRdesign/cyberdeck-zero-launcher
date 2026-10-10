@@ -1,0 +1,9 @@
+# Launcher toast (launcher_toast.cpp) on the native home screen: one line, then two lines.
+title toast
+apps Settings Store CLI SSH Calculator
+clock 20:30
+home
+toast "Store: no network connection"
+shot toast_home
+toast "Bluetooth keyboard connected\nM4 keyboard"
+shot toast_home_two_lines

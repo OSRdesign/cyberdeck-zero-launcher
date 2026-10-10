@@ -7,7 +7,10 @@
 #include "cp0_external_app_runner.hpp"
 
 #include "cp0_esc_exit_policy.hpp"
+#include "cp0_esc_key_watch.hpp"
 #include "cp0_esc_state.h"
+#include "cp0_keyboard_presence.h"
+#include "keyboard_input.h"
 #include "../cp0_external_process_group.hpp"
 #include "cp0_process_commands.hpp"
 
@@ -57,24 +60,42 @@ int run(const char *command, bool keep_root)
     keyboard_pause();
     const bool subreaper = cp0_process_group::enable_subreaper();
 
-    // A Bluetooth keyboard may be asleep (its device node is gone) when the app starts: that must not
-    // prevent the launch. The Esc watcher then attaches later, when the keyboard wakes up.
-    int keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK);
-    if (keyboard_fd < 0)
-        std::printf("[cp0] evdev %s not available yet: starting the app anyway\n", keyboard_device());
-    else
-        std::printf("[cp0] Opened evdev %s (no EVIOCGRAB; shared with child)\n", keyboard_device());
+    // The Esc-hold watcher reads the explicit keyboard device and, unless APPLAUNCH_KEYBOARD_SCAN=0, every real
+    // keyboard the presence watcher lists (USB, Bluetooth), picking them up or dropping them while the app
+    // runs. No EVIOCGRAB: the nodes stay shared with the child. A Bluetooth keyboard may be asleep (its node is
+    // gone) when the app starts: that must not prevent the launch, it is attached when it wakes up.
+    cp0_kbd_presence_watcher_t *presence =
+        cp0_keyboard_get_read_all_keyboards() ? cp0_kbd_presence_shared_acquire() : nullptr;
+    cp0_kbd_presence_list_t presence_list;
+    presence_list.count = 0;
+    unsigned seen_generation = cp0_kbd_presence_watcher_generation(presence);
+    cp0_esc_key_watch::Sources esc_sources;
+    const auto attach_keyboards = [&]() {
+        esc_sources.open(keyboard_device());
+        if (presence) {
+            seen_generation = cp0_kbd_presence_watcher_snapshot(presence, &presence_list);
+            for (unsigned i = 0; i < presence_list.count; ++i) esc_sources.open(presence_list.devices[i].path);
+        }
+    };
+    attach_keyboards();
+    if (esc_sources.count() == 0)
+        std::printf("[cp0] no keyboard available yet (%s): starting the app anyway\n", keyboard_device());
     std::fflush(stdout);
-    std::uint64_t next_reopen_ms = 0;
+    std::uint64_t next_reopen_ms = monotonic_ms() + 500;
+    const auto release_keyboards = [&]() {
+        esc_sources.close_all();
+        if (presence) cp0_kbd_presence_shared_release();
+        presence = nullptr;
+    };
 
     const pid_t pid = fork();
     if (pid < 0) {
-        if (keyboard_fd >= 0) close(keyboard_fd);
+        release_keyboards();
         keyboard_resume();
         return -1;
     }
     if (pid == 0) {
-        if (keyboard_fd >= 0) close(keyboard_fd);
+        esc_sources.close_all(); // O_CLOEXEC too; the presence thread does not exist in the child
         setpgid(0, 0);
         if (keep_root)
             execlp("/bin/sh", "sh", "-c", command, static_cast<char *>(nullptr));
@@ -98,30 +119,15 @@ int run(const char *command, bool keep_root)
         cp0_process_group::reap_available(pid, pid, status, leader_reaped);
         if (!cp0_process_group::exists(pid)) break;
 
-        if (keyboard_fd < 0 && monotonic_ms() >= next_reopen_ms) {
+        // New keyboards as soon as the presence list changes; every 500 ms the ones not open yet (a sleeping
+        // Bluetooth keyboard, udev permissions not set yet).
+        if (cp0_kbd_presence_watcher_generation(presence) != seen_generation || monotonic_ms() >= next_reopen_ms) {
             next_reopen_ms = monotonic_ms() + 500;
-            keyboard_fd = open(keyboard_device(), O_RDONLY | O_NONBLOCK);
-            if (keyboard_fd >= 0)
-                std::printf("[cp0] Opened evdev %s (keyboard back)\n", keyboard_device());
+            attach_keyboards();
         }
-        if (keyboard_fd >= 0) {
-            struct input_event event;
-            ssize_t got;
-            while ((got = read(keyboard_fd, &event, sizeof(event))) == static_cast<ssize_t>(sizeof(event))) {
-                if (event.type == EV_KEY && event.code == KEY_ESC) {
-                    if (event.value == 1)
-                        cp0_esc_state_write(1);
-                    else if (event.value == 0)
-                        cp0_esc_state_write(0);
-                }
-            }
-            if (got < 0 && errno != EAGAIN && errno != EINTR) {
-                // the keyboard went to sleep or disconnected: wait for it to come back
-                close(keyboard_fd);
-                keyboard_fd = -1;
-                cp0_esc_state_write(0);
-            }
-        }
+        // Esc is held while any keyboard holds it; a keyboard that slept or was unplugged releases its Esc.
+        const int esc_change = esc_sources.poll();
+        if (esc_change >= 0) cp0_esc_state_write(esc_change);
 
         const bool esc_now = cp0_esc_state_read() != 0;
         const auto decision = esc_policy.update(monotonic_ms(), esc_now);
@@ -144,7 +150,7 @@ int run(const char *command, bool keep_root)
                  "[process] external app group drained pgid=%d leader_reaped=%d\n",
                  static_cast<int>(pid),
                  leader_reaped ? 1 : 0);
-    if (keyboard_fd >= 0) close(keyboard_fd);
+    release_keyboards();
     keyboard_resume();
     cp0_esc_state_reset();
     std::printf("[cp0] Returned to launcher\n");

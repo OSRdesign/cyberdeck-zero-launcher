@@ -1,0 +1,13 @@
+# Native Calculator (full panel), opened from its tile like the user does, then a typed
+# expression and its result.
+title calculator
+apps Settings Store CLI SSH Calculator
+clock 20:30
+bt on
+home
+launch Calculator
+shot calculator_empty
+type 12*34
+shot calculator_typing
+key ENTER
+shot calculator_result

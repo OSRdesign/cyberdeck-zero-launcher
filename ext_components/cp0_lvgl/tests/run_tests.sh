@@ -272,6 +272,13 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
     -I"$root/include" "$root/tests/test_esc_exit_policy.cpp" -o "$binary"
 "$binary"
 
+# Esc-hold watcher of external apps: every keyboard, hotplug, unplug while held, no fd leak
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/src/cp0" \
+    "$root/src/cp0/cp0_esc_key_watch.cpp" \
+    "$root/tests/test_esc_key_watch.cpp" -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$root/include" -I"$root/src" \
     "$esc_state_object" \
