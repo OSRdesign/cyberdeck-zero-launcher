@@ -1,0 +1,7 @@
+# The layout service's numbers at every size (task 014 P1b), as text for the Controller:
+# out/<WxH>/metrics.txt = screen class, density and its source, tokens, text sizes, compat window and
+# toolbar, the home-grid layout in use, the APPLAUNCH_SCREEN_* environment and screen.state.
+# No picture: nothing here is compared with the goldens.
+title metrics
+sizes 480x320 640x480 800x480 720x720 1280x720 1024x600
+metrics metrics

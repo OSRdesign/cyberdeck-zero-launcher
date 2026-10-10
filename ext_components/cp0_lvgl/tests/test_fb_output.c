@@ -664,23 +664,7 @@ static void test_deck_equivalence(void)
     fb_free(&b);
 }
 
-/* Compat window placement: the deck keeps (0, 0) / (160, 0)-style top alignment, the 480x320 panel
- * gets 25 px above and 25 px between window and the 100 px toolbar. */
-static void test_compat_origin(void)
-{
-    int x, y;
-    cp0_fbo_compat_origin(640, 480, 640, 340, &x, &y); /* deck, 2x */
-    CHECK(x == 0 && y == 0);
-    cp0_fbo_compat_origin(640, 480, 320, 170, &x, &y); /* deck with compat scale 1 */
-    CHECK(x == 160 && y == 0);
-    cp0_fbo_compat_origin(480, 320, 320, 170, &x, &y); /* Pi 3A+, 1x */
-    CHECK(x == 80 && y == 25);
-    CHECK(y + 170 + 25 == 320 - 100);                   /* toolbar starts at y 220 */
-    cp0_fbo_compat_origin(320, 170, 320, 170, &x, &y); /* degenerate: never negative */
-    CHECK(x == 0 && y == 0);
-    cp0_fbo_compat_origin(200, 100, 320, 170, &x, &y);
-    CHECK(x == 0 && y == 0);
-}
+/* (The compat window placement moved to the layout service: tests/test_ui_metrics.c.) */
 
 /* The Pi 3A+ geometry end to end: 480x320 logical, 1x compat window at (80, 25), 320x480 RGB565
  * buffer with line length 640: a red logical top-left pixel lands at buffer (319, 0). */
@@ -765,7 +749,6 @@ int main(void)
     test_setup_and_parse();
     test_touch();
     test_deck_equivalence();
-    test_compat_origin();
     test_pi3a_geometry();
     if (failures) {
         fprintf(stderr, "test_fb_output: %d failure(s)\n", failures);

@@ -23,6 +23,7 @@
 #include "cp0/cp0_fb_output.h"
 #include "cp0/cp0_lvgl.h"
 #include "cp0_display.h"
+#include "cp0_ui_metrics.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
 
@@ -442,6 +443,7 @@ Profile make_profile(const std::string &name, const Size &size)
         p.env = {{"APPLAUNCH_BOARD", "pi3a-luckfox35"},
                  {"APPLAUNCH_ROTATE", "90"},
                  {"APPLAUNCH_COMPAT_SCALE", "1"},
+                 {"APPLAUNCH_PANEL_MM", "79x49"}, /* as install.sh writes it */
                  {"APPLAUNCH_BACKLIGHT", "gpio:/sys/class/backlight/backlight_gpio"}};
     } else { /* "deck" (no board.conf, the Zero 2 W) and "generic": XRGB8888, no rotation */
         p.pw = size.w, p.ph = size.h, p.bpp = 32, p.rot = 0;
@@ -457,7 +459,10 @@ std::string default_profile(const Size &size)
     return "generic";
 }
 
-int default_ppmm(const Size &size) /* x100; report 022 section 3.1 (density not consumed yet) */
+/* x100; report 022 section 3.1. The generic profile's fake framebuffer reports the matching physical size
+ * (var.width / var.height in mm), so the layout service reads its density the way it does from a KMS
+ * driver. The deck reports none (11.3 px/mm default); the Pi 3A+ has APPLAUNCH_PANEL_MM in its profile. */
+int default_ppmm(const Size &size)
 {
     if (size == Size{480, 320}) return 610;
     if (size == Size{640, 480}) return 1130;
@@ -546,6 +551,7 @@ struct Run {
     Size size;
     Profile profile;
     int ppmm = 0;
+    bool ppmm_explicit = false; /* a scene's "ppmm N": the fake framebuffer reports it on every profile */
     bool booted = false;
     std::string out_dir;
     std::string harness_dir;
@@ -574,10 +580,20 @@ void boot(Run &run)
     setenv("APPLAUNCH_TOUCH_DEV", HARNESS_TOUCH_PATH, 1);
     setenv("APPLAUNCH_TOUCH_ORIENT", "buffer", 1);
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
-    std::fprintf(stderr, "[harness] %s profile=%s fb=%dx%dx%d rot=%d ppmm=%d (logged only: v0.5.0 has no density input)\n",
-                 run.size.name().c_str(), run.profile.name.c_str(), run.profile.pw, run.profile.ph, run.profile.bpp,
-                 run.profile.rot, run.ppmm);
+    /* screen.state lands next to the shots, never in the real runtime directory */
+    const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";
+    mkdirs(runtime);
+    setenv("XDG_RUNTIME_DIR", runtime.c_str(), 1);
+    int mm_w = 0, mm_h = 0;
+    if (run.ppmm > 0 && (run.ppmm_explicit || run.profile.name == "generic")) {
+        mm_w = (run.profile.pw * 100 + run.ppmm / 2) / run.ppmm; /* buffer orientation, whole mm like a driver */
+        mm_h = (run.profile.ph * 100 + run.ppmm / 2) / run.ppmm;
+    }
+    std::fprintf(stderr, "[harness] %s profile=%s fb=%dx%dx%d rot=%d fb_mm=%dx%d (ppmm %d)\n", run.size.name().c_str(),
+                 run.profile.name.c_str(), run.profile.pw, run.profile.ph, run.profile.bpp, run.profile.rot, mm_w, mm_h,
+                 run.ppmm);
     harness_fb_configure(run.profile.pw, run.profile.ph, run.profile.bpp);
+    harness_fb_set_mm(mm_w, mm_h);
     if (chdir(harness::fixtures().resource_root.c_str()) != 0) /* the service's WorkingDirectory */
         std::fprintf(stderr, "[harness] chdir %s: %s\n", harness::fixtures().resource_root.c_str(), std::strerror(errno));
 
@@ -710,8 +726,10 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     if (cmd == "profile" || cmd == "ppmm" || cmd == "env") {
         if (run.booted) return fail(scene, line, cmd + " must come before the first drawing command");
         if (cmd == "profile" && w.size() == 2) run.profile = make_profile(w[1], run.size);
-        else if (cmd == "ppmm" && w.size() == 2) run.ppmm = to_int(w[1], run.ppmm);
-        else if (cmd == "env" && w.size() == 3) run.profile.env[w[1]] = w[2];
+        else if (cmd == "ppmm" && w.size() == 2) {
+            run.ppmm = to_int(w[1], run.ppmm);
+            run.ppmm_explicit = true;
+        } else if (cmd == "env" && w.size() == 3) run.profile.env[w[1]] = w[2];
         else return fail(scene, line, "usage: profile deck|pi3a|generic, ppmm N, env KEY VALUE");
         return true;
     }
@@ -856,6 +874,33 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     } else if (cmd == "screensaver") {
         native_screensaver::init(); /* ui_screensaver_init() does this on the Pi */
         settle(50);
+    } else if (cmd == "metrics") {
+        /* what the layout service computed for this size, plus what the launcher exported to its children */
+        if (w.size() != 2) return fail(scene, line, "usage: metrics NAME");
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+        char text[2048];
+        if (!m || cp0_ui_metrics_describe(m, text, sizeof(text)) < 0)
+            return fail(scene, line, "the display manager published no metrics");
+        std::string report = text;
+        report += "environment";
+        for (const char *name : {"APPLAUNCH_SCREEN_W", "APPLAUNCH_SCREEN_H", "APPLAUNCH_SCREEN_ROTATE",
+                                 "APPLAUNCH_SCREEN_PPMM", "APPLAUNCH_SCREEN_CLASS"}) {
+            const char *value = std::getenv(name);
+            report += std::string(" ") + name + "=" + (value ? value : "(unset)");
+        }
+        report += "\n";
+        char state_path[1024];
+        if (cp0_ui_state_path(std::getenv("XDG_RUNTIME_DIR"), state_path, sizeof(state_path)) == 0) {
+            std::ifstream state(state_path);
+            std::stringstream body;
+            body << state.rdbuf();
+            report += "screen.state\n" + body.str();
+        }
+        const std::string path = run.out_dir + "/" + run.size.name() + "/" + w[1] + ".txt";
+        std::ofstream out(path);
+        out << report;
+        if (!out) return fail(scene, line, "cannot write " + path);
+        std::printf("%s\n", path.c_str());
     } else if (cmd == "wait") {
         if (w.size() != 2) return fail(scene, line, "usage: wait MS");
         settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))));

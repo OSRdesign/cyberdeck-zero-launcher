@@ -13,8 +13,10 @@
  *                               the buffer                (default 0 / 90 if the buffer is portrait)
  *   APPLAUNCH_LOGICAL           WxH landscape canvas      (default: the buffer size through the
  *                               rotation; a size that does not match it is logged and ignored)
- *   APPLAUNCH_COMPAT_SCALE      1|2 scale of the 320x170 window (default: largest that fits, 2 on
- *                               the deck; a scale that does not fit is lowered)
+ *   APPLAUNCH_COMPAT_SCALE      1|2 scale of the 320x170 window (default: the layout service's, 2 on
+ *                               the deck; a scale above it is lowered)
+ *   APPLAUNCH_PANEL_MM          WxH landscape panel size in mm: the density the layout service
+ *                               sizes things with (default: the framebuffer's mm, then 11.3 px/mm)
  *   APPLAUNCH_TOUCH_ORIENT      legacy (default) | buffer: the touch axes follow the framebuffer;
  *                               raw values are normalised by the device's ABS range and turned
  *                               back through APPLAUNCH_ROTATE (SWAP/INVERT below are ignored)
@@ -26,7 +28,9 @@
  *   APPLAUNCH_TOUCH_INVERT_Y    1 to mirror touch Y (after the optional swap)
  *   APPLAUNCH_BACKLIGHT         see cp0_backlight_profile.h
  * Depth, channel layout and line length come from the framebuffer ioctls (16 bpp RGB565 layouts
- * and 32 bpp XRGB8888). All drawing goes through cp0_fb_output.c.
+ * and 32 bpp XRGB8888). All drawing goes through cp0_fb_output.c. Where the compat window goes and how
+ * big the toolbar under it is are decided by the layout service (cp0_ui_metrics.h), which also exports
+ * the screen size to the processes the launcher starts.
  */
 
 #include "lvgl/lvgl.h"
@@ -34,6 +38,7 @@
 #include "cp0_display.h"
 #include "cp0_fb_output.h"
 #include "cp0_lvgl.h"
+#include "cp0_ui_metrics.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
 
@@ -666,6 +671,35 @@ void cp0_display_compat_window(int *x, int *y, int *w, int *h)
     if (h) *h = g.wh;
 }
 
+int cp0_display_configure_compat(int scale, int x, int y)
+{
+    if (scale < 1 || x < 0 || y < 0 || g.lw <= 0 || g.lh <= 0 || g.bpp <= 0) return -1;
+    const int ww = UI_W * scale, wh = UI_H * scale;
+    /* a canvas smaller than the 1x window keeps the window at (0, 0), clipped, as it always did */
+    const bool fits = x + ww <= g.lw && y + wh <= g.lh;
+    if (!fits && !(scale == 1 && x == 0 && y == 0)) return -1;
+    /* 16 source rows per pass of the scaled blits */
+    const size_t need = (size_t)UI_W * scale * scale * 16 * g.bpp;
+    if (need > g.scratch_size) {
+        uint8_t *scratch = realloc(g.scratch, need);
+        if (!scratch) return -1;
+        g.scratch = scratch;
+        g.scratch_size = need;
+    }
+    const bool moved = g.ready && (scale != g.scale || x != g.ox || y != g.oy);
+    if (moved && g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout) fill_window_black();
+    g.scale = scale;
+    g.ox = x;
+    g.oy = y;
+    g.ww = ww;
+    g.wh = wh;
+    if (moved) {
+        lv_obj_invalidate(lv_display_get_screen_active(g.native));
+        if (g.mode == CP0_DISPLAY_MODE_COMPAT) lv_obj_invalidate(lv_display_get_screen_active(g.compat));
+    }
+    return 0;
+}
+
 static void fill_window_black(void)
 {
     cp0_fbo_fill_black(&g.out, g.ox, g.oy, g.ww, g.wh);
@@ -773,29 +807,25 @@ lv_display_t *cp0_dpi_scaled_create(void)
     g.lw = g.out.lw;
     g.lh = g.out.lh;
 
-    const int sx = g.lw / UI_W, sy = g.lh / UI_H;
-    g.scale = sx < sy ? sx : sy;
-    if (g.scale < 1) g.scale = 1;
-    {
-        const char *cs = getenv("APPLAUNCH_COMPAT_SCALE");
-        const int want = !cs ? 0 : strcmp(cs, "1") == 0 ? 1 : strcmp(cs, "2") == 0 ? 2 : -1;
-        if (cs && cs[0] && want < 0)
-            fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%s is not 1|2: using %d\n", cs, g.scale);
-        else if (want > g.scale)
-            fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%d does not fit %dx%d: using %d\n", want, g.lw,
-                    g.lh, g.scale);
-        else if (want > 0)
-            g.scale = want;
-    }
-    g.ww = UI_W * g.scale;
-    g.wh = UI_H * g.scale;
-    /* centred horizontally; at the top on the deck, centred above the toolbar on small panels */
-    cp0_fbo_compat_origin(g.lw, g.lh, g.ww, g.wh, &g.ox, &g.oy);
-
-    /* 16 source rows per pass of the scaled blits */
-    g.scratch_size = (size_t)UI_W * g.scale * g.scale * 16 * g.bpp;
-    g.scratch = malloc(g.scratch_size);
-    if (!g.scratch) return NULL;
+    /* Layout service: screen class, density, tokens and the compat window placement for this canvas
+     * (the deck and the 480x320 Pi 3A+ keep their pinned placement). APPLAUNCH_COMPAT_SCALE only lowers it. */
+    const char *panel_mm = getenv("APPLAUNCH_PANEL_MM");
+    const cp0_ui_density_t density =
+        cp0_ui_density_resolve(g.lw, g.lh, g.rot, panel_mm, (int)vi.width, (int)vi.height);
+    if (density.panel_mm_rejected)
+        fprintf(stderr, "[display-profile] APPLAUNCH_PANEL_MM=%s is not a usable WxH in mm: ignored\n", panel_mm);
+    const char *cs = getenv("APPLAUNCH_COMPAT_SCALE");
+    const int want = !cs ? 0 : strcmp(cs, "1") == 0 ? 1 : strcmp(cs, "2") == 0 ? 2 : -1;
+    cp0_ui_metrics_t metrics;
+    if (cp0_ui_metrics_compute(g.lw, g.lh, g.rot, density.ppmm_x100, density.src, want > 0 ? want : 0, &metrics) != 0)
+        return NULL;
+    if (cs && cs[0] && want < 0)
+        fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%s is not 1|2: using %d\n", cs, metrics.compat.scale);
+    else if (want > metrics.compat.scale_max)
+        fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%d does not fit %dx%d: using %d\n", want, g.lw, g.lh,
+                metrics.compat.scale);
+    if (cp0_display_configure_compat(metrics.compat.scale, metrics.compat.x, metrics.compat.y) != 0) return NULL;
+    cp0_ui_metrics_set_current(&metrics);
 
     {
         const char *orient = getenv("APPLAUNCH_TOUCH_ORIENT");
@@ -854,5 +884,15 @@ lv_display_t *cp0_dpi_scaled_create(void)
             vi.green.offset, vi.green.length, vi.blue.offset, vi.blue.length,
             g.bpp == 2 && !g.out.rgb565_plain ? " (converted)" : "", g.rot, g.lw, g.lh, g.scale, g.ww, g.wh, g.ox,
             g.oy, touch_desc, backlight);
+    fprintf(stderr,
+            "[display-metrics] class=%s%s ppmm=%d (%s, fb %ux%u mm) row=%d target=%d toolbar=%d@%d shell=%s\n",
+            cp0_ui_class_name(metrics.cls), metrics.preset != CP0_UI_PRESET_COMPUTED ? " (pinned)" : "",
+            metrics.ppmm_x100, cp0_ui_density_src_name(metrics.density_src), vi.width, vi.height,
+            metrics.tok[CP0_TOK_ROW_H], metrics.tok[CP0_TOK_TARGET], metrics.compat.toolbar_h,
+            metrics.compat.toolbar_y, metrics.shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck");
+    /* Early in start-up, before the services' threads, like the other setenv calls of the display and
+     * keyboard set-up (fbdev backend, keyboard init). */
+    if (cp0_ui_metrics_publish(&metrics, getenv("XDG_RUNTIME_DIR")) != 0)
+        fprintf(stderr, "[display-metrics] screen state not written: %s\n", strerror(errno));
     return g.compat;
 }

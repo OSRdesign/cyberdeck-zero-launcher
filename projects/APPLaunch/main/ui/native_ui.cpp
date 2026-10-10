@@ -14,6 +14,7 @@
 
 #include "cp0_display.h"
 #include "cp0_statusbar.h"
+#include "cp0_ui_metrics_lvgl.h"
 #include "hal_lvgl_bsp.h"
 #include "cp0_esc_state.h"
 #include "input_keys.h"
@@ -42,8 +43,6 @@
 
 namespace {
 
-constexpr int kCols = 3;        // grid columns
-constexpr int kRows = 2;        // grid rows that fit on screen
 constexpr uint32_t kBg = 0x000000;
 constexpr uint32_t kTileBg = 0x1E1E1E;
 constexpr uint32_t kTileBorder = 0x3A3A3A;
@@ -61,12 +60,15 @@ lv_obj_t *s_idle = nullptr;     // empty screen parked on the compat display whi
 std::vector<lv_obj_t *> s_tiles;
 int s_selected = 0;
 
-// Geometry of the native screens, computed from the native display size. Two profiles: the 640x480
-// deck (the values the UI always had; they must not change) and the compact one for small panels such
-// as the 480x320 Pi 3A+ (status bar 40, padding 10, icon and text about 72 % of the deck sizes).
+// Geometry of the native screens, from the layout service (cp0_ui_metrics.h) for the native display. The
+// 640x480 deck and the 480x320 Pi 3A+ are pinned presets: the values the UI always had (they must not
+// change; the render harness goldens check it). Other sizes keep today's two layouts (deck from 400 px of
+// height, compact below: status bar 40, padding 10, icon and text about 72 % of the deck sizes) until the
+// grid is drawn from the tokens (task 014 P1c).
 struct Layout {
     bool compact;
     int screen_w, screen_h;
+    int cols, rows;      // grid columns, rows that fit on screen
     int bar_h;           // status bar height
     int pad;             // grid padding and gap
     int tile_w, tile_h;  // two rows fit exactly under the status bar
@@ -81,66 +83,46 @@ struct Layout {
     int label_bottom, label_inset;
     int tb_pad_x, tb_pad_y, tb_gap, tb_radius;
     const lv_font_t *tb_text_font, *tb_symbol_font;
+    int toolbar_y, toolbar_h; // stock-app toolbar under the compat window, full width
 };
-
-constexpr int kCompactBelowH = 400; // a native display shorter than this uses the compact profile
 
 const Layout &layout()
 {
     static Layout l = [] {
+        const cp0_ui_metrics_t &m = *cp0_ui_metrics_get();
+        const cp0_ui_shell_t &s = m.shell;
         Layout v{};
-        lv_display_t *display = cp0_display_native();
-        v.screen_w = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : 640;
-        v.screen_h = display ? static_cast<int>(lv_display_get_vertical_resolution(display)) : 480;
-        v.compact = v.screen_h < kCompactBelowH;
-        if (!v.compact) {
-            v.bar_h = 56;
-            v.pad = 16;
-            v.status_pct = 100;
-            v.status_top = 8;
-            v.title_x = 20;
-            v.title_y = 10;
-            v.title_font = &lv_font_montserrat_32;
-            v.tile_radius = 28;
-            v.tile_border = 3;
-            v.tile_border_sel = 5;
-            v.icon = 128;
-            v.icon_top = 14;
-            v.label_font = &lv_font_montserrat_24;
-            v.label_bottom = 12;
-            v.label_inset = 16;
-            v.tb_pad_x = 10;
-            v.tb_pad_y = 10;
-            v.tb_gap = 8;
-            v.tb_radius = 18;
-            v.tb_text_font = &lv_font_montserrat_24;
-            v.tb_symbol_font = &lv_font_montserrat_32;
-        } else {
-            v.bar_h = 40;
-            v.pad = 10;
-            v.status_pct = 72;
-            v.status_top = 5;
-            v.title_x = 14;
-            v.title_y = 6;
-            v.title_font = &lv_font_montserrat_24;
-            v.tile_radius = 20;
-            v.tile_border = 2;
-            v.tile_border_sel = 4;
-            v.icon = 88;
-            v.icon_top = 6;
-            v.label_font = &lv_font_montserrat_18;
-            v.label_bottom = 5;
-            v.label_inset = 12;
-            v.tb_pad_x = 6;
-            v.tb_pad_y = 5;
-            v.tb_gap = 6;
-            v.tb_radius = 14;
-            v.tb_text_font = &lv_font_montserrat_18;
-            v.tb_symbol_font = &lv_font_montserrat_24;
-        }
-        v.tile_w = (v.screen_w - 2 * v.pad - (kCols - 1) * v.pad) / kCols;
-        v.tile_h = (v.screen_h - v.bar_h - (kRows + 1) * v.pad) / kRows;
-        v.status_w = 320 * v.status_pct / 100;
+        v.compact = m.shell_preset == CP0_UI_PRESET_COMPACT;
+        v.screen_w = m.w;
+        v.screen_h = m.h;
+        v.cols = s.cols;
+        v.rows = s.rows;
+        v.bar_h = s.bar_h;
+        v.pad = s.pad;
+        v.tile_w = s.tile_w;
+        v.tile_h = s.tile_h;
+        v.status_pct = s.status_pct;
+        v.status_top = s.status_top;
+        v.status_w = s.status_w;
+        v.title_x = s.title_x;
+        v.title_y = s.title_y;
+        v.title_font = cp0_ui_font_px(s.title_px);
+        v.tile_radius = s.tile_radius;
+        v.tile_border = s.tile_border;
+        v.tile_border_sel = s.tile_border_sel;
+        v.icon = s.icon;
+        v.icon_top = s.icon_top;
+        v.label_font = cp0_ui_font_px(s.label_px);
+        v.label_bottom = s.label_bottom;
+        v.label_inset = s.label_inset;
+        v.tb_pad_x = s.tb_pad_x;
+        v.tb_pad_y = s.tb_pad_y;
+        v.tb_gap = s.tb_gap;
+        v.tb_radius = s.tb_radius;
+        v.tb_text_font = cp0_ui_font_px(s.tb_text_px);
+        v.tb_symbol_font = cp0_ui_font_px(s.tb_symbol_px);
+        v.toolbar_y = m.compat.toolbar_y;
+        v.toolbar_h = m.compat.toolbar_h;
         return v;
     }();
     return l;
@@ -224,8 +206,8 @@ void home_key_cb(lv_event_t *event)
         switch (code) {
         case KEY_LEFT: select_tile(s_selected - 1, true); break;
         case KEY_RIGHT: select_tile(s_selected + 1, true); break;
-        case KEY_UP: select_tile(s_selected - kCols, true); break;
-        case KEY_DOWN: select_tile(s_selected + kCols, true); break;
+        case KEY_UP: select_tile(s_selected - layout().cols, true); break;
+        case KEY_DOWN: select_tile(s_selected + layout().cols, true); break;
         default: break;
         }
     } else if (code == KEY_ENTER) {
@@ -501,19 +483,18 @@ void ensure_chrome()
     if (s_chrome) return;
     DefaultDisplayScope scope(cp0_display_native());
 
-    int wx, wy, ww, wh;
-    cp0_display_compat_window(&wx, &wy, &ww, &wh);
     const Layout &l = layout();
     const int screen_w = l.screen_w;
-    const int screen_h = l.screen_h;
-    // The toolbar starts below the window, leaving the same margin as above it (deck: 0, 480x320: 25).
-    const int bar_y = wy + wh + wy;
+    // The layout service places the toolbar with the compat window (deck: y 340, 140 px; 480x320: y 220,
+    // 100 px, the same 25 px margin above and below the window).
+    const int bar_y = l.toolbar_y;
+    const int bar_h = l.toolbar_h;
 
     s_chrome = make_black_screen();
 
     lv_obj_t *bar = lv_obj_create(s_chrome);
     lv_obj_remove_style_all(bar);
-    lv_obj_set_size(bar, screen_w, screen_h - bar_y);
+    lv_obj_set_size(bar, screen_w, bar_h);
     lv_obj_set_pos(bar, 0, bar_y);
     lv_obj_set_style_pad_hor(bar, l.tb_pad_x, 0);
     lv_obj_set_style_pad_ver(bar, l.tb_pad_y, 0);
@@ -525,7 +506,7 @@ void ensure_chrome()
     const int button_w = (screen_w - 2 * l.tb_pad_x - (count - 1) * l.tb_gap) / count;
     for (auto &key : s_keys) {
         lv_obj_t *button = lv_button_create(bar);
-        lv_obj_set_size(button, button_w, screen_h - bar_y - 2 * l.tb_pad_y);
+        lv_obj_set_size(button, button_w, bar_h - 2 * l.tb_pad_y);
         lv_obj_set_style_radius(button, l.tb_radius, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x2A2A2A), 0);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);

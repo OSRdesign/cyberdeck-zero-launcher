@@ -171,6 +171,8 @@ APPLAUNCH_FB=$PANEL_FB
 APPLAUNCH_LOGICAL=480x320
 APPLAUNCH_ROTATE=90
 APPLAUNCH_COMPAT_SCALE=1
+# landscape panel size in mm (the overlay's width-mm=49 height-mm=79, portrait): the layout's density
+APPLAUNCH_PANEL_MM=79x49
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio
