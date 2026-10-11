@@ -12,7 +12,7 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | 005 | **LanScan 0.1.2**: copyright file for the bundled IEEE OUI list | apps-dev | done | `tasks/005-lanscan-copyright.md` |
 | 006 | **Settings > Apps polish** (tile order kept on upgrade, upgrade flow, sync progress, install feedback) | launcher-dev | done | `tasks/006-settings-apps-polish.md`, `reports/010.md` |
 | 012/013 | **Launcher 0.5.0**: Pi 3A+ support, board profile, USB and Bluetooth keyboards | Controller + savvy workers | done (PR #23, release v0.5.0) | `tasks/012-launcher-0.5.0.md`, `tasks/013-multiboard-pi3a.md`, `reports/021` |
-| 014 | **Responsive shell** (one code base for every SBC and capacitive screen): layout service, native Settings, on-screen keyboard, app contract | Controller + savvy workers | building: P1 to P3e merged, **P4 implemented (branch p4-ui-on-tokens, tests pending)**, P5 not started | `tasks/014-responsive-shell.md`, `reports/022` |
+| 014 | **Responsive shell** (one code base for every SBC and capacitive screen): layout service, native Settings, on-screen keyboard, app contract | Controller + savvy workers | building: P1 to P3e merged, P4 merged (PR #34), **P4b terminal keyboard implemented (branch p4b-terminal-osk, tests pending)**, P5 not started | `tasks/014-responsive-shell.md`, `reports/022` |
 | - | **Dev tooling**: `tools/dev` (WSL build, check-all) and `tools/boards` (deploy, test, screenshot on the boards) | Controller | done (PR #30) | `docs/dev/DEV-GUIDE.md`, `tools/dev/README.md`, `tools/boards/README.md` |
 
 ## Next (ideas, order not fixed)

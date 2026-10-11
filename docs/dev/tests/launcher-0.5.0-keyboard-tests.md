@@ -210,3 +210,20 @@ SSH form:
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
 
+## K. Terminal on-screen keyboard (task 014 P4b)
+
+Pi 3A+ (touch only, no keyboard connected):
+97. Open CLI: the on-screen keyboard appears, the prompt is on the last line above it, and `stty size` prints `5 40`.
+98. Type `ls -la | grep a` using the 123 and #+= layers, then Enter. Up/Down recall history, Left/Right edit the line, holding Backspace repeats.
+99. `cd /us` + Tab completes. Ctrl then c interrupts `sleep 30`. Ctrl-L, Ctrl-A, Ctrl-E, Ctrl-R and Ctrl-U work; the Ctrl key lights while armed and turns blue when locked.
+100. `nano /tmp/t`: type text, Ctrl-O then Enter saves, Ctrl-X exits (also try `nano -x`).
+101. SSH: fill the form on the keyboard and connect; type the password; on the remote run `stty size`, open nano, Ctrl-C a `ping`, use Tab and the arrows. Ctrl-D logs out; tapping a key returns to the form.
+102. Hold the keyboard's Esc for 3 s: the ribbon shows, then home. No launcher restart within 5 s.
+103. Ctrl-D in CLI shows "Press any key to exit"; two taps go home. In Python, Ctrl-D then one tap goes home.
+104. Plug a USB keyboard mid-session: the on-screen keyboard goes, the grid returns to 12 rows with its lines restored. Unplug it: the keyboard returns about 2 s later.
+Deck and HackBerry (with a physical keyboard):
+105. Deck with the BT keyboard awake: CLI, Python and SSH show no on-screen keyboard and the full grid; Ctrl-C from the keyboard works.
+106. HackBerry: CLI, Python and SSH show no on-screen keyboard and 24 rows; the built-in Ctrl, Tab and arrows work.
+
+Report anything odd; the Controller can capture the screen over ssh during the test.
+

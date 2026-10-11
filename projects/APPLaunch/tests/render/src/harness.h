@@ -121,6 +121,15 @@ void install_services();
  * having typed the passkey shown for it (a pending "display" pairing completes). */
 void bt_agent_request(const std::string &method, const std::string &address, const std::string &value);
 void bt_key_typed();
+/* The fake PTY (task 014 P4b: the terminal pages, cp0_signal_pty_api): no process. What the scene prints is what the
+ * terminal reads next ("\n" = CR LF, "\e" = Esc); what the terminal writes is echoed as a cooked tty and a shell would
+ * (text, Backspace, Enter = a new prompt, ^C = "^C" and a new prompt, ^D = "exit" and the end; escape sequences, Tab:
+ * nothing) and logged with every Open / Resize / Close. pty_exit(): the child has exited (Read reports the end,
+ * CheckChild 1). */
+void pty_output(const std::string &text);
+void pty_set_prompt(const std::string &prompt);
+void pty_exit();
+std::vector<std::string> pty_log();
 void config_set(const std::string &key, const std::string &value);
 std::string resolve_resource(const std::string &name);
 

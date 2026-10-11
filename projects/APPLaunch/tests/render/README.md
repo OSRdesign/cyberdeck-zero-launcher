@@ -75,7 +75,7 @@ runs at those sizes only.
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes to render (default the five above) |
 | `review` | the scene's shots are for review only: no golden is expected (nor made by `run.sh golden`) at 640x480 / 480x320 |
 | `profile deck\|pi3a\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
-| `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings` and `Calculator` open the real pages |
+| `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings`, `Calculator`, `SSH` and `CLI` (the terminal page, on the fake PTY) open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
 | `home` | build the grid and show it (`native_ui::refresh_apps` + `show_home`) |
 | `launch NAME` | tap-equivalent launch of a tile |
@@ -83,7 +83,8 @@ runs at those sizes only.
 | `ribbon` | the hold-Esc ribbon over a stock app, as `external_poll()` shows it |
 | `key NAME [press\|release]`, `type TEXT` | keys through the real queue (UP DOWN LEFT RIGHT ENTER ESC TAB SPACE BACKSPACE 0-9 ...) |
 | `tap X Y`, `drag X1 Y1 X2 Y2 [STEPS]`, `touch X Y` + `release` | touch through the display manager's touch path (logical coordinates) |
-| `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys), or on the text field under the field label LABEL |
+| `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys, `SPACE` for the space bar; a label with `#` in quotes: `"#+="`), or on the text field under the field label LABEL |
+| `ptyout TEXT`, `ptyprompt TEXT`, `ptyexit`, `ptylog NAME` | the fake PTY of the terminal pages (`src/harness_services.cpp`, no process): what the program prints next (`\n` = CR LF, `\e` = Esc); the prompt the fake shell prints after Enter and ^C; the program exits; what the terminal did with the PTY (open, every write as bytes, resize, close) as `out/<WxH>/NAME.txt`. Writes are echoed as a cooked tty and a shell would (^C: "^C" and a new prompt, ^D: "exit" and the end) |
 | `keyboards N` | physical keyboards the on-screen keyboard policy sees (default 0; `harness_stubs.cpp` replaces the presence watcher) |
 | `toast TEXT` (`\n` = new line) / `toast off`, `screensaver` (+ `wait`) | launcher toast (persistent) / hide it; arm the clock screensaver |
 | `osd level TITLE PCT`, `osd mute on`/`off`, `loading TEXT` / `loading off`, `compatpage` | the media OSD of the brightness / volume keys (it hides itself after 1000 ms: a shot settles 700 ms after the command), the "Loading..." overlay, a compat page (the compat window is default, a flat placeholder screen, no external app) |
@@ -121,6 +122,7 @@ review-only too.
 keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
 (keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.
 `overlays` (task 014 P4, review-only): the toast at home / over Settings / over the Calculator, the hold-Esc ribbon, the media OSD and the loading overlay at home and over a compat page, the compat ribbon over a stock app, at the five sizes.
+`terminal_osk` (task 014 P4b, review-only, `APPLAUNCH_OSK=auto` with `keyboards N`): the CLI terminal on the fake PTY with a physical keyboard (whole grid), the on-screen keyboard up when the last keyboard goes (grid above it, prompt on its last row, PTY resized), the 123 and #+= layers while typing, Ctrl armed, Ctrl+C, a physical keyboard back (grid and lines restored), Ctrl+D and "Press any key to exit", then the SSH form connecting through the keyboard's Enter and the SSH session, at the five sizes; `ptylog` writes the bytes every key sent and the PTY sizes (`out/<WxH>/pty.txt`).
 
 ## Goldens and fidelity
 
@@ -144,6 +146,8 @@ device screenshots, mostly in scaled FreeType text. `deck.py shot` stays the dev
 - Pages that need live services beyond the fixtures (Bluetooth scan/pairing, Apps sources, sudo prompt): add
   fixtures in `src/harness_services.cpp` as P3 scenes need them. Storage reads the host's mounts: on a PC it shows
   "SD card information unavailable.".
-- Stock apps (only a placeholder picture), the terminal pages (incl. the SSH session; the SSH form is covered), games, touch feel and speed. The harness proves layout, not behaviour on the board.
+- Stock apps (only a placeholder picture), real programs in the terminal pages (the terminal runs on a fake PTY that
+  echoes keys; no shell, ssh, nano), the hold-Esc controller (not linked), games, touch feel and speed. The harness
+  proves layout, not behaviour on the board.
 - Changes to `builtin_app_registry.cpp`'s table must be copied to `src/harness_stubs.cpp`; changes to the
   device LVGL config to `config/lvgl_config.h`.

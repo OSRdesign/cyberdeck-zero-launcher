@@ -35,6 +35,16 @@
 //    - terminal state: glyph grid, cursor, modes, scroll region
 //    - byte stream parser: ESC/CSI/OSC handling
 //    - frontend: LVGL row renderer and keyboard -> PTY writer
+//
+//  On the native display (the dpi-scaled backend: the Pi boards; task 014
+//  P4b) the terminal asks for the fallback on-screen keyboard for its whole
+//  session (cp0::ui::osk, the launcher's policy: shown only while no physical
+//  keyboard is present, setting Auto, no lock screen). While it is up the grid
+//  keeps the rows above it (model/st_viewport_model.hpp) and the PTY is
+//  resized to them; the full grid comes back when it goes. Its keys arrive as
+//  a physical keyboard's (LV_EVENT_KEYBOARD); Ctrl combinations come as the key
+//  code with KBD_MOD_CTRL and no text (STKeyEncoder writes the control byte).
+//  Stock CardputerZero and SDL have no such keyboard.
 // ============================================================
 class UISTPage : public AppPage
 {
@@ -193,12 +203,28 @@ private:
     int home_hold_status_ = 0;
     std::chrono::time_point<std::chrono::steady_clock> home_hold_start_{};
 
+    // the fallback on-screen keyboard (native display only, task 014 P4b)
+    bool keyboard_wanted_ = false;      // this terminal asked for it (native display, launcher shell present)
+    lv_obj_t *keyboard_owner_ = nullptr; // the object the request was made for (terminal_container_)
+    int keyboard_listener_ = 0;          // cp0::ui::osk inset listener id
+    int keyboard_inset_ = 0;             // the keyboard's height while it is up, else 0
+    int keyboard_pushed_rows_ = 0;       // lines a shrink moved into the scrollback (st_viewport::resize)
+
     static int clamp(int v, int lo, int hi);
     static std::string printable(uint32_t u);
     static lv_color_t palette(uint32_t color);
     const lv_font_t *terminal_font() const;
-    int big_view_rows() const { return (term_h_ - BIG_BOTTOM_H) / char_h_; }
+    int view_h() const { return std::max(char_h_, term_h_ - keyboard_inset_); } // the part not under the keyboard
+    int big_view_rows() const { return (view_h() - BIG_BOTTOM_H) / char_h_; }
+    int fitted_rows() const; // normal mode: the rows that fit above the keyboard (all of them without it)
     void init_geometry();
+    void setup_keyboard();
+    void keep_keyboard_request();
+    void teardown_keyboard();
+    void on_keyboard_inset(int inset);
+    void fit_rows_to_view();
+    void pty_resize();
+    void place_big_mode_bar();
     void scroll_by_rows(int rows);
     void drag_cb(lv_event_t *event);
     static void static_drag_cb(lv_event_t *event) noexcept;
@@ -288,5 +314,5 @@ private:
     static void static_cursor_cb(lv_timer_t *timer) noexcept;
     void cursor_cb();
     void handle_home_hold_exit();
-    void write_key(uint32_t evdev_key, const char *utf8);
+    void write_key(uint32_t evdev_key, const char *utf8, uint32_t modifiers);
 };

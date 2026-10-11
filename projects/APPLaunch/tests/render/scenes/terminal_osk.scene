@@ -1,0 +1,88 @@
+# Terminal pages with the fallback on-screen keyboard (task 014 P4b). The CLI tile opens the native terminal on the
+# harness' fake PTY (no process: the scene prints what the shell would; the fake echoes the keys as a tty and a shell
+# would, ^C gives "^C" and a new prompt, ^D "exit" and the end). APPLAUNCH_OSK=auto: the keyboard follows the
+# launcher's policy (scene command "keyboards N"). Shots:
+#   term_keyboard  a physical keyboard is present: no on-screen keyboard, the whole grid
+#   term_osk       the last keyboard went: the on-screen keyboard comes up for the whole session, the grid keeps the
+#                  rows above it with the prompt on its last row (the lines above went to the scrollback), the PTY is
+#                  resized to them
+#   term_123       "ls " typed on it, the 123 layer
+#   term_symbols   "-la " typed, the #+= layer
+#   term_typed     "ls -la | grep a" typed, back on the letters
+#   term_ctrl      Ctrl armed (one-shot)
+#   term_ctrl_c    Ctrl then c: ^C (0x03) reached the shell, a new prompt; Ctrl is off again
+#   term_restored  a physical keyboard is back: the on-screen keyboard goes, the lines come back, the PTY full size
+#   term_exit      the on-screen keyboard back up; Tab, Up, Esc tapped (bytes in the log), then Ctrl+D: the shell
+#                  exits, "Press any key to exit" with the keyboard still up (two taps on a key go home)
+#   ssh_session    the SSH form: its keyboard's Enter through Host, Port and User connects; the SSH session (the same
+#                  terminal page) with the keyboard
+# ptylog writes what reached the PTY: every key as bytes (Tab \x09, Up \e[A, Esc \e, ^C \x03, ^D \x04), the sizes.
+# Review only: no golden.
+title terminal with the on-screen keyboard
+review
+env APPLAUNCH_OSK auto
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+keyboards 1
+home
+launch CLI
+ptyprompt "pi@zero7:~$ "
+ptyout "Linux zero7 6.12.47 aarch64\n\npi@zero7:~$ ls\nDesktop    Music      apps\nDocuments  notes.txt  bin\npi@zero7:~$ uptime\n 20:30:12 up 2 days, 1 user\npi@zero7:~$ df -h /\nFilesystem  Size  Used Use%\n/dev/root    29G  6.1G  23%\npi@zero7:~$ "
+shot term_keyboard
+keyboards 0
+wait 600
+shot term_osk
+tapkey l
+tapkey s
+tapkey SPACE
+tapkey 123
+shot term_123
+tapkey -
+tapkey abc
+tapkey l
+tapkey a
+tapkey SPACE
+tapkey 123
+tapkey "#+="
+shot term_symbols
+tapkey |
+tapkey abc
+tapkey SPACE
+tapkey g
+tapkey r
+tapkey e
+tapkey p
+tapkey SPACE
+tapkey a
+shot term_typed
+tapkey Ctrl
+shot term_ctrl
+tapkey c
+shot term_ctrl_c
+keyboards 1
+wait 600
+shot term_restored
+keyboards 0
+wait 600
+tapkey Tab
+tapkey UP
+tapkey Esc
+tapkey Ctrl
+tapkey d
+wait 300
+shot term_exit
+tapkey x
+tapkey x
+wait 600
+launch SSH
+wait 300
+tapkey ENTER
+tapkey ENTER
+tapkey ENTER
+wait 600
+ptyprompt "pi@remote:~$ "
+ptyout "Linux remote 6.1.0-26-amd64 x86_64\nLast login: Sun Oct 11 18:02\npi@remote:~$ "
+shot ssh_session
+ptylog pty
