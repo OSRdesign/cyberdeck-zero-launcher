@@ -85,7 +85,8 @@ runs at those sizes only.
 | `tap X Y`, `drag X1 Y1 X2 Y2 [STEPS]`, `touch X Y` + `release` | touch through the display manager's touch path (logical coordinates) |
 | `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys), or on the text field under the field label LABEL |
 | `keyboards N` | physical keyboards the on-screen keyboard policy sees (default 0; `harness_stubs.cpp` replaces the presence watcher) |
-| `toast TEXT` (`\n` = new line), `screensaver` (+ `wait`) | launcher toast; arm the clock screensaver |
+| `toast TEXT` (`\n` = new line) / `toast off`, `screensaver` (+ `wait`) | launcher toast (persistent) / hide it; arm the clock screensaver |
+| `osd level TITLE PCT`, `osd mute on`/`off`, `loading TEXT` / `loading off`, `compatpage` | the media OSD of the brightness / volume keys (it hides itself after 1000 ms: a shot settles 700 ms after the command), the "Loading..." overlay, a compat page (the compat window is default, a flat placeholder screen, no external app) |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
 | `header NAME TITLE [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `native_ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home ZERO` taken on the home grid |
 | `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, `screen.state`) as `out/<WxH>/NAME.txt` |
@@ -116,6 +117,7 @@ NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the 
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 `settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
 review-only too.
+`overlays` (task 014 P4, review-only): the toast at home / over Settings / over the Calculator, the hold-Esc ribbon, the media OSD and the loading overlay at home and over a compat page, the compat ribbon over a stock app, at the five sizes.
 
 ## Goldens and fidelity
 
@@ -139,7 +141,6 @@ device screenshots, mostly in scaled FreeType text. `deck.py shot` stays the dev
 - Pages that need live services beyond the fixtures (Bluetooth scan/pairing, Apps sources, sudo prompt): add
   fixtures in `src/harness_services.cpp` as P3 scenes need them. Storage reads the host's mounts: on a PC it shows
   "SD card information unavailable.".
-- Stock apps (only a placeholder picture), the terminal pages, SSH, games, the loading overlay, the media
-  OSD, touch feel and speed. The harness proves layout, not behaviour on the board.
+- Stock apps (only a placeholder picture), the terminal pages, SSH, games, touch feel and speed. The harness proves layout, not behaviour on the board.
 - Changes to `builtin_app_registry.cpp`'s table must be copied to `src/harness_stubs.cpp`; changes to the
   device LVGL config to `config/lvgl_config.h`.

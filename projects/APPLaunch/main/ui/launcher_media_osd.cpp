@@ -8,23 +8,58 @@
 
 #include "ui.h"
 
+#include "cp0_ui_metrics_lvgl.h"
+#include "cp0_ui_overlay.h"
+
 namespace {
 
-constexpr lv_coord_t kWidth = 190;
-constexpr lv_coord_t kHeight = 82;
 constexpr uint32_t kBackgroundColor = 0x20242C;
 constexpr uint32_t kBarBackgroundColor = 0x555C66;
 constexpr uint32_t kAccentColor = 0xF2C94C;
 constexpr uint32_t kTextColor = 0xFFFFFF;
 
+// The OSD's boxes come from cp0_ui_overlay.h (task 014 P4): today's numbers on a display at most 320 px wide, the
+// pinned DECK / COMPACT scale (x2, x1.5) or the body font's scale on the native display. They are applied on every
+// show, so the OSD follows the display and its size.
+cp0_ui_osd_t spec_for(const lv_obj_t *obj, lv_coord_t *display_w, lv_coord_t *display_h)
+{
+    lv_display_t *display = obj ? lv_obj_get_display(obj) : lv_display_get_default();
+    const lv_coord_t width = display ? lv_display_get_horizontal_resolution(display) : CP0_UI_OVERLAY_COMPAT_MAX_W;
+    const lv_coord_t height = display ? lv_display_get_vertical_resolution(display) : 170;
+    cp0_ui_osd_t spec;
+    cp0_ui_overlay_osd(cp0_ui_metrics_get(), width, height, &spec);
+    if (display_w) *display_w = width;
+    if (display_h) *display_h = height;
+    return spec;
+}
+
+void place(lv_obj_t *obj, const cp0_ui_orect_t &r)
+{
+    lv_obj_set_size(obj, r.w, r.h);
+    lv_obj_set_pos(obj, r.x, r.y);
+}
+
 void center_osd(lv_obj_t *obj)
 {
     if (!obj) return;
-    lv_display_t *display = lv_obj_get_display(obj);
-    if (!display) return;
-    const lv_coord_t width = lv_display_get_horizontal_resolution(display);
-    const lv_coord_t height = lv_display_get_vertical_resolution(display);
-    lv_obj_set_pos(obj, (width - kWidth) / 2, (height - kHeight) / 2);
+    lv_coord_t width = 0, height = 0;
+    const cp0_ui_osd_t spec = spec_for(obj, &width, &height);
+    lv_obj_set_size(obj, spec.w, spec.h);
+    lv_obj_set_pos(obj, (width - spec.w) / 2, (height - spec.h) / 2);
+}
+
+void style_for(lv_obj_t *container, lv_obj_t *icon, lv_obj_t *title, lv_obj_t *value, lv_obj_t *bar)
+{
+    const cp0_ui_osd_t spec = spec_for(container, nullptr, nullptr);
+    lv_obj_set_style_radius(container, spec.radius, 0);
+    lv_obj_set_style_border_width(container, spec.border, 0);
+    lv_font_t *font = launcher_fonts().get(
+        "AlibabaPuHuiTi-3-55-Regular.ttf", spec.font_px, LV_FREETYPE_FONT_STYLE_BOLD);
+    lv_obj_set_style_text_font(icon, spec.icon_px > 0 ? cp0_ui_font_px(spec.icon_px) : LV_FONT_DEFAULT, 0);
+    lv_obj_set_style_text_font(title, font, 0);
+    lv_obj_set_style_text_font(value, font, 0);
+    lv_obj_set_style_radius(bar, spec.bar_radius, LV_PART_MAIN);
+    lv_obj_set_style_radius(bar, spec.bar_radius, LV_PART_INDICATOR);
 }
 
 } // namespace
@@ -32,6 +67,10 @@ void center_osd(lv_obj_t *obj)
 bool LauncherMediaOsd::ensure_created() noexcept
 {
     try {
+    // Follow the default display: the OSD lives on a display's top layer, so one made on another display (the compat
+    // window while a stock page ran) is replaced by one on the display that is default now.
+    if (container_ && lv_obj_get_display(container_) != lv_display_get_default())
+        lv_obj_delete(container_); // the delete callback clears our handles and the timer
     if (launcher_media_osd_ui_ready(container_, icon_, title_, value_, bar_))
         return true;
     if (container_) lv_obj_delete(container_);
@@ -45,12 +84,9 @@ bool LauncherMediaOsd::ensure_created() noexcept
         return false;
     lv_obj_add_event_cb(container_, container_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_remove_style_all(container_);
-    lv_obj_set_size(container_, kWidth, kHeight);
     center_osd(container_);
     lv_obj_set_style_bg_color(container_, lv_color_hex(kBackgroundColor), 0);
     lv_obj_set_style_bg_opa(container_, LV_OPA_90, 0);
-    lv_obj_set_style_radius(container_, 8, 0);
-    lv_obj_set_style_border_width(container_, 1, 0);
     lv_obj_set_style_border_color(container_, lv_color_hex(0x3A404A), 0);
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_shadow_width(container_, 0, 0);
@@ -64,24 +100,16 @@ bool LauncherMediaOsd::ensure_created() noexcept
         return false;
     }
     lv_obj_add_event_cb(icon_, child_delete_cb, LV_EVENT_DELETE, this);
-    lv_obj_set_size(icon_, 30, 24);
-    lv_obj_set_pos(icon_, 14, 10);
     lv_obj_set_style_text_color(icon_, lv_color_hex(kAccentColor), 0);
-    lv_obj_set_style_text_font(icon_, LV_FONT_DEFAULT, 0);
     lv_obj_set_style_text_align(icon_, LV_TEXT_ALIGN_CENTER, 0);
 
-    lv_font_t *font = launcher_fonts().get(
-        "AlibabaPuHuiTi-3-55-Regular.ttf", 12, LV_FREETYPE_FONT_STYLE_BOLD);
     title_ = lv_label_create(container_);
     if (!title_) {
         lv_obj_delete(container_);
         return false;
     }
     lv_obj_add_event_cb(title_, child_delete_cb, LV_EVENT_DELETE, this);
-    lv_obj_set_size(title_, 76, 18);
-    lv_obj_set_pos(title_, 48, 12);
     lv_obj_set_style_text_color(title_, lv_color_hex(kTextColor), 0);
-    lv_obj_set_style_text_font(title_, font, 0);
     lv_label_set_long_mode(title_, LV_LABEL_LONG_CLIP);
 
     value_ = lv_label_create(container_);
@@ -90,10 +118,7 @@ bool LauncherMediaOsd::ensure_created() noexcept
         return false;
     }
     lv_obj_add_event_cb(value_, child_delete_cb, LV_EVENT_DELETE, this);
-    lv_obj_set_size(value_, 48, 18);
-    lv_obj_set_pos(value_, 124, 12);
     lv_obj_set_style_text_color(value_, lv_color_hex(kTextColor), 0);
-    lv_obj_set_style_text_font(value_, font, 0);
     lv_obj_set_style_text_align(value_, LV_TEXT_ALIGN_RIGHT, 0);
 
     bar_ = lv_bar_create(container_);
@@ -102,16 +127,13 @@ bool LauncherMediaOsd::ensure_created() noexcept
         return false;
     }
     lv_obj_add_event_cb(bar_, child_delete_cb, LV_EVENT_DELETE, this);
-    lv_obj_set_size(bar_, 154, 10);
-    lv_obj_set_pos(bar_, 18, 50);
     lv_bar_set_range(bar_, 0, 100);
-    lv_obj_set_style_radius(bar_, 5, LV_PART_MAIN);
-    lv_obj_set_style_radius(bar_, 5, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(bar_, lv_color_hex(kBarBackgroundColor), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bar_, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_color(bar_, lv_color_hex(kAccentColor), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(bar_, LV_OPA_COVER, LV_PART_INDICATOR);
 
+    style_for(container_, icon_, title_, value_, bar_);
     lv_obj_add_flag(container_, LV_OBJ_FLAG_HIDDEN);
     return true;
     } catch (...) {
@@ -162,12 +184,13 @@ void LauncherMediaOsd::show_level(const char *title, const char *icon, int perce
     lv_label_set_text(title_, state.title.c_str());
     lv_label_set_text_fmt(value_, "%d%%", state.percent);
     lv_bar_set_value(bar_, state.percent, LV_ANIM_OFF);
-    lv_obj_set_size(icon_, 30, 24);
-    lv_obj_set_pos(icon_, 14, 10);
-    lv_obj_set_size(title_, 76, 18);
-    lv_obj_set_pos(title_, 48, 12);
+    const cp0_ui_osd_t spec = spec_for(container_, nullptr, nullptr);
+    style_for(container_, icon_, title_, value_, bar_);
+    place(icon_, spec.icon);
+    place(title_, spec.title);
+    place(value_, spec.value);
+    place(bar_, spec.bar);
     lv_obj_set_style_text_align(title_, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_pos(value_, 124, 12);
     lv_obj_clear_flag(value_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(bar_, LV_OBJ_FLAG_HIDDEN);
     show();
@@ -188,10 +211,10 @@ void LauncherMediaOsd::show_mute(bool muted) noexcept
     const auto &state = model_.state();
     lv_label_set_text(icon_, state.icon.c_str());
     lv_label_set_text(title_, state.title.c_str());
-    lv_obj_set_size(icon_, 60, 32);
-    lv_obj_set_pos(icon_, 65, 12);
-    lv_obj_set_size(title_, kWidth, 18);
-    lv_obj_set_pos(title_, 0, 50);
+    const cp0_ui_osd_t spec = spec_for(container_, nullptr, nullptr);
+    style_for(container_, icon_, title_, value_, bar_);
+    place(icon_, spec.mute_icon);
+    place(title_, spec.mute_title);
     lv_obj_set_style_text_align(title_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_add_flag(value_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(bar_, LV_OBJ_FLAG_HIDDEN);
