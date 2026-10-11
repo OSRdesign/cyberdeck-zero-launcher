@@ -1,0 +1,3 @@
+# Let the launcher switch Bluetooth on: Settings > Bluetooth runs "rfkill unblock bluetooth" as the
+# launcher's user, which needs write access to /dev/rfkill (root-only by default on trixie).
+KERNEL=="rfkill", SUBSYSTEM=="misc", GROUP="netdev", MODE="0664", OPTIONS+="static_node=rfkill"

@@ -49,8 +49,10 @@
  *   Dialog             (task 014 P3b) a title, a body (text, TextFields) and 1-3 buttons: the primary one is Enter, the
  *                      cancel one Esc (also the keyboard's Enter / Esc while a field edits). Width DIALOG_MAX_W,
  *                      centred in the room between the page header and the on-screen keyboard and following the
- *                      keyboard; the body scrolls; when the keyboard leaves no room the buttons go (cp0_ui_dialog.h).
- *                      A backdrop under it takes the taps meant for the page.
+ *                      keyboard; the body scrolls; when the keyboard leaves no room the buttons go, then the title
+ *                      moves into the page header's title slot (cp0_ui_dialog.h): the header itself, its Esc button
+ *                      and the status strip are never covered. A backdrop under it takes the taps meant for the page.
+ *                      A notice (one button, task 014 P3c): Enter and Esc both press it.
  *
  * LVGL thread only. The objects are children of the parent given to the constructor; the destructor deletes them
  * (unless the parent went first).
@@ -68,6 +70,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace cp0 {
@@ -173,6 +176,10 @@ public:
     /* The title for a path ("Settings", "Screen", "DarkTime"): the whole path joined with " > " when it fits up to
      * the Esc button, else the path without its first parts, else the last part with dots. */
     void set_title(const std::vector<std::string> &path);
+    /* A dialog's title in the title slot while the keyboard leaves it no room in its box (cp0_ui_dialog.h step 3):
+     * the latest owner's text shows instead of the path; text NULL removes the owner's (the path comes back when none
+     * is left). */
+    void set_title_override(const void *owner, const char *text);
     /* One status line under the title (empty hides it); error draws it red. */
     void set_caption(const std::string &text, bool error);
 
@@ -190,9 +197,13 @@ private:
     static void esc_event_cb(lv_event_t *event);
     static void root_delete_cb(lv_event_t *event);
     void on_inset(int inset);
+    void apply_title(const std::vector<std::string> &path);
+    void show_caption();
 
     cp0_ui_roller_page_t layout_;
     std::function<void()> on_back_;
+    std::vector<std::string> title_path_;
+    std::vector<std::pair<const void *, std::string>> title_overrides_; /* dialogs' titles, latest last */
     lv_obj_t *root_ = nullptr;
     lv_obj_t *header_ = nullptr;
     lv_obj_t *title_ = nullptr;
@@ -341,8 +352,9 @@ struct DialogButton {
 
 struct DialogSpec {
     std::string title;
-    std::vector<DialogButton> buttons; /* 1-3, left to right */
+    std::vector<DialogButton> buttons; /* 1-3, left to right; a single one is pressed by Enter and by Esc */
     bool message_line = false;         /* reserve one status line at the end of the body (set_message) */
+    Page *page = nullptr; /* the page under it: its header shows the title when the keyboard leaves no room (step 3) */
 };
 
 class Dialog {
@@ -378,10 +390,12 @@ private:
     static void backdrop_delete_cb(lv_event_t *event);
     void run(ButtonRole role);
     void keep_in_view();
+    void title_to_header(bool in_header);
 
     cp0_ui_roller_page_t layout_;
     cp0_ui_roller_page_t field_layout_;
     DialogSpec spec_;
+    bool title_in_header_ = false;
     cp0_ui_dialog_t geometry_{};
     lv_obj_t *backdrop_ = nullptr;
     lv_obj_t *box_ = nullptr;

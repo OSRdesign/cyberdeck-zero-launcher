@@ -162,6 +162,25 @@ void Page::esc_event_cb(lv_event_t *event)
 
 void Page::set_title(const std::vector<std::string> &path)
 {
+    title_path_ = path;
+    if (title_overrides_.empty()) apply_title(path);
+}
+
+void Page::set_title_override(const void *owner, const char *text)
+{
+    const auto found = std::find_if(title_overrides_.begin(), title_overrides_.end(),
+                                    [owner](const std::pair<const void *, std::string> &entry) {
+                                        return entry.first == owner;
+                                    });
+    if (found != title_overrides_.end()) title_overrides_.erase(found);
+    if (text) title_overrides_.emplace_back(owner, text);
+    if (title_overrides_.empty()) apply_title(title_path_);
+    else apply_title({title_overrides_.back().second});
+    show_caption();
+}
+
+void Page::apply_title(const std::vector<std::string> &path)
+{
     if (!title_ || path.empty()) return;
     const lv_font_t *font = lv_obj_get_style_text_font(title_, LV_PART_MAIN);
     for (size_t first = 0; first < path.size(); ++first) {
@@ -171,12 +190,14 @@ void Page::set_title(const std::vector<std::string> &path)
             /* the home grid's title label as it is: content width, wrap mode */
             lv_label_set_long_mode(title_, LV_LABEL_LONG_MODE_WRAP);
             lv_obj_set_width(title_, LV_SIZE_CONTENT);
+            lv_obj_set_height(title_, LV_SIZE_CONTENT);
             lv_label_set_text(title_, text.c_str());
             return;
         }
     }
     lv_label_set_long_mode(title_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_width(title_, layout_.title_max_w);
+    if (font) lv_obj_set_height(title_, lv_font_get_line_height(font)); /* one line: dots need a fixed height */
     lv_label_set_text(title_, path.back().c_str());
 }
 
@@ -190,12 +211,18 @@ void Page::set_caption(const std::string &text, bool error)
     lv_obj_set_width(caption_, padded <= layout_.caption_w ? LV_SIZE_CONTENT : layout_.caption_w);
     if (font) lv_obj_set_height(caption_, lv_font_get_line_height(font)); /* dots need a fixed height */
     lv_obj_set_style_text_color(caption_, lv_color_hex(error ? kCaptionError : kCaption), 0);
-    if (text.empty()) {
-        lv_obj_add_flag(caption_, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_remove_flag(caption_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_foreground(caption_); /* above the roller, created after the scaffold */
-    }
+    if (!text.empty()) lv_obj_move_foreground(caption_); /* above the roller, created after the scaffold */
+    show_caption();
+}
+
+/* The status line shows when it says something, except while a dialog's title holds the header (the page under the
+ * dialog gives way: no line of it peeks out beside the dialog). */
+void Page::show_caption()
+{
+    if (!caption_) return;
+    const char *text = lv_label_get_text(caption_);
+    if (!text || !text[0] || !title_overrides_.empty()) lv_obj_add_flag(caption_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(caption_, LV_OBJ_FLAG_HIDDEN);
 }
 
 } // namespace ui

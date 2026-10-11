@@ -57,6 +57,18 @@ int main()
     assert(!cp0::bluetooth::parse_request({"BtPair", "not-an-address"}, request));
     assert(!cp0::bluetooth::parse_request({"BtPair", address, "junk"}, request));
 
+    // task 014 P3c: a known device's name, the adapter alias's rules
+    assert(cp0::bluetooth::parse_request({"BtDeviceAlias", address, "Desk keyboard"}, request));
+    assert(request.command == cp0::bluetooth::Command::DeviceAlias);
+    assert(request.text == address && request.alias == "Desk keyboard");
+    assert(!cp0::bluetooth::parse_request({"BtDeviceAlias", address}, request));
+    assert(!cp0::bluetooth::parse_request({"BtDeviceAlias", "not-an-address", "Desk"}, request));
+    assert(!cp0::bluetooth::parse_request({"BtDeviceAlias", address, ""}, request));
+    assert(!cp0::bluetooth::parse_request({"BtDeviceAlias", address, "bad\tname"}, request));
+    assert(!cp0::bluetooth::parse_request({"BtDeviceAlias", address, std::string(64, 'a')}, request));
+    assert(cp0::bluetooth::parse_request({"BtDeviceAlias", address, std::string(63, 'a')}, request));
+    assert(!cp0::bluetooth::parse_request({"BtDeviceAlias", address, "Desk", "junk"}, request));
+
     assert(cp0::bluetooth::sanitize_wire_field("normal") == "normal");
     assert(cp0::bluetooth::sanitize_wire_field(
                std::string("name\twith\rcontrols\n\0", 20)) ==

@@ -22,7 +22,7 @@ static int box_h(const parts_t *p, int body)
 }
 
 int cp0_ui_dialog_layout(const cp0_ui_metrics_t *m, int top, int inset, int title_line_h, int content_h, int buttons,
-                         cp0_ui_dialog_t *out)
+                         int header_title, cp0_ui_dialog_t *out)
 {
     if (!m || !out || m->w <= 0 || m->h <= 0) return -1;
     cp0_ui_dialog_t d = {0};
@@ -41,16 +41,22 @@ int cp0_ui_dialog_layout(const cp0_ui_metrics_t *m, int top, int inset, int titl
     inset = imax(0, imin(inset, m->h));
     parts_t p = {m->tok[CP0_TOK_SPACE_M], d.gap, imax(0, title_line_h), imax(0, content_h),
                  imax(0, imin(buttons, CP0_UI_DIALOG_MAX_BUTTONS)), d.button_h};
-    const int bottom = m->h - inset;
-    int t = top;
+    const int bottom = imax(top, m->h - inset);
+    const int t = top; /* the page header (its title, Esc, status strip) is never covered */
     if (inset > 0) {
         /* 1. the keyboard is up: its Enter and Esc stand for the buttons */
         if (box_h(&p, p.content) > bottom - t) p.buttons = 0;
-        /* 2. tighter padding, then the room over the header too */
+        /* 2. tighter padding */
         if (box_h(&p, p.content) > bottom - t) p.pad = m->tok[CP0_TOK_SPACE_S];
-        if (box_h(&p, p.content) > bottom - t) t = 0;
+        /* 3. the title moves into the page header's title slot (the page's own title gives way to it) */
+        if (header_title && p.title && box_h(&p, p.content) > bottom - t) {
+            p.title = 0;
+            d.title_in_header = 1;
+        }
+        /* 4. the least padding */
+        if (box_h(&p, p.content) > bottom - t) p.pad = imin(p.pad, 2);
     }
-    /* 3. the body keeps what is left and scrolls */
+    /* 5. the body keeps what is left and scrolls */
     const int room = imax(0, bottom - t);
     int body = p.content;
     if (box_h(&p, body) > room) {
@@ -68,7 +74,6 @@ int cp0_ui_dialog_layout(const cp0_ui_metrics_t *m, int top, int inset, int titl
     d.body_h = body;
     d.button_y = p.buttons ? d.body_y + body + p.gap : 0;
     d.button_w = p.buttons ? imax(0, (d.content_w - (p.buttons - 1) * d.button_gap) / p.buttons) : 0;
-    d.covers_header = d.y < top;
     *out = d;
     return 0;
 }

@@ -467,6 +467,9 @@ void SettingsNativeHost::open_native(int index)
 void SettingsNativeHost::close_native()
 {
     native_.reset();
+    // the page may have renamed its entry (Bluetooth "Alias: <name>"): its row shows the label as it is now
+    if (native_row_ >= 0 && native_row_ < static_cast<int>(rows_.size()))
+        roller_->update_row(native_row_, row_spec(*rows_[static_cast<size_t>(native_row_)]));
     native_row_ = -1;
     clear_caption(); /* a page's own status line goes with it */
     roller_->set_hidden(false);

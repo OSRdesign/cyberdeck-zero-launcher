@@ -108,6 +108,15 @@ bool parse_request(const std::list<std::string> &arguments, Request &request)
         request.text = *argument;
         return true;
     }
+    if (command == "BtDeviceAlias") {
+        request.command = Command::DeviceAlias;
+        if (arguments.size() != 3 || !valid_address(*argument)) return false;
+        const std::string &alias = *std::next(argument);
+        if (alias.empty() || alias.size() >= 64 || has_wire_control(alias)) return false;
+        request.text = *argument;
+        request.alias = alias;
+        return true;
+    }
     if (command == "BtScan" || command == "BtList" || command == "BtConnectedList") {
         request.command = command == "BtScan" ? Command::Scan :
             (command == "BtList" ? Command::List : Command::ConnectedList);

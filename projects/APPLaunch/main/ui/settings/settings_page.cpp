@@ -638,6 +638,10 @@ SettingsNativePage settings_native_page(const NodeIter &node)
     if (factory_is(factory, settings_storage_page_factory)) return SettingsNativePage::Storage;
     if (factory_is(factory, settings_credit_page_factory)) return SettingsNativePage::Licenses;
     if (factory_is(factory, settings_rtc_info_page_factory)) return SettingsNativePage::DateTimeInfo;
+    // task 014 P3c: the Bluetooth pages (the section itself, its toggles, stay the host's)
+    if (factory_is(factory, bluetooth_connected_page_factory)) return SettingsNativePage::BluetoothPaired;
+    if (factory_is(factory, bluetooth_scan_page_factory)) return SettingsNativePage::BluetoothScan;
+    if (factory_is(factory, bluetooth_alias_page_factory)) return SettingsNativePage::BluetoothAlias;
     // task 014 P3b: the Wi-Fi section is one native page (its Enable toggle, Networks and Join Hidden Network)
     if (factory_is(factory, roller_page_factory))
         for (auto child = node.begin(); child != node.end(); ++child)
@@ -675,8 +679,8 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
                                          confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
                                          settings_keyboard_choice_page_factory})
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
-        // the Bluetooth alias (text entry), Date & Time "Save?" (its factory-time warning is a dialog) and any
-        // other page of its own: not migrated yet (P3)
+        // Date & Time "Save?" (its factory-time warning is a dialog) and any other page of its own: not migrated
+        // yet (P3)
         return SettingsNodeKind::Custom;
     }
     if (entry.icon_enabled && entry.has_api()) return SettingsNodeKind::Toggle;

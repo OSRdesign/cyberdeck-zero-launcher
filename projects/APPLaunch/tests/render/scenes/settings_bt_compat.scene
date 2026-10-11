@@ -1,0 +1,45 @@
+# The legacy Bluetooth pages in the compat Settings (the deck's default, APPLAUNCH_SETTINGS_UI unset), task 014 P3c:
+# they now take their wire format, Named Only filter and agent rules from settings_bluetooth_model.hpp and must look
+# and behave as before. Paired Devices, Scan (Named Only), the PIN prompt with 0000 typed, the list after pairing.
+# Same fake BlueZ as the native scenes (src/harness_services.cpp). Review only: no golden.
+title settings bluetooth compat
+review
+sizes 640x480 480x320
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key DOWN
+key DOWN
+key ENTER
+wait 1000
+shot bt_compat_section
+# Power, Alias, Discoverable, Named Only, Paired Devices, Scan
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+shot bt_compat_paired
+key ESC
+wait 500
+key DOWN
+key ENTER
+wait 2500
+shot bt_compat_scan
+# Scan rows: M4 keyboard, Studio headphones..., Car kit, Field phone, Pocket keyboard, Old headset, ...
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+type 0000
+shot bt_compat_pin
+key ENTER
+wait 3000
+shot bt_compat_paired_after

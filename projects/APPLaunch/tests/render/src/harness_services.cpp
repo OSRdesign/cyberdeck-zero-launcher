@@ -14,13 +14,17 @@
 #include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_app.h"
 
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <map>
+#include <mutex>
 #include <set>
 #include <string>
+
+#include <strings.h>
 
 #include <sys/syscall.h>
 #include <sys/time.h>
@@ -106,6 +110,111 @@ bool starts_with(const std::string &value, const std::string &prefix)
 {
     return value.compare(0, prefix.size(), prefix) == 0;
 }
+
+/* --------------------------------------------------------------------------- fake BlueZ (task 014 P3c) */
+
+std::recursive_mutex &bt_mutex()
+{
+    static std::recursive_mutex mutex;
+    return mutex;
+}
+
+/* the device with this address (case-insensitive, as BlueZ), or nullptr; call with bt_mutex() held */
+FixtureBtDevice *bt_device(const std::string &address)
+{
+    for (FixtureBtDevice &device : fixtures().bt_devices)
+        if (strcasecmp(device.address.c_str(), address.c_str()) == 0) return &device;
+    return nullptr;
+}
+
+std::string bt_path(const std::string &address)
+{
+    std::string path = "/org/bluez/hci0/dev_" + address;
+    for (char &c : path)
+        if (c == ':') c = '_';
+    return path;
+}
+
+Reply &bt_display_pairing() /* a "display" pairing waiting for the remote keyboard (bt_key_typed) */
+{
+    static Reply pending;
+    return pending;
+}
+
+uint64_t bt_next_agent_id()
+{
+    static std::atomic<uint64_t> id{1};
+    return id++;
+}
+
+void bt_set_paired(const std::string &address)
+{
+    std::lock_guard<std::recursive_mutex> lock(bt_mutex());
+    if (FixtureBtDevice *device = bt_device(address)) device->paired = true;
+}
+
+/* Pair with an agent request, as BlueZ does: the request goes to the UI (cp0_signal_bt_agent), Pair answers when the
+ * UI does. Nobody listening: rejected, as the real backend does without a subscriber. */
+void bt_pair_with_agent(const std::string &address, const std::string &pairing, Reply reply)
+{
+    Fixtures &f = fixtures();
+    if (cp0_signal_bt_agent.empty()) {
+        if (reply) reply(-1, "Authentication Rejected");
+        return;
+    }
+    if (pairing == "display") {
+        {
+            std::lock_guard<std::recursive_mutex> lock(bt_mutex());
+            bt_display_pairing() = reply;
+        }
+        cp0_signal_bt_agent(bt_next_agent_id(), "DisplayPasskey", bt_path(address), f.bt_display_code,
+                            [](bool, std::string) {});
+        return;
+    }
+    std::string method = "RequestConfirmation", value = f.bt_confirm_code, expected;
+    if (pairing == "pin") method = "RequestPinCode", value.clear(), expected = f.bt_pin;
+    else if (pairing == "passkey") method = "RequestPasskey", value.clear(), expected = f.bt_passkey;
+    cp0_signal_bt_agent(bt_next_agent_id(), method, bt_path(address), value,
+                        [address, expected, reply](bool accepted, std::string text) {
+                            std::fprintf(stderr, "[harness] bt agent reply accepted=%d text=%s\n", accepted ? 1 : 0,
+                                         text.c_str());
+                            if (!accepted) {
+                                if (reply) reply(-1, "Authentication Rejected");
+                                return;
+                            }
+                            if (!expected.empty() && text != expected) {
+                                if (reply) reply(-1, "Authentication Failed");
+                                return;
+                            }
+                            bt_set_paired(address);
+                            if (reply) reply(0, "");
+                        });
+}
+
+} // namespace
+
+void bt_agent_request(const std::string &method, const std::string &address, const std::string &value)
+{
+    cp0_signal_bt_agent(bt_next_agent_id(), method, bt_path(address), value, [method](bool accepted, std::string text) {
+        std::fprintf(stderr, "[harness] bt agent %s reply accepted=%d text=%s\n", method.c_str(), accepted ? 1 : 0,
+                     text.c_str());
+    });
+}
+
+void bt_key_typed()
+{
+    Reply reply;
+    {
+        std::lock_guard<std::recursive_mutex> lock(bt_mutex());
+        reply = std::move(bt_display_pairing());
+        bt_display_pairing() = nullptr;
+        for (FixtureBtDevice &device : fixtures().bt_devices)
+            if (device.pairing == "display" && !device.paired) device.paired = true;
+    }
+    if (reply) reply(0, "");
+}
+
+namespace {
 
 std::string lower_ext(const std::string &path)
 {
@@ -268,17 +377,75 @@ void install_services()
         }
     });
 
+    /* Bluetooth (task 014 P3c): the BlueZ backend as Settings sees it. Called on the pages' worker threads (the strip
+     * calls it on the LVGL thread), so the device fixtures are guarded; the agent is called without the lock (a page
+     * may answer at once). BtConnectedList keeps answering from the `bt` scene command only, so the status strip stays
+     * what the home grid's header shows. */
     cp0_signal_bt_api.append([](Args args, Reply reply) {
-        const Fixtures &f = fixtures();
+        Fixtures &f = fixtures();
         const std::string command = arg(args, 0);
+        std::unique_lock<std::recursive_mutex> lock(bt_mutex());
         if (command == "BtStatus") {
-            if (reply) reply(0, std::string(f.bt_powered ? "1" : "0") + "\t00:11:22:33:44:55\t0\tzero7");
+            if (reply) reply(0, std::string(f.bt_powered ? "1" : "0") + "\t00:11:22:33:44:55\t0\t" + f.bt_alias);
         } else if (command == "BtConnectedList") {
             if (f.bt_connected) {
                 if (reply) reply(1, "AA:BB:CC:DD:EE:FF\t-50\t1\t1\t1\tM4 keyboard\n");
             } else if (reply) {
                 reply(0, "");
             }
+        } else if (command == "BtList") {
+            if (!f.bt_powered) {
+                if (reply) reply(0, "");
+                return;
+            }
+            std::string lines;
+            int count = 0;
+            for (const FixtureBtDevice &device : f.bt_devices) {
+                if (!device.paired && !(device.nearby && f.bt_discovered)) continue;
+                lines += device.address + "\t" + std::to_string(device.rssi) + "\t" + (device.connected ? "1" : "0") +
+                         "\t" + (device.paired ? "1" : "0") + "\t" + (device.paired ? "1" : "0") + "\t" + device.name +
+                         "\n";
+                ++count;
+            }
+            if (reply) reply(count, lines);
+        } else if (command == "BtDiscoveryStart") {
+            f.bt_discovered = f.bt_powered;
+            if (reply) reply(f.bt_powered ? 0 : -1, f.bt_powered ? "" : "Not Ready");
+        } else if (command == "BtDiscoveryStop" || command == "BtCancelPairing" || command == "BtReset") {
+            if (reply) reply(0, "");
+        } else if (command == "BtAlias") {
+            f.bt_alias = arg(args, 1);
+            if (reply) reply(0, "ok");
+        } else if (command == "BtPower") {
+            f.bt_powered = arg(args, 1) == "1";
+            if (reply) reply(0, "");
+        } else if (command == "BtConnect" || command == "BtDisconnect" || command == "BtRemove" ||
+                   command == "BtDeviceAlias" || command == "BtPair") {
+            FixtureBtDevice *device = bt_device(arg(args, 1));
+            if (!device) {
+                if (reply) reply(-1, "device not found");
+                return;
+            }
+            if (command == "BtConnect") {
+                device->connected = true;
+            } else if (command == "BtDisconnect") {
+                device->connected = false;
+            } else if (command == "BtRemove") {
+                device->paired = device->connected = false;
+            } else if (command == "BtDeviceAlias") {
+                device->name = arg(args, 2);
+            } else { /* BtPair: the agent's request first, as BlueZ does */
+                const std::string address = device->address;
+                const std::string pairing = device->pairing;
+                if (pairing.empty()) {
+                    device->paired = true;
+                } else {
+                    lock.unlock();
+                    bt_pair_with_agent(address, pairing, reply);
+                    return;
+                }
+            }
+            if (reply) reply(0, "");
         } else {
             unknown("bt", args, reply);
         }

@@ -10,11 +10,15 @@
  * gaps SPACE_S, radius RADIUS_M, title HEADING text, body and buttons BODY text, buttons TARGET high (9 mm).
  *
  * Placement (cp0_ui_osk_dialog_y): centred in the room between `top` (the page header's bottom) and the on-screen
- * keyboard (the bottom of the screen when it is hidden). When the whole dialog does not fit:
+ * keyboard (the bottom of the screen when it is hidden); the page header (its title, the Esc button, the status strip)
+ * is never covered. When the whole dialog does not fit:
  *   1. the keyboard is up: the buttons go (the keyboard's Enter and Esc are the primary and the cancel action);
- *   2. still too tall: its top and bottom padding becomes SPACE_S, then it may cover the page header (top 0);
- *   3. still too tall: the body keeps the room left and scrolls (the widget keeps the field being edited in view).
- * Without a keyboard only step 3 applies (with the header kept).
+ *   2. still too tall: its top and bottom padding becomes SPACE_S;
+ *   3. still too tall (and the page lends it, header_title): the title leaves the box for the page header's title slot,
+ *      where it replaces the page's title while it is there (task 014 P3c: 480x320 and 640x480 with the keyboard);
+ *   4. still too tall: the top and bottom padding become 2 px;
+ *   5. still too tall: the body keeps the room left and scrolls (the widget keeps the field being edited in view).
+ * Without a keyboard only step 5 applies.
  */
 #pragma once
 
@@ -36,15 +40,16 @@ typedef struct {
     int scrolls;         /* the content is taller than body_h */
     int buttons;         /* buttons shown: 0 when they went (the keyboard's Enter / Esc act for them) */
     int button_y, button_w, button_h, button_gap;
-    int covers_header;   /* step 2: the dialog may lie over the page header */
+    int title_in_header; /* step 3: the title shows in the page header's title slot, not in the box */
 } cp0_ui_dialog_t;
 
 /* The dialog for the metrics m. top: the y it stays under (the page header's height); inset: the on-screen keyboard's
  * height (0 when hidden); title_line_h: the title's line height (0: no title); content_h: the body's natural height
- * at content_w (call once with 0 to learn content_w and the text sizes, measure, then again); buttons: 0..3.
+ * at content_w (call once with 0 to learn content_w and the text sizes, measure, then again); buttons: 0..3;
+ * header_title: the page header can show the title (step 3).
  * Returns 0, or -1 (out untouched) when m or out is NULL or the screen is empty. */
 int cp0_ui_dialog_layout(const cp0_ui_metrics_t *m, int top, int inset, int title_line_h, int content_h, int buttons,
-                         cp0_ui_dialog_t *out);
+                         int header_title, cp0_ui_dialog_t *out);
 
 #ifdef __cplusplus
 }

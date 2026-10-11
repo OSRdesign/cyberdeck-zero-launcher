@@ -49,6 +49,7 @@ void cancel_pairing_async(const char *address, Completion completion);
 void connect_async(const char *address, Completion completion);
 void disconnect_async(const char *address, Completion completion);
 void remove_async(const char *address, Completion completion);
+void set_device_alias_async(const char *address, const char *alias, Completion completion);
 
 int set_power(int enabled);
 int set_alias(const char *alias);

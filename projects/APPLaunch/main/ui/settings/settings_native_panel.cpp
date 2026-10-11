@@ -7,6 +7,7 @@
 #include "settings_native_panel.hpp"
 
 #include "settings_keyboard_page.hpp"
+#include "settings_native_bluetooth_page.hpp"
 #include "settings_native_info_page.hpp"
 #include "settings_native_wifi_page.hpp"
 #include "settings_page.hpp"
@@ -25,6 +26,10 @@ std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter
     case SettingsNativePage::Licenses:
     case SettingsNativePage::DateTimeInfo:
         return settings_info_panel_create(settings_native_page(node), context);
+    case SettingsNativePage::BluetoothPaired:
+    case SettingsNativePage::BluetoothScan:
+    case SettingsNativePage::BluetoothAlias:
+        return settings_bluetooth_panel_create(settings_native_page(node), node, context);
     case SettingsNativePage::None:
         break;
     }

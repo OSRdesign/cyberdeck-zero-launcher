@@ -69,7 +69,7 @@ Dialog::Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec 
 {
     if (spec_.buttons.size() > CP0_UI_DIALOG_MAX_BUTTONS) spec_.buttons.resize(CP0_UI_DIALOG_MAX_BUTTONS);
     cp0_ui_dialog_layout(cp0_ui_metrics_get(), layout_.header_h, 0, 0, 0, static_cast<int>(spec_.buttons.size()),
-                         &geometry_);
+                         spec_.page != nullptr, &geometry_);
     field_layout_.roller_w = geometry_.content_w;
     field_layout_.roller_x = 0;
 
@@ -167,6 +167,7 @@ Dialog::~Dialog()
 {
     if (inset_listener_) osk::remove_inset_listener(inset_listener_);
     inset_listener_ = 0;
+    title_to_header(false);
     if (backdrop_) {
         lv_obj_remove_event_cb_with_user_data(backdrop_, backdrop_delete_cb, this);
         lv_obj_delete(backdrop_);
@@ -181,6 +182,17 @@ void Dialog::backdrop_delete_cb(lv_event_t *event)
     self->inset_listener_ = 0;
     self->backdrop_ = self->box_ = self->title_ = self->viewport_ = self->content_ = self->message_ = nullptr;
     self->buttons_.clear();
+    self->spec_.page = nullptr; /* the page's objects go with its root: nothing to give back */
+    self->title_in_header_ = false;
+}
+
+/* Step 3 of the layout: the title shows in the page header's title slot instead of the box, or comes back. */
+void Dialog::title_to_header(bool in_header)
+{
+    if (!spec_.page) return;
+    if (in_header) spec_.page->set_title_override(this, spec_.title.c_str());
+    else if (title_in_header_) spec_.page->set_title_override(this, nullptr);
+    title_in_header_ = in_header;
 }
 
 lv_obj_t *Dialog::add_text(const std::string &text)
@@ -232,15 +244,17 @@ void Dialog::relayout()
     lv_obj_update_layout(content_);
     const int content_h = lv_obj_get_height(content_);
     cp0_ui_dialog_layout(cp0_ui_metrics_get(), layout_.header_h, osk::bottom_inset(), title_h, content_h,
-                         static_cast<int>(buttons_.size()), &geometry_);
+                         static_cast<int>(buttons_.size()), spec_.page != nullptr, &geometry_);
     const cp0_ui_dialog_t &g = geometry_;
 
     lv_obj_set_pos(box_, g.x, g.y);
     lv_obj_set_size(box_, g.w, g.h);
-    if (has_title) {
+    title_to_header(has_title && g.title_in_header);
+    if (has_title && !g.title_in_header) {
         lv_obj_remove_flag(title_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(title_, g.pad, g.title_y);
         lv_obj_set_width(title_, g.content_w);
+        lv_obj_set_height(title_, title_h); /* one line: a long title ends with dots instead of running into the body */
     } else {
         lv_obj_add_flag(title_, LV_OBJ_FLAG_HIDDEN);
     }
@@ -296,6 +310,11 @@ void Dialog::run(ButtonRole role)
             action();
             return;
         }
+    // a notice (one button, task 014 P3c): Enter and Esc both press it
+    if (spec_.buttons.size() == 1 && spec_.buttons.front().action) {
+        const auto action = spec_.buttons.front().action;
+        action();
+    }
 }
 
 void Dialog::primary()

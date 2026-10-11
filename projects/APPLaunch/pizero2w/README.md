@@ -122,6 +122,7 @@ the packages `install.sh` pulled in with apt, the user's groups and lingering, a
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
 | `90-backlight-unblank.rules` | The PWM backlight starts powered down: unblank it when it appears. |
 | `91-applaunch-vkbd.rules` | `uinput` permission and the `/dev/input/applaunch-vkbd` name used for stock apps. |
+| `93-applaunch-rfkill.rules` | `/dev/rfkill` writable by the `netdev` group, so Settings > Bluetooth can run `rfkill unblock bluetooth` as the launcher user. |
 | `50-networkmanager-netdev.rules`, `51-launcher-time-power.rules` | PolicyKit: Wi-Fi scan/connect, Network Time / clock, reboot / shutdown from a background session. |
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |

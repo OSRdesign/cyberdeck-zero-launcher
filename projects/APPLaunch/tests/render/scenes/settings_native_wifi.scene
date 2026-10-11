@@ -42,8 +42,9 @@ tapkey a
 tapkey s
 tapkey s
 shot wifi_password
-# at 480x320 and 640x480 the dialog lies over the header while the keyboard is up (cp0_ui_dialog.h step 2)
-@800x480,720x720,1280x720 header wifi_password "Settings > Wi-Fi" Wi-Fi
+# at 480x320 and 640x480 the dialog's title (the network) shows in the header while the keyboard is up
+# (cp0_ui_dialog.h step 3): the header itself stays the home grid's
+header wifi_password "Settings > Wi-Fi" Wi-Fi Neighbour-5G
 tapkey ENTER
 wait 1500
 shot wifi_wrong_password

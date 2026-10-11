@@ -56,6 +56,17 @@ struct FixtureNetwork {
     bool saved;
 };
 
+/* A Bluetooth device the fake BlueZ knows (task 014 P3c scenes). Fake names, locally administered addresses. */
+struct FixtureBtDevice {
+    std::string address;
+    std::string name;    /* "" = no name (hidden by Named Only) */
+    int rssi;
+    bool paired;
+    bool connected;
+    bool nearby;         /* found by a discovery (paired devices are known anyway) */
+    std::string pairing; /* what Pair asks the agent: "" (nothing), "confirm", "pin", "passkey", "display" */
+};
+
 /* Fixture state the stubbed services answer from (set by scene commands). */
 struct Fixtures {
     std::string resource_root;         /* <repo>/projects/APPLaunch/APPLaunch (= /usr/share/APPLaunch) */
@@ -73,7 +84,28 @@ struct Fixtures {
     std::string wifi_password = "harness-pass"; /* a new secured network accepts only this (fake) password */
     std::string wifi_hidden_ssid = "Hidden-Lab"; /* Join Hidden Network finds only this one */
     bool bt_powered = false;
-    bool bt_connected = false;
+    bool bt_connected = false;         /* the status strip's connected icon (BtConnectedList) */
+    std::string bt_alias = "zero7";    /* the adapter's name (BtStatus, BtAlias) */
+    bool bt_discovered = false;        /* a discovery ran: BtList shows the nearby devices too */
+    /* paired: a keyboard (connected), headphones with a long name, a car kit; nearby: a phone (numeric comparison),
+     * a keyboard (passkey shown here, typed there: "btkeytyped" completes it), an old headset (PIN), a tablet (passkey
+     * shown there, typed here), two unnamed ones (Named Only hides them), a speaker with a very long name (no prompt) */
+    std::vector<FixtureBtDevice> bt_devices = {
+        {"02:5A:00:00:00:01", "M4 keyboard", -52, true, true, true, ""},
+        {"02:5A:00:00:00:02", "Studio headphones with a rather long name", -61, true, false, true, ""},
+        {"02:5A:00:00:00:03", "Car kit", -77, true, false, false, ""},
+        {"02:5A:00:00:00:10", "Field phone", -48, false, false, true, "confirm"},
+        {"02:5A:00:00:00:11", "Pocket keyboard", -55, false, false, true, "display"},
+        {"02:5A:00:00:00:12", "Old headset", -66, false, false, true, "pin"},
+        {"02:5A:00:00:00:13", "Tablet", -70, false, false, true, "passkey"},
+        {"02:5A:00:00:00:14", "", -81, false, false, true, ""},
+        {"02:5A:00:00:00:15", "02-5A-00-00-00-15", -84, false, false, true, ""},
+        {"02:5A:00:00:00:16", "Garden speaker with an extremely long Bluetooth name", -73, false, false, true, ""},
+    };
+    std::string bt_confirm_code = "482913"; /* the phone's numeric comparison */
+    std::string bt_display_code = "731904"; /* the passkey shown for the keyboard */
+    std::string bt_pin = "0000";            /* the only PIN the old headset takes (fake) */
+    std::string bt_passkey = "246810";      /* the passkey the tablet shows (fake) */
     int backlight_max = 255;
     int backlight = 200;
     unsigned keyboards = 0;            /* physical keyboards present (on-screen keyboard policy) */
@@ -81,6 +113,10 @@ struct Fixtures {
 
 Fixtures &fixtures();
 void install_services();
+/* Bluetooth scene commands: a BlueZ agent request as the backend sends it (reply logged), and the remote keyboard
+ * having typed the passkey shown for it (a pending "display" pairing completes). */
+void bt_agent_request(const std::string &method, const std::string &address, const std::string &value);
+void bt_key_typed();
 void config_set(const std::string &key, const std::string &value);
 std::string resolve_resource(const std::string &name);
 

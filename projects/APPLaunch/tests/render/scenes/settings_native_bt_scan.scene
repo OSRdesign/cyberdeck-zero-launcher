@@ -1,0 +1,82 @@
+# Native Bluetooth Scan with the agent's prompts (task 014 P3c), release build, on-screen keyboard forced. The fake
+# BlueZ (src/harness_services.cpp) finds, besides the paired devices: a phone (numeric comparison), a keyboard (a
+# passkey shown here and typed there), an old headset (PIN 0000), a tablet (passkey), two unnamed devices (hidden by
+# Named Only) and a speaker with a very long name.
+# Shots: the scan list (the Scan toggle, the devices with their state or signal), the PIN dialog with the number pad
+# and 0000 typed (its buttons gone: the pad's Enter / Esc act), paired ("Paired with Old headset", the highlight kept
+# on it through the fresh discovery), the phone's pairing code to confirm (No / Yes), paired, the code to type on the
+# keyboard (OK), paired once it was typed, and the Scan toggle off.
+# Review only: no golden; headers checked against the home grid's (run.sh header).
+title settings native bluetooth scan
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home ZERO
+launch Settings
+key DOWN
+key DOWN
+key ENTER
+wait 1000
+# Scan (row 5)
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 2500
+shot bt_scan
+header bt_scan "Settings > Bluetooth > Scan" "Bluetooth > Scan" Scan
+# rows: Scan, M4 keyboard, Studio headphones..., Car kit, Field phone, Pocket keyboard, Old headset, Tablet, Garden...
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+tapkey 0
+tapkey 0
+tapkey 0
+tapkey 0
+shot bt_pin
+# the device titles the PIN dialog; at 480x320 and 640x480 that title shows in the header (cp0_ui_dialog.h step 3)
+header bt_pin "Settings > Bluetooth > Scan" "Bluetooth > Scan" Scan "Old headset"
+tapkey ENTER
+wait 3000
+shot bt_pin_paired
+header bt_pin_paired "Settings > Bluetooth > Scan" "Bluetooth > Scan" Scan
+# the phone (two rows up): its pairing code, Yes
+key UP
+key UP
+key ENTER
+wait 1500
+shot bt_confirm
+key ENTER
+wait 3000
+shot bt_confirm_paired
+# the keyboard (next row): the code to type on it, then it is typed there
+key DOWN
+key ENTER
+wait 1500
+shot bt_display
+btkeytyped
+wait 3000
+shot bt_display_paired
+# the Scan toggle (row 0) off
+key UP
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1500
+shot bt_scan_off
+header bt_scan_off "Settings > Bluetooth > Scan" "Bluetooth > Scan" Scan

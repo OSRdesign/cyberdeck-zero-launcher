@@ -1001,6 +1001,15 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         out << area.x1 << " " << area.y1 << " " << lv_label_get_text(title) << "\n";
         if (!out) return fail(scene, line, "cannot write " + dir + w[1] + ".txt");
         std::printf("%s%s.png\n", dir.c_str(), w[1].c_str());
+    } else if (cmd == "btagent") {
+        /* btagent METHOD ADDRESS [VALUE]: a BlueZ agent request as the backend sends it (task 014 P3c) */
+        if (w.size() < 3 || w.size() > 4) return fail(scene, line, "usage: btagent METHOD ADDRESS [VALUE]");
+        harness::bt_agent_request(w[1], w[2], w.size() == 4 ? w[3] : std::string());
+        settle(400);
+    } else if (cmd == "btkeytyped") {
+        /* the remote keyboard typed the passkey shown for it: the pending pairing completes */
+        harness::bt_key_typed();
+        settle(400);
     } else if (cmd == "wait") {
         if (w.size() != 2) return fail(scene, line, "usage: wait MS");
         settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))));

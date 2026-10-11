@@ -1,0 +1,88 @@
+# Native Bluetooth dialogs with a physical keyboard (task 014 P3c): APPLAUNCH_OSK=auto and one keyboard present, so
+# the on-screen keyboard stays away and the dialogs show their buttons. Paired Devices: Forget confirmed (the car kit
+# goes, "Forgot Car kit"); Scan: the tablet's passkey typed on the keyboard (Cancel / OK), too short ("Passkey must be
+# 6 digits."), then complete; the Alias page with a service authorization request over it (No / Yes); Bluetooth
+# switched off: the legacy notice on Paired Devices (OK goes back).
+# Review only: no golden.
+title settings native bluetooth dialogs
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key DOWN
+key DOWN
+key ENTER
+wait 1000
+# Paired Devices (row 4): the car kit (row 2), Forget
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+key DOWN
+key DOWN
+key ENTER
+key DOWN
+key ENTER
+shot bt_forget_buttons
+key ENTER
+wait 1500
+shot bt_forgot
+key ESC
+wait 300
+# Scan (row 5): the tablet (row 6 now that the car kit is gone)
+key DOWN
+key ENTER
+wait 2500
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+type 2468
+shot bt_passkey
+key ENTER
+wait 300
+shot bt_passkey_short
+type 10
+key ENTER
+wait 3000
+shot bt_passkey_paired
+key ESC
+wait 300
+# Alias (row 1) with a service authorization request over it
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+btagent AuthorizeService 02:5A:00:00:00:01 0000110b-0000-1000-8000-00805f9b34fb
+shot bt_authorize
+key ESC
+wait 300
+key ESC
+key ESC
+wait 300
+# Bluetooth off: the notice on Paired Devices
+bt off
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+shot bt_power_off
+key ENTER
+wait 500
+shot bt_power_off_back
