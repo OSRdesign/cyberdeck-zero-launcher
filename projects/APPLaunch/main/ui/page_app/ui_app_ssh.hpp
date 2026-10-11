@@ -10,10 +10,19 @@
 #include "../model/ssh_connection_model.hpp"
 #include "../model/ssh_view_build_contract.hpp"
 #include "keyboard_input.h"
+#include <array>
 #include <memory>
 #include <string>
 
 class UISTPage;
+
+namespace cp0 {
+namespace ui {
+class Page;
+class TextField;
+class TextBlock;
+} // namespace ui
+} // namespace cp0
 
 // ============================================================
 //  SSH Client  UISSHPage
@@ -23,6 +32,11 @@ class UISTPage;
 //    VIEW_INPUT    -- Host/Port/User input fields
 //    VIEW_HELP     -- SSH controls and shortcut reference
 //    VIEW_TERMINAL -- Embedded UISTPage running ssh
+//
+//  On the native display (the dpi-scaled backend: the Pi boards, task 014 P4) the
+//  form is a native page instead (ui_app_ssh_native.cpp): the Settings header,
+//  Host / Port / User as TextFields, Connect and Help buttons, a status line,
+//  Help as a TextBlock. Stock CardputerZero keeps the 320x150 form above.
 // ============================================================
 
 class UISSHPage : public AppPage
@@ -33,6 +47,10 @@ public:
     UISSHPage();
 
     ~UISSHPage();
+
+    // The launcher asks at launch time (launch.h page_native_choice): the native form whenever the native display
+    // exists.
+    static bool native_display_now();
 
 private:
     // ==================== data members ====================
@@ -79,4 +97,35 @@ private:
 
     void event_handler(lv_event_t *e);
     void detach_delete_callbacks();
+
+    // ==================== native form (ui_app_ssh_native.cpp) ====================
+    bool native_ = false;
+    bool native_strip_added_ = false;
+    std::unique_ptr<cp0::ui::Page> native_page_;
+    std::array<std::unique_ptr<cp0::ui::TextField>, SshConnectionModel::FIELD_COUNT> native_fields_;
+    std::unique_ptr<cp0::ui::TextBlock> native_help_;
+    lv_obj_t *native_connect_ = nullptr;
+    lv_obj_t *native_help_button_ = nullptr;
+    lv_obj_t *native_status_ = nullptr;
+    lv_obj_t *native_buttons_row_ = nullptr;
+    int native_inset_listener_ = 0;
+    lv_obj_t *native_help_return_ = nullptr; // focused before the help opened
+    bool native_help_close_posted_ = false;
+
+    void build_native();
+    void destroy_native();
+    void native_set_status();
+    void native_relayout();
+    static void native_field_focus_cb(lv_event_t *event);
+    void native_sync_model();
+    void native_stop_editing();
+    void native_show_help();
+    void native_close_help();
+    void native_fill_group();
+    void native_on_field_submit(size_t index);
+    void native_focus_step(lv_obj_t *from, bool next);
+    static void native_screen_loaded_cb(lv_event_t *event);
+    static void native_keyboard_cb(lv_event_t *event);
+    static void native_button_cb(lv_event_t *event);
+    static void native_close_help_cb(void *user);
 };

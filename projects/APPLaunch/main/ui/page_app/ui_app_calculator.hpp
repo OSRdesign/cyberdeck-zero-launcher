@@ -8,9 +8,17 @@
 #pragma once
 
 #include "../launcher_ui_app_page.hpp"
+#include "calculator_layout.hpp"
 
 #include <array>
+#include <memory>
 #include <string>
+
+namespace cp0 {
+namespace ui {
+class Page;
+}
+} // namespace cp0
 
 class UICalculatorPage : public AppPage
 {
@@ -20,6 +28,8 @@ public:
 
     UICalculatorPage();
     ~UICalculatorPage();
+    UICalculatorPage(const UICalculatorPage &) = delete;
+    UICalculatorPage &operator=(const UICalculatorPage &) = delete;
 
 private:
     enum class Key : uint8_t {
@@ -51,6 +61,8 @@ private:
 
     // ui
     void build_ui(int width, int height);
+    void place_main_label(const lv_font_t *font);
+    static void screen_loaded_cb(lv_event_t *event);
     static void button_cb(lv_event_t *event);
     static void keyboard_cb(lv_event_t *event);
     static void esc_cb(lv_event_t *event);
@@ -59,10 +71,12 @@ private:
     std::string expression_;    // what is being typed (ASCII operators)
     std::string source_;        // the finished expression shown small above the result
     std::string result_;        // the evaluated result, shown when result_shown_
-    bool compact_ = false; // 480x320: smaller main-number fonts so the entry clears the keypad
+    calculator_layout::Layout layout_; // pinned deck / compact presets, else computed from the layout tokens
     bool result_shown_ = false;
     bool error_ = false;
+    bool strip_added_ = false;
 
+    std::unique_ptr<cp0::ui::Page> header_; // computed layouts: the Settings header (title, Esc, status strip)
     lv_obj_t *source_label_ = nullptr;
     lv_obj_t *main_label_ = nullptr;
     std::array<Button, static_cast<size_t>(Key::Count)> buttons_{};

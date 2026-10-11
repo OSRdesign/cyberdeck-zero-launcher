@@ -8,10 +8,12 @@
 
 #include "cp0_backlight_profile.h"
 #include "cp0_display.h"
+#include "cp0_ui_metrics_lvgl.h"
 #include "hal_lvgl_bsp.h"
 #include "keyboard_input.h"
 #include "launcher_media_controls.h"
 #include "lvgl/lvgl.h"
+#include "model/screensaver_clock_layout.hpp"
 #include "model/screensaver_runtime_contract.hpp"
 #include "native_ui.hpp"
 #include "sample_log.h"
@@ -25,33 +27,8 @@ namespace {
 
 constexpr int kDimPercent = 10;
 constexpr uint32_t kIdleCheckMs = 500;
-constexpr int kClockFontPx = 180;
-constexpr int kTimeOffsetY = -30;
-constexpr int kDateOffsetY = 90;
-// The sizes above are designed for the 640x480 deck. A shorter display (the compact profile of
-// native_ui, e.g. 480x320) scales them by the tighter of its width/height ratios to that design.
-constexpr int kDesignW = 640;
-constexpr int kDesignH = 480;
-constexpr int kCompactBelowH = 400;
-
-struct ClockGeometry {
-    int font_px;
-    int time_y;
-    int date_y;
-    const lv_font_t *date_font;
-};
-
-ClockGeometry clock_geometry(int width, int height)
-{
-    if (height >= kCompactBelowH || width <= 0 || height <= 0)
-        return {kClockFontPx, kTimeOffsetY, kDateOffsetY, &lv_font_montserrat_28};
-    // num/den = min(width / 640, height / 480), kept as a fraction for exact integer math.
-    const bool by_height = height * kDesignW <= width * kDesignH;
-    const int num = by_height ? height : width;
-    const int den = by_height ? kDesignH : kDesignW;
-    return {kClockFontPx * num / den, kTimeOffsetY * num / den, kDateOffsetY * num / den,
-            &lv_font_montserrat_18};
-}
+// The clock's size and place come from model/screensaver_clock_layout.hpp: the deck's 640x480 design scaled by
+// min(w / 640, h / 480) (task 014 P4).
 
 lv_obj_t *s_overlay = nullptr;
 lv_obj_t *s_time = nullptr;
@@ -104,7 +81,7 @@ void ensure_overlay()
     lv_obj_remove_style_all(s_overlay);
     const int width = static_cast<int>(lv_display_get_horizontal_resolution(display));
     const int height = static_cast<int>(lv_display_get_vertical_resolution(display));
-    const ClockGeometry geo = clock_geometry(width, height);
+    const screensaver_clock_layout::Geometry geo = screensaver_clock_layout::compute(width, height);
     lv_obj_set_size(s_overlay, width, height);
     lv_obj_set_pos(s_overlay, 0, 0);
     lv_obj_set_style_bg_color(s_overlay, lv_color_hex(0x000000), 0);
@@ -113,7 +90,7 @@ void ensure_overlay()
 
     s_time = lv_label_create(s_overlay);
     lv_obj_set_style_text_color(s_time, lv_color_hex(0xFFFFFF), 0);
-    if (lv_font_t *font = launcher_fonts().get("Montserrat-Bold.ttf", geo.font_px,
+    if (lv_font_t *font = launcher_fonts().get("Montserrat-Bold.ttf", geo.clock_px,
                                                LV_FREETYPE_FONT_STYLE_NORMAL,
                                                LV_FREETYPE_FONT_RENDER_MODE_BITMAP))
         lv_obj_set_style_text_font(s_time, font, 0);
@@ -124,7 +101,7 @@ void ensure_overlay()
 
     s_date = lv_label_create(s_overlay);
     lv_obj_set_style_text_color(s_date, lv_color_hex(0x9A9A9A), 0);
-    lv_obj_set_style_text_font(s_date, geo.date_font, 0);
+    lv_obj_set_style_text_font(s_date, cp0_ui_font_px(geo.date_px), 0);
     lv_label_set_text(s_date, "--/--/----");
     lv_obj_align(s_date, LV_ALIGN_CENTER, 0, geo.date_y);
 

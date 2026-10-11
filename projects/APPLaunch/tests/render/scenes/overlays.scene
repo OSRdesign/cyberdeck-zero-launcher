@@ -1,0 +1,52 @@
+# Task 014 P4: the shell's overlays on layout tokens. Review only (no goldens): the launcher toast at home, over the
+# Settings header and over the Calculator; the native hold-Esc ribbon (the toast with its text); the media OSD of the
+# brightness / volume keys and the "Loading..." overlay on the native display and over a compat page, the OSD and the loading overlay first made on the compat window and then shown at home again (they follow
+# the default display); last the compat ribbon over a stock app (compat numbers, unchanged).
+# Compat (display of at most 320 px wide) numbers are today's; the native display gets the DECK / COMPACT tables or
+# the token sizes (cp0_ui_overlay.h).
+title overlays
+review
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+toast "Connected to Home Wi-Fi"
+shot ov_toast_home
+toast "Bluetooth keyboard connected\nM4 keyboard"
+shot ov_toast_home_two_lines
+toast off
+launch Settings
+toast "Wi-Fi: wrong password"
+shot ov_toast_settings
+toast off
+key ESC
+launch Calculator
+toast "Hold ESC 3s to return home"
+shot ov_ribbon_calculator
+toast off
+key ESC
+# a compat page first (the compat window is the default display): the OSD and the overlay are made there
+compatpage
+osd level Brightness 60
+shot ov_osd_level_compat
+osd mute on
+shot ov_osd_mute_compat
+loading "Loading..."
+shot ov_loading_compat
+loading off
+# back at home: they follow the default display
+home
+osd level Brightness 60
+shot ov_osd_level_home
+osd level Volume 85
+shot ov_osd_volume_home
+osd mute on
+shot ov_osd_mute_home
+wait 1200
+loading "Loading..."
+shot ov_loading_home
+loading off
+stockapp
+ribbon
+shot ov_ribbon_stockapp

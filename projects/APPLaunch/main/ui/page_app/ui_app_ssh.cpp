@@ -13,6 +13,7 @@
 #include "../model/ssh_shortcut_action.hpp"
 #include "sample_log.h"
 #include "ui_app_st.hpp"
+#include "cp0_ui_widgets.hpp" // the native form's members (ui_app_ssh_native.cpp)
 
 #include <new>
 #include <utility>
@@ -21,6 +22,11 @@ UISSHPage::UISSHPage() : AppPage()
 {
     set_page_title("SSH");
     load_profile();
+    if (native_display_now()) {
+        native_ = true;
+        build_native();
+        return;
+    }
     create_ui();
     if (root_screen_ && form_container_) {
         event_handler_init();
@@ -30,6 +36,7 @@ UISSHPage::UISSHPage() : AppPage()
 
 UISSHPage::~UISSHPage()
 {
+    destroy_native();
     restore_text_input_mode();
     restore_operation_.shutdown();
     detach_delete_callbacks();
@@ -41,8 +48,14 @@ UISSHPage::~UISSHPage()
     terminal_page_.reset();
 }
 
+bool UISSHPage::native_display_now()
+{
+    return native_ui::enabled();
+}
+
 void UISSHPage::do_connect()
 {
+    if (native_) native_sync_model();
     const auto validation = model_.validate();
     if (validation.error != SshConnectionModel::Error::NONE) {
         set_status(validation.message, true);
@@ -60,18 +73,19 @@ void UISSHPage::do_connect()
 
     // The terminal fills the whole panel like the CLI: it takes its layout from the display it is
     // created on, so switch to the native display first (restore_input_view() switches back).
+    if (native_) native_stop_editing();
     native_ui::begin_page(true);
     try {
         terminal_page_ = std::make_shared<UISTPage>();
     } catch (...) {
-        native_ui::begin_page(false);
+        native_ui::begin_page(native_);
         restore_operation_.abort(restore_token_);
         set_status("Unable to create SSH terminal", true);
         return;
     }
     if (!terminal_page_ || !terminal_page_->screen()) {
         terminal_page_.reset();
-        native_ui::begin_page(false);
+        native_ui::begin_page(native_);
         restore_operation_.abort(restore_token_);
         set_status("Unable to create SSH screen", true);
         return;
@@ -113,7 +127,7 @@ void UISSHPage::do_connect()
     } catch (...) {
         terminal_page_->navigate_home = nullptr;
         terminal_page_.reset();
-        native_ui::begin_page(false);
+        native_ui::begin_page(native_);
         restore_operation_.abort(restore_token_);
         set_status("Unable to start SSH", true);
         return;
@@ -133,6 +147,10 @@ void UISSHPage::set_status(std::string message, bool error)
     SshConnectionModel previous = model_;
     status_message_ = std::move(message);
     status_error_ = error;
+    if (native_) {
+        native_set_status();
+        return;
+    }
     rebuild_or_restore(std::move(previous));
 }
 
@@ -175,7 +193,8 @@ void UISSHPage::save_profile()
 
 void UISSHPage::restore_input_view()
 {
-    native_ui::begin_page(false); // back to the compat window (and its toolbar) for the form
+    // back to the compat window (and its toolbar) for the compat form; the native form stays on the native display
+    native_ui::begin_page(native_);
     if (screen()) lv_disp_load_scr(screen());
     if (lv_indev_t *input = lv_indev_get_next(nullptr)) {
         lv_indev_set_group(input, input_group());
@@ -184,8 +203,9 @@ void UISSHPage::restore_input_view()
         terminal_page_->navigate_home = nullptr;
     terminal_page_.reset();
     view_state_ = ViewState::INPUT;
-    enter_text_input_mode();
     terminal_return_pending_ = false;
+    if (native_) return; // the form's group and focus are as they were; a field edits again on Enter or a tap
+    enter_text_input_mode();
 }
 
 void UISSHPage::enter_text_input_mode()

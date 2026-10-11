@@ -8,6 +8,9 @@
 
 #include "ui.h"
 
+#include "cp0_ui_metrics_lvgl.h"
+#include "cp0_ui_overlay.h"
+
 #include <cstring>
 
 namespace {
@@ -15,28 +18,19 @@ namespace {
 constexpr uint32_t kShowDurationMs = 1500;
 constexpr uint32_t kBackgroundColor = 0x1F3A5F;
 constexpr uint32_t kTextColor = 0xFFFFFF;
-constexpr lv_coord_t kWidth = 280;
-constexpr lv_coord_t kHeight = 22;
-constexpr lv_coord_t kMultilineHeight = 38;
-constexpr lv_coord_t kTopOffset = 4;
-constexpr int kDesignWidthPx = 320; // the layout above is designed for the 320 px wide display
 
-// The toast is laid out for 320 px; on a wider (native) display it is scaled up by
-// width / 320 so it keeps the same apparent size as the upscaled compat window
-// (exactly 2x on the 640 px deck, 1.5x on a 480 px panel). Never scaled down.
-struct ToastScale {
-    int width;
-    lv_coord_t operator()(int design_px) const
-    {
-        return static_cast<lv_coord_t>(design_px * width / kDesignWidthPx);
-    }
-};
-
-ToastScale scale_for(const lv_obj_t *object)
+// The size comes from cp0_ui_overlay.h (task 014 P4): a display at most 320 px wide (the compat window, stock
+// CardputerZero, SDL) keeps today's 280x22 / 38 toast; the native display gets the pinned DECK / COMPACT table (the
+// old width / 320 scaling, byte-identical there) or a size from the tokens.
+cp0_ui_toast_t spec_for(const lv_obj_t *object, int lines, bool *native)
 {
     lv_display_t *display = object ? lv_obj_get_display(object) : lv_display_get_default();
-    const int width = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : kDesignWidthPx;
-    return ToastScale{width > kDesignWidthPx ? width : kDesignWidthPx};
+    const int width = display ? static_cast<int>(lv_display_get_horizontal_resolution(display))
+                              : CP0_UI_OVERLAY_COMPAT_MAX_W;
+    cp0_ui_toast_t spec;
+    cp0_ui_overlay_toast(cp0_ui_metrics_get(), width, lines, &spec);
+    if (native) *native = !cp0_ui_overlay_is_compat_display(width);
+    return spec;
 }
 
 } // namespace
@@ -54,14 +48,14 @@ bool LauncherToast::ensure_created() noexcept
     container_ = lv_obj_create(parent);
     if (!container_)
         return false;
-    const ToastScale scale = scale_for(parent);
+    const cp0_ui_toast_t spec = spec_for(parent, 1, nullptr);
     lv_obj_add_event_cb(container_, container_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_remove_style_all(container_);
-    lv_obj_set_size(container_, scale(kWidth), scale(kHeight));
-    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, scale(kTopOffset));
+    lv_obj_set_size(container_, spec.w, spec.h);
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, spec.top);
     lv_obj_set_style_bg_color(container_, lv_color_hex(kBackgroundColor), 0);
     lv_obj_set_style_bg_opa(container_, LV_OPA_80, 0);
-    lv_obj_set_style_radius(container_, scale(6), 0);
+    lv_obj_set_style_radius(container_, spec.radius, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_shadow_width(container_, 0, 0);
@@ -77,9 +71,9 @@ bool LauncherToast::ensure_created() noexcept
     lv_obj_add_event_cb(label_, label_delete_cb, LV_EVENT_DELETE, this);
     lv_obj_set_style_text_color(label_, lv_color_hex(kTextColor), 0);
     lv_obj_set_style_text_font(
-        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", scale(12),
+        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", spec.font_px,
                                     LV_FREETYPE_FONT_STYLE_BOLD), 0);
-    lv_obj_set_width(label_, scale(kWidth - 12));
+    lv_obj_set_width(label_, spec.label_w);
     lv_label_set_long_mode(label_, LV_LABEL_LONG_WRAP);
     lv_obj_set_style_text_align(label_, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(label_);
@@ -102,11 +96,27 @@ void LauncherToast::show(const char *text) noexcept
     if (!ensure_created())
         return;
 
-    const ToastScale scale = scale_for(container_);
+    // Re-apply the size on every show: it follows the display's width (and the layout service), not the width the
+    // toast was created at.
+    bool native = false;
+    const bool two_lines = text && std::strchr(text, '\n');
+    const cp0_ui_toast_t spec = spec_for(container_, two_lines ? 2 : 1, &native);
     lv_label_set_text(label_, text ? text : "");
-    lv_obj_set_height(container_, scale(text && std::strchr(text, '\n') ? kMultilineHeight : kHeight));
+    lv_obj_set_size(container_, spec.w, spec.h);
+    lv_obj_set_style_radius(container_, spec.radius, 0);
+    lv_obj_set_style_text_font(
+        label_, launcher_fonts().get("AlibabaPuHuiTi-3-55-Regular.ttf", spec.font_px,
+                                    LV_FREETYPE_FONT_STYLE_BOLD), 0);
+    lv_obj_set_width(label_, spec.label_w);
+    if (native) {
+        // a text that wraps to more lines than the box was sized for grows the box (the compat toast never did)
+        lv_obj_update_layout(container_);
+        const int label_h = static_cast<int>(lv_obj_get_height(label_));
+        if (label_h > spec.h)
+            lv_obj_set_height(container_, label_h + 2 * cp0_ui_tok(CP0_TOK_SPACE_S));
+    }
     lv_obj_center(label_);
-    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, scale(kTopOffset));
+    lv_obj_align(container_, LV_ALIGN_TOP_MID, 0, spec.top);
     lv_obj_move_foreground(container_);
     lv_obj_clear_flag(container_, LV_OBJ_FLAG_HIDDEN);
     if (!hide_timer_)

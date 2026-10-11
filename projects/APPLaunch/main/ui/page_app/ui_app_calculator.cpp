@@ -11,6 +11,9 @@
 #include <locale>
 #include <sstream>
 
+#include "cp0_ui_metrics_lvgl.h"
+#include "cp0_ui_roller.h"
+#include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
 #include "native_ui.hpp"
 #include "input_keys.h"
@@ -192,8 +195,21 @@ UICalculatorPage::UICalculatorPage() : AppPage()
 
 UICalculatorPage::~UICalculatorPage()
 {
-    if (root_screen_)
+    if (root_screen_) {
         lv_obj_remove_event_cb_with_user_data(root_screen_, UICalculatorPage::keyboard_cb, this);
+        lv_obj_remove_event_cb_with_user_data(root_screen_, UICalculatorPage::screen_loaded_cb, this);
+    }
+    header_.reset();
+}
+
+// The shared status strip goes in when the screen is shown, as in the native Settings (it reads the Wi-Fi / Bluetooth
+// state at once only on the active screen).
+void UICalculatorPage::screen_loaded_cb(lv_event_t *event)
+{
+    auto *self = static_cast<UICalculatorPage *>(lv_event_get_user_data(event));
+    if (!self || self->strip_added_ || !self->header_) return;
+    self->strip_added_ = true;
+    native_ui::add_status_icons(self->header_->header());
 }
 
 void UICalculatorPage::build_ui(int width, int height)
@@ -202,40 +218,63 @@ void UICalculatorPage::build_ui(int width, int height)
     if (!parent) return;
     lv_obj_set_style_bg_color(root_screen_, lv_color_hex(kColorBg), 0);
 
-    // 640x480 keeps its original numbers; a short display (480x320) gets a compact keypad.
-    const bool compact = height < 400;
-    compact_ = compact;
-    const int kPad = compact ? 6 : 10;
-    const int kTopBar = compact ? 36 : 44;
-    const int kDisplayH = compact ? 64 : 104;
-    const int kGap = compact ? 4 : 6;
-    constexpr int kRows = 6;
-    constexpr int kCols = 4;
+    // 640x480 and 480x320 keep their original numbers (pinned presets); any other canvas is computed from the
+    // layout tokens (calculator_layout.hpp).
+    cp0_ui_metrics_t own{};
+    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_get();
+    if (!metrics || metrics->w != width || metrics->h != height) {
+        cp0_ui_metrics_compute(width, height, 0, 0, CP0_UI_DENSITY_DEFAULT, 0, &own);
+        metrics = &own;
+    }
+    layout_ = calculator_layout::compute(*metrics);
+    const calculator_layout::Layout &lay = layout_;
 
-    // title + close
-    lv_obj_t *title = lv_label_create(parent);
-    lv_label_set_text(title, "Calculator");
-    lv_obj_set_style_text_font(title, compact ? &lv_font_montserrat_20 : &lv_font_montserrat_28, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(0xF0B400), 0);
-    lv_obj_set_pos(title, compact ? 10 : 16, compact ? 8 : 6);
-    native_ui::add_status_icons(parent);
+    if (lay.header_page) {
+        // the Settings header: the home grid's title place, the Esc button, the status strip
+        cp0_ui_roller_page_t rp{};
+        if (cp0_ui_roller_page(metrics, native_ui::status_strip_left(), &rp) == 0) {
+            header_ = std::make_unique<cp0::ui::Page>(
+                parent, rp, [](lv_obj_t *bar, const char *text) { return native_ui::add_title(bar, text); },
+                [] {
+                    // a tap on Esc is a short press of the real Esc key: it leaves the Calculator like the keyboard's
+                    cp0_keyboard_inject(KEY_ESC, KBD_KEY_PRESSED, 0);
+                    cp0_keyboard_inject(KEY_ESC, KBD_KEY_RELEASED, 0);
+                });
+            header_->set_title({"Calculator"});
+            if (root_screen_) {
+                lv_obj_remove_flag(root_screen_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+                lv_obj_add_event_cb(root_screen_, UICalculatorPage::screen_loaded_cb, LV_EVENT_SCREEN_LOADED, this);
+            }
+        }
+    }
+    if (!header_) {
+        // the pinned presets (and a computed canvas without room for the header): the title label of old
+        lv_obj_t *title = lv_label_create(parent);
+        lv_label_set_text(title, "Calculator");
+        lv_obj_set_style_text_font(
+            title, cp0_ui_font_px(lay.header_page ? metrics->text_px[CP0_TEXT_TITLE] : lay.title_px), 0);
+        lv_obj_set_style_text_color(title, lv_color_hex(0xF0B400), 0);
+        lv_obj_set_pos(title, lay.title_x, lay.title_y);
+        native_ui::add_status_icons(parent);
+    }
 
     // display: small source line above the big result line
     source_label_ = lv_label_create(parent);
-    lv_obj_set_width(source_label_, width - 2 * kPad - 8);
-    lv_obj_set_pos(source_label_, kPad, kTopBar + 2);
+    lv_obj_set_width(source_label_, lay.text_w);
+    lv_obj_set_pos(source_label_, lay.text_x, lay.src_y);
     lv_label_set_long_mode(source_label_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(source_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(source_label_, face(compact ? 18 : 28), 0);
+    lv_obj_set_style_text_font(source_label_, face(lay.src_px), 0);
+    if (lay.computed) lv_obj_set_height(source_label_, static_cast<int>(lv_font_get_line_height(face(lay.src_px))));
     lv_obj_set_style_text_color(source_label_, lv_color_hex(0x8A8A8A), 0);
     lv_label_set_text(source_label_, "");
 
     main_label_ = lv_label_create(parent);
-    lv_obj_set_width(main_label_, width - 2 * kPad - 8);
-    lv_obj_set_pos(main_label_, kPad, kTopBar + (compact ? 22 : 38));
+    lv_obj_set_width(main_label_, lay.text_w);
+    lv_obj_set_pos(main_label_, lay.text_x, lay.main_y);
     lv_label_set_long_mode(main_label_, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(main_label_, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_style_text_font(main_label_, face(compact ? 30 : 48), 0);
+    lv_obj_set_style_text_font(main_label_, face(lay.main_px[0]), 0);
     lv_obj_set_style_text_color(main_label_, lv_color_hex(0xFFFFFF), 0);
 
     // keypad
@@ -259,20 +298,16 @@ void UICalculatorPage::build_ui(int width, int height)
         {Key::Esc, "Esc", kColorFunction, 0, 5, 1},   {Key::Equals, "=", kColorEquals, 1, 5, 3},
     };
 
-    const int pad_top = kTopBar + kDisplayH;
-    const int cell_w = (width - 2 * kPad - (kCols - 1) * kGap) / kCols;
-    const int cell_h = (height - pad_top - kPad - (kRows - 1) * kGap) / kRows;
     for (const Cell &cell : cells) {
         Button &slot = buttons_[static_cast<size_t>(cell.key)];
         slot.page = this;
         slot.key = cell.key;
         lv_obj_t *button = lv_button_create(parent);
-        const int w = cell.span * cell_w + (cell.span - 1) * kGap;
-        lv_obj_set_size(button, w, cell_h);
-        lv_obj_set_pos(button, kPad + cell.col * (cell_w + kGap), pad_top + cell.row * (cell_h + kGap));
+        lv_obj_set_size(button, lay.cell_span_w(cell.span), lay.cell_h);
+        lv_obj_set_pos(button, lay.cell_x(cell.col), lay.cell_y(cell.row));
         lv_obj_set_style_bg_color(button, lv_color_hex(cell.color), 0);
         lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(button, compact ? 8 : 14, 0);
+        lv_obj_set_style_radius(button, lay.radius, 0);
         lv_obj_set_style_shadow_width(button, 0, 0);
         lv_obj_set_style_bg_color(button, lv_color_hex(0x707070), LV_STATE_PRESSED);
         if (cell.key == Key::Esc)
@@ -283,9 +318,8 @@ void UICalculatorPage::build_ui(int width, int height)
         lv_obj_t *label = lv_label_create(button);
         lv_label_set_text(label, cell.text);
         const bool sign = cell.key == Key::Multiply || cell.key == Key::Divide;
-        const lv_font_t *label_font = compact ? (sign ? face(20) : &lv_font_montserrat_20)
-                                              : (sign ? face(32) : cell.key == Key::Esc ? &lv_font_montserrat_28
-                                                                                        : &lv_font_montserrat_32);
+        const lv_font_t *label_font =
+            sign ? face(lay.key_px) : cp0_ui_font_px(cell.key == Key::Esc ? lay.esc_px : lay.key_px);
         lv_obj_set_style_text_font(label, label_font, 0);
         lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
         lv_obj_center(label);
@@ -440,10 +474,24 @@ void UICalculatorPage::refresh()
     if (!main_label_ || !source_label_) return;
     const std::string main_text = result_shown_ ? result_ : (expression_.empty() ? "0" : pretty(expression_));
     // long inputs get a smaller font so they still fit
-    const lv_font_t *font = face(compact_ ? (main_text.size() <= 12 ? 30 : main_text.size() <= 18 ? 24 : 20)
-                                          : (main_text.size() <= 12 ? 48 : main_text.size() <= 18 ? 36 : 28));
+    const size_t length = main_text.size();
+    const int step = length <= static_cast<size_t>(calculator_layout::kMainStepShort)   ? 0
+                     : length <= static_cast<size_t>(calculator_layout::kMainStepMid) ? 1
+                                                                                        : 2;
+    const lv_font_t *font = face(layout_.main_px[step]);
     lv_obj_set_style_text_font(main_label_, font, 0);
+    place_main_label(font);
     lv_obj_set_style_text_color(main_label_, lv_color_hex(error_ ? 0xFF5F56 : 0xFFFFFF), 0);
     lv_label_set_text(main_label_, main_text.c_str());
     lv_label_set_text(source_label_, source_.empty() ? "" : (pretty(source_) + " =").c_str());
+}
+
+// Computed layouts anchor the result line at the bottom of the display (next to the keys); the pinned presets keep
+// their fixed top.
+void UICalculatorPage::place_main_label(const lv_font_t *font)
+{
+    if (!main_label_ || layout_.main_bottom <= 0 || !font) return;
+    const int line_h = static_cast<int>(lv_font_get_line_height(font));
+    lv_obj_set_height(main_label_, line_h); // one line: a long text ends with dots instead of wrapping onto the keys
+    lv_obj_set_pos(main_label_, layout_.text_x, layout_.main_bottom - line_h);
 }
