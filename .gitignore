@@ -7,6 +7,8 @@ static_lib
 keyboard_input.c
 doc
 tools
+# the repo's own dev tooling (tools/dev, tools/boards) is tracked
+!/tools/
 setup.ini
 pi
 projects/APPLaunch/main/ui/page_app.h
