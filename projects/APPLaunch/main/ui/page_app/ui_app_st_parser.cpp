@@ -20,6 +20,7 @@ void UISTPage::reset_terminal()
     scroll_bot_ = term_rows_ - 1;
     scrollback_.clear();
     scrollback_offset_ = 0;
+    keyboard_pushed_rows_ = 0; /* nothing left to bring back when the on-screen keyboard goes */
     mode_ = MODE_WRAP;
     parse_state_ = ParseState::Normal;
     utf8_decoder_.reset();

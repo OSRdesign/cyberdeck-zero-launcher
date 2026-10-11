@@ -193,6 +193,7 @@ void UISTPage::static_cursor_cb(lv_timer_t *timer) noexcept
 void UISTPage::cursor_cb()
 {
     handle_home_hold_exit();
+    keep_keyboard_request();
     update_cursor();
     if (!terminal_active_ || !cursor_visible_mode_) {
         show_cursor(false);
@@ -224,9 +225,17 @@ void UISTPage::handle_home_hold_exit()
     if (navigate_home) navigate_home();
 }
 
-void UISTPage::write_key(uint32_t evdev_key, const char *utf8)
+void UISTPage::write_key(uint32_t evdev_key, const char *utf8, uint32_t modifiers)
 {
     const std::string encoded =
-        STKeyEncoder::encode(evdev_key, utf8, (mode_ & MODE_APPCURSOR) != 0);
+        STKeyEncoder::encode(evdev_key, utf8, (mode_ & MODE_APPCURSOR) != 0, modifiers);
     if (!encoded.empty()) pty_write(encoded.data(), encoded.size());
+}
+
+// The grid's new size to the PTY (TIOCSWINSZ): the shell, ssh (window-change to the remote host) and full-screen
+// programs get SIGWINCH and lay themselves out again.
+void UISTPage::pty_resize()
+{
+    if (pty_handle_.empty()) return;
+    cp0_signal_pty_api({"Resize", pty_handle_, std::to_string(term_cols_), std::to_string(term_rows_)}, nullptr);
 }

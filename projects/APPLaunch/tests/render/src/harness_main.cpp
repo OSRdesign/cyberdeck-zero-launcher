@@ -885,6 +885,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             spec.kind = spec.name == "Settings"     ? "settings"
                         : spec.name == "Calculator" ? "calculator"
                         : spec.name == "SSH"        ? "ssh"
+                        : spec.name == "CLI"        ? "cli"
                                                     : "tile";
             apps.push_back(spec);
         }
@@ -992,7 +993,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         static const std::map<std::string, std::string> symbols = {
             {"SHIFT", "\xe2\x87\xa7"}, {"ENTER", LV_SYMBOL_NEW_LINE}, {"BACKSPACE", LV_SYMBOL_BACKSPACE},
             {"LEFT", LV_SYMBOL_LEFT},  {"UP", LV_SYMBOL_UP},          {"DOWN", LV_SYMBOL_DOWN},
-            {"RIGHT", LV_SYMBOL_RIGHT},
+            {"RIGHT", LV_SYMBOL_RIGHT}, {"SPACE", ""}, /* the space bar: the keyboard's only key without a label */
         };
         const auto symbol = symbols.find(w[1]);
         const std::string text = symbol != symbols.end() ? symbol->second : w[1];
@@ -1142,6 +1143,27 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         /* the remote keyboard typed the passkey shown for it: the pending pairing completes */
         harness::bt_key_typed();
         settle(400);
+    } else if (cmd == "ptyout" || cmd == "ptyprompt") {
+        /* ptyout TEXT...: what the program in the fake PTY prints next ("\n" = CR LF, "\e" = Esc); ptyprompt TEXT: the
+         * prompt the fake shell prints after Enter and ^C (task 014 P4b) */
+        std::string text;
+        for (std::size_t i = 1; i < w.size(); ++i) text += (i > 1 ? " " : "") + w[i];
+        if (cmd == "ptyout") harness::pty_output(text);
+        else harness::pty_set_prompt(text);
+        settle(300);
+    } else if (cmd == "ptyexit") {
+        /* the program in the fake PTY exits: the terminal says "Press any key to exit" */
+        harness::pty_exit();
+        settle(300);
+    } else if (cmd == "ptylog") {
+        /* ptylog NAME: what the terminal did with the fake PTY (open, every write as bytes, resize, close) as
+         * out/<WxH>/NAME.txt */
+        if (w.size() != 2) return fail(scene, line, "usage: ptylog NAME");
+        const std::string path = run.out_dir + "/" + run.size.name() + "/" + w[1] + ".txt";
+        std::ofstream out(path);
+        for (const std::string &entry : harness::pty_log()) out << entry << "\n";
+        if (!out) return fail(scene, line, "cannot write " + path);
+        std::printf("%s\n", path.c_str());
     } else if (cmd == "wait") {
         if (w.size() != 2) return fail(scene, line, "usage: wait MS");
         settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))));

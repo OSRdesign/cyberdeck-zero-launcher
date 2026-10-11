@@ -231,6 +231,7 @@ void UISTPage::static_renderer_delete_cb(lv_event_t *event) noexcept
                     segment.label = nullptr;
         }
         if (self->terminal_container_ == deleted) {
+            self->teardown_keyboard(); /* the keyboard was asked for this object: released while it still exists */
             self->terminal_active_ = false;
             self->stop_timers();
             self->stop_pty();
@@ -281,6 +282,7 @@ void UISTPage::event_cb(lv_event_t *event)
 {
     if (lv_event_get_code(event) == LV_EVENT_DELETE &&
         lv_event_get_target(event) == lv_event_get_current_target(event)) {
+        teardown_keyboard();
         terminal_active_ = false;
         stop_timers();
         stop_pty();
@@ -361,7 +363,7 @@ void UISTPage::event_cb(lv_event_t *event)
         STKeyEncoder::should_forward_event(key->key_code, key->key_state)) {
         leave_scrollback();
         follow_cursor_in_big_mode();
-        write_key(key->key_code, key->utf8);
+        write_key(key->key_code, key->utf8, key->mods);
     }
 }
 

@@ -27,9 +27,11 @@ UISTPage::UISTPage(TerminalHelpFactory help_factory)
     }
     bind_events();
     start_shell();
+    setup_keyboard();
 }
 UISTPage::~UISTPage()
 {
+    teardown_keyboard();
     terminal_active_ = false;
     if (root_screen_)
         lv_obj_remove_event_cb_with_user_data(
@@ -60,7 +62,7 @@ void UISTPage::exec(const std::string &command, const std::list<std::string> &ar
     hide_help();
     big_mode_ = false;
     term_cols_ = normal_cols_;
-    term_rows_ = normal_rows_;
+    term_rows_ = fitted_rows(); // the PTY opens with the rows above the on-screen keyboard while it is up
     viewport_x_ = 0;
     viewport_y_ = 0;
     big_view_locked_ = false;
@@ -268,7 +270,8 @@ int UISTPage::visible_cols() const
 
 int UISTPage::visible_rows() const
 {
-    return big_mode_ ? big_view_rows() : normal_rows_;
+    // normal mode: the grid is the PTY's size (normal_rows_, or fewer above the on-screen keyboard)
+    return big_mode_ ? big_view_rows() : term_rows_;
 }
 
 int UISTPage::visible_h() const

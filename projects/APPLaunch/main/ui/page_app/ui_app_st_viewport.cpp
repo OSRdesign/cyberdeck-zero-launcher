@@ -6,6 +6,119 @@
 
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_st.hpp"
+#include "../model/st_viewport_model.hpp"
+#include "../native_ui.hpp"
+#include "cp0_ui_widgets.hpp"
+
+// ------------------------------------------------------------------ the on-screen keyboard (task 014 P4b)
+
+/* The terminal has no text field: on the native display it asks for the fallback keyboard for its whole session. The
+ * keyboard service shows it only while the launcher's policy allows (launcher_osk: no physical keyboard, setting Auto,
+ * no lock screen) and asks that policy again every 250 ms, so it goes when a keyboard appears and comes back when the
+ * last one has gone. Its Tab types a tab character (a multi-line request); its Esc is the shell's Esc and, held, the
+ * launcher's hold-Esc (it moves the Esc state like the toolbar's). Stock CardputerZero and SDL: nothing. */
+void UISTPage::setup_keyboard()
+{
+    if (keyboard_wanted_ || !native_ || !native_ui::enabled() || !terminal_container_) return;
+    keyboard_wanted_ = true;
+    keyboard_owner_ = terminal_container_;
+    keyboard_listener_ = cp0::ui::osk::add_inset_listener([this](int inset) { on_keyboard_inset(inset); });
+    cp0::ui::osk::request(keyboard_owner_, cp0::ui::TextType::Text, true);
+    on_keyboard_inset(cp0::ui::osk::bottom_inset()); /* none after the page change (native_ui::begin_page) */
+}
+
+/* Another owner (a sudo prompt's field over the terminal) took the keyboard and let it go: ask again (the cursor timer,
+ * every 500 ms). A page change clears the request too, but the terminal goes with that page at once. */
+void UISTPage::keep_keyboard_request()
+{
+    if (keyboard_wanted_ && keyboard_owner_ && !cp0::ui::osk::owner())
+        cp0::ui::osk::request(keyboard_owner_, cp0::ui::TextType::Text, true);
+}
+
+void UISTPage::teardown_keyboard()
+{
+    if (keyboard_listener_) cp0::ui::osk::remove_inset_listener(keyboard_listener_);
+    keyboard_listener_ = 0;
+    if (keyboard_owner_) cp0::ui::osk::release(keyboard_owner_); /* ignored when another page owns it now */
+    keyboard_owner_ = nullptr;
+    keyboard_wanted_ = false;
+}
+
+void UISTPage::on_keyboard_inset(int inset)
+{
+    inset = std::max(0, inset);
+    if (inset == keyboard_inset_) return;
+    keyboard_inset_ = inset;
+    if (!renderer_ready()) return;
+    fit_rows_to_view();
+}
+
+int UISTPage::fitted_rows() const
+{
+    return st_viewport::rows_for(normal_rows_, term_h_, keyboard_inset_, char_h_);
+}
+
+/* The grid for the room above the keyboard (st_viewport_model.hpp): fewer rows while it is up, the cursor line kept
+ * on screen (the lines above that no longer fit go to the scrollback), the full grid back when it goes (those lines
+ * return); the PTY gets the new size. The 80x24 view (F6) keeps its size: only its window shrinks and follows the
+ * cursor. */
+void UISTPage::fit_rows_to_view()
+{
+    if (big_mode_) {
+        follow_cursor_in_big_mode();
+        dirty_all();
+        update_big_mode_ui();
+        render_all();
+        return;
+    }
+    const int rows = fitted_rows();
+    if (rows == term_rows_) {
+        update_scrollbar();
+        return;
+    }
+    const int old_rows = term_rows_;
+    const st_viewport::Resize plan = st_viewport::resize(old_rows, rows, cursor_.y, keyboard_pushed_rows_,
+                                                         static_cast<int>(scrollback_.size()));
+    if (plan.scroll_up > 0) {
+        for (int y = 0; y < plan.scroll_up; ++y) append_scrollback_row(screen_[static_cast<size_t>(y)]);
+        for (int y = 0; y + plan.scroll_up < old_rows; ++y)
+            screen_[static_cast<size_t>(y)] = screen_[static_cast<size_t>(y + plan.scroll_up)];
+    }
+    if (rows < old_rows) {
+        // the rows under the new grid (under the cursor, or moved up) are dropped
+        const Glyph blank{};
+        for (int y = rows; y < MAX_ROWS; ++y) screen_[static_cast<size_t>(y)].fill(blank);
+    }
+    if (plan.pull_back > 0) {
+        for (int y = rows - 1; y >= plan.pull_back; --y)
+            screen_[static_cast<size_t>(y)] = screen_[static_cast<size_t>(y - plan.pull_back)];
+        const size_t first = scrollback_.size() - static_cast<size_t>(plan.pull_back);
+        for (int y = 0; y < plan.pull_back; ++y)
+            screen_[static_cast<size_t>(y)] = scrollback_[first + static_cast<size_t>(y)];
+        scrollback_.erase(scrollback_.begin() + static_cast<std::ptrdiff_t>(first), scrollback_.end());
+    }
+    saved_cursor_.y = clamp(saved_cursor_.y + plan.cursor_y - cursor_.y, 0, rows - 1);
+    cursor_.y = clamp(plan.cursor_y, 0, rows - 1);
+    keyboard_pushed_rows_ = plan.pushed;
+    term_rows_ = rows;
+    scroll_top_ = 0;
+    scroll_bot_ = rows - 1;
+    scrollback_offset_ = 0; /* the prompt in view */
+    dirty_all();
+    render_all();
+    pty_resize();
+}
+
+/* The F4..F8 bar of the 80x24 view sits at the bottom of the part above the keyboard (the whole screen without it). */
+void UISTPage::place_big_mode_bar()
+{
+    const int slot_w = term_w_ / BOTTOM_BAR_SLOTS;
+    for (int index = 0; index < BOTTOM_BAR_SLOTS; ++index) {
+        const size_t slot = static_cast<size_t>(index);
+        if (bottom_labels_[slot]) lv_obj_set_pos(bottom_labels_[slot], index * slot_w, view_h() - BIG_BOTTOM_H);
+        if (bottom_indicators_[slot]) lv_obj_set_pos(bottom_indicators_[slot], index * slot_w, view_h() - 4);
+    }
+}
 
 void UISTPage::update_scrollbar()
 {
@@ -37,12 +150,13 @@ void UISTPage::update_scrollbar()
 
     lv_obj_clear_flag(scrollbar_track_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(scrollbar_thumb_, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_size(scrollbar_track_, SCROLLBAR_W, term_h_);
+    const int track_h = view_h(); /* above the on-screen keyboard while it is up */
+    lv_obj_set_size(scrollbar_track_, SCROLLBAR_W, track_h);
     lv_obj_set_pos(scrollbar_track_, term_w_ - SCROLLBAR_W - 1, 0);
     int total_rows = history_rows + term_rows_;
-    int thumb_height = std::max(8, term_h_ * term_rows_ / std::max(total_rows, 1));
-    thumb_height = std::min(term_h_, thumb_height);
-    int range = term_h_ - thumb_height;
+    int thumb_height = std::max(8, track_h * term_rows_ / std::max(total_rows, 1));
+    thumb_height = std::min(track_h, thumb_height);
+    int range = track_h - thumb_height;
     int thumb_y = range - scrollback_offset_ * range / std::max(1, history_rows);
     lv_obj_set_size(scrollbar_thumb_, SCROLLBAR_W, thumb_height);
     lv_obj_set_pos(scrollbar_thumb_, term_w_ - SCROLLBAR_W - 1, thumb_y);
@@ -95,6 +209,7 @@ void UISTPage::update_big_mode_ui()
         if (big_mode_) lv_obj_clear_flag(indicator, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(indicator, LV_OBJ_FLAG_HIDDEN);
     }
+    place_big_mode_bar();
     update_hscrollbar();
     update_scrollbar();
 }
@@ -107,7 +222,7 @@ void UISTPage::switch_big_mode(bool enable)
     stop_pty();
     big_mode_ = enable;
     term_cols_ = big_mode_ ? BIG_COLS : normal_cols_;
-    term_rows_ = big_mode_ ? BIG_ROWS : normal_rows_;
+    term_rows_ = big_mode_ ? BIG_ROWS : fitted_rows();
     viewport_x_ = 0;
     viewport_y_ = 0;
     big_view_locked_ = false;

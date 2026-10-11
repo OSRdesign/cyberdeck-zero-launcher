@@ -70,6 +70,53 @@ int main()
     // A recognized control key never falls through to the supplied text.
     assert(STKeyEncoder::encode(KEY_ENTER, "ignored", false) == "\r");
 
+    // Tab is a tab character with or without text (the on-screen keyboard's Tab of a one-line field has no text).
+    assert(STKeyEncoder::encode(KEY_TAB, nullptr, false) == "\t");
+    assert(STKeyEncoder::encode(KEY_TAB, "\t", false) == "\t");
+    assert(STKeyEncoder::encode(KEY_TAB, nullptr, false, KBD_MOD_CTRL) == "\t");
+
+    // Ctrl + a key without text (the on-screen keyboard: key code + KBD_MOD_CTRL, no text, task 014 P4b): the C0
+    // control byte of the US layout, as xterm.
+    const auto ctrl = [](uint32_t key, uint32_t mods = KBD_MOD_CTRL) {
+        return STKeyEncoder::encode(key, nullptr, false, mods);
+    };
+    assert(ctrl(KEY_C) == "\x03");
+    assert(ctrl(KEY_D) == "\x04");
+    assert(ctrl(KEY_Z) == "\x1a");
+    assert(ctrl(KEY_L) == "\x0c");
+    assert(ctrl(KEY_A) == "\x01");
+    assert(ctrl(KEY_E) == "\x05");
+    assert(ctrl(KEY_R) == "\x12");
+    assert(ctrl(KEY_U) == "\x15");
+    assert(ctrl(KEY_W) == "\x17");
+    assert(ctrl(KEY_X) == "\x18");
+    assert(ctrl(KEY_O) == "\x0f");
+    assert(ctrl(KEY_C, KBD_MOD_CTRL | KBD_MOD_SHIFT) == "\x03"); /* Shift armed too: still ^C */
+    assert(ctrl(KEY_SPACE) == std::string(1, '\0'));
+    assert(ctrl(KEY_2, KBD_MOD_CTRL | KBD_MOD_SHIFT) == std::string(1, '\0')); /* Ctrl+@ */
+    assert(ctrl(KEY_LEFTBRACE) == "\x1b");
+    assert(ctrl(KEY_BACKSLASH) == "\x1c");
+    assert(ctrl(KEY_RIGHTBRACE) == "\x1d");
+    assert(ctrl(KEY_6, KBD_MOD_CTRL | KBD_MOD_SHIFT) == "\x1e"); /* Ctrl+^ */
+    assert(ctrl(KEY_MINUS, KBD_MOD_CTRL | KBD_MOD_SHIFT) == "\x1f"); /* Ctrl+_ */
+    assert(ctrl(KEY_SLASH) == "\x1f");
+    assert(ctrl(KEY_SLASH, KBD_MOD_CTRL | KBD_MOD_SHIFT) == "\x7f"); /* Ctrl+? */
+    assert(ctrl(KEY_1).empty());
+    assert(ctrl(KEY_DOT).empty());
+    // without Ctrl a key without text writes nothing (unchanged)
+    assert(STKeyEncoder::encode(KEY_C, nullptr, false, 0).empty());
+    assert(STKeyEncoder::encode(KEY_C, "", false, KBD_MOD_SHIFT).empty());
+    // a key's text wins over its control byte (a physical keyboard's layout gives Ctrl+C as "\x03" itself)
+    assert(STKeyEncoder::encode(KEY_C, "\x03", false, KBD_MOD_CTRL) == "\x03");
+    assert(STKeyEncoder::encode(KEY_C, "c", false, KBD_MOD_CTRL) == "c");
+    // the control keys keep their own sequences with Ctrl (the on-screen arrows and Backspace under an armed Ctrl)
+    assert(ctrl(KEY_UP) == "\x1b[A");
+    assert(ctrl(KEY_BACKSPACE) == std::string(1, static_cast<char>(0x7f)));
+    assert(ctrl(KEY_ENTER) == "\r");
+    assert(ctrl(KEY_ESC) == "\x1b");
+    assert(STKeyEncoder::ctrl_byte(KEY_C, 0) == -1);
+    assert(STKeyEncoder::ctrl_byte(KEY_C, KBD_MOD_CTRL) == 3);
+
     assert(STKeyEncoder::should_forward_event(KEY_ENTER, KBD_KEY_PRESSED));
     assert(!STKeyEncoder::should_forward_event(KEY_ENTER, KBD_KEY_REPEATED));
     assert(!STKeyEncoder::should_forward_event(KEY_ENTER, KBD_KEY_RELEASED));

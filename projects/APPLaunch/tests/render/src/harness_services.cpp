@@ -14,15 +14,18 @@
 #include "hal_lvgl_bsp.h"
 #include "cp0_lvgl_app.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <map>
 #include <mutex>
 #include <set>
 #include <string>
+#include <vector>
 
 #include <strings.h>
 
@@ -266,8 +269,153 @@ void config_set(const std::string &key, const std::string &value)
     config()[key] = value;
 }
 
+/* --------------------------------------------------------------------------- fake PTY (task 014 P4b) */
+
+namespace {
+
+struct FakePty {
+    std::mutex mutex;
+    bool open = false;
+    bool exited = false;
+    std::string output; /* what Read returns next */
+    std::string prompt = "$ ";
+    std::vector<std::string> log;
+};
+
+FakePty &fake_pty()
+{
+    static FakePty pty;
+    return pty;
+}
+
+/* the bytes written, readable: text as is, Esc as \e, other control bytes as \xNN */
+std::string visible_bytes(const std::string &data)
+{
+    std::string out;
+    for (unsigned char c : data) {
+        char hex[8];
+        if (c == 0x1b) out += "\\e";
+        else if (c < 0x20 || c == 0x7f) {
+            std::snprintf(hex, sizeof(hex), "\\x%02x", c);
+            out += hex;
+        } else out += static_cast<char>(c);
+    }
+    return out;
+}
+
+/* a cooked tty with a shell behind it: what the user sees of a key (call with the mutex held) */
+void pty_echo(FakePty &pty, const std::string &data)
+{
+    if (!data.empty() && data[0] == 0x1b) return; /* Esc and the arrows' sequences: no echo */
+    for (unsigned char c : data) {
+        if (c == '\r') pty.output += "\r\n" + pty.prompt;
+        else if (c == 0x7f) pty.output += "\b \b";
+        else if (c == 0x03) pty.output += "^C\r\n" + pty.prompt;
+        else if (c == 0x04) { /* ^D on the prompt: the shell says exit and ends */
+            pty.output += "exit\r\n";
+            pty.exited = true;
+            pty.log.push_back("exit");
+            return;
+        }
+        else if (c == '\t') continue; /* completion: nothing to complete here */
+        else if (c < 0x20) {
+            pty.output += '^';
+            pty.output += static_cast<char>(c + '@');
+        } else pty.output += static_cast<char>(c);
+    }
+}
+
+} // namespace
+
+void pty_output(const std::string &text)
+{
+    std::string bytes;
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\\' && i + 1 < text.size() && (text[i + 1] == 'n' || text[i + 1] == 'e')) {
+            bytes += text[i + 1] == 'n' ? "\r\n" : "\x1b";
+            ++i;
+        } else {
+            bytes += text[i];
+        }
+    }
+    FakePty &pty = fake_pty();
+    std::lock_guard<std::mutex> lock(pty.mutex);
+    pty.output += bytes;
+}
+
+void pty_set_prompt(const std::string &prompt)
+{
+    FakePty &pty = fake_pty();
+    std::lock_guard<std::mutex> lock(pty.mutex);
+    pty.prompt = prompt;
+}
+
+void pty_exit()
+{
+    FakePty &pty = fake_pty();
+    std::lock_guard<std::mutex> lock(pty.mutex);
+    pty.exited = true;
+    pty.log.push_back("exit");
+}
+
+std::vector<std::string> pty_log()
+{
+    FakePty &pty = fake_pty();
+    std::lock_guard<std::mutex> lock(pty.mutex);
+    return pty.log;
+}
+
 void install_services()
 {
+    /* The PTY service (cp0_pty_contract: Open COMMAND COLS ROWS ARGV0 ARGS..., Read H SIZE, Write H DATA, Resize H COLS
+     * ROWS, CheckChild H, Close H): one fake session at a time, handle "7". */
+    cp0_signal_pty_api.append([](Args args, Reply reply) {
+        FakePty &pty = fake_pty();
+        const std::string command = arg(args, 0);
+        std::unique_lock<std::mutex> lock(pty.mutex);
+        if (command == "Open") {
+            pty.open = true;
+            pty.exited = false;
+            pty.output.clear();
+            pty.log.push_back("open " + arg(args, 1) + " " + arg(args, 2) + "x" + arg(args, 3));
+            lock.unlock();
+            if (reply) reply(0, "7");
+        } else if (command == "Read") {
+            if (pty.exited && pty.output.empty()) {
+                lock.unlock();
+                if (reply) reply(-1, "");
+                return;
+            }
+            const std::size_t size = static_cast<std::size_t>(std::max(1, std::atoi(arg(args, 2).c_str())));
+            const std::string data = pty.output.substr(0, size);
+            pty.output.erase(0, data.size());
+            lock.unlock();
+            if (reply) reply(static_cast<int>(data.size()), data);
+        } else if (command == "Write") {
+            const std::string data = arg(args, 2);
+            pty.log.push_back("write " + visible_bytes(data));
+            pty_echo(pty, data);
+            lock.unlock();
+            if (reply) reply(static_cast<int>(data.size()), "");
+        } else if (command == "Resize") {
+            pty.log.push_back("resize " + arg(args, 2) + "x" + arg(args, 3));
+            lock.unlock();
+            if (reply) reply(0, "");
+        } else if (command == "CheckChild") {
+            const bool exited = pty.exited;
+            lock.unlock();
+            if (reply) reply(exited ? 1 : 0, exited ? "0" : "");
+        } else if (command == "Close") {
+            pty.open = false;
+            pty.log.push_back("close");
+            lock.unlock();
+            if (reply) reply(0, "");
+        } else {
+            lock.unlock();
+            unknown("pty", args, reply);
+        }
+    });
+
     cp0_signal_config_api.append([](Args args, Reply reply) {
         const std::string command = arg(args, 0);
         if (command == "GetInt" || command == "GetStr") {
