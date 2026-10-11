@@ -1,16 +1,22 @@
-# Settings, opened from its tile: it runs in the 320x170 compat window (scaled by the display
-# manager) with the native toolbar below. Root menu, then the Screen and System sections.
+# Settings (the native host, the default since task 014 P3e), opened from its tile: full screen on the native display.
+# Root menu, then the Screen and System sections. These are the Settings goldens (640x480 and 480x320; the other
+# sizes are review only); the first baseline of the native Settings, re-shot on 2026-10-11 from the compat ones.
 title settings
 apps Settings Store CLI SSH Calculator
 clock 20:30
 bt on
 home
 launch Settings
+wait 300
 shot settings_root
 key ENTER
+wait 300
 shot settings_screen
 key ESC
+wait 300
 key UP
+wait 300
 shot settings_root_system
 key ENTER
+wait 300
 shot settings_system

@@ -10,7 +10,6 @@
 # Review only: no golden; headers checked against the home grid's (run.sh header).
 title settings native apps
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK force
 env HARNESS_APPS catalogue

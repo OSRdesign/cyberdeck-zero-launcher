@@ -162,10 +162,6 @@ validate() {
     "$bin" compare "$ref/pi3a-home-480x320.png" "$out/480x320/home.png" --ignore 0,0,14,30 \
         --diff "$out/diff/validate-pi3a-home.png" || true
     "$bin" compare "$ref/pi3a-home-480x320.png" "$out/480x320/home.png" --ignore 0,0,14,30 --tolerance 9 || rc=1
-    echo "-- Settings root 640x480 (docs/screenshots/settings.png, deck 2026-10-03): clock and Wi-Fi"
-    echo "   strip ignored (other time and signal); expect identical elsewhere"
-    "$bin" compare "$root/docs/screenshots/settings.png" "$out/640x480/settings_root.png" --ignore 440,0,200,40 \
-        --diff "$out/diff/validate-settings-root.png" || rc=1
     return $rc
 }
 

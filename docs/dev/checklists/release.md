@@ -8,6 +8,10 @@ A release is an approval gate: the user says "cut vX.Y.Z".
 4. Version and notes: `docs-writer` drafts the release notes (what is new, how to install, how to update).
 5. Build the bundle in WSL: `projects/APPLaunch/pizero2w/build.sh --with-store`; check the tarball is new
    (timestamp), contains the launcher, the Store, `install.sh`, the service file, the fonts.
+   `build.sh` builds the `release` channel unless `APPLAUNCH_CHANNEL` is set (so development-only pages such as
+   System > Keyboard test stay hidden, and About / System "Channel" reads `release`); `tools/dev/wsl-build.sh` builds
+   `development` by default, so a bundle meant for a release is built with `build.sh` directly (or with
+   `APPLAUNCH_CHANNEL=release tools/dev/wsl-build.sh`). CI builds `prerelease`.
 6. Optional but wanted for launcher changes: `deck-verifier` installs the new binary on the deck and confirms the
    startup and the home grid.
 7. Push both repos (user's go-ahead), then `gh release create vX.Y.Z <tarball> --target main --notes-file ...`.

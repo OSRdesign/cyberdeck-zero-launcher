@@ -2,7 +2,7 @@
 #
 # Task 014 P3e: no page of the Pi boards' Settings tree may be left to the compat (legacy) path. Every page factory
 # the tree puts on a Pi board must be one the native host knows: a native page, a section or a value page (Choice).
-# settings_node_kind() sends any other factory to SettingsNodeKind::Custom (compat path, hidden in a release build).
+# settings_node_kind() sends any other factory to SettingsNodeKind::Custom (hidden by the native host).
 
 import re
 from pathlib import Path

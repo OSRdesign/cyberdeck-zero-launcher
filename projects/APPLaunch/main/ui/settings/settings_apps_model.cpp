@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Settings > Apps, the rules of the native page (see settings_apps_model.hpp). Each rule of the lists is the legacy
- * page's (settings_apps_page.cpp: row_count, render, activate, request_remove_app, start_update_all, shortcut_key);
+ * page's (deleted in P3e: row_count, render, activate, request_remove_app, start_update_all, shortcut_key);
  * the action lists are the native page's (task 014 P3d, Controller decision).
  */
 

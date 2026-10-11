@@ -12,6 +12,8 @@
 #      CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk; bash build.sh in projects/APPLaunch/pizero2w
 #   4. prints the last 25 lines of the build, the full log's path, the bundle's path and size
 #
+#   APPLAUNCH_CHANNEL in the environment sets the channel (default development here; build.sh alone defaults to release)
+#
 #   --with-store     also build the Store (passed to pizero2w/build.sh)
 #   --build-dir DIR  WSL build tree (default ~/zero7/<checkout folder name>)
 #   --log FILE       full build log (default /tmp/wsl-build-<checkout folder name>.log)
@@ -58,6 +60,8 @@ set +e
     source "$HOME/zero7/venv/bin/activate"
     export VENV=$HOME/zero7/venv APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y \
         CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+    # a developer's build: development-only pages show (pizero2w/build.sh defaults to release); the caller may override
+    export APPLAUNCH_CHANNEL=${APPLAUNCH_CHANNEL:-development}
     cd "$build_dir/projects/APPLaunch/pizero2w" && bash build.sh "${store[@]}"
 ) >"$log" 2>&1
 rc=$?

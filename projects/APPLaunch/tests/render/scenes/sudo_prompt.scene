@@ -5,7 +5,6 @@
 # on the dialog's button), then with a physical keyboard (no keyboard, buttons visible; Enter / Esc). Review only.
 title sudo prompt
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK force
 apps Settings Store CLI SSH Calculator

@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The native Settings > Apps page (task 014 P3d): the legacy page's two tabs (settings_apps_page.cpp) in the roller
+ * The native Settings > Apps page (task 014 P3d): the legacy page's two tabs (deleted in P3e; see git history) in the roller
  * look, touch and keyboard, plus action lists so that every action also works by touch. Rules in
  * settings_apps_model.hpp, workers in settings_apps_jobs.hpp.
  *
@@ -39,5 +39,17 @@
 #pragma once
 
 #include "settings_native_panel.hpp"
+#include "settings_tree_types.hpp"
+
+#include "lvgl_components.hpp"
+
+#include <functional>
+#include <memory>
+
+/* The Apps entry's page identity in the Settings tree (settings_native_page() and the legacy roller know the entry by
+ * this function). The legacy Apps page was deleted in P3e: it builds nothing, and the legacy roller (stock
+ * CardputerZero, the SDL simulator) tolerates a null page, so the entry does nothing there. */
+std::unique_ptr<DComponens::LvglComponensBase> settings_apps_page_factory(
+    lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 
 std::unique_ptr<SettingsNativePanel> settings_apps_panel_create(const SettingsNativePanelContext &context);

@@ -9,7 +9,6 @@
 # Review only, no golden.
 title settings native apps action lists
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK auto
 env HARNESS_APPS catalogue

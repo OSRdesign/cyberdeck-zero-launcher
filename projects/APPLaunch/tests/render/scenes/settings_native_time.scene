@@ -5,11 +5,10 @@
 # works (back in the section, the new time shown); a date before the factory date (the harness build date is
 # 2026-10-10: the clock is set to 2000-03-14) asks first in a Dialog: Cancel (Esc), then Confirm; the header's Esc
 # closes the question first, and leaving the section with the question open answers no.
-# Review only: no golden (the compat Settings goldens are unchanged); every header is checked against the home
+# Review only: no golden; every header is checked against the home
 # grid's (run.sh header). Fixtures: scene commands `ntp on|off`, `timeset ok|fail` (src/harness_stubs.cpp).
 title settings native date and time
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 apps Settings Store CLI SSH Calculator
 clock 20:30 2026-10-10

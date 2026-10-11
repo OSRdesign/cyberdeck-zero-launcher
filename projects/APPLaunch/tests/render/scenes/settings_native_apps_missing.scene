@@ -4,7 +4,6 @@
 # Review only: no golden.
 title settings native apps backend missing
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env HARNESS_APPS missing
 apps Settings Store CLI SSH Calculator

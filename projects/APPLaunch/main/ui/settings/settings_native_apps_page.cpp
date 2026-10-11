@@ -563,3 +563,9 @@ std::unique_ptr<SettingsNativePanel> settings_apps_panel_create(const SettingsNa
 {
     return std::make_unique<AppsPanel>(context);
 }
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_apps_page_factory(lv_obj_t *, const NodeIter &,
+                                                                         std::function<void()>)
+{
+    return nullptr;
+}

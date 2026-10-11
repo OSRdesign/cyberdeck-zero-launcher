@@ -3,7 +3,7 @@
  *
  * The native Settings host (task 014 P2a, decisions D1-D3): the existing Settings tree (settings_page.cpp) drawn
  * full screen on the native display with the shared widgets (cp0_ui_widgets.hpp), touch native and keyboard
- * complete, at every screen size. Runs when APPLAUNCH_SETTINGS_UI=native (settings_native_mode.hpp).
+ * complete, at every screen size. Runs whenever the dpi-scaled display backend exists (settings_native_mode.hpp).
  *
  * Single column, drill-in, one level at a time:
  *   level 1  the sections (the root's children, exactly the entries the tree has on this board)
@@ -20,8 +20,7 @@
  *   Toggle   a switch; status read with SettingApiReadFlagTimeStart on a worker (Async) or polled (Direct), toggled
  *            with SettingApiActivate, exactly as the legacy submenu does
  *   Action   SettingApiActivate on Enter
- *   Custom   no native widget yet (no node of the Pi boards): the compat path in development builds
- *            (settings_native_compat.hpp), hidden in a release build (D3)
+ *   Custom   a legacy page of another board with no native widget (no node of the Pi boards): hidden
  *   Native   a page built natively instead of the roller (settings_native_panel.hpp: the development Keyboard test
  *            form, task 014 P2b; the read-only pages About, User, Storage, Licenses, Date & Time > Info, P3a; the
  *            Wi-Fi page, P3b; Bluetooth Paired Devices, Scan, Alias, P3c; Apps, P3d). Esc first goes back inside the
@@ -49,7 +48,6 @@
 #include <vector>
 
 class AppPageRoot;
-class SettingsCompatPath;
 class SettingsNativePanel;
 namespace DComponens {
 class LvglComponensBase;
@@ -87,7 +85,6 @@ private:
     void toggle(int index);
     void read_toggle(int index);
     void poll_direct_toggles();
-    void open_custom(int index);
     void open_native(int index);
     void close_native();
     void binding_done(std::uint64_t generation, const SettingEntry *entry);
@@ -111,7 +108,6 @@ private:
     std::unique_ptr<cp0::ui::Page> page_;
     std::unique_ptr<cp0::ui::Roller> roller_;
     lv_obj_t *binding_host_ = nullptr;
-    std::unique_ptr<SettingsCompatPath> compat_;
     std::unique_ptr<cp0::ui::Dialog> confirm_;    /* a value page's question (choice_confirm), over the list */
     int confirm_row_ = -1;                        /* the row that asked */
     std::unique_ptr<SettingsNativePanel> native_; /* a Native row's page, shown instead of the roller */

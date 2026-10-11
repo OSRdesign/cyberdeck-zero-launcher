@@ -8,7 +8,7 @@ accepted too); it is never stored, never on a command line (sudo reads it on std
 ```
 python board.py upload     pi3a C:/path/pizero2w-bundle.tar.gz   # upload, unpack to /tmp/applaunch-bundle, stage ~/applaunch-test
 python board.py install    pi3a [--check]                        # sudo install.sh --user <user> (--check = install.sh --dry-run)
-python board.py test-start pi5 --env APPLAUNCH_SETTINGS_UI=native --env APPLAUNCH_OSK=force
+python board.py test-start pi5 --env APPLAUNCH_OSK=force
 python board.py grab       pi5 C:/tmp/pi5.png [--raw]            # framebuffer, turned the way the user sees it
 python board.py test-stop  pi5                                   # restore desktop / service, remove test files
 python board.py status     deck

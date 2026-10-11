@@ -9,7 +9,7 @@
  *                                 channel build): a native form with a Text, a Number and a Password field, to try the
  *                                 keyboard on a board (APPLAUNCH_OSK=force shows it even with a physical keyboard).
  *
- * The compat Settings (the deck's default) gets neither, so its pages and the render harness goldens are unchanged.
+ * The legacy roller Settings (stock builds without the dpi-scaled backend) gets neither.
  */
 #pragma once
 
@@ -48,7 +48,7 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_keyboard_choice_page_fac
     lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 
 // The "Keyboard test" entry's factory: a marker for settings_native_page() (SettingsNativePage::KeyboardTest); the
-// native host opens the page with settings_native_panel_create(). It builds nothing for the compat renderer.
+// native host opens the page with settings_native_panel_create(). It builds nothing for the legacy renderer.
 std::unique_ptr<DComponens::LvglComponensBase> settings_keyboard_test_factory(
     lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 

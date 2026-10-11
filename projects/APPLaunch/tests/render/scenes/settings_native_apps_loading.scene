@@ -4,7 +4,6 @@
 # Review only: no golden.
 title settings native apps loading
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env HARNESS_APPS hold
 env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore

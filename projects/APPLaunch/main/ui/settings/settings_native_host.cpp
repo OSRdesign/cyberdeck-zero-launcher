@@ -8,8 +8,6 @@
 
 #include "lvgl_components.hpp"
 #include "settings_keyboard_page.hpp"
-#include "settings_native_compat.hpp"
-#include "settings_native_mode.hpp"
 #include "settings_native_panel.hpp"
 #include "settings_page.hpp"
 #include "ui_app_page.hpp"
@@ -134,10 +132,6 @@ SettingsNativeHost::SettingsNativeHost(AppPageRoot &page, lv_obj_t *parent, Tree
     // on the active screen (native_ui.cpp), so it matches the home grid's from the first frame.
     if (lv_obj_t *screen = page.screen()) lv_obj_add_event_cb(screen, screen_loaded_cb, LV_EVENT_SCREEN_LOADED, this);
 
-    compat_ = std::make_unique<SettingsCompatPath>(
-        page, [this](std::function<void()> callback) { post(std::move(callback)); },
-        [this] { build_rows(roller_->selected()); });
-
     path_.push_back(tree_.begin());
     build_rows(0);
 }
@@ -147,7 +141,6 @@ SettingsNativeHost::~SettingsNativeHost()
     lv_async_call_cancel(run_posted_cb, this);
     posted_.clear();
     native_.reset(); /* its fields stop editing (input context, intercept, keyboard) before anything else goes */
-    compat_.reset();
     release_rows();
     if (lv_obj_t *screen = page_root_.screen())
         lv_obj_remove_event_cb_with_user_data(screen, screen_loaded_cb, this);
@@ -212,7 +205,6 @@ void SettingsNativeHost::build_rows(int selected)
 {
     release_rows();
     const NodeIter section = path_.back();
-    const bool dev = settings_ui::dev_pages();
     for (auto child = section.begin(); child != section.end(); ++child) {
         auto row = std::make_unique<Row>();
         row->node = child;
@@ -225,8 +217,8 @@ void SettingsNativeHost::build_rows(int selected)
         case SettingsNodeKind::Native: row->type = RowType::Native; break;
         case SettingsNodeKind::Plain: row->type = RowType::Plain; break;
         }
-        /* D3: a release build hides unmigrated pages; native ones (Apps since P3d) show in both */
-        if (row->type == RowType::Custom && !dev) continue;
+        /* a legacy page of another board with no native widget is hidden (no node of the Pi boards is Custom) */
+        if (row->type == RowType::Custom) continue;
         rows_.push_back(std::move(row));
     }
     status_tasks_ = std::make_unique<StatusTasks>();
@@ -349,7 +341,6 @@ void SettingsNativeHost::show_choice(int index)
 
 void SettingsNativeHost::back()
 {
-    if (compat_ && compat_->active()) return; /* the compat page handles its own Esc */
     if (confirm_) {
         answer_confirm(false); /* the header's Esc closes the question first */
         return;
@@ -418,13 +409,11 @@ void SettingsNativeHost::activate_entry(int index)
         } catch (...) {
         }
         break;
-    case RowType::Custom:
-        open_custom(index);
-        break;
     case RowType::Native:
         open_native(index);
         break;
     case RowType::Slider:
+    case RowType::Custom:
     case RowType::Plain:
         break;
     }
@@ -450,13 +439,6 @@ void SettingsNativeHost::slide(int index, int value)
     row.slider_value = row.percents[best];
     roller_->update_row(index, row_spec(row));
     row.binding->choice_activate(static_cast<int>(best));
-}
-
-void SettingsNativeHost::open_custom(int index)
-{
-    if (!settings_ui::dev_pages() || !compat_) return;
-    const NodeIter node = rows_[static_cast<size_t>(index)]->node;
-    compat_->open(node);
 }
 
 /* A Native row (task 014 P2b): its page takes the body; the roller hides and leaves the input group meanwhile. Esc on a

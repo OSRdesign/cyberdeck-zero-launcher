@@ -9,7 +9,6 @@
 # the home grid's (run.sh header).
 title settings native wifi
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK force
 apps Settings Store CLI SSH Calculator

@@ -113,7 +113,7 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 
 | Part | Files |
 | --- | --- |
-| Settings > Apps page | `projects/APPLaunch/main/ui/settings/settings_apps_page.{hpp,cpp}` |
+| Settings > Apps page | `projects/APPLaunch/main/ui/settings/settings_native_apps_page.{hpp,cpp}` (workers: `settings_apps_jobs.*`, rules: `settings_apps_model.*`) |
 | Backend access (sources, catalogue, install flow) | `projects/APPLaunch/main/ui/settings/apps_backend.{hpp,cpp}` |
 | Example app | `apps/lanscan/` in the apps repo |
 | Switch (off on the original CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |

@@ -10,7 +10,7 @@
 #include "settings_native_host.hpp"
 #include "settings_native_mode.hpp"
 #include "settings_touch_page.hpp"
-#include "settings_apps_page.hpp"
+#include "settings_native_apps_page.hpp"
 
 #include "cp0_backlight_profile.h"
 #include "cp0_lvgl_app.h"

@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Settings > Apps, the rules of the native page (task 014 P3d): pure (no LVGL, no thread, no I/O;
- * tests/test_settings_apps_model.cpp). The legacy page's behaviour (settings_apps_page.cpp) without its drawing, plus
+ * tests/test_settings_apps_model.cpp). The legacy page's behaviour (deleted in P3e) without its drawing, plus
  * the native page's action lists:
  *
  *   tabs      Apps (the catalogue of the user's own sources) and Sources. A pending confirmation and an open action list

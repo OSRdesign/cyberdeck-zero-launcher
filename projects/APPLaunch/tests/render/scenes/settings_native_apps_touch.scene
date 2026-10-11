@@ -7,7 +7,6 @@
 title settings native apps touch
 review
 sizes 480x320 800x480
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env HARNESS_APPS catalogue
 env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore

@@ -1,8 +1,10 @@
 # How to build a native Settings page (cheat sheet)
 
-The native Settings host draws the existing Settings tree full screen with the shell's widgets when
-`APPLAUNCH_SETTINGS_UI=native` (`projects/APPLaunch/main/ui/settings/settings_native_mode.hpp`). A page that has no
-native widget yet opens through the compat path in development builds and is hidden in release builds (decision D3).
+The native Settings host draws the existing Settings tree full screen with the shell's widgets whenever
+the dpi-scaled display backend exists, i.e. on every Pi board (`native_ui::enabled()`,
+`projects/APPLaunch/main/ui/settings/settings_native_mode.hpp`; since task 014 P3e there is no switch and no compat
+path). A page that has no native widget is hidden (`Custom`); stock CardputerZero, the SDL simulator and the emulator
+have no such backend and keep the legacy roller pages.
 Paths below are relative to `projects/APPLaunch/main/ui/settings/` unless they start with a repo folder. LVGL is 9.5.0.
 
 ## 1. How the host decides what a tree node becomes
@@ -13,7 +15,7 @@ own page factory and API, in this order:
 | Kind | Rule |
 | --- | --- |
 | `Native` | `settings_native_page(node)` is not `None` (checked first) |
-| `Custom` | the entry's `page_type == PageType::FullCustom`, or any other factory not listed below (compat path) |
+| `Custom` | the entry's `page_type == PageType::FullCustom`, or any other factory not listed below (hidden: no compat path any more) |
 | `Section` | factory `roller_page_factory` or `bluetooth_roller_page_factory` |
 | `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `settings_rtc_confirm_page_factory` (Save?), `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory` |
 | `Toggle` | no factory, `icon_enabled` and `has_api()` |
@@ -88,7 +90,7 @@ development keyboard form (`settings_keyboard_page.cpp`).
   `wifi_hidden_ssid` for Join Hidden. Add your service's commands and fixture fields there; an unknown command answers
   -1 and logs `no fixture`.
 - Scene: `scenes/settings_native_<name>.scene`. Template: `scenes/settings_native_wifi.scene`
-  (`env APPLAUNCH_SETTINGS_UI native`, `env APPLAUNCH_DEV 0`, `env APPLAUNCH_OSK force`, `apps ...`, `home`,
+  (`env APPLAUNCH_DEV 0`, `env APPLAUNCH_OSK force`, `apps ...`, `home`,
   `header home ZERO`, `launch Settings`, `key DOWN` / `key ENTER`, `wait`, `shot NAME`, `header NAME "Settings > X" X`,
   `tapkey` for the on-screen keyboard). `review` marks shots without goldens. Without a `sizes` line a scene renders
   at 480x320, 640x480, 800x480, 720x720 and 1280x720 (`src/harness_main.cpp`).

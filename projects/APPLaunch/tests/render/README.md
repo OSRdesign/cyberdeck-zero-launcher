@@ -1,7 +1,7 @@
 # Render harness (headless PC screenshots of the launcher)
 
 Renders the native shell (home grid, status strip, stock-app toolbar, Calculator, screensaver, toasts) and
-the compat-hosted Settings pages to PNG at any logical screen size, on the PC, with no board and no
+the native Settings pages to PNG at any logical screen size, on the PC, with no board and no
 SDL. Goldens at 640x480 (deck) and 480x320 (Pi 3A+) catch any changed pixel, so the responsive-shell
 work (task 014, P1b onwards) can be checked without a person at a board.
 
@@ -93,12 +93,12 @@ runs at those sizes only.
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
 `screensaver`, `toast` (one and two lines), `settings` (root, Screen section, root on System, System
-section). Settings runs where it runs on the device: in the compat window, scaled by the display manager.
-`settings_native` (task 014 P2a, `APPLAUNCH_SETTINGS_UI=native`: root, Screen section, DarkTime list, Brightness
+section). Settings is the native host (full screen on the native display, the default since task 014 P3e; its
+goldens were re-shot on 2026-10-11 from the compat ones).
+`settings_native` (task 014 P2a: root, Screen section, DarkTime list, Brightness
 slider one step darker or the Pi 3A+ on/off list, at all five sizes) and `settings_native_touch` (tap, tap to open,
-drag, the header's Esc button, at 480x320 and 800x480) and `settings_native_compat` (decision D3: Apps opens through
-the compat path in a development build, Esc returns to the native Settings, Esc again goes home) are review-only scenes
-(no goldens; the compat Settings goldens above are unchanged); their headers are checked against the home grid by
+drag, the header's Esc button, at 480x320 and 800x480) are review-only scenes
+(no goldens); their headers are checked against the home grid by
 `run.sh header`.
 `osk` (task 014 P2b, `APPLAUNCH_OSK=force`: Settings > System > On-screen keyboard, then the development page
 Keyboard test: letters, Shift armed, 123, Ctrl armed, number pad, password masked, Esc dismisses, a tap on the field
@@ -125,8 +125,8 @@ Goldens compare harness to harness. Against the devices (`run.sh validate`, capt
 - Pi 3A+ home 480x320 vs `/dev/fb1` capture (RGB565, de-rotated): 16 pixels are the console cursor
   blinking at the top left (not drawn by the launcher, ignored), 25 pixels in the clock text differ by at
   most 1 LSB of RGB565 (channel delta 9). Everything else identical.
-- Settings root 640x480 vs `docs/screenshots/settings.png` (deck, 2026-10-03): identical outside the
-  clock/Wi-Fi strip (other time and signal in that capture).
+- Settings: no device comparison any more (the one against `docs/screenshots/settings.png`, a 2026-10-03 deck capture
+  of the compat Settings, was dropped with the flip to the native Settings, task 014 P3e).
 
 Caveats: the device blends with NEON and the host does not; the device's FreeType (Debian trixie) and
 the host's (Ubuntu 24.04) may rasterise a glyph differently. Expect at most 1-LSB differences against

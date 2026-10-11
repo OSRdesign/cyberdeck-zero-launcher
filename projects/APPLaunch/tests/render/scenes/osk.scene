@@ -2,11 +2,10 @@
 # APPLAUNCH_OSK=force (the harness has no presence watcher; on a board the keyboard shows only when no physical
 # keyboard is present). The keys are tapped through the touch path (tapkey). Shots: the System section with
 # "On-screen keyboard: Auto", the Text field editing with the letters page, Shift armed, the 123 page, Ctrl armed, the
-# Number field on the number pad, the Password field masked. Review only: no golden (the compat Settings goldens
-# are unchanged); the page header is checked against the home grid's (run.sh header).
+# Number field on the number pad, the Password field masked. Review only: no golden; the page header is checked against the
+# home grid's (run.sh header).
 title on-screen keyboard
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 1
 env APPLAUNCH_OSK force
 apps Settings Store CLI SSH Calculator
