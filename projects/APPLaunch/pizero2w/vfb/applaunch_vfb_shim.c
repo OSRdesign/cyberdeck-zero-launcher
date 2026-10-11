@@ -30,6 +30,7 @@
 static int g_vfds[MAX_VFDS];
 static int g_vfd_count;
 static applaunch_vfb_header_t *g_header;
+static off_t g_data_offset; /* where the pixels start in the file (header_data_offset) */
 
 static int (*real_open)(const char *, int, ...);
 static int (*real_open64)(const char *, int, ...);
@@ -76,6 +77,17 @@ static void forget(int fd)
         }
 }
 
+/* Offset of the pixel data in an initialised file: VFB2 = its header_bytes (64 KiB: page-aligned on 4, 16 and
+ * 64 KiB-page kernels), VFB1 (a file an older launcher left) = 4096; -1 for anything else. */
+static off_t header_data_offset(const applaunch_vfb_header_t *header)
+{
+    if (header->magic == APPLAUNCH_VFB_MAGIC_V1) return APPLAUNCH_VFB_HEADER_BYTES_V1;
+    if (header->magic != APPLAUNCH_VFB_MAGIC || header->version < APPLAUNCH_VFB_VERSION) return -1;
+    const uint32_t bytes = header->header_bytes;
+    if (bytes < APPLAUNCH_VFB_HEADER_MAP_BYTES || bytes > (16u << 20) || bytes % 4096u != 0) return -1;
+    return (off_t)bytes;
+}
+
 /* Opens the shared file for an app that asked for a framebuffer; -1 when not available. */
 static int open_virtual(int flags)
 {
@@ -85,13 +97,15 @@ static int open_virtual(int flags)
     int fd = real_open(path, (flags & ~(O_CREAT | O_EXCL | O_TRUNC)) | O_RDWR | O_CLOEXEC);
     if (fd < 0) return -1;
     if (!g_header) {
-        void *map = real_mmap(NULL, APPLAUNCH_VFB_HEADER_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-        if (map == MAP_FAILED || ((applaunch_vfb_header_t *)map)->magic != APPLAUNCH_VFB_MAGIC) {
-            if (map != MAP_FAILED) munmap(map, APPLAUNCH_VFB_HEADER_BYTES);
+        void *map = real_mmap(NULL, APPLAUNCH_VFB_HEADER_MAP_BYTES, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        const off_t data_offset = map == MAP_FAILED ? -1 : header_data_offset(map);
+        if (data_offset < 0) {
+            if (map != MAP_FAILED) munmap(map, APPLAUNCH_VFB_HEADER_MAP_BYTES);
             real_close(fd);
             return -1;
         }
         g_header = map;
+        g_data_offset = data_offset;
     }
     g_header->attached = 1;
     g_vfds[g_vfd_count++] = fd;
@@ -160,9 +174,9 @@ static void *do_mmap(void *(*fn)(void *, size_t, int, int, int, off_t), void *ad
                      int flags, int fd, off_t offset)
 {
     if (fd >= 0 && is_virtual(fd)) {
-        /* the framebuffer starts after the header page */
+        /* the framebuffer starts after the header (mmap needs a page-aligned offset: VFB2's 64 KiB is) */
         return fn(addr, length, prot, (flags & ~MAP_ANONYMOUS) | MAP_SHARED, fd,
-                  offset + APPLAUNCH_VFB_HEADER_BYTES);
+                  offset + g_data_offset);
     }
     return fn(addr, length, prot, flags, fd, offset);
 }
@@ -194,7 +208,9 @@ static void fill_var(struct fb_var_screeninfo *var)
     var->blue.offset = 0;
     var->blue.length = 8;
     var->activate = FB_ACTIVATE_NOW;
-    var->height = var->width = (uint32_t)-1; /* unknown physical size */
+    /* unknown physical size, on purpose even though VFB2 carries ppmm_x100: a cp0_lvgl app (the Store) takes its
+     * density from the fbdev mm (cp0_lvgl_dpi_scaled.c), so real mm would change how it renders (report 023) */
+    var->height = var->width = (uint32_t)-1;
     var->vmode = FB_VMODE_NONINTERLACED;
 }
 

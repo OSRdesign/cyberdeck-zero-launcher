@@ -552,6 +552,24 @@ struct ExternalRun {
 };
 ExternalRun *s_external = nullptr;
 
+// gen= of the screen.state the launcher published (0 when there is none)
+unsigned screen_state_gen()
+{
+    char path[512];
+    if (cp0_ui_state_path(std::getenv("XDG_RUNTIME_DIR"), path, sizeof(path)) != 0) return 0;
+    const int fd = ::open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return 0;
+    char text[8192];
+    size_t len = 0;
+    while (len < sizeof(text)) {
+        const ssize_t n = ::read(fd, text + len, sizeof(text) - len);
+        if (n <= 0) break;
+        len += static_cast<size_t>(n);
+    }
+    ::close(fd);
+    return cp0_ui_state_parse_gen(text, len);
+}
+
 bool create_vfb_file(ExternalRun &run)
 {
     const uint32_t width = APPLAUNCH_VFB_DEFAULT_WIDTH, height = APPLAUNCH_VFB_DEFAULT_HEIGHT;
@@ -571,6 +589,21 @@ bool create_vfb_file(ExternalRun &run)
     header->bpp = 32;
     header->stride = stride;
     header->yres_virtual = height;
+    // VFB2: where the picture goes on the panel (the layout service's compat window), for the shim and later uses
+    header->version = APPLAUNCH_VFB_VERSION;
+    header->header_bytes = APPLAUNCH_VFB_HEADER_BYTES;
+    header->canvas_mode = APPLAUNCH_VFB_CANVAS_NATIVE;
+    if (const cp0_ui_metrics_t *m = cp0_ui_metrics_current()) {
+        header->host_w = static_cast<uint32_t>(m->w);
+        header->host_h = static_cast<uint32_t>(m->h);
+        header->win_x = m->compat.x;
+        header->win_y = m->compat.y;
+        header->win_w = m->compat.w;
+        header->win_h = m->compat.h;
+        header->scale = static_cast<uint32_t>(m->compat.scale);
+        header->ppmm_x100 = static_cast<uint32_t>(m->ppmm_x100);
+    }
+    header->gen = screen_state_gen();
     header->magic = APPLAUNCH_VFB_MAGIC; // last: the shim only attaches to an initialised file
     return true;
 }

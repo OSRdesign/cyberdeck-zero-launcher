@@ -183,3 +183,26 @@ retire its `/proc` check; R4 drop `X-MinSize` once it works at 480x320. Apps REA
 - **Q10** VFB2 in lockstep with the launcher; no versioned `.so` name.
 
 Order: P5-1 (contract core) now; P5-2 (`X-MinSize` + VFB2) and P5-3 (probe, harness, docs) after the Controller's review.
+
+## P5-2 as implemented (2026-10-12)
+
+- **`X-MinSize=WxH`** (`desktop_entry.{h,cpp}`): `DesktopEntry::min_w/min_h`, parsed by `parse_desktop_min_size()`
+  (`x` or `X`, decimal 1..65535 each, blanks around the parts allowed); anything else = 0x0 = no restriction (a later
+  bad line clears an earlier good one). `desktop_min_size_fits()` (pure) decides: no metrics = shown, otherwise hidden
+  when the screen is smaller in either dimension. `desktop_app_loader.cpp` asks it right after the parse with
+  `cp0_ui_metrics_current()` (the home grid's metrics; NULL on stock / SDL builds) and skips the file like
+  `Hidden=true` (not registered, so it does not appear in Settings > Apps either; the log says `hide ... X-MinSize`).
+  Tests: `tests/test_desktop_entry.cpp`.
+- **VFB2** (`applaunch_vfb.h`): magic `VFB2`, `header_bytes=65536`, the 9 VFB1 fields at the same offsets
+  (static_asserts) + `version header_bytes host_w host_h win_x win_y win_w win_h scale ppmm_x100 canvas_mode kb_request
+  kb_inset gen`. `native_ui.cpp` `create_vfb_file` fills them (metrics `w,h`, `compat` rect and scale, `ppmm_x100`,
+  `canvas_mode=0`, `kb_*=0`, `gen` read from the published `screen.state`); the file and the blit use the 64 KiB
+  offset. The shim maps 4096 bytes of header, takes the data offset from `header_bytes` (VFB2: >= 4096, <= 16 MiB,
+  4 KiB multiple) or 4096 for a `VFB1` file; any other magic is refused (the app then opens the real fb, as before
+  for a missing file). `VSCREENINFO` still reports mm = -1.
+- **F3 confirmed by reading:** the VFB1 shim passes `offset + 4096` to `mmap`, which must be a multiple of the page
+  size (EINVAL otherwise), so on a 16 KiB-page kernel every app mmap of the framebuffer fails. VFB2's 65536 is a
+  multiple of 4/16/64 KiB. Still to see on the HackBerry (physical test 12-13).
+- Host test: `projects/APPLaunch/pizero2w/vfb/test_vfb.sh` (shim + `fbtest.c` + `test_vfb_file.c`, host gcc, WSL):
+  VFB2 pixels at +65536 with the header area untouched, VFB1 at +4096, bad magic refused without a crash.
+  `fbtest` gained `FBTEST_FRAMES=N` and one log line after the page-flip ioctls.
