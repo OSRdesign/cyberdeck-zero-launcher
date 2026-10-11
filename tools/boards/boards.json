@@ -1,0 +1,94 @@
+{
+  "_comment": [
+    "Known boards for board.py. No passwords here: board.py reads the SSH password from the PW (or PIPW) environment variable.",
+    "kind: 'service' = the launcher is installed and runs as the user service APPLaunch.service (systemctl --user);",
+    "      'desktop' = Raspberry Pi OS desktop (lightdm + labwc) owns the screen: the test launcher stops lightdm and test-stop starts it again.",
+    "fb: the panel's framebuffer as the board reports it (width x height in buffer orientation, bpp, pixel format);",
+    "rotate: degrees counter-clockwise that turn a raw framebuffer capture into what the user sees (PIL Image.rotate).",
+    "test_env: the launcher environment of test-start (from APPLaunch.service, install.sh board profiles and the scratchpad test runs).",
+    "quirks: no_environ = an ssh command string containing the word 'environ' drops the connection (Pi 3A+): board.py refuses such a command."
+  ],
+  "boards": {
+    "deck": {
+      "host": "zero7.local",
+      "user": "osrde",
+      "kind": "service",
+      "fb": {"device": "/dev/fb0", "width": 640, "height": 480, "bpp": 32, "format": "BGRA"},
+      "rotate": 0,
+      "test_env": {
+        "APPLAUNCH_DISPLAY": "dpi-scaled",
+        "LV_LINUX_FBDEV_DEVICE": "/dev/fb0",
+        "APPLAUNCH_ROTATE": "0",
+        "LV_LINUX_KEYBOARD_DEVICE": "/dev/input/bt-keyboard",
+        "APPLAUNCH_TOUCH_SWAP_XY": "1",
+        "APPLAUNCH_TOUCH_INVERT_X": "0",
+        "APPLAUNCH_TOUCH_INVERT_Y": "1",
+        "APPLAUNCH_STD_KEYBOARD": "1"
+      },
+      "quirks": []
+    },
+    "pi3a": {
+      "host": "192.168.68.170",
+      "user": "osrde",
+      "kind": "service",
+      "fb": {"device": "/dev/fb1", "width": 320, "height": 480, "bpp": 16, "format": "RGB565"},
+      "rotate": 90,
+      "test_env": {
+        "APPLAUNCH_DISPLAY": "dpi-scaled",
+        "APPLAUNCH_BOARD": "pi3a-luckfox35",
+        "APPLAUNCH_FB": "/dev/fb1",
+        "LV_LINUX_FBDEV_DEVICE": "/dev/fb1",
+        "APPLAUNCH_LOGICAL": "480x320",
+        "APPLAUNCH_ROTATE": "90",
+        "APPLAUNCH_COMPAT_SCALE": "1",
+        "APPLAUNCH_PANEL_MM": "79x49",
+        "APPLAUNCH_TOUCH_DEV": "auto",
+        "APPLAUNCH_TOUCH_ORIENT": "buffer",
+        "APPLAUNCH_BACKLIGHT": "gpio:/sys/class/backlight/backlight_gpio",
+        "APPLAUNCH_TOUCH_SWAP_XY": "0",
+        "APPLAUNCH_TOUCH_INVERT_X": "0",
+        "APPLAUNCH_TOUCH_INVERT_Y": "0",
+        "APPLAUNCH_STD_KEYBOARD": "1"
+      },
+      "quirks": ["no_environ"]
+    },
+    "pi5": {
+      "host": "192.168.68.175",
+      "user": "osrde",
+      "kind": "desktop",
+      "fb": {"device": "/dev/fb0", "width": 480, "height": 800, "bpp": 32, "format": "BGRA"},
+      "rotate": 90,
+      "test_env": {
+        "APPLAUNCH_DISPLAY": "dpi-scaled",
+        "LV_LINUX_FBDEV_DEVICE": "/dev/fb0",
+        "APPLAUNCH_FB": "/dev/fb0",
+        "APPLAUNCH_LOGICAL": "800x480",
+        "APPLAUNCH_ROTATE": "90",
+        "APPLAUNCH_TOUCH_DEV": "auto",
+        "APPLAUNCH_TOUCH_ORIENT": "buffer",
+        "APPLAUNCH_STD_KEYBOARD": "1",
+        "APPLAUNCH_BOARD": "pi5-hyperpixel-test"
+      },
+      "quirks": []
+    },
+    "hackberry": {
+      "host": "192.168.68.214",
+      "user": "osrde",
+      "kind": "desktop",
+      "fb": {"device": "/dev/fb0", "width": 720, "height": 720, "bpp": 32, "format": "BGRA"},
+      "rotate": 0,
+      "test_env": {
+        "APPLAUNCH_DISPLAY": "dpi-scaled",
+        "LV_LINUX_FBDEV_DEVICE": "/dev/fb0",
+        "APPLAUNCH_FB": "/dev/fb0",
+        "APPLAUNCH_LOGICAL": "720x720",
+        "APPLAUNCH_ROTATE": "0",
+        "APPLAUNCH_TOUCH_DEV": "auto",
+        "APPLAUNCH_TOUCH_ORIENT": "buffer",
+        "APPLAUNCH_STD_KEYBOARD": "1",
+        "APPLAUNCH_BOARD": "hackberry-test"
+      },
+      "quirks": []
+    }
+  }
+}

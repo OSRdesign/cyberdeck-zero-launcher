@@ -43,6 +43,34 @@ Packages: write `apps/<id>/app.json`, put the files in `apps/<id>/root/` exactly
 then `python tools/make_registry.py --owner OSRdesign --repo cyberdeck-zero-apps` (builds every `.deb` and
 `registry.json`). Check a package with `dpkg-deb -I` and `dpkg-deb -c` in WSL.
 
+## Build, test, deploy (launcher)
+
+**LVGL is 9.5.0** (`CONFIG_V9_5_LVGL_VERSION_*` in the build's `build/config/global_config.mk`, sources in
+`SDK/github_source/lvgl/lvgl_9_5`): use the 9.5 API.
+
+- `tools/dev/wsl-build.sh`: syncs your checkout into its own WSL tree (`~/zero7/<checkout folder>`), builds the Pi
+  bundle under the build lock, prints the tail of the log and the bundle path. `tools/dev/check-all.sh`: unit tests,
+  render, compare, twice, header, one PASS/FAIL line each. Details and prerequisites: `tools/dev/README.md`.
+- `tools/boards/board.py` (`boards.json`): upload, install, test-start / test-stop, grab, status on the deck, the
+  Pi 3A+, the Pi 5 and the HackBerry, with each board's quirks built in (`--dry-run` prints the commands). Only the
+  device operator runs it against a board. See `tools/boards/README.md`.
+- Building a native Settings page: `docs/dev/native-settings-page-howto.md`.
+
+**Definition of done for a launcher UI task** (before the hand-off report):
+
+1. scons build green (`tools/dev/wsl-build.sh`), no new warnings in the files you touched;
+2. unit tests green (`ext_components/cp0_lvgl/tests/run_tests.sh`, `projects/APPLaunch/tests/run_tests.sh`), new
+   logic covered by a test registered there;
+3. compat goldens 640x480 and 480x320 byte-identical (`run.sh compare`), unless the task is a deliberate baseline
+   change agreed with the Controller;
+4. `run.sh twice` identical; `run.sh header` passes;
+5. new UI: a harness scene, rendered at the five sizes 480x320, 640x480, 800x480, 720x720, 1280x720 (contact sheet in
+   the report);
+6. docs and the file map updated;
+7. no commit and no push by workers.
+
+Steps 2-4 are one command: `tools/dev/check-all.sh`.
+
 ## Gotchas that cost hours (all learned the hard way)
 
 - The shell tool mangles backslash escapes inside heredocs (`\n`, `\b`, quotes). Write files with the Write/Edit

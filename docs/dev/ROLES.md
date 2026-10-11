@@ -18,9 +18,10 @@ The builder of a change never signs it off: `deck-verifier` does, and it has a v
 
 1. **Brief.** The Controller writes `docs/dev/tasks/NNN-name.md` (goal, owner, acceptance criteria, constraints, what
    it must not touch) and agrees it with the user.
-2. **Build.** The owner works in its own git worktree and builds with the WSL lock (see the dev guide). It does not
+2. **Build.** The owner works in its own git worktree and builds with the WSL lock (see the dev guide, "Build, test,
+   deploy": `tools/dev/wsl-build.sh`, `tools/dev/check-all.sh`, the launcher UI definition of done). It does not
    commit to `main`: it leaves changes uncommitted or on a branch and writes a hand-off report.
-3. **Deploy and observe.** `deck-verifier` installs the result on the deck (an app through Settings > Apps, a
+3. **Deploy and observe.** `deck-verifier` (or the device operator with `tools/boards/board.py`) installs the result on the deck (an app through Settings > Apps, a
    launcher binary by copying it) and captures screenshots and logs.
 4. **Verify.** `deck-verifier` runs the checklists in `docs/dev/checklists/` and writes `docs/dev/reports/NNN.md`.
    Failures go back to the owner with the evidence.
