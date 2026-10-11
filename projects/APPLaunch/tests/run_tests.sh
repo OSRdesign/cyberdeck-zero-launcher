@@ -200,6 +200,21 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/model/screensaver_model.cpp" \
     -o "$build_dir/test_screensaver_model"
 "$build_dir/test_screensaver_model"
+# P4: Calculator and dimmed clock layouts (pure, header-only; the Calculator test links the real layout service)
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_screensaver_clock_layout.cpp" \
+    -o "$build_dir/test_screensaver_clock_layout"
+"$build_dir/test_screensaver_clock_layout"
+${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_ui_metrics.c" \
+    -o "$build_dir/calculator_layout_metrics.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_calculator_layout.cpp" \
+    "$build_dir/calculator_layout_metrics.o" \
+    -o "$build_dir/test_calculator_layout"
+"$build_dir/test_calculator_layout"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_lockscreen_state_model.cpp" \

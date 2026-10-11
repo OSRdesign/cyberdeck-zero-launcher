@@ -1,0 +1,37 @@
+# Native Calculator on the computed layouts (task 014 P4), review only: empty, a long expression, a result of 8 and
+# more digits, a long result, an error, then the dimmed clock (DarkTime) over it. At the five default sizes; the
+# 640x480 and 480x320 Calculator goldens are in calculator.scene (pinned, unchanged).
+title calculator_more
+review
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-10-10
+wifi 70
+bt on
+config dark_time 10
+home
+launch Calculator
+shot calcm_empty
+type 12*34
+shot calcm_typing
+type +(7-2)^2/4
+shot calcm_expression
+key ENTER
+shot calcm_result
+key DELETE
+type 12345678*9
+key ENTER
+shot calcm_digits8
+key DELETE
+type 2/3
+key ENTER
+shot calcm_long_result
+key DELETE
+type 123456789+987654321*2-45/3+(7*8)^2-1000000
+shot calcm_long_expression
+key DELETE
+type 1/0
+key ENTER
+shot calcm_error
+screensaver
+wait 10600
+shot calcm_clock
