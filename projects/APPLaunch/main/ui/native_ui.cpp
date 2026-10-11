@@ -667,7 +667,11 @@ bool run_external(const std::string &command, bool keep_root, std::function<void
     cp0_display_set_key_sink([](unsigned short code, int value) { native_vkbd::send(code, value); });
 
     std::string wrapped = std::string("export APPLAUNCH_VFB=") + APPLAUNCH_VFB_DEFAULT_PATH +
-                          " LV_LINUX_FBDEV_DEVICE=/dev/fb0";
+                          " LV_LINUX_FBDEV_DEVICE=/dev/fb0"
+                          // The wrapped app draws into the 320x170 virtual framebuffer: drop the launcher's
+                          // board.conf panel geometry (rotation, logical size, scale) so its own dpi-scaled
+                          // backend draws upright and unscaled. APPLAUNCH_DISPLAY stays (status bar uses it).
+                          " APPLAUNCH_FB=/dev/fb0 APPLAUNCH_ROTATE=0";
     // Feed the app one virtual keyboard that carries both the physical keys and the toolbar taps.
     if (native_vkbd::ensure()) {
         const char *physical = std::getenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE");
@@ -679,7 +683,7 @@ bool run_external(const std::string &command, bool keep_root, std::function<void
     }
     if (::access(kVfbShim, R_OK) == 0) wrapped += std::string(" LD_PRELOAD=") + kVfbShim;
     else SLOGW("[EXT] %s is missing: the app will draw to the real framebuffer", kVfbShim);
-    wrapped += "; " + command;
+    wrapped += "; unset APPLAUNCH_LOGICAL APPLAUNCH_COMPAT_SCALE APPLAUNCH_PANEL_MM; " + command;
     SLOGI("[EXT] run: %s", wrapped.c_str());
 
     run->timer = lv_timer_create(external_poll, 33, nullptr);

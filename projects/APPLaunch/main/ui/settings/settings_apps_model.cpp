@@ -3,7 +3,8 @@
  *
  * Settings > Apps, the rules of the native page (see settings_apps_model.hpp). Each rule of the lists is the legacy
  * page's (deleted in P3e: row_count, render, activate, request_remove_app, start_update_all, shortcut_key);
- * the action lists are the native page's (task 014 P3d, Controller decision).
+ * the action lists are the native page's (task 014 P3d, Controller decision), the levels P3e's (Installed / Available
+ * split, Controller decision after the Pi 3A+ test).
  */
 
 #include "settings_apps_model.hpp"
@@ -45,11 +46,22 @@ void Model::set_status(const std::string &text, bool error, bool warn)
     status_warn_ = warn;
 }
 
-void Model::set_tab(Tab tab)
+void Model::set_level(Level level)
 {
     cancel();
     close_actions();
-    tab_ = tab;
+    level_ = level;
+}
+
+int Model::installed_count() const
+{
+    return static_cast<int>(
+        std::count_if(apps_.begin(), apps_.end(), [](const apps_backend::App &entry) { return entry.installed; }));
+}
+
+int Model::available_count() const
+{
+    return static_cast<int>(apps_.size()) - installed_count();
 }
 
 const apps_backend::App *Model::app(const std::string &id) const
@@ -72,6 +84,7 @@ bool Model::open_actions(int index)
 {
     const Row target = row(index);
     if (actions_ || (target.type != RowType::App && target.type != RowType::Source)) return false;
+    if (level_ == Level::Available) return false; /* an app to install has no list: Enter or a tap installs it */
     actions_ = true;
     actions_key_ = target.key;
     return true;
@@ -86,7 +99,7 @@ void Model::close_actions()
 std::string Model::actions_title() const
 {
     if (!actions_) return {};
-    if (tab_ == Tab::Apps) {
+    if (level_ == Level::Installed) {
         const apps_backend::App *chosen = app(actions_key_);
         return chosen ? chosen->title : std::string();
     }
@@ -97,13 +110,17 @@ std::string Model::actions_title() const
 bool Model::actions_valid() const
 {
     if (!actions_) return false;
-    return tab_ == Tab::Apps ? app(actions_key_) != nullptr : source(actions_key_) != nullptr;
+    if (level_ == Level::Installed) {
+        const apps_backend::App *chosen = app(actions_key_);
+        return chosen && chosen->installed; /* removed: its list has nothing left to do */
+    }
+    return source(actions_key_) != nullptr;
 }
 
 int Model::actions_row() const
 {
     const std::vector<Row> all = list_rows();
-    const RowType type = tab_ == Tab::Apps ? RowType::App : RowType::Source;
+    const RowType type = level_ == Level::Sources ? RowType::Source : RowType::App;
     for (std::size_t i = 0; i < all.size(); ++i)
         if (all[i].type == type && all[i].key == actions_key_) return static_cast<int>(i);
     return -1;
@@ -174,30 +191,52 @@ std::string Model::source_problem(const apps_backend::Source &source) const
     return shorten(source.name, 22) + ": " + problem + (source.status == "cached" ? " (cached list)" : "");
 }
 
+void Model::add_apps(std::vector<Row> &rows, bool installed) const
+{
+    bool any = false;
+    for (const apps_backend::App &entry : apps_) {
+        if (entry.installed != installed) continue;
+        rows.push_back({RowType::App, entry.id, entry.title, app_value(entry), busy_ && package_id_ == entry.id,
+                        app_tone(entry)});
+        any = true;
+    }
+    if (any) return;
+    Row placeholder;
+    if (backend_missing_) {
+        placeholder.label = "The Store is needed (backend missing)";
+    } else if (loaded_) {
+        placeholder.label = installed ? "No apps installed" : "Nothing to install";
+    } else {
+        placeholder.label = "Loading...";
+        placeholder.busy = true;
+    }
+    rows.push_back(std::move(placeholder));
+}
+
 std::vector<Row> Model::list_rows() const
 {
     std::vector<Row> rows;
-    if (tab_ == Tab::Apps) {
+    const bool counted = loaded_ && !backend_missing_;
+    auto count = [&](const char *label, int n) {
+        return std::string(label) + (counted ? " (" + std::to_string(n) + ")" : std::string());
+    };
+    switch (level_) {
+    case Level::Root:
+        rows.push_back({RowType::Installed, {}, count("Installed", installed_count()), {}, false, Tone::Normal});
+        rows.push_back({RowType::Available, {}, count("Available", available_count()), {}, false, Tone::Normal});
+        rows.push_back({RowType::Sources, {}, "Sources", {}, false, Tone::Normal});
+        return rows;
+    case Level::Installed:
         if (update_all_row())
             rows.push_back({RowType::UpdateAll, {}, "Update all (" + std::to_string(upgradable_count()) + ")", {}, false,
                             Tone::Normal});
-        for (const apps_backend::App &entry : apps_)
-            rows.push_back({RowType::App, entry.id, entry.title, app_value(entry), busy_ && package_id_ == entry.id,
-                            app_tone(entry)});
-        if (apps_.empty()) {
-            Row placeholder;
-            if (backend_missing_) {
-                placeholder.label = "The Store is needed (backend missing)";
-            } else if (loaded_) {
-                placeholder.label = "No apps: add your source in Sources";
-            } else {
-                placeholder.label = "Loading...";
-                placeholder.busy = true;
-            }
-            rows.push_back(std::move(placeholder));
-        }
-        rows.push_back({RowType::Sources, {}, "Sources", {}, false, Tone::Normal});
+        add_apps(rows, true);
         return rows;
+    case Level::Available:
+        add_apps(rows, false);
+        return rows;
+    case Level::Sources:
+        break;
     }
     for (const apps_backend::Source &entry : sources_) {
         const apps_status::SyncEntry *sync = sync_.find(entry.url);
@@ -213,9 +252,8 @@ std::vector<Row> Model::action_rows() const
 {
     std::vector<Row> rows;
     auto add = [&](RowType type, const char *label) { rows.push_back({type, actions_key_, label, {}, false, Tone::Normal}); };
-    if (tab_ == Tab::Apps) {
+    if (level_ == Level::Installed) {
         if (const apps_backend::App *chosen = app(actions_key_)) {
-            if (!chosen->installed) add(RowType::Install, "Install");
             if (chosen->upgradable()) add(RowType::Update, "Update");
             if (chosen->installed) add(RowType::Remove, "Remove");
         }
@@ -265,19 +303,24 @@ Action Model::activate(int index) const
     const Row target = row(index);
     Action action;
     switch (target.type) { /* what works while a job runs or without the backend */
+    case RowType::Installed:
+    case RowType::Available:
     case RowType::Sources:
-        action.kind = ActionKind::ShowSources;
+        action.kind = ActionKind::ShowLevel;
+        action.level = target.type == RowType::Installed
+                           ? Level::Installed
+                           : (target.type == RowType::Available ? Level::Available : Level::Sources);
         return action;
     case RowType::Cancel:
         action.kind = ActionKind::CloseActions;
         return action;
-    case RowType::App: {
-        // an up-to-date app: no install or update to start, its action list (Remove) instead
-        const apps_backend::App *chosen = app(target.key);
-        if (chosen && chosen->current()) action.kind = ActionKind::OpenActions;
-        if (chosen && chosen->current()) return action;
+    case RowType::App:
+        // an installed app: its action list (Update, Remove), never a direct update
+        if (level_ == Level::Installed && !actions_) {
+            action.kind = ActionKind::OpenActions;
+            return action;
+        }
         break;
-    }
     default:
         break;
     }
@@ -285,13 +328,14 @@ Action Model::activate(int index) const
     switch (target.type) {
     case RowType::UpdateAll:
         return update_all();
-    case RowType::App:
-    case RowType::Install:
+    case RowType::App: { /* Available: install it */
+        const apps_backend::App *chosen = app(target.key);
+        if (chosen && !chosen->installed) return package_action(ActionKind::Install, *chosen);
+        break;
+    }
     case RowType::Update: {
         const apps_backend::App *chosen = app(target.key);
-        if (!chosen) break;
-        if (!chosen->installed && target.type != RowType::Update) return package_action(ActionKind::Install, *chosen);
-        if (chosen->upgradable() && target.type != RowType::Install) return package_action(ActionKind::Upgrade, *chosen);
+        if (chosen && chosen->upgradable()) return package_action(ActionKind::Upgrade, *chosen);
         break;
     }
     case RowType::Remove:
@@ -327,6 +371,8 @@ Action Model::activate(int index) const
     case RowType::Sync:
         return sync();
     case RowType::Placeholder:
+    case RowType::Installed:
+    case RowType::Available:
     case RowType::Sources:
     case RowType::Cancel:
         break;
@@ -337,7 +383,7 @@ Action Model::activate(int index) const
 Action Model::tap(int index) const
 {
     const Row target = row(index);
-    if (!actions_ && (target.type == RowType::App || target.type == RowType::Source)) {
+    if (!actions_ && level_ == Level::Sources && target.type == RowType::Source) {
         Action action;
         action.kind = ActionKind::OpenActions;
         return action;
@@ -372,7 +418,7 @@ Action Model::sync() const
 Action Model::add_source() const
 {
     Action action;
-    if (tab_ == Tab::Sources && !actions_ && !busy_ && !backend_missing_) action.kind = ActionKind::AddSource;
+    if (level_ == Level::Sources && !actions_ && !busy_ && !backend_missing_) action.kind = ActionKind::AddSource;
     return action;
 }
 
@@ -382,7 +428,7 @@ bool Model::ask_remove(int index)
     const Row target = row(index);
     const bool listed = target.type == RowType::App || target.type == RowType::Source;
     if (!listed && target.type != RowType::Remove) return false;
-    if (tab_ == Tab::Apps && (target.type == RowType::App || target.type == RowType::Remove)) {
+    if (level_ == Level::Installed && (target.type == RowType::App || target.type == RowType::Remove)) {
         const apps_backend::App *chosen = app(target.key);
         if (!chosen || !chosen->installed) return false;
         pending_ = Confirm::RemoveApp;
@@ -391,7 +437,7 @@ bool Model::ask_remove(int index)
         pending_size_ = chosen->size;
         return true;
     }
-    if (tab_ == Tab::Sources && (target.type == RowType::Source || target.type == RowType::Remove)) {
+    if (level_ == Level::Sources && (target.type == RowType::Source || target.type == RowType::Remove)) {
         const apps_backend::Source *chosen = source(target.key);
         if (!chosen || chosen->builtin) return false;
         pending_ = Confirm::RemoveSource;
@@ -429,7 +475,7 @@ void Model::cancel()
 std::string Model::caption(int index, Severity &severity) const
 {
     // a running job's progress first; when idle, the failure of the highlighted source (or of the listed one)
-    if (!busy_ && tab_ == Tab::Sources) {
+    if (!busy_ && level_ == Level::Sources) {
         const std::string key = actions_ ? actions_key_ : (row(index).type == RowType::Source ? row(index).key : "");
         if (const apps_backend::Source *chosen = key.empty() ? nullptr : source(key)) {
             const std::string problem = source_problem(*chosen);

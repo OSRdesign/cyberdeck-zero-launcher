@@ -81,6 +81,8 @@ int main()
     assert(about_board.lines[1] == "Board: pi3a-luckfox35");
     assert(credit.title == "Third-Party Licenses & Credits");
     assert(credit.lines.size() > 300);
-    assert(credit.lines.front().find("Kickstarter backers") != std::string::npos);
+    assert(credit.lines.front() == "Cyberdeck Zero launcher");
+    assert(credit.lines[7] == "Upstream CardputerZero");
+    assert(credit.lines[8].find("Kickstarter backers") != std::string::npos);
     assert(credit.lines.back() == "CC0-1.0");
 }

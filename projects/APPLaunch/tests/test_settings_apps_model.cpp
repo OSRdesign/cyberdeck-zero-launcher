@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * Settings > Apps: Debian version order, upgrade detection, sync progress, failure reasons, free space, the
- * update-all queue; the native page's rules (settings_apps_model: rows, actions, confirmations, status line).
+ * update-all queue; the native page's rules (settings_apps_model: levels (Installed / Available / Sources), counts,
+ * empty states, rows, actions, confirmations, status line).
  */
 
 #include "../main/ui/settings/apps_backend.hpp"
@@ -486,53 +487,100 @@ static settings_apps::Model catalogue_model()
 
 static void model_rows()
 {
+    using settings_apps::Level;
     using settings_apps::RowType;
     assert(settings_apps::shorten("Weather Station", 12) == "Weather Sta~");
     assert(settings_apps::shorten("short", 12) == "short");
 
-    // before the first list: "Loading..." (busy), then the Sources row
+    // the root before the first list: no counts; each level says "Loading..." (busy)
     settings_apps::Model loading;
+    assert(loading.level() == Level::Root);
     auto rows = loading.rows();
-    assert(rows.size() == 2 && rows[0].type == RowType::Placeholder && rows[0].label == "Loading..." && rows[0].busy);
-    assert(rows[1].type == RowType::Sources && rows[1].label == "Sources");
-    loading.set_lists({}, {});
+    assert(rows.size() == 3 && rows[0].type == RowType::Installed && rows[0].label == "Installed");
+    assert(rows[1].type == RowType::Available && rows[1].label == "Available");
+    assert(rows[2].type == RowType::Sources && rows[2].label == "Sources");
+    loading.set_level(Level::Installed);
     rows = loading.rows();
-    assert(rows[0].label == "No apps: add your source in Sources" && !rows[0].busy && loading.loaded());
+    assert(rows.size() == 1 && rows[0].type == RowType::Placeholder && rows[0].label == "Loading..." && rows[0].busy);
+    loading.set_level(Level::Available);
+    assert(loading.rows()[0].label == "Loading..." && loading.rows()[0].busy);
+    // loaded and empty
+    loading.set_lists({}, {});
+    assert(loading.loaded());
+    assert(loading.rows().size() == 1 && loading.rows()[0].label == "Nothing to install" && !loading.rows()[0].busy);
+    loading.set_level(Level::Installed);
+    assert(loading.rows().size() == 1 && loading.rows()[0].label == "No apps installed" && !loading.rows()[0].busy);
+    loading.set_level(Level::Root);
+    assert(loading.rows()[0].label == "Installed (0)" && loading.rows()[1].label == "Available (0)");
+    // without the backend: no counts, the backend message on both levels
     settings_apps::Model missing;
     missing.set_backend_missing(true);
     assert(missing.status() == "Store backend not installed");
+    assert(missing.rows()[0].label == "Installed" && missing.rows()[1].label == "Available");
+    missing.set_level(Level::Installed);
     assert(missing.rows()[0].label == "The Store is needed (backend missing)" && !missing.rows()[0].busy);
+    missing.set_level(Level::Available);
+    assert(missing.rows()[0].label == "The Store is needed (backend missing)");
 
-    // the catalogue: Update all (2) first, versions as the legacy page shows them, Sources last
+    // the root of the catalogue: three installed, one to install
     settings_apps::Model model = catalogue_model();
+    assert(model.installed_count() == 3 && model.available_count() == 1);
+    rows = model.rows();
+    assert(rows.size() == 3 && rows[0].label == "Installed (3)" && rows[1].label == "Available (1)");
+    assert(rows[2].label == "Sources" && rows[0].tone == settings_apps::Tone::Normal);
+    assert(model.find_row(RowType::Available) == 1 && model.find_row(RowType::Sources) == 2);
+
+    // Installed: Update all (2) first, then the installed apps with their versions
+    model.set_level(Level::Installed);
     rows = model.rows();
     assert(model.upgradable_count() == 2 && model.update_all_row());
-    assert(rows.size() == 6);
+    assert(rows.size() == 4);
     assert(rows[0].type == RowType::UpdateAll && rows[0].label == "Update all (2)");
     assert(rows[1].key == "radar" && rows[1].label == "Packet Radar" && rows[1].value == "0.3.0>0.3.1");
-    assert(rows[2].value == "0.9.2");                // current: its version only
-    assert(rows[3].value == "v0.4.0");               // not installed: the offered version
-    // the legacy page's colours: an update amber, installed green, not installed muted
+    assert(rows[2].key == "notes" && rows[2].value == "0.9.2");   // current: its version only
+    assert(rows[3].key == "weather" && rows[3].value == "1.1.4>1.2.0");
+    // the legacy page's colours: an update amber, installed green
     using settings_apps::Tone;
-    assert(rows[1].tone == Tone::Update && rows[2].tone == Tone::Good && rows[3].tone == Tone::Muted);
-    assert(rows[0].tone == Tone::Normal && rows[5].tone == Tone::Normal);
-    assert(rows[5].type == RowType::Sources);
-    assert(model.find_row(RowType::App, "meter") == 3 && model.find_row(RowType::Sources) == 5);
-    assert(model.find_row(RowType::App, "nope") == -1);
+    assert(rows[1].tone == Tone::Update && rows[2].tone == Tone::Good && rows[0].tone == Tone::Normal);
+    assert(model.find_row(RowType::App, "weather") == 3 && model.find_row(RowType::App, "meter") == -1);
+    assert(model.find_row(RowType::Sources) == -1);
+
+    // Available: the app that is not installed, its offered version, muted
+    model.set_level(Level::Available);
+    rows = model.rows();
+    assert(rows.size() == 1 && rows[0].type == RowType::App && rows[0].key == "meter" && rows[0].value == "v0.4.0");
+    assert(rows[0].tone == Tone::Muted);
+
     // one update only: no Update all row
     settings_apps::Model single;
     single.set_lists({make_app("radar", "Packet Radar", "0.3.1", "0.3.0")}, {});
+    single.set_level(Level::Installed);
     assert(!single.update_all_row() && single.rows()[0].type == RowType::App);
     // long versions are cut as on the legacy page
     assert(settings_apps::Model::app_value(make_app("x", "X", "1.2.3-beta4", "1.2.3-beta3")) == "1.2.3-b~>1.2.3-b~");
-    // the app a package job runs for is busy
-    model.set_busy(true, "notes");
-    assert(model.rows()[2].busy && !model.rows()[1].busy);
-    model.set_busy(false, "notes");
-    assert(!model.rows()[2].busy && model.package_id().empty());
+    // the app a package job runs for is busy (an update on Installed, an install on Available)
+    model.set_level(Level::Installed);
+    model.set_busy(true, "radar");
+    assert(model.rows()[1].busy && !model.rows()[2].busy && !model.rows()[0].busy);
+    model.set_level(Level::Available);
+    model.set_busy(true, "meter");
+    assert(model.rows()[0].busy);
+    model.set_busy(false, "meter");
+    assert(!model.rows()[0].busy && model.package_id().empty());
+
+    // the counts follow a new list: Signal Meter installed
+    model.set_lists({make_app("radar", "Packet Radar", "0.3.1", "0.3.0", "2 MB"),
+                     make_app("notes", "Field Notes", "0.9.2", "0.9.2"),
+                     make_app("meter", "Signal Meter", "0.4.0", "0.4.0"),
+                     make_app("weather", "Weather Station", "1.2.0", "1.1.4")},
+                    model.sources());
+    assert(model.rows().size() == 1 && model.rows()[0].label == "Nothing to install");
+    model.set_level(Level::Root);
+    assert(model.rows()[0].label == "Installed (4)" && model.rows()[1].label == "Available (0)");
 
     // Sources: values, then Add and Sync
-    model.set_tab(settings_apps::Tab::Sources);
+    model = catalogue_model();
+    model.set_level(Level::Sources);
     rows = model.rows();
     assert(rows.size() == 5);
     assert(rows[0].type == RowType::Source && rows[0].key == "u1" && rows[0].value == "4 apps");
@@ -565,30 +613,54 @@ static void model_rows()
 static void model_actions()
 {
     using settings_apps::ActionKind;
+    using settings_apps::Level;
     settings_apps::Model model = catalogue_model();
 
-    // Update all (row 0): every app with an update, the first one's size
+    // the root: Enter or a tap opens a level, even while a job runs or without the backend
     auto action = model.activate(0);
+    assert(action.kind == ActionKind::ShowLevel && action.level == Level::Installed);
+    assert(model.tap(1).kind == ActionKind::ShowLevel && model.tap(1).level == Level::Available);
+    assert(model.activate(2).kind == ActionKind::ShowLevel && model.activate(2).level == Level::Sources);
+    assert(model.activate(99).kind == ActionKind::None);
+    model.set_busy(true, "radar");
+    assert(model.activate(1).kind == ActionKind::ShowLevel);
+    model.set_busy(false);
+    assert(!model.open_actions(0) && !model.ask_remove(0));
+    assert(model.sync().kind == ActionKind::Sync);
+    assert(model.add_source().kind == ActionKind::None);        // A works on Sources only
+
+    // Installed: Update all (row 0): every app with an update, the first one's size; an app: its action list
+    model.set_level(Level::Installed);
+    action = model.activate(0);
     assert(action.kind == ActionKind::UpdateAll && action.items.size() == 2);
     assert(action.items[0].first == "radar" && action.items[1].second == "Weather Station" && action.size == "2 MB");
-    assert(model.update_all().kind == ActionKind::UpdateAll);
-    action = model.activate(1);
-    assert(action.kind == ActionKind::Upgrade && action.id == "radar" && action.name == "Packet Radar");
-    assert(model.activate(2).kind == ActionKind::OpenActions);  // up to date: nothing to start, its list (Remove)
-    action = model.activate(3);
-    assert(action.kind == ActionKind::Install && action.id == "meter" && action.size == "1454518");
-    assert(model.activate(5).kind == ActionKind::ShowSources);
-    assert(model.activate(99).kind == ActionKind::None);
-    assert(model.sync().kind == ActionKind::Sync);
-    assert(model.add_source().kind == ActionKind::None);        // A works on the Sources tab only
-
-    // nothing starts while a job runs; the Sources tab still opens
+    assert(model.tap(0).kind == ActionKind::UpdateAll && model.update_all().kind == ActionKind::UpdateAll);
+    assert(model.activate(1).kind == ActionKind::OpenActions);  // an update: its list, never a direct update
+    assert(model.tap(1).kind == ActionKind::OpenActions);
+    assert(model.activate(2).kind == ActionKind::OpenActions);  // up to date: its list (Remove)
+    // nothing starts while a job runs; a list still opens
     model.set_busy(true, "radar");
-    assert(model.activate(3).kind == ActionKind::None && model.activate(0).kind == ActionKind::None);
-    assert(model.update_all().kind == ActionKind::None && model.sync().kind == ActionKind::None);
-    assert(model.activate(5).kind == ActionKind::ShowSources);
+    assert(model.activate(0).kind == ActionKind::None && model.update_all().kind == ActionKind::None);
+    assert(model.sync().kind == ActionKind::None && model.activate(1).kind == ActionKind::OpenActions);
     assert(!model.ask_remove(2));
     model.set_busy(false);
+
+    // Available: Enter or a tap installs at once, no list
+    model.set_level(Level::Available);
+    action = model.activate(0);
+    assert(action.kind == ActionKind::Install && action.id == "meter" && action.name == "Signal Meter");
+    assert(action.size == "1454518");
+    assert(model.tap(0).kind == ActionKind::Install);
+    assert(!model.open_actions(0) && !model.in_actions());
+    assert(!model.ask_remove(0));                                 // nothing to remove there
+    model.set_busy(true, "radar");
+    assert(model.activate(0).kind == ActionKind::None && model.tap(0).kind == ActionKind::None);
+    model.set_busy(false);
+    // the placeholder does nothing
+    settings_apps::Model empty;
+    empty.set_lists({}, {});
+    empty.set_level(Level::Available);
+    assert(empty.activate(0).kind == ActionKind::None && empty.tap(0).kind == ActionKind::None);
 
     // nothing to update: a message
     settings_apps::Model current;
@@ -596,14 +668,16 @@ static void model_actions()
     action = current.update_all();
     assert(action.kind == ActionKind::Say && action.message == "Everything is up to date");
 
-    // without the backend nothing runs
+    // without the backend nothing runs; the levels still open
     settings_apps::Model missing = catalogue_model();
     missing.set_backend_missing(true);
-    assert(missing.activate(3).kind == ActionKind::None && missing.update_all().kind == ActionKind::None);
+    assert(missing.activate(0).kind == ActionKind::ShowLevel);
+    missing.set_level(Level::Available);
+    assert(missing.activate(0).kind == ActionKind::None && missing.update_all().kind == ActionKind::None);
     assert(missing.sync().kind == ActionKind::None);
 
     // Sources: Enter toggles a source, Add, Sync
-    model.set_tab(settings_apps::Tab::Sources);
+    model.set_level(Level::Sources);
     action = model.activate(0);
     assert(action.kind == ActionKind::ToggleSource && action.id == "u1" && !action.enable);
     action = model.activate(2);
@@ -626,21 +700,23 @@ static void model_confirmations()
 {
     using settings_apps::ActionKind;
     using settings_apps::Confirm;
+    using settings_apps::Level;
     settings_apps::Model model = catalogue_model();
+    model.set_level(Level::Installed);
 
-    // D: an installed app asks first; the update-all row, an app that is not installed and the Sources row do not
-    assert(!model.ask_remove(0) && !model.ask_remove(3) && !model.ask_remove(5));
+    // D: an installed app asks first; the update-all row does not
+    assert(!model.ask_remove(0) && !model.ask_remove(9));
     assert(model.pending() == Confirm::None);
     assert(model.ask_remove(2) && model.pending() == Confirm::RemoveApp && model.pending_name() == "Field Notes");
     auto action = model.confirm();
     assert(action.kind == ActionKind::Uninstall && action.id == "notes" && action.name == "Field Notes");
     assert(model.pending() == Confirm::None && model.confirm().kind == ActionKind::None);
-    // cancelled, or dropped by a tab change
+    // cancelled, or dropped by a level change
     assert(model.ask_remove(1));
     model.cancel();
     assert(model.pending() == Confirm::None);
     assert(model.ask_remove(1));
-    model.set_tab(settings_apps::Tab::Sources);
+    model.set_level(Level::Sources);
     assert(model.pending() == Confirm::None);
 
     // a source asks first; the built-in one (never listed in practice) and the Add / Sync rows do not
@@ -652,7 +728,7 @@ static void model_confirmations()
     apps_backend::Source hub = make_source("hub", "CardputerZero Hub", "ok", 9);
     hub.builtin = true;
     builtin.set_lists({}, {hub});
-    builtin.set_tab(settings_apps::Tab::Sources);
+    builtin.set_level(Level::Sources);
     assert(!builtin.ask_remove(0));
     assert(builtin.activate(0).kind == ActionKind::Say && builtin.activate(0).message == "Built-in source");
 
@@ -666,13 +742,12 @@ static void model_action_lists()
 {
     using settings_apps::ActionKind;
     using settings_apps::Confirm;
+    using settings_apps::Level;
     using settings_apps::RowType;
     settings_apps::Model model = catalogue_model();
+    model.set_level(Level::Installed);
 
-    // a tap on an app or a source opens its list; other rows do what Enter does
-    assert(model.tap(1).kind == ActionKind::OpenActions && model.tap(3).kind == ActionKind::OpenActions);
-    assert(model.tap(0).kind == ActionKind::UpdateAll && model.tap(5).kind == ActionKind::ShowSources);
-    assert(!model.open_actions(0) && !model.open_actions(5) && !model.in_actions());
+    assert(!model.open_actions(0) && !model.in_actions());      // Update all has no list
 
     // an app with an update: Update, Remove, Cancel; the title is the app's
     assert(model.open_actions(1) && model.in_actions() && model.actions_title() == "Packet Radar");
@@ -691,15 +766,9 @@ static void model_action_lists()
     assert(model.activate(2).kind == ActionKind::CloseActions);
     assert(model.actions_row() == 1);                            // the highlight goes back to the app's row
     model.close_actions();
-    assert(!model.in_actions() && model.rows().size() == 6 && model.actions_title().empty());
+    assert(!model.in_actions() && model.rows().size() == 4 && model.actions_title().empty());
 
-    // not installed: Install, Cancel; current: Remove, Cancel
-    assert(model.open_actions(3));
-    rows = model.rows();
-    assert(rows.size() == 2 && rows[0].type == RowType::Install && rows[1].type == RowType::Cancel);
-    action = model.activate(0);
-    assert(action.kind == ActionKind::Install && action.id == "meter");
-    model.close_actions();
+    // current: Remove, Cancel
     assert(model.open_actions(2));
     rows = model.rows();
     assert(rows.size() == 2 && rows[0].type == RowType::Remove && rows[1].type == RowType::Cancel);
@@ -709,17 +778,20 @@ static void model_action_lists()
     assert(model.activate(0).kind == ActionKind::None && !model.ask_remove(0));
     assert(model.activate(1).kind == ActionKind::CloseActions);
     model.set_busy(false);
-    // the app went away (removed elsewhere): the list is no longer valid
+    // the app was removed: the list is no longer valid (still in the catalogue, now available)
     assert(model.actions_valid());
-    model.set_lists({make_app("radar", "Packet Radar", "0.3.1", "0.3.0")}, model.sources());
+    model.set_lists({make_app("notes", "Field Notes", "0.9.2", nullptr)}, model.sources());
     assert(!model.actions_valid() && model.actions_row() == -1);
     model.close_actions();
+    model.set_lists({}, model.sources());
+    assert(model.rows()[0].label == "No apps installed");
 
-    // a source: Disable, Sync, Remove, Cancel; a disabled one: Enable, Remove, Cancel
+    // a source: a tap opens its list, Enter keeps the legacy on / off
     model = catalogue_model();
-    model.set_tab(settings_apps::Tab::Sources);
+    model.set_level(Level::Sources);
     assert(model.tap(0).kind == ActionKind::OpenActions && model.tap(3).kind == ActionKind::AddSource);
-    assert(model.activate(0).kind == ActionKind::ToggleSource);  // Enter keeps the legacy on / off
+    assert(model.activate(0).kind == ActionKind::ToggleSource);
+    // Disable, Sync, Remove, Cancel; a disabled one: Enable, Remove, Cancel
     assert(model.open_actions(1) && model.actions_title() == "field-kit/tools");
     rows = model.rows();
     assert(rows.size() == 4 && rows[0].type == RowType::Disable && rows[0].label == "Disable");
@@ -735,7 +807,7 @@ static void model_action_lists()
     assert(model.caption(0, severity) == "field-kit/tools: Bad JSON (cached list)" &&
            severity == settings_apps::Severity::Error);
     assert(model.actions_row() == 1);
-    model.set_tab(settings_apps::Tab::Sources);                  // a tab change closes it
+    model.set_level(Level::Sources);                             // a level change closes it
     assert(!model.in_actions());
     assert(model.open_actions(2));
     rows = model.rows();
@@ -748,8 +820,9 @@ static void model_action_lists()
     // without the backend: nothing but Cancel
     settings_apps::Model missing = catalogue_model();
     missing.set_backend_missing(true);
-    assert(missing.open_actions(3) && missing.activate(0).kind == ActionKind::None);
-    assert(missing.activate(1).kind == ActionKind::CloseActions);
+    missing.set_level(Level::Installed);
+    assert(missing.open_actions(1) && missing.activate(0).kind == ActionKind::None);
+    assert(missing.activate(2).kind == ActionKind::CloseActions);
 }
 
 static void model_caption()
@@ -766,7 +839,7 @@ static void model_caption()
     assert(model.caption(0, severity) == "Synced 2 of 3 sources" && severity == Severity::Warn && model.status_warn());
 
     // Sources: the highlighted failed source says why (its stored error; "cached": the last good list is kept)
-    model.set_tab(settings_apps::Tab::Sources);
+    model.set_level(settings_apps::Level::Sources);
     assert(model.caption(1, severity) == "field-kit/tools: Bad JSON (cached list)" && severity == Severity::Error);
     assert(model.caption(0, severity) == "Synced 2 of 3 sources" && severity == Severity::Warn);
     // a failure of this run: its reason
@@ -786,6 +859,9 @@ static void model_caption()
     assert(model.source_problem(make_source("u", "a-very-long-owner-name/and-repo", "error", 0, true,
                                             "download failed (curl 22): x"))
            == "a-very-long-owner-nam~: Download failed");
+    // the root and the app levels never show a source's reason
+    model.set_level(settings_apps::Level::Root);
+    assert(model.caption(1, severity) == "Syncing 1/2 deck-lab/apps");
 }
 
 int main()

@@ -2,7 +2,8 @@
 
 The deck can install apps from **any public GitHub repository** that follows a simple layout. On the deck, open
 **Settings > Apps > Sources > + Add a GitHub source**, type `owner/repo`, and the apps of that repository appear
-in the **Apps** tab, where each one can be installed or removed.
+under **Settings > Apps > Available**, where each one installs with Enter or a tap; installed apps are listed under
+**Settings > Apps > Installed**, where each one can be updated or removed.
 
 Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZero Hub catalogue stays in the
 **Store** app and is not shown there.
@@ -46,11 +47,17 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 
 ## Using Settings > Apps on the deck
 
-**Versions and updates.** The Apps tab shows each app's installed version and the version the sources offer. When
-the offered one is newer (compared the Debian way, as `dpkg --compare-versions` does, not as text) the row shows
-both, for example `0.1.2>0.1.3`, in yellow, and Enter runs **Update**. When more than one app has an update, an
-**Update all (N)** row appears (key `U`); it updates the apps one after the other and asks for the sudo
-password once per app. An app that is current shows only its version.
+**Levels.** Settings > Apps lists **Installed (N)**, **Available (M)** and **Sources**; the counts follow every
+install, removal and sync. **Installed** lists the installed apps; Enter or a tap on one opens its actions (Update
+when an update is offered, Remove, Cancel). **Available** lists the apps of your enabled sources that are not
+installed, with the version offered; Enter or a tap installs one at once. While a job runs, its app's row shows a
+spinner. Empty levels say `No apps installed` or `Nothing to install` (`Loading...` before the first list).
+
+**Versions and updates.** Installed shows each app's installed version and, when the sources offer a newer one
+(compared the Debian way, as `dpkg --compare-versions` does, not as text), both, for example `0.1.2>0.1.3`, in
+yellow; its actions then offer **Update**. When more than one app has an update, an **Update all (N)** row heads
+Installed (key `U`); it updates the apps one after the other and asks for the sudo password once per app. An app
+that is current shows only its version.
 
 **Tile position.** An upgraded or reinstalled app keeps its place on the home grid. The launcher stores the tile
 order as `app_order` (a list of keys made from the `.desktop` file names) in
@@ -84,16 +91,15 @@ Esc at the password prompt gives a red `Cancelled`.
 | Key | Action |
 | --- | --- |
 | Up / Down | move the selection |
-| Left / Right | Apps tab / Sources tab |
-| Enter | install or update (Apps); on/off (Sources); yes in a confirmation |
-| Esc | back, or no in a confirmation |
-| `U` | update all (Apps tab) |
-| `S` | sync (either tab) |
-| `A` | add a source (Sources tab) |
-| `D` or Del | remove the selected app (Apps tab) or source (Sources tab) after a confirmation; the built-in source cannot be removed. A tap on an up-to-date app does nothing |
+| Right | open the selected level (Apps root only) |
+| Left / Esc | back one level (Installed / Available / Sources -> Apps -> Settings), or no in a confirmation |
+| Enter | open a level; an installed app's actions (Installed); install (Available); on/off (Sources); yes in a confirmation |
+| `U` | update all (Installed) |
+| `S` | sync (any list) |
+| `A` | add a source (Sources) |
+| `D` or Del | remove the selected app (Installed) or source (Sources) after a confirmation; the built-in source cannot be removed |
 
-The letters are read from the physical key, so `W`, `E`, `R` and `T` no longer move the selection or switch tabs,
-as they did before. `F`, `X`, `Z` and `C` still act as up, down, left and right.
+The letters are read from the physical key, so `W`, `E`, `R` and `T` never move the selection or change levels. `F`, `X`, `Z` and `C` still act as up, down, left and right.
 
 ## Full-screen apps (Pi port)
 

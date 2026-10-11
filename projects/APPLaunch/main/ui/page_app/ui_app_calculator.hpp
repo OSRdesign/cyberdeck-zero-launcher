@@ -59,6 +59,7 @@ private:
     std::string expression_;    // what is being typed (ASCII operators)
     std::string source_;        // the finished expression shown small above the result
     std::string result_;        // the evaluated result, shown when result_shown_
+    bool compact_ = false; // 480x320: smaller main-number fonts so the entry clears the keypad
     bool result_shown_ = false;
     bool error_ = false;
 

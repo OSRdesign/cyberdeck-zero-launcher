@@ -1,8 +1,10 @@
-# Native Settings > Apps by touch (task 014 P3d), on the fake catalogue (src/harness_apps.cpp): a tap on the highlighted
-# root row opens Apps, a tap on the next row moves the highlight, a drag scrolls to the end and snaps on the Sources
-# row, a tap on it opens the Sources level, a tap on the highlighted source opens its action list, a tap on Remove
-# moves the highlight there and a second tap asks to remove it, the dialog's Cancel button is tapped, the header's Esc
-# goes back to the source list, then to Apps on the Sources row.
+# Native Settings > Apps by touch (task 014 P3d; P3e: Installed / Available split), on the fake catalogue
+# (src/harness_apps.cpp): a tap on the highlighted Settings row opens the Apps root, a tap on the next row moves the
+# highlight to Available, a tap on it opens the Available level, the header's Esc goes back to the Apps root (on
+# Available), a tap on the next row (Sources) and a tap on it open the Sources level, a drag on the source list snaps,
+# a tap on the highlighted source opens its action list, a tap on Remove moves the highlight there and a second tap
+# asks to remove it, the dialog's Cancel button is tapped, the header's Esc goes back to the source list, then to the
+# Apps root on the Sources row.
 # Review only, no golden.
 title settings native apps touch
 review
@@ -29,16 +31,30 @@ shot apps_touch_list
 header apps_touch_list "Settings > Apps" Apps
 @480x320 tap 240 224
 @800x480 tap 400 332
+wait 300
 shot apps_touch_moved
-@480x320 drag 240 300 240 60 30
-@800x480 drag 400 460 400 100 30
+@480x320 tap 240 180
+@800x480 tap 400 268
 wait 500
-shot apps_touch_dragged
+shot apps_touch_available
+header apps_touch_available "Settings > Apps > Available" "Apps > Available" Available
+@480x320 tap 281 20
+@800x480 tap 525 28
+wait 500
+shot apps_touch_root_back
+@480x320 tap 240 224
+@800x480 tap 400 332
+wait 300
 @480x320 tap 240 180
 @800x480 tap 400 268
 wait 500
 shot apps_touch_sources
 header apps_touch_sources "Settings > Apps > Sources" "Apps > Sources" Sources
+# a drag down past the first source: the list snaps back on deck-lab/apps
+@480x320 drag 240 120 240 260 30
+@800x480 drag 400 160 400 400 30
+wait 500
+shot apps_touch_dragged
 # deck-lab/apps: its list (Disable, Sync, Remove, Cancel); Remove is two rows down
 @480x320 tap 240 180
 @800x480 tap 400 268

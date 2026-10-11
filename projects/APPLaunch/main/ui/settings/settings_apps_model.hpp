@@ -1,26 +1,26 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Settings > Apps, the rules of the native page (task 014 P3d): pure (no LVGL, no thread, no I/O;
- * tests/test_settings_apps_model.cpp). The legacy page's behaviour (deleted in P3e) without its drawing, plus
- * the native page's action lists:
+ * Settings > Apps, the rules of the native page (task 014 P3d; P3e: Installed / Available split): pure (no LVGL, no
+ * thread, no I/O; tests/test_settings_apps_model.cpp). The legacy page's behaviour (deleted in P3e) without its drawing,
+ * plus the native page's levels and action lists:
  *
- *   tabs      Apps (the catalogue of the user's own sources) and Sources. A pending confirmation and an open action list
- *             are dropped when the tab changes.
- *   rows      Apps: "Update all (N)" first when more than one update is offered, then every app (title; value: its
- *             installed version, "installed>offered" when an update is offered, "v<offered>" when it is not
- *             installed), "Loading..." / "No apps: add your source in Sources" / "The Store is needed (backend
- *             missing)" while the list is empty, and a "Sources" row (the native page's way to the Sources tab by
- *             touch). Sources: every source (name; value: "off", "waiting", "done", "failed", "<N> apps", "not
- *             synced"), "+ Add a GitHub source", "Sync my sources". The app a package job runs for and the source being
- *             synced are busy rows. Values carry the legacy page's colours as tones (update amber, installed / synced
- *             green, failed red, the rest muted).
- *   actions   an app's or a source's action list (a level of its own): Install (not installed) / Update (an update is
- *             offered) / Remove (installed), Cancel; Enable or Disable, Sync (enabled), Remove, Cancel. A tap on an app
- *             or a source opens it; Enter (the keyboard) keeps the legacy page's direct action (install, update, a
- *             source on / off) and opens the list only for an app that is up to date (nothing to install or update).
- *             Nothing starts while a job runs or without the Store backend; going to the Sources tab, opening and
- *             leaving a list always work.
+ *   levels    Root ("Installed (N)", "Available (M)", "Sources"; no counts before the first list or without the Store
+ *             backend), Installed, Available and Sources. A pending confirmation and an open action list are dropped
+ *             when the level changes.
+ *   rows      Installed: "Update all (N)" first when more than one update is offered, then every installed app (title;
+ *             value: its installed version, "installed>offered" when an update is offered). Available: every app of the
+ *             enabled sources that is not installed ("v<offered>"). Empty: "Loading..." / "No apps installed" /
+ *             "Nothing to install" / "The Store is needed (backend missing)". Sources: every source (name; value:
+ *             "off", "waiting", "done", "failed", "<N> apps", "not synced"), "+ Add a GitHub source", "Sync my
+ *             sources". The app a package job runs for and the source being synced are busy rows. Values carry the
+ *             legacy page's colours as tones (update amber, installed / synced green, failed red, the rest muted).
+ *   actions   an installed app's or a source's action list (a level of its own): Update (an update is offered) /
+ *             Remove, Cancel; Enable or Disable, Sync (enabled), Remove, Cancel. Installed: Enter or a tap opens the
+ *             app's list. Available: Enter or a tap installs at once (no list). Sources: a tap opens the list, Enter
+ *             keeps the legacy page's direct action (a source on / off). Root: Enter or a tap opens the level.
+ *             Nothing starts while a job runs or without the Store backend; moving between levels, opening and leaving
+ *             a list always work.
  *   confirm   Remove (the list's row, or D / Del on the row) asks first (pending); confirm() gives the removal.
  *   caption   the status line: the reason of the highlighted (or listed) failed source while nothing runs
  *             ("owner/repo: HTTP 404", "(cached list)" when its last good list is still used), else the workers' status
@@ -40,18 +40,19 @@
 
 namespace settings_apps {
 
-enum class Tab { Apps, Sources };
+enum class Level { Root, Installed, Available, Sources };
 
 enum class RowType {
+    Installed,   /* Root: "Installed (N)", the Installed level */
+    Available,   /* Root: "Available (M)", the Available level */
+    Sources,     /* Root: "Sources", the Sources level */
     UpdateAll,   /* "Update all (N)" */
     App,         /* key: the app's id */
-    Placeholder, /* the empty catalogue's text (busy while the first list loads) */
-    Sources,     /* the Sources tab */
+    Placeholder, /* an empty level's text (busy while the first list loads) */
     Source,      /* key: the source's URL */
     AddSource,   /* "+ Add a GitHub source" */
     Sync,        /* "Sync my sources" */
     /* an action list's rows (key: the app's id / the source's URL) */
-    Install,
     Update,
     Remove,
     Enable,
@@ -87,7 +88,7 @@ enum class ActionKind {
     ToggleSource, /* id: the URL; enable: the new state */
     RemoveSource, /* id: the URL: a confirmed removal */
     AddSource,    /* open the add-source entry */
-    ShowSources,  /* the Sources tab */
+    ShowLevel,    /* level: Installed, Available or Sources */
     OpenActions,  /* the row's action list (open_actions) */
     CloseActions, /* back from the action list (Cancel) */
     AskRemove,    /* the confirmation of a removal (ask_remove on the same row) */
@@ -99,6 +100,7 @@ struct Action {
     std::string name;
     std::string size;
     bool enable = false;
+    Level level = Level::Root;
     std::vector<std::pair<std::string, std::string>> items; /* UpdateAll: (id, title) of every app with an update */
     std::string message;
 };
@@ -131,11 +133,14 @@ public:
     const std::vector<apps_backend::App> &apps() const { return apps_; }
     const std::vector<apps_backend::Source> &sources() const { return sources_; }
 
-    /* ---- tabs and action lists */
+    /* ---- levels and action lists */
 
-    Tab tab() const { return tab_; }
-    void set_tab(Tab tab);
-    /* Row `index` (an app or a source) shows its action list; false for any other row. */
+    Level level() const { return level_; }
+    void set_level(Level level);
+    /* Installed / available apps (the root's counts). */
+    int installed_count() const;
+    int available_count() const;
+    /* Row `index` (an installed app or a source) shows its action list; false for any other row. */
     bool open_actions(int index);
     void close_actions();
     bool in_actions() const { return actions_; }
@@ -143,7 +148,7 @@ public:
     std::string actions_title() const;
     /* The list's app or source is still there (a refreshed list may have lost it). */
     bool actions_valid() const;
-    /* The row of the list's app or source on its tab (where the highlight goes back to), -1 when it is gone. */
+    /* The row of the list's app or source on its level (where the highlight goes back to), -1 when it is gone. */
     int actions_row() const;
 
     /* ---- the rows shown */
@@ -157,10 +162,10 @@ public:
     /* ---- actions; index: a row of rows() */
 
     Action activate(int index) const; /* Enter (the keyboard) */
-    Action tap(int index) const;      /* a tap on the highlighted row: an app or a source opens its action list */
-    Action update_all() const;        /* U (Apps tab), the "Update all" row */
+    Action tap(int index) const;      /* a tap on the highlighted row: a source opens its action list */
+    Action update_all() const;        /* U (Installed), the "Update all" row */
     Action sync() const;              /* S */
-    Action add_source() const;        /* A (Sources tab) */
+    Action add_source() const;        /* A (Sources) */
     /* D / Del on an app or a source, or an action list's Remove: an installed app or a source asks for a confirmation
      * (pending()); false when the row has nothing to remove or a job runs. */
     bool ask_remove(int index);
@@ -190,13 +195,14 @@ private:
     const apps_backend::Source *source(const std::string &url) const;
     Row row(int index) const;
     std::vector<Row> list_rows() const;
+    void add_apps(std::vector<Row> &rows, bool installed) const;
     std::vector<Row> action_rows() const;
     Action package_action(ActionKind kind, const apps_backend::App &app) const;
 
     std::vector<apps_backend::App> apps_;
     std::vector<apps_backend::Source> sources_;
     apps_status::SyncProgress sync_;
-    Tab tab_ = Tab::Apps;
+    Level level_ = Level::Root;
     bool loaded_ = false;
     bool backend_missing_ = false;
     bool busy_ = false;
@@ -205,7 +211,7 @@ private:
     bool status_error_ = false;
     bool status_warn_ = false;
     bool actions_ = false;
-    std::string actions_key_; /* the app's id (Apps tab) / the source's URL (Sources tab) */
+    std::string actions_key_; /* the app's id (Installed) / the source's URL (Sources) */
     Confirm pending_ = Confirm::None;
     std::string pending_key_;
     std::string pending_name_;

@@ -1,0 +1,47 @@
+# Native Settings > Apps (task 014 P3e: Installed / Available split) while a package job runs: the fake Store backend
+# (src/harness_apps.cpp, HARNESS_APPS catalogue, HARNESS_APPS_PACKAGE hold) never answers --prepare-package, so the job
+# keeps running. Shots: Installed with Packet Radar updating (Update from its action list: the row spins, the status
+# line shows the step), the Apps root meanwhile (counts unchanged), Available with nothing started (a job runs: Enter
+# on Signal Meter does nothing).
+# Review only: no golden.
+title settings native apps updating
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+env HARNESS_APPS catalogue
+env HARNESS_APPS_PACKAGE hold
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+# Installed: Update all (2), Field Notes, Packet Radar, Weather Station...; Packet Radar's list: Update
+key ENTER
+wait 500
+key DOWN
+key DOWN
+key ENTER
+wait 300
+key ENTER
+wait 1000
+shot apps_updating
+header apps_updating "Settings > Apps > Installed" "Apps > Installed" Installed
+key LEFT
+wait 500
+shot apps_updating_root
+key DOWN
+key ENTER
+wait 500
+key DOWN
+key ENTER
+wait 500
+shot apps_updating_available

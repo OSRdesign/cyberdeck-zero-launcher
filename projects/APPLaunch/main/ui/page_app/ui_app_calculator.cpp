@@ -204,6 +204,7 @@ void UICalculatorPage::build_ui(int width, int height)
 
     // 640x480 keeps its original numbers; a short display (480x320) gets a compact keypad.
     const bool compact = height < 400;
+    compact_ = compact;
     const int kPad = compact ? 6 : 10;
     const int kTopBar = compact ? 36 : 44;
     const int kDisplayH = compact ? 64 : 104;
@@ -439,7 +440,8 @@ void UICalculatorPage::refresh()
     if (!main_label_ || !source_label_) return;
     const std::string main_text = result_shown_ ? result_ : (expression_.empty() ? "0" : pretty(expression_));
     // long inputs get a smaller font so they still fit
-    const lv_font_t *font = face(main_text.size() <= 12 ? 48 : main_text.size() <= 18 ? 36 : 28);
+    const lv_font_t *font = face(compact_ ? (main_text.size() <= 12 ? 30 : main_text.size() <= 18 ? 24 : 20)
+                                          : (main_text.size() <= 12 ? 48 : main_text.size() <= 18 ? 36 : 28));
     lv_obj_set_style_text_font(main_label_, font, 0);
     lv_obj_set_style_text_color(main_label_, lv_color_hex(error_ ? 0xFF5F56 : 0xFFFFFF), 0);
     lv_label_set_text(main_label_, main_text.c_str());

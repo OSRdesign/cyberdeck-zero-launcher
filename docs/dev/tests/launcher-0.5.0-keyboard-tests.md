@@ -134,16 +134,16 @@ Report anything odd; the Controller can capture the screen over ssh during the t
 Apps needs the Store backend and network (the native Settings needs no setting since P3e).
 
 Apps (keyboard):
-52. Settings > Apps shows "Update all (N)" first when several updates exist, then the apps with versions, Sources last.
-53. Enter on an app that is not installed asks for the sudo password; it installs; its row spins meanwhile.
-54. U runs Update all, asking for the password once per app.
-55. D on an installed app, then Enter, removes it; Esc cancels the confirm.
-56. Right opens Sources; Left or Esc returns to Apps on the Sources row.
+52. Settings > Apps shows "Installed (N)", "Available (M)", "Sources" (P3e split); Installed shows "Update all (N)" first when several updates exist, then the installed apps with versions (an update amber); Available lists the apps not installed with their version.
+53. On Available, Enter on an app asks for the sudo password; it installs; its row spins meanwhile; then it leaves Available and the counts change ("Installed (N+1)", "Available (M-1)").
+54. On Installed, U runs Update all, asking for the password once per app.
+55. On Installed, D on an app, then Enter, removes it; Esc cancels the confirm. Enter on an app opens its actions (Update when offered, Remove, Cancel).
+56. Right or Enter on the Apps root opens the highlighted level; Left or Esc returns to the Apps root on that row (title "Apps > Installed" etc.), then to Settings.
 57. On Sources: A, type owner/repo, Enter adds the source; S syncs.
 58. W / E / R / T never move the highlight.
 Apps (touch):
-59. Tap a row to highlight it, tap again to open its action list; drag scrolls; the header Esc goes back.
-60. Tap an app: Install / Update / Remove (as applicable) and Cancel; Remove asks first; Update starts and the row spins.
+59. Tap a row to highlight it, tap again to open it (a level, an installed app's action list); drag scrolls; the header Esc goes back one level.
+60. Tap an installed app: Update (when offered), Remove, Cancel; Remove asks first; Update starts and the row spins. Tap an available app: it installs at once (no list).
 61. Tap a source: Disable or Enable, Sync (that source only), Remove, Cancel; after a partial sync the status line is amber ("Synced 1 of 2 sources"); a long failure reason wraps.
 62. No keyboard: "Add a GitHub source" opens the on-screen keyboard; its Enter submits; Cancel and OK are 9 mm targets.
 Sudo prompt (any sudo action, e.g. an Apps install):
@@ -168,7 +168,8 @@ and the Pi 3A+ for 12; a BT keyboard for 2, 4, 5 and 8.
 72. Wi-Fi: Details; Forget, then rejoin with the password. With no keyboard present the on-screen keyboard appears.
 73. Bluetooth: Power; Discoverable; the keyboard shows Connected; Rename.
 74. A Launcher toggle hides a tile; a Touch choice still applies in Snake or Tank.
-75. Apps: the list loads; install with the sudo dialog, and cancel.
+75. Apps: the root shows Installed (N) / Available (M) / Sources; Available loads; install with the sudo dialog, and cancel;
+    Installed: an app's actions (Update / Remove / Cancel).
 76. Date & Time: Network Time off; Set Manually: change the minute and save; year 2000 shows the warning (Cancel, then
     Confirm); Network Time back on.
 77. System: Storage; Licenses scrolls; On-screen keyboard Auto / Off; Reboot then No; Shutdown then No.
