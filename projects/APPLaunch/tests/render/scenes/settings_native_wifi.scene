@@ -1,0 +1,64 @@
+# Native Wi-Fi page (task 014 P3b, Controller design), in a release build (APPLAUNCH_DEV=0) with the on-screen
+# keyboard forced (APPLAUNCH_OSK=force: the harness has no presence watcher). The fake Wi-Fi service
+# (src/harness_services.cpp) finds: deck-lab (connected, saved), Workshop (saved), Cafe Libre and Guest (open),
+# Neighbour-5G (new, secured) and Garage (weak); a new secured network accepts only the fixture's fake password.
+# Shots: the list (toggle, connected with the check and bold name, saved, locks, signal bars), the highlight on the
+# new secured network, its password dialog with the keyboard (letters typed), the wrong-password state (the dialog
+# stays, the field is cleared, "Wrong password"), connected with the right password (status line, the network first
+# with the check), the connected network's actions and its details. Review only: no golden; headers checked against
+# the home grid's (run.sh header).
+title settings native wifi
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home ZERO
+launch Settings
+# root: Screen, Wi-Fi, ...
+key DOWN
+key ENTER
+wait 1500
+shot wifi_list
+header wifi_list "Settings > Wi-Fi" Wi-Fi
+# rows: Wi-Fi, deck-lab, Workshop, Cafe Libre, Neighbour-5G, Guest, Garage, Join Hidden Network, Rescan
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+shot wifi_list_secured
+key ENTER
+tapkey w
+tapkey r
+tapkey o
+tapkey n
+tapkey g
+tapkey p
+tapkey a
+tapkey s
+tapkey s
+shot wifi_password
+# at 480x320 and 640x480 the dialog lies over the header while the keyboard is up (cp0_ui_dialog.h step 2)
+@800x480,720x720,1280x720 header wifi_password "Settings > Wi-Fi" Wi-Fi
+tapkey ENTER
+wait 1500
+shot wifi_wrong_password
+type harness-pass
+key ENTER
+wait 1500
+shot wifi_connected
+# the highlight stayed on Neighbour-5G, now first and connected: Enter opens its actions
+key ENTER
+shot wifi_actions
+header wifi_actions "Settings > Wi-Fi > Neighbour-5G" "Wi-Fi > Neighbour-5G" Neighbour-5G
+key ENTER
+wait 1000
+shot wifi_details
+header wifi_details "Settings > Wi-Fi > Neighbour-5G > Details" "Wi-Fi > Neighbour-5G > Details" "Neighbour-5G > Details" Details
+key ESC
+key ESC
+shot wifi_back_to_list

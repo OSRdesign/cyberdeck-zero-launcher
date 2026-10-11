@@ -627,11 +627,45 @@ bool factory_is(const SettingPageFactory &factory, PageFactoryFn function)
 
 }  // namespace
 
+SettingsNativePage settings_native_page(const NodeIter &node)
+{
+    const SettingPageFactory &factory = node->page_factory;
+    if (!factory) return SettingsNativePage::None;
+    if (factory_is(factory, settings_keyboard_test_factory)) return SettingsNativePage::KeyboardTest;
+    // task 014 P3a: the read-only pages
+    if (factory_is(factory, settings_t12b_about_page_factory)) return SettingsNativePage::About;
+    if (factory_is(factory, settings_account_page_factory)) return SettingsNativePage::User;
+    if (factory_is(factory, settings_storage_page_factory)) return SettingsNativePage::Storage;
+    if (factory_is(factory, settings_credit_page_factory)) return SettingsNativePage::Licenses;
+    if (factory_is(factory, settings_rtc_info_page_factory)) return SettingsNativePage::DateTimeInfo;
+    // task 014 P3b: the Wi-Fi section is one native page (its Enable toggle, Networks and Join Hidden Network)
+    if (factory_is(factory, roller_page_factory))
+        for (auto child = node.begin(); child != node.end(); ++child)
+            if (child->page_factory && factory_is(child->page_factory, wifi_scan_page3_factory))
+                return SettingsNativePage::Wifi;
+    return SettingsNativePage::None;
+}
+
+SettingsWifiSection settings_wifi_section(const NodeIter &wifi)
+{
+    SettingsWifiSection section;
+    for (auto child = wifi.begin(); child != wifi.end(); ++child) {
+        if (!section.has_enable && !child->page_factory && child->icon_enabled && child->has_api()) {
+            section.has_enable = true;
+            section.enable = child;
+        } else if (child->page_factory && factory_is(child->page_factory, wifi_add_hidden_page_factory)) {
+            section.has_hidden = true;
+            section.hidden_label = child->label;
+        }
+    }
+    return section;
+}
+
 SettingsNodeKind settings_node_kind(const NodeIter &node)
 {
     const SettingEntry &entry = *node;
     if (entry.page_factory) {
-        if (factory_is(entry.page_factory, settings_keyboard_test_factory)) return SettingsNodeKind::Native;
+        if (settings_native_page(node) != SettingsNativePage::None) return SettingsNodeKind::Native;
         if (entry.page_type == PageType::FullCustom) return SettingsNodeKind::Custom;
         if (factory_is(entry.page_factory, roller_page_factory) ||
             factory_is(entry.page_factory, bluetooth_roller_page_factory))

@@ -409,10 +409,12 @@ def test_info_page_clock_keeps_ticking():
             "std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(",
         )
     )
-    assert "page->set_lines_provider(" in factory
-    assert 'lines[0] = "Current: " + settings_rtc_local_time_text();' in factory
-    assert 'lines[1] = "Network Time: " + settings_rtc_ntp_status_text();' in factory
-    assert 'lines[2] = "Time Zone: " + settings_rtc_timezone_text();' in factory
+    assert "page->set_lines_provider(settings_rtc_info_lines);" in factory
+    # the lines themselves are shared with the native info page (task 014 P3a)
+    lines = normalized(function_body(RTC_CPP, "bool settings_rtc_info_lines(std::vector<std::string> &lines)"))
+    assert 'lines[0] = "Current: " + settings_rtc_local_time_text();' in lines
+    assert 'lines[1] = "Network Time: " + settings_rtc_ntp_status_text();' in lines
+    assert 'lines[2] = "Time Zone: " + settings_rtc_timezone_text();' in lines
 
     # A timer drives the provider, and the page owns and deletes it.
     static = normalized(STATIC_CPP)

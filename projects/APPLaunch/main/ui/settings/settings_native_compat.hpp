@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * The compat path of the native Settings host (task 014 decision D3, development builds only): a page the host has
- * no widget for yet (Wi-Fi networks, Bluetooth pairing / scan / alias, Apps, the info pages...) opens exactly as the
+ * no widget for yet (Bluetooth pairing / scan / alias, Apps, the manual time "Save?" step) opens exactly as the
  * legacy Settings shows it: built by its own page factory in a 320x150 container under the 20 px top bar, on the
  * compat display, scaled into the window above the stock-app toolbar, touch turned into keys (LIST mode). When the
  * page goes back (its own Esc / Left, or the toolbar's Esc) the native Settings screen comes back.

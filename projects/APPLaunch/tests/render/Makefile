@@ -63,6 +63,10 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_osk.c \
     $(CP0)/src/cp0_ui_osk_widget.cpp \
     $(CP0)/src/cp0_ui_text_field.cpp \
+    $(CP0)/src/cp0_ui_info.c \
+    $(CP0)/src/cp0_ui_info_widget.cpp \
+    $(CP0)/src/cp0_ui_dialog.c \
+    $(CP0)/src/cp0_ui_dialog_widget.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \

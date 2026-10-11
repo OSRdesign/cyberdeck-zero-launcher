@@ -48,6 +48,14 @@ int64_t harness_wall_clock(void);
 
 namespace harness {
 
+/* A network the fake Wi-Fi scan finds (task 014 P3b scenes). No real network names or passwords. */
+struct FixtureNetwork {
+    std::string ssid;
+    int signal;           /* 0..100 */
+    std::string security; /* "" = open */
+    bool saved;
+};
+
 /* Fixture state the stubbed services answer from (set by scene commands). */
 struct Fixtures {
     std::string resource_root;         /* <repo>/projects/APPLaunch/APPLaunch (= /usr/share/APPLaunch) */
@@ -57,6 +65,13 @@ struct Fixtures {
     std::string wifi_ssid = "deck-lab";
     std::string wifi_ip = "192.168.1.42";
     bool wifi_radio = true;
+    /* the scan: the connected network (deck-lab, saved), a saved one, open ones, a new secured one, a weak one */
+    std::vector<FixtureNetwork> wifi_networks = {
+        {"deck-lab", 70, "WPA2", true},     {"Workshop", 84, "WPA2", true}, {"Cafe Libre", 62, "", false},
+        {"Neighbour-5G", 55, "WPA2", false}, {"Garage", 12, "WPA2", false},  {"Guest", 33, "", false},
+    };
+    std::string wifi_password = "harness-pass"; /* a new secured network accepts only this (fake) password */
+    std::string wifi_hidden_ssid = "Hidden-Lab"; /* Join Hidden Network finds only this one */
     bool bt_powered = false;
     bool bt_connected = false;
     int backlight_max = 255;

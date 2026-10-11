@@ -367,24 +367,14 @@ void LvSettingStaticInfoPage3::handle_repeated_key(uint32_t key)
     }
 }
 
-std::unique_ptr<DComponens::LvglComponensBase> settings_t12b_about_page_factory(
-    lv_obj_t *parent,
-    const NodeIter &page_node,
-    std::function<void()> on_back)
+settings_t12b::about_help::Content settings_about_content()
 {
     const char *board = std::getenv("APPLAUNCH_BOARD"); // board profile label, unset on the deck
-    return std::make_unique<LvSettingStaticInfoPage3>(
-        parent,
-        page_node,
-        std::move(on_back),
-        settings_t12b::about_help::about(
-            build_version(), build_date(), build_channel(), build_commit(), board ? board : ""));
+    return settings_t12b::about_help::about(
+        build_version(), build_date(), build_channel(), build_commit(), board ? board : "");
 }
 
-std::unique_ptr<DComponens::LvglComponensBase> settings_storage_page_factory(
-    lv_obj_t *parent,
-    const NodeIter &page_node,
-    std::function<void()> on_back)
+settings_t12b::about_help::Content settings_storage_content()
 {
     const SettingsStorageInfo storage = SettingsStorageModel::read();
     settings_t12b::about_help::Content content{"Storage", {}};
@@ -397,8 +387,30 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_storage_page_factory(
     } else {
         content.lines = {"SD card information unavailable."};
     }
+    return content;
+}
+
+settings_t12b::about_help::Content settings_credit_content()
+{
+    return settings_t12b::about_help::credit();
+}
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_t12b_about_page_factory(
+    lv_obj_t *parent,
+    const NodeIter &page_node,
+    std::function<void()> on_back)
+{
     return std::make_unique<LvSettingStaticInfoPage3>(
-        parent, page_node, std::move(on_back), std::move(content));
+        parent, page_node, std::move(on_back), settings_about_content());
+}
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_storage_page_factory(
+    lv_obj_t *parent,
+    const NodeIter &page_node,
+    std::function<void()> on_back)
+{
+    return std::make_unique<LvSettingStaticInfoPage3>(
+        parent, page_node, std::move(on_back), settings_storage_content());
 }
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_credit_page_factory(
@@ -407,5 +419,5 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_credit_page_factory(
     std::function<void()> on_back)
 {
     return std::make_unique<LvSettingStaticInfoPage3>(
-        parent, page_node, std::move(on_back), settings_t12b::about_help::credit());
+        parent, page_node, std::move(on_back), settings_credit_content());
 }

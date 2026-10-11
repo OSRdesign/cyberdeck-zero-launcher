@@ -14,6 +14,12 @@
  *             Choice  label, blue check mark on the current value
  *             Toggle  label, switch
  *             Slider  label, slider, value text (Left / Right or a drag change it)
+ *             Info    (task 014 P3a) key left, value right (cp0_ui_info.h: the key capped, the value cut with dots or,
+ *                     on Compact, wrapped onto a second line)
+ *             Network (task 014 P3b) a Wi-Fi network: name left; at the right the signal bars (four, the status
+ *                     bar's look), a small lock when secured, and a blue check (connected: the name in bold too)
+ *                     or the value text ("Saved")
+ *             Busy    (task 014 P3b) label and a spinner at the right ("Connecting...")
  *           Touch: a drag scrolls and snaps to a row; a tap on a row moves the highlight there; a tap on the
  *           highlighted row activates it. Keyboard (LV_EVENT_KEY on the page's input group): Up / Down move, Enter
  *           activates, Esc goes back, Left / Right change a slider (elsewhere Right activates and Left goes back, as
@@ -36,11 +42,23 @@
  *                      by that inset and keeps the editing field in view; keep_above_keyboard() keeps a dialog centred
  *                      in the room above it.
  *
+ *   InfoTable          (task 014 P3a) a Roller of Info rows for the read-only pages: no row action, the highlight still
+ *                      moves (Up / Down, drag, tap) so a long table scrolls; Esc / Left go back.
+ *   TextBlock          (task 014 P3a) a long text (Licenses, guides) in a scrolling column, roller wide: drag, Up / Down
+ *                      (a row token per press), Page Up / Down, Home / End; Esc / Left go back.
+ *   Dialog             (task 014 P3b) a title, a body (text, TextFields) and 1-3 buttons: the primary one is Enter, the
+ *                      cancel one Esc (also the keyboard's Enter / Esc while a field edits). Width DIALOG_MAX_W,
+ *                      centred in the room between the page header and the on-screen keyboard and following the
+ *                      keyboard; the body scrolls; when the keyboard leaves no room the buttons go (cp0_ui_dialog.h).
+ *                      A backdrop under it takes the taps meant for the page.
+ *
  * LVGL thread only. The objects are children of the parent given to the constructor; the destructor deletes them
  * (unless the parent went first).
  */
 #pragma once
 
+#include "cp0_ui_dialog.h"
+#include "cp0_ui_info.h"
 #include "cp0_ui_osk.h"
 #include "cp0_ui_roller.h"
 #include "keyboard_input.h"
@@ -55,17 +73,19 @@
 namespace cp0 {
 namespace ui {
 
-enum class RowKind { Nav, Choice, Toggle, Slider };
+enum class RowKind { Nav, Choice, Toggle, Slider, Info, Network, Busy };
 
 struct RowSpec {
     RowKind kind = RowKind::Nav;
-    std::string label;
-    std::string value;  /* Nav: current value (green, right); Slider: value text */
-    bool on = false;    /* Choice: carries the check mark; Toggle: switch state */
+    std::string label;  /* Info: the key */
+    std::string value;  /* Nav: current value (green, right); Slider: value text; Info: the value; Network: "Saved" */
+    bool on = false;    /* Choice: carries the check mark; Toggle: switch state; Network: connected (check, bold) */
     int slider_min = 0; /* Slider */
     int slider_max = 100;
     int slider_value = 0;
     int slider_step = 1; /* one Left / Right press */
+    int bars = 0;        /* Network: signal bars lit, 0..4 */
+    bool secured = false; /* Network: the lock */
 };
 
 struct RollerEvents {
@@ -98,8 +118,11 @@ private:
         RowSpec spec;
         lv_obj_t *obj = nullptr;
         lv_obj_t *label = nullptr;
-        lv_obj_t *value = nullptr;  /* Nav / Slider value text, Choice check mark */
-        lv_obj_t *control = nullptr; /* switch or slider */
+        lv_obj_t *value = nullptr;  /* Nav / Slider / Info / Network value text, Choice check mark */
+        lv_obj_t *control = nullptr; /* switch, slider, spinner (Busy) */
+        lv_obj_t *check = nullptr;  /* Network: the connected check mark */
+        lv_obj_t *lock = nullptr;   /* Network: the lock (shackle and body) */
+        lv_obj_t *bars[4] = {};     /* Network: signal bars */
         int distance = -1;          /* styled for this distance from the centre (-1: not yet) */
     };
 
@@ -118,6 +141,8 @@ private:
     void on_scroll(lv_event_code_t code);
     void on_row_clicked(int index);
     void slide_by(int index, int steps);
+    int style_info(Row &row, int distance, const lv_font_t *font);
+    int style_network(Row &row, int distance, const lv_font_t *value_font);
 
     cp0_ui_roller_page_t layout_;
     RollerEvents events_;
@@ -177,6 +202,57 @@ private:
     int inset_listener_ = 0;
 };
 
+/* ------------------------------------------------------------------ read-only pages (task 014 P3a) */
+
+struct InfoItem {
+    std::string key;
+    std::string value; /* empty: the key alone across the row */
+};
+
+class InfoTable {
+public:
+    /* back: Esc / Left (and the page's header Esc, which the page calls itself) */
+    InfoTable(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, std::function<void()> back);
+    InfoTable(const InfoTable &) = delete;
+    InfoTable &operator=(const InfoTable &) = delete;
+
+    /* Replace the rows. Same keys as before: the values change in place and the highlight stays. */
+    void set_items(const std::vector<InfoItem> &items);
+    void set_value(int index, const std::string &value);
+    int count() const { return static_cast<int>(items_.size()); }
+    void set_hidden(bool hidden) { roller_.set_hidden(hidden); }
+    lv_obj_t *focus_object() const { return roller_.focus_object(); }
+
+private:
+    static RowSpec spec_of(const InfoItem &item);
+
+    Roller roller_;
+    std::vector<InfoItem> items_;
+};
+
+class TextBlock {
+public:
+    /* font: NULL = the BODY text size of the layout service (builtin Montserrat); pages pass a FreeType face for text
+     * beyond ASCII */
+    TextBlock(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, const std::string &text, const lv_font_t *font,
+              std::function<void()> back);
+    ~TextBlock();
+    TextBlock(const TextBlock &) = delete;
+    TextBlock &operator=(const TextBlock &) = delete;
+
+    lv_obj_t *focus_object() const { return box_; }
+    void set_hidden(bool hidden);
+
+private:
+    static void box_event_cb(lv_event_t *event);
+    void on_key(uint32_t key);
+
+    cp0_ui_roller_page_t layout_;
+    std::function<void()> back_;
+    lv_obj_t *box_ = nullptr; /* scrolls; in the page's input group */
+    lv_obj_t *label_ = nullptr;
+};
+
 /* ------------------------------------------------------------------ text fields and the on-screen keyboard */
 
 enum class TextType { Text, Number, Password };
@@ -194,6 +270,8 @@ struct TextFieldEvents {
     std::function<void(const std::string &text)> changed;
     std::function<void(const std::string &text)> submit; /* Enter while editing (single line); default: stop editing */
     std::function<void()> back;                           /* Esc while not editing: the page's back action */
+    std::function<void()> escape; /* Esc while editing (a dialog's Cancel); default: stop editing. Runs inside the key
+                                     event: delete the field later, not in the callback */
 };
 
 class TextField {
@@ -249,6 +327,70 @@ private:
     int saved_intercept_ = 0;
     cp0_keyboard_text_hint_t saved_hint_ = KBD_TEXT_HINT_TEXT;
     lv_obj_t *key_screen_ = nullptr; /* the screen LV_EVENT_KEYBOARD is read on while editing */
+};
+
+/* ------------------------------------------------------------------ dialog (task 014 P3b) */
+
+enum class ButtonRole { Normal, Primary, Cancel };
+
+struct DialogButton {
+    std::string text;
+    ButtonRole role = ButtonRole::Normal; /* Primary: Enter; Cancel: Esc */
+    std::function<void()> action;         /* runs inside an LVGL event: delete the dialog later, not in it */
+};
+
+struct DialogSpec {
+    std::string title;
+    std::vector<DialogButton> buttons; /* 1-3, left to right */
+    bool message_line = false;         /* reserve one status line at the end of the body (set_message) */
+};
+
+class Dialog {
+public:
+    /* parent: the page's full-screen root (the dialog and its backdrop cover the body under the header). */
+    Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec spec);
+    ~Dialog();
+    Dialog(const Dialog &) = delete;
+    Dialog &operator=(const Dialog &) = delete;
+
+    /* The content column (text, fields), the dialog's content width. Call relayout() after adding to it. */
+    lv_obj_t *body() const { return content_; }
+    /* The page layout narrowed to the body: give it to a TextField built in body(). */
+    const cp0_ui_roller_page_t &field_layout() const { return field_layout_; }
+    lv_obj_t *add_text(const std::string &text);
+    void set_title(const std::string &title);
+    /* The status line (message_line): empty clears it; error draws it red. */
+    void set_message(const std::string &text, bool error);
+    void relayout();
+    /* Keeps the dialog above whatever the page draws later (the page's status line). */
+    void raise();
+
+    /* A dialog without fields: add this to the page's input group and focus it (Enter = primary, Esc = cancel). */
+    lv_obj_t *focus_object() const { return box_; }
+    void primary();
+    void cancel();
+    lv_obj_t *root() const { return backdrop_; }
+    const cp0_ui_dialog_t &geometry() const { return geometry_; }
+
+private:
+    static void box_event_cb(lv_event_t *event);
+    static void button_event_cb(lv_event_t *event);
+    static void backdrop_delete_cb(lv_event_t *event);
+    void run(ButtonRole role);
+    void keep_in_view();
+
+    cp0_ui_roller_page_t layout_;
+    cp0_ui_roller_page_t field_layout_;
+    DialogSpec spec_;
+    cp0_ui_dialog_t geometry_{};
+    lv_obj_t *backdrop_ = nullptr;
+    lv_obj_t *box_ = nullptr;
+    lv_obj_t *title_ = nullptr;
+    lv_obj_t *viewport_ = nullptr; /* the body's scrolling window */
+    lv_obj_t *content_ = nullptr;
+    lv_obj_t *message_ = nullptr;
+    std::vector<lv_obj_t *> buttons_;
+    int inset_listener_ = 0;
 };
 
 class OnScreenKeyboard {

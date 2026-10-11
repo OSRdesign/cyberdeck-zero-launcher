@@ -11,10 +11,10 @@
  * The variable comes from the launcher's environment (board.conf / the service unit). Native needs the dpi-scaled
  * display backend; without it (SDL simulator) the compat renderer runs whatever the variable says.
  *
- * D3: a page the native host has no widget for yet (Wi-Fi networks, Bluetooth pairing / scan / alias, Apps and the
- * sudo prompt, the User / Storage / Licenses / About / Date & Time info pages, the manual time "Save?" step) opens
- * through the compat path from the native host in development builds only. In a release build those entries are
- * hidden while native is selected. Development = APPLAUNCH_DEV=1 in the environment, or a build whose channel
+ * D3: a page the native host has no widget for yet (Bluetooth pairing / scan / alias, Apps and the sudo prompt, the
+ * manual time "Save?" step; the Wi-Fi and the info pages are native since task 014 P3a / P3b) opens through the compat
+ * path from the native host in development builds only. In a release build those entries are hidden while native is
+ * selected; native pages show in both. Development = APPLAUNCH_DEV=1 in the environment, or a build whose channel
  * (APPLAUNCH_CHANNEL at build time, LAUNCHER_CHANNEL_RAW) is "development" (the default of a local scons build);
  * APPLAUNCH_DEV=0 forces the release behaviour.
  */

@@ -14,6 +14,7 @@
 #pragma once
 
 #include "lvgl_components.hpp"
+#include "settings_native_panel.hpp"
 
 #include <functional>
 #include <memory>
@@ -46,21 +47,15 @@ private:
 std::unique_ptr<DComponens::LvglComponensBase> settings_keyboard_choice_page_factory(
     lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 
-// The "Keyboard test" entry's factory: a marker for settings_node_kind() (SettingsNodeKind::Native); the native host
-// opens the page with settings_native_panel_create(). It builds nothing for the compat renderer.
+// The "Keyboard test" entry's factory: a marker for settings_native_page() (SettingsNativePage::KeyboardTest); the
+// native host opens the page with settings_native_panel_create(). It builds nothing for the compat renderer.
 std::unique_ptr<DComponens::LvglComponensBase> settings_keyboard_test_factory(
     lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 
-// A page the native host shows in its body instead of the roller (a form of TextFields).
-class SettingsNativePanel {
-public:
-    virtual ~SettingsNativePanel() = default;
-};
-
-// The native page of a SettingsNodeKind::Native node: built in page.body(), its fields in `group` (the first one
-// focused: it edits, the keyboard comes). back: the page's back action (Esc on a field that is not editing).
-std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter &node, cp0::ui::Page &page,
-                                                                  lv_group_t *group, std::function<void()> back);
+// The Keyboard test form, built in page.body(), its fields in `group` (the first one focused: it edits, the keyboard
+// comes). back: the page's back action (Esc on a field that is not editing).
+std::unique_ptr<SettingsNativePanel> settings_keyboard_test_panel_create(cp0::ui::Page &page, lv_group_t *group,
+                                                                         std::function<void()> back);
 
 namespace settings_keyboard {
 

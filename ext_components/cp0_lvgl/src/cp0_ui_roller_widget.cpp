@@ -26,6 +26,38 @@ constexpr uint32_t kValue = 0x00CC66;  /* the green of today's Settings hints ("
 constexpr uint32_t kCheck = 0x2D9CDB;  /* the home grid's selection blue */
 constexpr uint32_t kTrack = 0x3A3A3A;
 constexpr uint32_t kKnob = 0xFFFFFF;
+constexpr uint32_t kBarOn = 0x33CC33;  /* the status bar's Wi-Fi bars (cp0_statusbar.c BAR_ON / BAR_OFF) */
+constexpr uint32_t kBarOff = 0x4D4D4D;
+constexpr uint32_t kLock = 0x9A9A9A;   /* the text fields' label grey */
+
+/* The status bar's Wi-Fi icon (cp0_statusbar.c): four bars 8 px wide on a 12 px pitch, 9 / 15 / 21 / 28 px high in a
+ * 30 px block, radius 3; here scaled so the block is as high as the row's value text. */
+constexpr int kBarDesignH = 30;
+constexpr int kBarDesign[4] = {9, 15, 21, 28};
+
+struct NetworkGlyphs {
+    int glyph;      /* block height: the centre row's value text size */
+    int bar_w, pitch, radius;
+    int bar_h[4];
+    int block_w;    /* the four bars */
+    int lock_w, lock_h;
+};
+
+int scaled(int design, int glyph) { return (design * glyph + kBarDesignH / 2) / kBarDesignH; }
+
+NetworkGlyphs network_glyphs(const cp0_ui_roller_page_t &l)
+{
+    NetworkGlyphs g{};
+    g.glyph = std::max(8, l.value_px);
+    g.bar_w = std::max(2, scaled(8, g.glyph));
+    g.pitch = std::max(g.bar_w + 1, scaled(12, g.glyph));
+    g.radius = std::max(1, scaled(3, g.glyph));
+    for (int i = 0; i < 4; ++i) g.bar_h[i] = std::max(2, scaled(kBarDesign[i], g.glyph));
+    g.block_w = 3 * g.pitch + g.bar_w;
+    g.lock_h = std::max(8, g.glyph * 4 / 5);
+    g.lock_w = std::max(6, g.lock_h * 3 / 4);
+    return g;
+}
 
 int text_width(const char *text, const lv_font_t *font)
 {
@@ -55,6 +87,7 @@ int switch_h(const cp0_ui_roller_page_t &l) { return std::max(16, l.text_px); }
 int switch_w(const cp0_ui_roller_page_t &l) { return switch_h(l) * 9 / 5; }
 int slider_w(const cp0_ui_roller_page_t &l) { return l.roller_w / 3; }
 int slider_h(const cp0_ui_roller_page_t &l) { return std::max(6, l.text_px / 4); }
+int spinner_size(const cp0_ui_roller_page_t &l) { return std::max(12, l.value_px); }
 
 /* Row text: Montserrat (the home grid's face), bold on the centre row; FreeType so any name renders */
 const lv_font_t *row_font(int px, bool bold)
@@ -207,6 +240,55 @@ void Roller::build_row(int index)
         row.value = lv_label_create(row.obj);
         lv_obj_set_style_text_color(row.value, lv_color_hex(kValue), 0);
         break;
+    case RowKind::Info:
+        row.value = lv_label_create(row.obj);
+        lv_obj_set_style_text_color(row.value, lv_color_hex(kValue), 0);
+        lv_obj_set_style_text_align(row.value, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_label_set_long_mode(row.value, LV_LABEL_LONG_MODE_DOTS);
+        break;
+    case RowKind::Network: {
+        const NetworkGlyphs g = network_glyphs(layout_);
+        row.value = lv_label_create(row.obj);
+        lv_obj_set_style_text_color(row.value, lv_color_hex(kValue), 0);
+        row.check = lv_label_create(row.obj);
+        lv_label_set_text(row.check, LV_SYMBOL_OK);
+        lv_obj_set_style_text_color(row.check, lv_color_hex(kCheck), 0);
+        // the lock: a shackle (a rounded outline) over a solid body
+        row.lock = plain(row.obj);
+        lv_obj_set_size(row.lock, g.lock_w, g.lock_h);
+        lv_obj_t *shackle = plain(row.lock);
+        lv_obj_set_size(shackle, g.lock_w * 2 / 3, g.lock_h * 2 / 3);
+        lv_obj_set_style_border_width(shackle, std::max(2, g.lock_w / 6), 0);
+        lv_obj_set_style_border_color(shackle, lv_color_hex(kLock), 0);
+        lv_obj_set_style_border_opa(shackle, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(shackle, LV_RADIUS_CIRCLE, 0);
+        lv_obj_align(shackle, LV_ALIGN_TOP_MID, 0, 0);
+        lv_obj_t *body = plain(row.lock);
+        lv_obj_set_size(body, g.lock_w, g.lock_h * 11 / 20);
+        lv_obj_set_style_bg_color(body, lv_color_hex(kLock), 0);
+        lv_obj_set_style_bg_opa(body, LV_OPA_COVER, 0);
+        lv_obj_set_style_radius(body, std::max(1, g.lock_w / 6), 0);
+        lv_obj_align(body, LV_ALIGN_BOTTOM_MID, 0, 0);
+        for (int i = 0; i < 4; ++i) {
+            row.bars[i] = plain(row.obj);
+            lv_obj_set_size(row.bars[i], g.bar_w, g.bar_h[i]);
+            lv_obj_set_style_radius(row.bars[i], g.radius, 0);
+            lv_obj_set_style_bg_opa(row.bars[i], LV_OPA_COVER, 0);
+        }
+        break;
+    }
+    case RowKind::Busy: {
+        const int size = spinner_size(layout_);
+        row.control = lv_spinner_create(row.obj);
+        leave_group(row.control);
+        lv_obj_remove_flag(row.control, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_size(row.control, size, size);
+        lv_obj_set_style_arc_width(row.control, std::max(2, size / 7), LV_PART_MAIN);
+        lv_obj_set_style_arc_width(row.control, std::max(2, size / 7), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_color(row.control, lv_color_hex(kTrack), LV_PART_MAIN);
+        lv_obj_set_style_arc_color(row.control, lv_color_hex(kCheck), LV_PART_INDICATOR);
+        break;
+    }
     }
     fill_row(row);
 }
@@ -217,7 +299,21 @@ void Roller::fill_row(Row &row)
     switch (row.spec.kind) {
     case RowKind::Nav:
     case RowKind::Slider:
+    case RowKind::Info:
         lv_label_set_text(row.value, row.spec.value.c_str());
+        break;
+    case RowKind::Network: {
+        // connected: the check; otherwise the value ("Saved"), if any
+        lv_label_set_text(row.value, row.spec.on ? "" : row.spec.value.c_str());
+        if (row.spec.on) lv_obj_remove_flag(row.check, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(row.check, LV_OBJ_FLAG_HIDDEN);
+        if (row.spec.secured) lv_obj_remove_flag(row.lock, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(row.lock, LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < 4; ++i)
+            lv_obj_set_style_bg_color(row.bars[i], lv_color_hex(i < row.spec.bars ? kBarOn : kBarOff), 0);
+        break;
+    }
+    case RowKind::Busy:
         break;
     case RowKind::Choice:
         if (row.spec.on) lv_obj_remove_flag(row.value, LV_OBJ_FLAG_HIDDEN);
@@ -255,12 +351,18 @@ void Roller::style_row(int index, bool force)
 
     const int px = cp0_ui_roller_text_px(layout_.text_px, distance);
     const int value_px = cp0_ui_roller_text_px(layout_.value_px, distance);
-    const lv_font_t *font = row_font(px, distance == 0);
+    /* the centre row is bold; a connected network always */
+    const bool bold = distance == 0 || (row.spec.kind == RowKind::Network && row.spec.on);
+    const lv_font_t *font = row_font(px, bold);
     const lv_font_t *value_font = row_font(value_px, false);
     lv_obj_set_style_opa(row.obj, static_cast<lv_opa_t>(cp0_ui_roller_opa(distance)), 0);
     lv_obj_set_style_text_font(row.label, font, 0);
 
     const int inset = layout_.inset;
+    if (row.spec.kind == RowKind::Info) {
+        style_info(row, distance, font);
+        return;
+    }
     int right = 0; /* room taken at the right of the row */
     switch (row.spec.kind) {
     case RowKind::Nav:
@@ -287,11 +389,84 @@ void Roller::style_row(int index, bool force)
         right = slider_w(layout_) + layout_.gap + slot;
         break;
     }
+    case RowKind::Network:
+        right = style_network(row, distance, value_font);
+        break;
+    case RowKind::Busy:
+        lv_obj_align(row.control, LV_ALIGN_RIGHT_MID, -inset, 0);
+        right = spinner_size(layout_);
+        break;
+    case RowKind::Info:
+        break;
     }
     const int label_w = layout_.roller_w - 2 * inset - (right > 0 ? right + layout_.gap : 0);
     lv_obj_set_width(row.label, std::max(0, label_w));
     lv_obj_set_height(row.label, lv_font_get_line_height(font)); /* one line: dots, never a wrap */
     lv_obj_align(row.label, LV_ALIGN_LEFT_MID, inset, 0);
+}
+
+/* Info row: key and value widths from cp0_ui_info_row at the centre row's sizes (the layout keeps still while the
+ * text shrinks away from the centre); on Compact a long value wraps onto two lines at a smaller size. */
+int Roller::style_info(Row &row, int distance, const lv_font_t *font)
+{
+    const int inset = layout_.inset;
+    const lv_font_t *key_centre = row_font(layout_.text_px, true);
+    const lv_font_t *value_centre = row_font(layout_.value_px, false);
+    cp0_ui_info_row_t info{};
+    const int wrap = cp0_ui_classify(layout_.w, layout_.h) == CP0_UI_COMPACT;
+    if (cp0_ui_info_row(layout_.roller_w, inset, layout_.gap, text_width(row.spec.label.c_str(), key_centre),
+                        layout_.text_px, text_width(row.spec.value.c_str(), value_centre), layout_.value_px,
+                        layout_.row_h, wrap, &info) != 0)
+        return 0;
+    // a text that fits keeps its own width (no dots from a rounding pixel); one that does not gets the room the
+    // layout gives it, on one or two lines, with dots past the last one
+    if (info.key_px != layout_.text_px) {
+        font = row_font(cp0_ui_roller_text_px(info.key_px, distance), distance == 0);
+        lv_obj_set_style_text_font(row.label, font, 0);
+    }
+    const bool key_fits = !info.key_cut && info.key_lines == 1 && info.key_px == layout_.text_px;
+    lv_obj_set_width(row.label, key_fits ? LV_SIZE_CONTENT : info.key_w);
+    lv_obj_set_height(row.label, info.key_lines * lv_font_get_line_height(font));
+    lv_obj_align(row.label, LV_ALIGN_LEFT_MID, inset, 0);
+    if (row.spec.value.empty()) {
+        lv_obj_add_flag(row.value, LV_OBJ_FLAG_HIDDEN);
+        return 0;
+    }
+    lv_obj_remove_flag(row.value, LV_OBJ_FLAG_HIDDEN);
+    const lv_font_t *value_font = row_font(cp0_ui_roller_text_px(info.value_px, distance), false);
+    lv_obj_set_style_text_font(row.value, value_font, 0);
+    const bool value_fits = !info.truncated && info.value_lines == 1 && info.value_px == layout_.value_px;
+    lv_obj_set_width(row.value, value_fits ? LV_SIZE_CONTENT : info.value_w);
+    lv_obj_set_height(row.value, info.value_lines * lv_font_get_line_height(value_font));
+    lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -inset, 0);
+    return info.value_w;
+}
+
+/* Network row, from the right edge: the four bars, the lock when secured, then the check (connected) or the value
+ * ("Saved"). The glyphs keep the centre row's size (the row fades away from the centre). Returns the room taken. */
+int Roller::style_network(Row &row, int /*distance*/, const lv_font_t *value_font)
+{
+    const NetworkGlyphs g = network_glyphs(layout_);
+    const int step = std::max(2, layout_.gap / 2);
+    int x = layout_.inset; /* from the row's right edge */
+    for (int i = 0; i < 4; ++i)
+        lv_obj_align(row.bars[i], LV_ALIGN_RIGHT_MID, -(x + (3 - i) * g.pitch), (g.glyph - g.bar_h[i]) / 2);
+    x += g.block_w;
+    if (row.spec.secured) {
+        lv_obj_align(row.lock, LV_ALIGN_RIGHT_MID, -(x + step), 0);
+        x += step + g.lock_w;
+    }
+    if (row.spec.on) {
+        const lv_font_t *symbol = cp0_ui_font_px(layout_.value_px);
+        lv_obj_set_style_text_font(row.check, symbol, 0);
+        lv_obj_align(row.check, LV_ALIGN_RIGHT_MID, -(x + layout_.gap), 0);
+        x += layout_.gap + text_width(LV_SYMBOL_OK, symbol);
+    } else if (!row.spec.value.empty()) {
+        lv_obj_set_style_text_font(row.value, value_font, 0);
+        lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -(x + layout_.gap), 0);
+        x += layout_.gap + text_width(row.spec.value.c_str(), value_font);
+    }
+    return x - layout_.inset;
 }
 
 /* Restyle the rows near the old and the new centre (the others are off screen and keep their faint style). */

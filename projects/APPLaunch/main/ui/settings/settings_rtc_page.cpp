@@ -1872,10 +1872,16 @@ std::string settings_rtc_ntp_status_text()
     return state.ntp_on() ? "On" : "Off";
 }
 
-std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
-    lv_obj_t *parent,
-    const NodeIter &parent_node,
-    std::function<void()> back_callback)
+bool settings_rtc_info_lines(std::vector<std::string> &lines)
+{
+    if (lines.size() < 3) return false;
+    lines[0] = "Current: " + settings_rtc_local_time_text();
+    lines[1] = "Network Time: " + settings_rtc_ntp_status_text();
+    lines[2] = "Time Zone: " + settings_rtc_timezone_text();
+    return true;
+}
+
+settings_t12b::about_help::Content settings_rtc_info_content()
 {
     // Nothing on this path used to load the local time, so the Info page always
     // reported the model's placeholder (2026-01-01) unless a field page had
@@ -1893,22 +1899,21 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
         workflow.load_local_time(time->payload);
     }
 
-    settings_t12b::about_help::Content content{
-        "Date & Time",
-        {"Current: " + settings_rtc_local_time_text(),
-         "Network Time: " + settings_rtc_ntp_status_text(),
-         "Time Zone: " + settings_rtc_timezone_text()}};
+    settings_t12b::about_help::Content content{"Date & Time", std::vector<std::string>(3)};
+    settings_rtc_info_lines(content.lines);
+    return content;
+}
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
+    lv_obj_t *parent,
+    const NodeIter &parent_node,
+    std::function<void()> back_callback)
+{
     auto page = std::make_unique<LvSettingStaticInfoPage3>(
-        parent, parent_node, std::move(back_callback), std::move(content));
+        parent, parent_node, std::move(back_callback), settings_rtc_info_content());
     // A frozen clock is the one thing an Info page must not show, so keep all
     // lines fresh while it is on screen.
-    page->set_lines_provider([](std::vector<std::string> &lines) {
-        if (lines.size() < 3) return false;
-        lines[0] = "Current: " + settings_rtc_local_time_text();
-        lines[1] = "Network Time: " + settings_rtc_ntp_status_text();
-        lines[2] = "Time Zone: " + settings_rtc_timezone_text();
-        return true;
-    });
+    page->set_lines_provider(settings_rtc_info_lines);
     return page;
 }
 

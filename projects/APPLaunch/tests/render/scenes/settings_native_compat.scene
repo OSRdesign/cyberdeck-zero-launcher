@@ -1,7 +1,7 @@
-# Native Settings, decision D3 (task 014 P2a): a page with no native widget yet (here User, the account info page)
-# opens from the native host through the compat path in a development build (APPLAUNCH_DEV=1): the legacy page in
-# the compat window with the toolbar. Its Esc returns to the native Settings on the same row; Esc on level 1 goes
-# home. Review only, no golden.
+# Native Settings, decision D3 (task 014 P2a): a page with no native widget yet (here Apps; User, the example until
+# P3a, is native now) opens from the native host through the compat path in a development build (APPLAUNCH_DEV=1):
+# the legacy page in the compat window with the toolbar. Its Esc returns to the native Settings on the same row; Esc
+# on level 1 goes home. Review only, no golden.
 title settings native compat path
 review
 sizes 480x320 800x480
@@ -14,6 +14,7 @@ bt on
 home
 header home ZERO
 launch Settings
+key UP
 key UP
 key UP
 key UP

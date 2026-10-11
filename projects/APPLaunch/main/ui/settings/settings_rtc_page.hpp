@@ -9,8 +9,10 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "lvgl_components.hpp"
+#include "settings_about_help_model.hpp"
 #include "settings_tree_types.hpp"
 
 class LvSettingRtcPage3 : public LvSettingValuePage3Base {
@@ -100,6 +102,11 @@ void settings_rtc_refresh_ntp() noexcept;
 // must stay cheap - the time comes from std::time, not from D-Bus.
 std::string settings_rtc_local_time_text();
 std::string settings_rtc_ntp_status_text();
+
+// Date & Time > Info for both renderers (the legacy info page and the native one, task 014 P3a): the content with the
+// local time loaded first, and the per-second refresh of its three lines (false when `lines` is not that content's).
+settings_t12b::about_help::Content settings_rtc_info_content();
+bool settings_rtc_info_lines(std::vector<std::string> &lines);
 
 std::unique_ptr<DComponens::LvglComponensBase> settings_rtc_info_page_factory(
     lv_obj_t *parent,

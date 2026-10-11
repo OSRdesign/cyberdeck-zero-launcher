@@ -5,6 +5,7 @@
  */
 
 #include "settings_wifi_page.hpp"
+#include "settings_wifi_model.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -21,143 +22,6 @@
 namespace {
 
 constexpr uint32_t kWifiScanRefreshPeriodMs = 8000;
-
-class settings_wifi_com {
-private:
-    enum class WifiDefaultDef : std::size_t {
-        kMaxPasswordBytes = 64,
-    };
-
-public:
-    struct AccessPoint {
-        std::string ssid;
-        std::string security;
-        int signal  = 0;
-        bool in_use = false;
-        bool saved  = false;
-    };
-
-    struct Status {
-        bool connected = false;
-        std::string ssid;
-        std::string ip;
-        int signal    = 0;
-        bool ethernet = false;
-    };
-
-    template <std::size_t Size>
-    static std::string bounded_string(const char (&value)[Size])
-    {
-        std::size_t length = 0;
-        while (length < Size && value[length] != '\0') ++length;
-        return std::string(value, length);
-    }
-
-    static bool valid_text(const std::string &value, std::size_t max_bytes, bool allow_empty)
-    {
-        if (!allow_empty && value.empty()) return false;
-        if (value.size() >= max_bytes) return false;
-        return std::all_of(value.begin(), value.end(),
-                           [](unsigned char byte) { return byte >= 0x20u && byte != 0x7Fu; });
-    }
-
-    static int validate_credentials(const std::string &ssid, const std::string &password)
-    {
-        if (!valid_text(ssid, CP0_WIFI_SSID_MAX, false) || !valid_text(password, static_cast<std::size_t>(WifiDefaultDef::kMaxPasswordBytes) + 1, true))
-            return CP0_WIFI_ERROR_INVALID;
-        return 0;
-    }
-
-    static bool is_open_security(const std::string &security)
-    {
-        if (security.empty()) return true;
-        std::string normalized = security;
-        std::transform(normalized.begin(), normalized.end(), normalized.begin(),
-                       [](unsigned char byte) { return static_cast<char>(std::toupper(byte)); });
-        return normalized == "OPEN" || normalized == "NONE" || normalized == "--";
-    }
-
-    static int radio_enabled()
-    {
-        return cp0_wifi_radio_enabled();
-    }
-
-    static int radio_set_enabled(bool enabled)
-    {
-        return cp0_wifi_radio_set_enabled(enabled ? 1 : 0);
-    }
-
-    static int read_status(Status &status)
-    {
-        status = {};
-        cp0_wifi_status_t raw{};
-        const int result = cp0_wifi_status_read(&raw);
-        if (result != 0) return result;
-
-        status.connected = raw.connected != 0;
-        status.ssid      = bounded_string(raw.ssid);
-        status.ip        = bounded_string(raw.ip);
-        status.signal    = raw.signal;
-        status.ethernet  = raw.ethernet != 0;
-        return 0;
-    }
-
-    static int scan(std::vector<AccessPoint> &access_points, int max_entries)
-    {
-        access_points.clear();
-        if (max_entries <= 0) return 0;
-
-        const int limit = std::clamp(max_entries, 1, CP0_WIFI_AP_MAX);
-        std::vector<cp0_wifi_ap_t> raw(static_cast<std::size_t>(limit));
-        const int result = cp0_wifi_scan(raw.data(), limit);
-        if (result < 0) return result;
-
-        const int count = std::min(result, limit);
-        access_points.reserve(static_cast<std::size_t>(count));
-        for (int index = 0; index < count; ++index) {
-            const cp0_wifi_ap_t &source = raw[static_cast<std::size_t>(index)];
-            AccessPoint access_point;
-            access_point.ssid     = bounded_string(source.ssid);
-            access_point.security = bounded_string(source.security);
-            access_point.signal   = source.signal;
-            access_point.in_use   = source.in_use != 0;
-            access_point.saved    = source.saved != 0;
-            if (!access_point.ssid.empty()) access_points.push_back(std::move(access_point));
-        }
-        return static_cast<int>(access_points.size());
-    }
-
-    static int connect(const std::string &ssid, const std::string &password)
-    {
-        const int validation = validate_credentials(ssid, password);
-        if (validation != 0) return validation;
-        return cp0_wifi_connect(ssid.c_str(), password.empty() ? nullptr : password.c_str());
-    }
-
-    static bool profile_exists(const std::string &ssid)
-    {
-        return valid_text(ssid, CP0_WIFI_SSID_MAX, false) && cp0_wifi_profile_exists(ssid.c_str()) != 0;
-    }
-
-    static int connect_hidden(const std::string &ssid, const std::string &password)
-    {
-        const int validation = validate_credentials(ssid, password);
-        if (validation != 0) return validation;
-
-        return cp0_wifi_connect_hidden(ssid.c_str(), password.empty() ? nullptr : password.c_str());
-    }
-
-    static int profile_forget(const std::string &ssid)
-    {
-        if (!valid_text(ssid, CP0_WIFI_SSID_MAX, false)) return CP0_WIFI_ERROR_INVALID;
-        return cp0_wifi_profile_forget(ssid.c_str());
-    }
-
-    static int profile_disconnect_active()
-    {
-        return cp0_wifi_disconnect_active();
-    }
-};
 
 } // namespace
 
@@ -525,22 +389,7 @@ const char *LvSettingWifiScanPage3::scan_error_message(int result){
     }
 
 const char *LvSettingWifiScanPage3::connection_error_message(int result){
-        switch (result) {
-            case CP0_WIFI_ERROR_RADIO_OFF:
-                return "Wi-Fi is off";
-            case CP0_WIFI_ERROR_AUTH:
-                return "Incorrect password";
-            case CP0_WIFI_ERROR_NOT_FOUND:
-                return "Network is no longer available";
-            case CP0_WIFI_ERROR_IP_CONFIG:
-                return "Connected, but IP setup failed";
-            case CP0_WIFI_ERROR_TIMEOUT:
-                return "Network operation timed out";
-            case CP0_WIFI_ERROR_INVALID:
-                return "Invalid Wi-Fi credentials";
-            default:
-                return "Wi-Fi service unavailable";
-        }
+        return settings_wifi::connection_error_text(result);
     }
 
 bool LvSettingWifiScanPage3::is_open_security(const std::string &security){
@@ -1118,20 +967,7 @@ bool LvSettingWifiScanPage3::move_hidden_cursor_right(){
     }
 
 std::string LvSettingWifiScanPage3::password_validation_error() const{
-        if (password_.empty()) return "Password required";
-
-        std::string security = password_security_;
-        std::transform(security.begin(), security.end(), security.begin(),
-                       [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
-        if (security.find("802.1X") != std::string::npos || security.find("EAP") != std::string::npos ||
-            security.find("ENTERPRISE") != std::string::npos)
-            return "Enterprise Wi-Fi is not supported";
-        if (security.find("WPA") == std::string::npos) return {};
-        if (password_.size() >= 8 && password_.size() <= 63) return {};
-        if (password_.size() == 64 &&
-            std::all_of(password_.begin(), password_.end(), [](unsigned char ch) { return std::isxdigit(ch) != 0; }))
-            return {};
-        return "WPA password: 8-63 chars or 64 hex";
+        return settings_wifi::password_error(password_, password_security_);
     }
 
 void LvSettingWifiScanPage3::show_password_prompt(const std::string &ssid, const std::string &security, const std::string &error){

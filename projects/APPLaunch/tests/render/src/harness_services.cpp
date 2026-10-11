@@ -189,17 +189,80 @@ void install_services()
     });
 
     cp0_signal_wifi_api.append([](Args args, Reply reply) {
-        const Fixtures &f = fixtures();
+        Fixtures &f = fixtures();
         const std::string command = arg(args, 0);
+        const bool connected = f.wifi_connected && f.wifi_radio;
+        auto find = [&f](const std::string &ssid) -> FixtureNetwork * {
+            for (FixtureNetwork &network : f.wifi_networks)
+                if (network.ssid == ssid) return &network;
+            return nullptr;
+        };
         if (command == "Status") {
             cp0_wifi_status_t status{};
-            status.connected = f.wifi_connected ? 1 : 0;
-            std::snprintf(status.ssid, sizeof(status.ssid), "%s", f.wifi_connected ? f.wifi_ssid.c_str() : "");
-            std::snprintf(status.ip, sizeof(status.ip), "%s", f.wifi_connected ? f.wifi_ip.c_str() : "");
-            status.signal = f.wifi_connected ? f.wifi_signal : 0;
+            status.connected = connected ? 1 : 0;
+            std::snprintf(status.ssid, sizeof(status.ssid), "%s", connected ? f.wifi_ssid.c_str() : "");
+            std::snprintf(status.ip, sizeof(status.ip), "%s", connected ? f.wifi_ip.c_str() : "");
+            status.signal = connected ? f.wifi_signal : 0;
             if (reply) reply(0, cp0::network::encode_status_payload(status));
         } else if (command == "RadioEnabled") {
             if (reply) reply(f.wifi_radio ? 1 : 0, "");
+        } else if (command == "RadioSetEnabled") { /* "on" / "off" */
+            f.wifi_radio = arg(args, 1) == "on" || arg(args, 1) == "1" || arg(args, 1) == "true";
+            if (reply) reply(0, "");
+        } else if (command == "Scan") { /* the fixture networks, in their order (the page sorts them) */
+            if (!f.wifi_radio) {
+                if (reply) reply(CP0_WIFI_ERROR_RADIO_OFF, "");
+                return;
+            }
+            std::vector<cp0_wifi_ap_t> aps;
+            for (const FixtureNetwork &network : f.wifi_networks) {
+                cp0_wifi_ap_t ap{};
+                std::snprintf(ap.ssid, sizeof(ap.ssid), "%s", network.ssid.c_str());
+                std::snprintf(ap.security, sizeof(ap.security), "%s", network.security.c_str());
+                ap.signal = network.signal;
+                ap.in_use = connected && network.ssid == f.wifi_ssid ? 1 : 0;
+                ap.saved = network.saved ? 1 : 0;
+                aps.push_back(ap);
+            }
+            if (reply)
+                reply(static_cast<int>(aps.size()), cp0::network::encode_scan_payload(aps.data(), static_cast<int>(aps.size())));
+        } else if (command == "Connect" || command == "ConnectHidden") {
+            /* an open or saved network joins without a password; a new secured one only with f.wifi_password;
+             * a hidden one only as f.wifi_hidden_ssid */
+            const std::string ssid = arg(args, 1);
+            const std::string password = arg(args, 2);
+            if (!f.wifi_radio) {
+                if (reply) reply(CP0_WIFI_ERROR_RADIO_OFF, "");
+                return;
+            }
+            FixtureNetwork *network = find(ssid);
+            if (command == "ConnectHidden" && !network && ssid == f.wifi_hidden_ssid) {
+                f.wifi_networks.push_back({ssid, 58, "WPA2", false});
+                network = &f.wifi_networks.back();
+            }
+            if (!network) {
+                if (reply) reply(CP0_WIFI_ERROR_NOT_FOUND, "");
+                return;
+            }
+            const bool open = network->security.empty();
+            if (!open && !network->saved && password != f.wifi_password) {
+                if (reply) reply(CP0_WIFI_ERROR_AUTH, "");
+                return;
+            }
+            network->saved = network->saved || !open;
+            f.wifi_connected = true; /* the status keeps the scene's signal (wifi PCT): the strip stays comparable */
+            f.wifi_ssid = ssid;
+            f.wifi_ip = "192.168.1.57";
+            if (reply) reply(0, "");
+        } else if (command == "ProfileForget") {
+            if (FixtureNetwork *network = find(arg(args, 1))) network->saved = false;
+            if (reply) reply(0, "");
+        } else if (command == "ProfileExists") {
+            const FixtureNetwork *network = find(arg(args, 1));
+            if (reply) reply(network && network->saved ? 1 : 0, "");
+        } else if (command == "ProfileDisconnectActive" || command == "Disconnect") {
+            f.wifi_connected = false;
+            if (reply) reply(0, "");
         } else {
             unknown("wifi", args, reply);
         }
@@ -254,6 +317,9 @@ void install_services()
             if (reply) reply(0, "1");
         } else if (command == "AccountInfoRead") {
             if (reply) reply(0, "osrde\nzero7");
+        } else if (command == "NetworkDefaultInfoRead") { /* IPv4, gateway, MAC of the default route (fake) */
+            const Fixtures &f = fixtures();
+            if (reply) reply(0, (f.wifi_connected ? f.wifi_ip : std::string("--")) + "\n192.168.1.1\n02:00:5e:00:53:01");
         } else {
             unknown("osinfo/timedate", args, reply);
         }

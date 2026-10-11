@@ -149,6 +149,13 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 "$build_dir/test_settings_storage_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_settings_wifi_model.cpp" \
+    "$settings_ui_root/settings_wifi_model.cpp" \
+    -o "$build_dir/test_settings_wifi_model"
+"$build_dir/test_settings_wifi_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
     "$test_root/test_settings_battery_info_model.cpp" \
     "$settings_ui_root/settings_page_battery_info_model.cpp" \
     -o "$build_dir/test_settings_battery_info_model"
