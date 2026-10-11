@@ -679,10 +679,11 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
         // value pages: LvSettingValuePage3Base subclasses (SettingsChoiceBinding)
         for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
                                          confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
-                                         settings_keyboard_choice_page_factory})
+                                         settings_keyboard_choice_page_factory,
+                                         settings_rtc_confirm_page_factory}) // Save?: its warning is a host Dialog
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
-        // Date & Time "Save?" (its factory-time warning is a dialog) and any other page of its own: not migrated
-        // yet (P3)
+        // any other page of its own: not migrated (the Pi boards have none left; the other boards' pages are
+        // hidden in a release build)
         return SettingsNodeKind::Custom;
     }
     if (entry.icon_enabled && entry.has_api()) return SettingsNodeKind::Toggle;

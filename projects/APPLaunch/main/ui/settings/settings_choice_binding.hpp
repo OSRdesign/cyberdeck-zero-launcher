@@ -11,6 +11,8 @@
  *     (loads the current value, keeps its async tasks, rollbacks, countdowns);
  *   - choice_activate(index) applies an option exactly as Enter on that row of the legacy page does;
  *   - the page reports its selection moves and its status line through SettingsChoiceObserver;
+ *   - a page that must ask before it goes on (Date & Time "Save?" with a date before the factory date) calls
+ *     choice_confirm() and waits for choice_confirm_reply(); a page without an observer draws its own box;
  *   - when the page is done (applied, or nothing to change) it calls the back callback the factory got, as it
  *     always did. A page that called it is finished: the host destroys it and creates a fresh one to show the new
  *     value (the legacy page objects are single-use too).
@@ -31,6 +33,10 @@ public:
     virtual void choice_selected(int index) = 0;
     /* the page's status line ("Loading dark time", "Brightness save failed", "On again in 7 s", ""...) */
     virtual void choice_status(const std::string &text, bool error) = 0;
+    /* the page asks a question and waits for choice_confirm_reply(): the observer shows title, text and the two
+     * buttons (cancel answers false, confirm true) */
+    virtual void choice_confirm(const std::string &title, const std::string &text, const std::string &cancel,
+                                const std::string &confirm) = 0;
 };
 
 class SettingsChoiceBinding {
@@ -47,6 +53,8 @@ public:
      * outcome arrives as choice_selected / choice_status and, on success, the back callback), Failure, NotHandled */
     virtual SettingApiResult choice_activate(int index) = 0;
     virtual void choice_set_observer(SettingsChoiceObserver *observer) = 0;
+    /* the answer to choice_confirm(); the observer answers false when the question goes away unanswered */
+    virtual void choice_confirm_reply(bool confirmed) { (void)confirmed; }
 };
 
 /* The parent that makes a value page logic-only (see above): hidden, never drawn. */

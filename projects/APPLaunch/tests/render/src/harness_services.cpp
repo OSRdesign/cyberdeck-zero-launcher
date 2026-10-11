@@ -473,7 +473,8 @@ void install_services()
     auto time_service = [](Args args, Reply reply) {
         const std::string command = arg(args, 0);
         if (command == "LocalTime") {
-            const time_t now = static_cast<time_t>(harness_wall_clock());
+            const int64_t set_time = fixtures().time_set_epoch.load();
+            const time_t now = static_cast<time_t>(set_time >= 0 ? set_time : harness_wall_clock());
             std::tm local{};
             localtime_r(&now, &local);
             char text[64];
@@ -481,7 +482,7 @@ void install_services()
                           local.tm_mday, local.tm_hour, local.tm_min, local.tm_sec);
             if (reply) reply(0, text);
         } else if (command == "NtpGet") {
-            if (reply) reply(0, "1");
+            if (reply) reply(fixtures().ntp_on ? 1 : 0, "1"); /* the code is the state: 1 on, 0 off */
         } else if (command == "AccountInfoRead") {
             if (reply) reply(0, "osrde\nzero7");
         } else if (command == "NetworkDefaultInfoRead") { /* IPv4, gateway, MAC of the default route (fake) */

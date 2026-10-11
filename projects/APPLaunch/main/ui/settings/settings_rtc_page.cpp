@@ -1142,6 +1142,8 @@ struct LvSettingRtcConfirmPage3::Impl {
     lv_obj_t *factory_warning_cancel = nullptr;
     lv_obj_t *factory_warning_confirm = nullptr;
     bool factory_warning_confirm_selected = false;
+    SettingsChoiceObserver *observer = nullptr; /* the native host: it shows the warning and the errors */
+    bool factory_warning_asked = false;         /* choice_confirm() sent, no reply yet */
     lv_obj_t *status_label = nullptr;
     std::string last_error;
 
@@ -1538,6 +1540,11 @@ void LvSettingRtcConfirmPage3::resolve_factory_time_warning(bool confirm)
 
     const auto sink = impl_->factory_warning_sink;
     close_factory_time_warning();
+    continue_after_factory_time_warning(sink, confirm);
+}
+
+void LvSettingRtcConfirmPage3::continue_after_factory_time_warning(const ActivationSink &sink, bool confirm)
+{
     if (!sink.valid()) return;
 
     if (!confirm) {
@@ -1549,6 +1556,21 @@ void LvSettingRtcConfirmPage3::resolve_factory_time_warning(bool confirm)
     // older timestamp and continues through the normal privileged RTC write.
     const SettingApiResult result = begin_save(true);
     if (result != SettingApiResult::Pending) finish_activation(sink, result);
+}
+
+void LvSettingRtcConfirmPage3::choice_set_observer(SettingsChoiceObserver *observer)
+{
+    LvSettingValuePage3Base::choice_set_observer(observer);
+    impl_->observer = observer;
+}
+
+void LvSettingRtcConfirmPage3::choice_confirm_reply(bool confirmed)
+{
+    if (!impl_->factory_warning_asked) return;
+    const auto sink = impl_->factory_warning_sink;
+    impl_->factory_warning_asked = false;
+    impl_->factory_warning_sink = {};
+    continue_after_factory_time_warning(sink, confirmed);
 }
 
 void LvSettingRtcConfirmPage3::handle_factory_time_warning_key(lv_event_t *event)
@@ -1616,7 +1638,14 @@ SettingApiResult LvSettingRtcConfirmPage3::begin_save(bool allow_before_factory_
 
     const std::string timestamp = workflow.state().timestamp();
     if (!allow_before_factory_time && setting::timestamp_before_factory_date(timestamp)) {
-        show_factory_time_warning(activation_sink());
+        if (impl_->observer) {
+            // native Settings: the host shows the warning and answers through choice_confirm_reply()
+            impl_->factory_warning_sink = activation_sink();
+            impl_->factory_warning_asked = true;
+            impl_->observer->choice_confirm("Warning", "Can't set before factory time", "Cancel", "Confirm");
+        } else {
+            show_factory_time_warning(activation_sink());
+        }
         return SettingApiResult::Pending;
     }
 
@@ -1727,6 +1756,7 @@ void LvSettingRtcConfirmPage3::create_status_label()
 void LvSettingRtcConfirmPage3::set_error(const char *message)
 {
     impl_->last_error = message ? message : APPLAUNCH_TXT_RTC_WRITE_FAILED;
+    report_status(impl_->last_error, true); /* the native host's status line */
     if (impl_->status_label) {
         lv_label_set_text(impl_->status_label, impl_->last_error.c_str());
         lv_obj_clear_flag(impl_->status_label, LV_OBJ_FLAG_HIDDEN);
@@ -1736,6 +1766,7 @@ void LvSettingRtcConfirmPage3::set_error(const char *message)
 void LvSettingRtcConfirmPage3::clear_error()
 {
     impl_->last_error.clear();
+    report_status("", false);
     if (impl_->status_label) {
         lv_label_set_text(impl_->status_label, "");
         lv_obj_add_flag(impl_->status_label, LV_OBJ_FLAG_HIDDEN);

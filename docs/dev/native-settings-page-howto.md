@@ -15,7 +15,7 @@ own page factory and API, in this order:
 | `Native` | `settings_native_page(node)` is not `None` (checked first) |
 | `Custom` | the entry's `page_type == PageType::FullCustom`, or any other factory not listed below (compat path) |
 | `Section` | factory `roller_page_factory` or `bluetooth_roller_page_factory` |
-| `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory` |
+| `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `settings_rtc_confirm_page_factory` (Save?), `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory` |
 | `Toggle` | no factory, `icon_enabled` and `has_api()` |
 | `Action` | no factory, `has_api()` |
 | `Plain` | nothing to open |

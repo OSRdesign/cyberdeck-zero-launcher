@@ -20,13 +20,16 @@
  *   Toggle   a switch; status read with SettingApiReadFlagTimeStart on a worker (Async) or polled (Direct), toggled
  *            with SettingApiActivate, exactly as the legacy submenu does
  *   Action   SettingApiActivate on Enter
- *   Custom   no native widget yet (the manual time "Save?" step): the compat path in development builds
+ *   Custom   no native widget yet (no node of the Pi boards): the compat path in development builds
  *            (settings_native_compat.hpp), hidden in a release build (D3)
  *   Native   a page built natively instead of the roller (settings_native_panel.hpp: the development Keyboard test
  *            form, task 014 P2b; the read-only pages About, User, Storage, Licenses, Date & Time > Info, P3a; the
  *            Wi-Fi page, P3b; Bluetooth Paired Devices, Scan, Alias, P3c; Apps, P3d). Esc first goes back inside the
  *            page (its dialog, its sub-list), then to the section; the page's row is redrawn when it closes (a renamed
  *            entry)
+ * A value page may ask a question (SettingsChoiceObserver::choice_confirm: the manual time "Save?" before the factory
+ * date): the host shows it as a cp0::ui::Dialog (Cancel / Confirm) over the list and gives the answer back; Esc and the
+ * header's Esc cancel it, leaving the section answers "no".
  * Activation gates (Set Manually while Network Time is on) are honoured; the refusal shows in the status line.
  *
  * LVGL thread only.
@@ -90,6 +93,9 @@ private:
     void binding_done(std::uint64_t generation, const SettingEntry *entry);
     void choice_selected(int row, int index);
     void choice_status(int row, const std::string &text, bool error);
+    void choice_confirm(int row, const std::string &title, const std::string &text, const std::string &cancel,
+                        const std::string &confirm);
+    void answer_confirm(bool confirmed);
     void clear_caption();
     int known_value(const Row &row) const;
     void post(std::function<void()> callback);
@@ -106,6 +112,8 @@ private:
     std::unique_ptr<cp0::ui::Roller> roller_;
     lv_obj_t *binding_host_ = nullptr;
     std::unique_ptr<SettingsCompatPath> compat_;
+    std::unique_ptr<cp0::ui::Dialog> confirm_;    /* a value page's question (choice_confirm), over the list */
+    int confirm_row_ = -1;                        /* the row that asked */
     std::unique_ptr<SettingsNativePanel> native_; /* a Native row's page, shown instead of the roller */
     int native_row_ = -1;                         /* its row (-1: none) */
 

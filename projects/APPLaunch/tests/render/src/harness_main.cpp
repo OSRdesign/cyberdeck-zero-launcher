@@ -823,6 +823,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::tm t{};
         t.tm_year = year - 1900, t.tm_mon = month - 1, t.tm_mday = day, t.tm_hour = hh, t.tm_min = mm;
         harness_set_wall_clock(static_cast<int64_t>(timegm(&t)));
+        fx.time_set_epoch.store(-1); /* a time saved from Settings no longer overrides it */
         return true;
     }
     if (cmd == "wifi") {
@@ -840,6 +841,16 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     if (cmd == "config") {
         if (w.size() != 3) return fail(scene, line, "usage: config KEY VALUE");
         harness::config_set(w[1], w[2]);
+        return true;
+    }
+    if (cmd == "ntp") {
+        if (w.size() != 2 || (w[1] != "on" && w[1] != "off")) return fail(scene, line, "usage: ntp on|off");
+        fx.ntp_on = w[1] == "on";
+        return true;
+    }
+    if (cmd == "timeset") {
+        if (w.size() != 2 || (w[1] != "ok" && w[1] != "fail")) return fail(scene, line, "usage: timeset ok|fail");
+        fx.time_settable = w[1] == "ok";
         return true;
     }
     if (cmd == "keyboards") {

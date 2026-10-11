@@ -1,0 +1,122 @@
+# Native Date & Time > Set Manually (task 014 P3e, release build: APPLAUNCH_DEV=0 hides every page that is not native,
+# so the "Save?" step has to be native to show at all). Network Time on refuses the section with its reason in the
+# status line; with it off the section lists Year .. Minute and Save?; a minute is set (a fresh value page), Save?
+# asks Yes / No (No highlighted); the save fails (the fake clock refuses: the error in the status line, red), then
+# works (back in the section, the new time shown); a date before the factory date (the harness build date is
+# 2026-10-10: the clock is set to 2000-03-14) asks first in a Dialog: Cancel (Esc), then Confirm; the header's Esc
+# closes the question first, and leaving the section with the question open answers no.
+# Review only: no golden (the compat Settings goldens are unchanged); every header is checked against the home
+# grid's (run.sh header). Fixtures: scene commands `ntp on|off`, `timeset ok|fail` (src/harness_stubs.cpp).
+title settings native date and time
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-10-10
+wifi 70
+bt on
+ntp on
+timeset fail
+home
+header home ZERO
+launch Settings
+# root: Up from Screen wraps to System, Up again is Date & Time
+key UP
+key UP
+key ENTER
+wait 600
+shot time_section
+header time_section "Settings > Date & Time" "Date & Time" Time
+# Info, Network Time, Set Manually: refused while Network Time is on
+key DOWN
+key DOWN
+key ENTER
+shot time_gated
+header time_gated "Settings > Date & Time" "Date & Time" Time
+# Network Time off: back to the root and in again (the section reads it when it opens)
+key ESC
+ntp off
+key ENTER
+wait 600
+key DOWN
+key DOWN
+key ENTER
+wait 600
+shot time_list
+header time_list "Settings > Date & Time > Set Manually" "Date & Time > Set Manually" "Set Manually"
+# Minute: a fresh value page; one down from 30, Enter applies and comes back with the edit kept
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 300
+shot time_minute
+header time_minute "Settings > Date & Time > Set Manually > Minute" "Date & Time > Set Manually > Minute" "Set Manually > Minute" Minute
+key DOWN
+key ENTER
+wait 600
+shot time_edited
+# Save?: No is highlighted
+key DOWN
+key ENTER
+wait 300
+shot time_save
+header time_save "Settings > Date & Time > Set Manually > Save?" "Date & Time > Set Manually > Save?" "Set Manually > Save?" "Save?"
+# Yes with a clock that refuses: the error in the status line, the list stays
+key UP
+key ENTER
+wait 600
+shot time_error
+# the clock accepts it: back in the section with the saved time
+timeset ok
+key ENTER
+wait 900
+shot time_saved
+header time_saved "Settings > Date & Time > Set Manually" "Date & Time > Set Manually" "Set Manually"
+# a date before the factory date: leave Date & Time (the edits go), the clock is in 2000
+key ESC
+key ESC
+clock 20:30 2000-03-14
+key ENTER
+wait 600
+key DOWN
+key DOWN
+key ENTER
+wait 600
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 300
+key DOWN
+key ENTER
+wait 600
+key DOWN
+key ENTER
+wait 300
+key UP
+key ENTER
+wait 600
+shot time_warning
+header time_warning "Settings > Date & Time > Set Manually > Save?" "Date & Time > Set Manually > Save?" "Set Manually > Save?" "Save?" Warning
+# Esc cancels: nothing is saved, the list stays
+key ESC
+wait 300
+shot time_warning_cancelled
+# Yes again, then the header's Esc button (at 480x320 and 800x480; the others take the key) closes the question
+key ENTER
+wait 600
+@480x320 tap 281 20
+@800x480 tap 525 28
+@640x480,720x720,1280x720 key ESC
+wait 300
+shot time_warning_header_esc
+# Yes, Confirm: the older date is written, back in the section
+key ENTER
+wait 600
+key ENTER
+wait 900
+shot time_warning_saved
+header time_warning_saved "Settings > Date & Time > Set Manually" "Date & Time > Set Manually" "Set Manually"

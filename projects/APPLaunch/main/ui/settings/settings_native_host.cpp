@@ -88,6 +88,11 @@ public:
     Observer(SettingsNativeHost *host, int row) : host_(host), row_(row) {}
     void choice_selected(int index) override { host_->choice_selected(row_, index); }
     void choice_status(const std::string &text, bool error) override { host_->choice_status(row_, text, error); }
+    void choice_confirm(const std::string &title, const std::string &text, const std::string &cancel,
+                        const std::string &confirm) override
+    {
+        host_->choice_confirm(row_, title, text, cancel, confirm);
+    }
 
 private:
     SettingsNativeHost *host_;
@@ -178,6 +183,7 @@ void SettingsNativeHost::run_posted_cb(void *data)
 
 void SettingsNativeHost::release_rows()
 {
+    if (confirm_) answer_confirm(false); /* a question left unanswered is a "no" */
     if (direct_poll_) {
         lv_timer_delete(direct_poll_);
         direct_poll_ = nullptr;
@@ -344,6 +350,10 @@ void SettingsNativeHost::show_choice(int index)
 void SettingsNativeHost::back()
 {
     if (compat_ && compat_->active()) return; /* the compat page handles its own Esc */
+    if (confirm_) {
+        answer_confirm(false); /* the header's Esc closes the question first */
+        return;
+    }
     if (native_row_ >= 0) {
         if (native_ && native_->back()) return; /* a level of the page's own (a dialog, a sub-list) */
         close_native();
@@ -535,6 +545,43 @@ void SettingsNativeHost::choice_status(int row_index, const std::string &text, b
         caption_row_ = row_index;
     }
     page_->set_caption(text, error);
+}
+
+/* The page asks and waits (the factory-date warning of "Save?"): a Dialog over the list; Enter / the right button
+ * confirms, Esc / the left one cancels. The roller leaves the input group meanwhile, so the keys stay in the dialog. */
+void SettingsNativeHost::choice_confirm(int row_index, const std::string &title, const std::string &text,
+                                        const std::string &cancel, const std::string &confirm)
+{
+    if (row_index < 0 || row_index >= static_cast<int>(rows_.size())) return;
+    if (confirm_) answer_confirm(false);
+    confirm_row_ = row_index;
+    cp0::ui::DialogSpec spec;
+    spec.title = title;
+    spec.page = page_.get();
+    spec.buttons = {{cancel, cp0::ui::ButtonRole::Cancel, [this] { post([this] { answer_confirm(false); }); }},
+                    {confirm, cp0::ui::ButtonRole::Primary, [this] { post([this] { answer_confirm(true); }); }}};
+    confirm_ = std::make_unique<cp0::ui::Dialog>(page_->root(), page_->layout(), std::move(spec));
+    confirm_->add_text(text);
+    confirm_->relayout();
+    if (lv_group_t *group = page_root_.input_group()) {
+        lv_group_remove_obj(roller_->focus_object());
+        lv_group_add_obj(group, confirm_->focus_object());
+        lv_group_focus_obj(confirm_->focus_object());
+    }
+}
+
+void SettingsNativeHost::answer_confirm(bool confirmed)
+{
+    if (!confirm_) return;
+    const int row_index = confirm_row_;
+    confirm_row_ = -1;
+    confirm_.reset();
+    if (lv_group_t *group = page_root_.input_group()) {
+        lv_group_add_obj(group, roller_->focus_object());
+        lv_group_focus_obj(roller_->focus_object());
+    }
+    if (row_index >= 0 && row_index < static_cast<int>(rows_.size()) && rows_[static_cast<size_t>(row_index)]->binding)
+        rows_[static_cast<size_t>(row_index)]->binding->choice_confirm_reply(confirmed);
 }
 
 void SettingsNativeHost::clear_caption()
