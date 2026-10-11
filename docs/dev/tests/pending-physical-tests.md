@@ -39,6 +39,10 @@ Local deb `C:\CLAUDE\zero7\pkg-out\mesh-hop_0.3.0_arm64.deb`, board B (XIAO S3 W
 Full protocol: [mesh-hop-0.3.0-deck-tests.md](mesh-hop-0.3.0-deck-tests.md) (21 steps): install over 0.2.2 with data kept,
 Position box, "heard back by N repeaters", packet log. Send back the answers per step and `~/.local/share/mesh-hop/mesh-hop.log`.
 
+## F. Launcher 0.5.0 fallback on-screen keyboard (task 014 P2b): built and harness-checked, NOT yet deployed
+Native pages only (Settings > System > Keyboard test with `APPLAUNCH_SETTINGS_UI=native` and `APPLAUNCH_DEV=1`).
+Full protocol: [launcher-0.5.0-keyboard-tests.md](launcher-0.5.0-keyboard-tests.md) (22 steps).
+
 ## D. Environment note
 `deck.py` needs the PIPW environment variable (the deck password) in the Claude Code session; it was missing in the
 session of 2026-10-06. Rotate the deck password (it leaked twice into tool output on 2026-10-04) and set PIPW again.

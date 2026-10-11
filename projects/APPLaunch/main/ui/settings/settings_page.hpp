@@ -51,6 +51,7 @@ enum class SettingsNodeKind {
     Toggle,  // an on / off entry with a status read (icon_enabled + API)
     Action,  // an entry with an API and no status
     Custom,  // a page of its own the native host has no widget for yet (decision D3: compat path in dev builds)
+    Native,  // a page built natively in the host's body (settings_native_panel_create): Keyboard test (task 014 P2b)
     Plain,   // nothing to open
 };
 SettingsNodeKind settings_node_kind(const NodeIter &node);

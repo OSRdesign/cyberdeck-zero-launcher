@@ -332,6 +332,13 @@ void Roller::select(int index, bool animated)
     if (!animated) target_ = -1;
 }
 
+void Roller::set_hidden(bool hidden)
+{
+    if (!body_) return;
+    if (hidden) lv_obj_add_flag(body_, LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_remove_flag(body_, LV_OBJ_FLAG_HIDDEN);
+}
+
 void Roller::slide_by(int index, int steps)
 {
     if (index < 0 || index >= count()) return;

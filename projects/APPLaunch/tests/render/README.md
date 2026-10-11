@@ -83,6 +83,8 @@ runs at those sizes only.
 | `ribbon` | the hold-Esc ribbon over a stock app, as `external_poll()` shows it |
 | `key NAME [press\|release]`, `type TEXT` | keys through the real queue (UP DOWN LEFT RIGHT ENTER ESC TAB SPACE BACKSPACE 0-9 ...) |
 | `tap X Y`, `drag X1 Y1 X2 Y2 [STEPS]`, `touch X Y` + `release` | touch through the display manager's touch path (logical coordinates) |
+| `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys), or on the text field under the field label LABEL |
+| `keyboards N` | physical keyboards the on-screen keyboard policy sees (default 0; `harness_stubs.cpp` replaces the presence watcher) |
 | `toast TEXT` (`\n` = new line), `screensaver` (+ `wait`) | launcher toast; arm the clock screensaver |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
 | `header NAME TITLE [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `native_ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home ZERO` taken on the home grid |
@@ -98,6 +100,10 @@ drag, the header's Esc button, at 480x320 and 800x480) and `settings_native_comp
 the compat path in a development build, Esc returns to the native Settings, Esc again goes home) are review-only scenes
 (no goldens; the compat Settings goldens above are unchanged); their headers are checked against the home grid by
 `run.sh header`.
+`osk` (task 014 P2b, `APPLAUNCH_OSK=force`: Settings > System > On-screen keyboard, then the development page
+Keyboard test: letters, Shift armed, 123, Ctrl armed, number pad, password masked, Esc dismisses, a tap on the field
+brings the keyboard back, at all five sizes) and `osk_policy` (`APPLAUNCH_OSK=auto` at 640x480 and 800x480: setting
+Off, back to Auto through its choice list, a physical keyboard appears) are review-only scenes too.
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 
 ## Goldens and fidelity

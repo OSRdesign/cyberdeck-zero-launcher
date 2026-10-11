@@ -11,6 +11,7 @@
 #include "keyboard_input.h"
 #include "sample_log.h"
 
+#include <atomic>
 #include <cerrno>
 #include <cstdint>
 #include <cstdio>
@@ -32,10 +33,38 @@ struct Publisher {
 Publisher s_publisher;
 cp0_kbd_presence_watcher_t *s_watcher = nullptr;
 
+// The on-screen keyboard policy's view (input_presence::keyboards()), written by the listener, read by the UI thread.
+std::atomic<bool> s_known{false};
+std::atomic<unsigned> s_count{0};
+std::atomic<unsigned> s_bt_count{0};
+std::atomic<std::int64_t> s_any_gone{0};
+std::atomic<std::int64_t> s_bt_gone{0};
+
+std::int64_t monotonic_seconds()
+{
+    timespec now{};
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return 1;
+    return now.tv_sec > 0 ? static_cast<std::int64_t>(now.tv_sec) : 1; /* 0 means "never" */
+}
+
+void track_for_policy(const cp0_kbd_presence_list_t *list)
+{
+    unsigned bluetooth = 0;
+    for (unsigned i = 0; i < list->count; ++i)
+        if (list->devices[i].bus == CP0_KBD_PRESENCE_BUS_BLUETOOTH) ++bluetooth;
+    const std::int64_t now = monotonic_seconds();
+    if (s_count.load() > 0 && list->count == 0) s_any_gone.store(now);
+    if (s_bt_count.load() > 0 && bluetooth == 0) s_bt_gone.store(now); /* it sleeps: present for N minutes more */
+    s_bt_count.store(bluetooth);
+    s_count.store(list->count);
+    s_known.store(true);
+}
+
 void on_keyboards(const cp0_kbd_presence_list_t *list, unsigned generation, void *)
 {
     Publisher &p = s_publisher;
     if (p.published && generation == p.watcher_generation) return; // the same list twice (start-up)
+    track_for_policy(list);
 
     cp0_input_state_t next;
     next.keyboards = list->count;
@@ -110,6 +139,17 @@ void stop()
     s_watcher = nullptr;
 }
 
+KeyboardSnapshot keyboards()
+{
+    KeyboardSnapshot snapshot;
+    snapshot.known = s_known.load();
+    snapshot.keyboards = s_count.load();
+    snapshot.now_s = monotonic_seconds();
+    snapshot.any_gone_s = s_any_gone.load();
+    snapshot.bt_gone_s = s_bt_gone.load();
+    return snapshot;
+}
+
 } // namespace input_presence
 
 #else
@@ -119,6 +159,7 @@ namespace input_presence {
 void configure() {}
 void start() {}
 void stop() {}
+KeyboardSnapshot keyboards() { return KeyboardSnapshot(); }
 
 } // namespace input_presence
 

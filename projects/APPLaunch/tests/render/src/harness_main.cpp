@@ -794,6 +794,11 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         harness::config_set(w[1], w[2]);
         return true;
     }
+    if (cmd == "keyboards") {
+        if (w.size() != 2) return fail(scene, line, "usage: keyboards N");
+        fx.keyboards = static_cast<unsigned>(std::max(0, to_int(w[1])));
+        return true;
+    }
 
     boot(run);
 
@@ -886,6 +891,44 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         touch_at(run, 1, to_int(w[1]), to_int(w[2]));
         settle(80);
         touch_at(run, 0, to_int(w[1]), to_int(w[2]));
+        settle(400);
+    } else if (cmd == "tapkey") {
+        /* tapkey LABEL: a tap through the touch path on the centre of the on-screen keyboard key whose label is LABEL
+         * (the native display's top layer). SHIFT, ENTER, BACKSPACE, LEFT, UP, DOWN, RIGHT name the symbol keys. */
+        if (w.size() != 2) return fail(scene, line, "usage: tapkey LABEL");
+        static const std::map<std::string, std::string> symbols = {
+            {"SHIFT", "\xe2\x87\xa7"}, {"ENTER", LV_SYMBOL_NEW_LINE}, {"BACKSPACE", LV_SYMBOL_BACKSPACE},
+            {"LEFT", LV_SYMBOL_LEFT},  {"UP", LV_SYMBOL_UP},          {"DOWN", LV_SYMBOL_DOWN},
+            {"RIGHT", LV_SYMBOL_RIGHT},
+        };
+        const auto symbol = symbols.find(w[1]);
+        const std::string text = symbol != symbols.end() ? symbol->second : w[1];
+        lv_obj_t *label = find_label(lv_display_get_layer_top(cp0_display_native()), {text});
+        lv_obj_t *key = label ? lv_obj_get_parent(label) : nullptr;
+        if (!key) return fail(scene, line, "no on-screen keyboard key labelled " + w[1]);
+        lv_area_t area;
+        lv_obj_get_coords(key, &area);
+        const int x = (area.x1 + area.x2) / 2, y = (area.y1 + area.y2) / 2;
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(400);
+    } else if (cmd == "tapfield") {
+        /* tapfield LABEL: a tap on the field under the TextField label LABEL (the label's next sibling) */
+        if (w.size() != 2) return fail(scene, line, "usage: tapfield LABEL");
+        lv_obj_t *label = find_label(lv_display_get_screen_active(cp0_display_native()), {w[1]});
+        lv_obj_t *row = label ? lv_obj_get_parent(label) : nullptr;
+        const int32_t at = label ? lv_obj_get_index(label) : -1;
+        lv_obj_t *field = row && at >= 0 && static_cast<uint32_t>(at + 1) < lv_obj_get_child_count(row)
+                              ? lv_obj_get_child(row, at + 1)
+                              : nullptr;
+        if (!field) return fail(scene, line, "no field under a label " + w[1]);
+        lv_area_t area;
+        lv_obj_get_coords(field, &area);
+        const int x = (area.x1 + area.x2) / 2, y = (area.y1 + area.y2) / 2;
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
         settle(400);
     } else if (cmd == "drag") {
         if (w.size() < 5) return fail(scene, line, "usage: drag X1 Y1 X2 Y2 [STEPS]");

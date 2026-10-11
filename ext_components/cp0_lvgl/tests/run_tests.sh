@@ -547,3 +547,24 @@ TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_de
     "$root/src/cp0_ui_roller.c" \
     "$root/tests/test_ui_roller.c" -o "$binary"
 "$binary"
+
+# Task 014 P2b: on-screen keyboard core (layout from the tokens, pages, Shift / Ctrl state machine, key event
+# sequences, presence policy gate, dialog placement) and its injection path (press + release with text through the
+# real queue, Ctrl+C, the Esc state and the release owed when the keyboard goes away mid-press, the text hint)
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" -I"$root/src" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_ui_osk.c" \
+    "$root/tests/test_ui_osk.c" -o "$binary"
+"$binary"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread \
+    -I"$root/include" -I"$root/src" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_ui_osk.c" \
+    "$root/src/cp0_keyboard_inject_key.c" \
+    "$root/src/cp0_keyboard_text.c" \
+    "$root/src/cp0_esc_state.c" \
+    "$root/src/cp0_keyboard_queue.c" \
+    "$root/tests/test_osk_inject.c" -o "$binary"
+"$binary"

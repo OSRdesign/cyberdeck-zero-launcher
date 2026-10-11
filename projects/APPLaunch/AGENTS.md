@@ -191,6 +191,14 @@ UTF-8 bytes before leaving the event callback. Remove screen event descriptors
 before their owning page is destroyed, and restore any saved input context and
 intercept state during teardown.
 
+Native (responsive shell) pages take text with `cp0::ui::TextField`
+(`cp0_ui_widgets.hpp`), which does the save / set / restore above itself, sets
+the text hint (`cp0_keyboard_set_text_hint`) and asks for the fallback
+on-screen keyboard (`cp0::ui::osk`, policy in `main/ui/launcher_osk.*`). That
+keyboard injects press + release `key_item`s with text through
+`cp0_keyboard_inject_key()`, so they arrive exactly like a physical key's; it
+is never summoned by the user and exists on native pages only (task 014 P2b).
+
 The implementation sources of truth are
 `ext_components/cp0_lvgl/src/cp0/cp0_keyboard_lvgl_input.c` for device builds,
 `ext_components/cp0_lvgl/src/sdl/sdl_lvgl_keyboard.c` for SDL builds, and

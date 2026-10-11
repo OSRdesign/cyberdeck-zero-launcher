@@ -35,9 +35,12 @@ extern "C" {
 #define CP0_KBD_PRESENCE_MAX_WAIT_MS 2000u /* a stream of changes still rescans this often */
 #define CP0_KBD_PRESENCE_POLL_MS     2000u /* safety rescan even without any inotify event */
 
+#define CP0_KBD_PRESENCE_BUS_BLUETOOTH 0x0005u /* BUS_BLUETOOTH: a keyboard that can sleep and drop its node */
+
 typedef struct {
     char path[CP0_KBD_PRESENCE_PATH_SIZE]; /* "/dev/input/event4" */
     char name[CP0_KBD_PRESENCE_NAME_SIZE]; /* kernel name, e.g. "M4 Keyboard" */
+    unsigned bus;                          /* I: Bus= (0x0003 USB, 0x0005 Bluetooth, ...); not compared by list_equal */
 } cp0_kbd_presence_device_t;
 
 typedef struct {

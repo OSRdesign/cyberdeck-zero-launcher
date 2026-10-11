@@ -22,6 +22,8 @@
  *   Action   SettingApiActivate on Enter
  *   Custom   no native widget yet: the compat path in development builds (settings_native_compat.hpp), hidden in a
  *            release build (D3)
+ *   Native   a page built natively in the scaffold's body instead of the roller (settings_native_panel_create, task
+ *            014 P2b: the development "Keyboard test" form); Esc on it comes back to the section
  * Activation gates (Set Manually while Network Time is on) are honoured; the refusal shows in the status line.
  *
  * LVGL thread only.
@@ -42,6 +44,7 @@
 
 class AppPageRoot;
 class SettingsCompatPath;
+class SettingsNativePanel;
 namespace DComponens {
 class LvglComponensBase;
 }
@@ -57,7 +60,7 @@ public:
     void back();
 
 private:
-    enum class RowType { Section, Choice, Slider, Toggle, Action, Custom, Plain };
+    enum class RowType { Section, Choice, Slider, Toggle, Action, Custom, Native, Plain };
     struct Row;
     class Observer;
     class StatusTasks;
@@ -79,6 +82,8 @@ private:
     void read_toggle(int index);
     void poll_direct_toggles();
     void open_custom(int index);
+    void open_native(int index);
+    void close_native();
     void binding_done(std::uint64_t generation, const SettingEntry *entry);
     void choice_selected(int row, int index);
     void choice_status(int row, const std::string &text, bool error);
@@ -98,6 +103,8 @@ private:
     std::unique_ptr<cp0::ui::Roller> roller_;
     lv_obj_t *binding_host_ = nullptr;
     std::unique_ptr<SettingsCompatPath> compat_;
+    std::unique_ptr<SettingsNativePanel> native_; /* a Native row's page, shown instead of the roller */
+    int native_row_ = -1;                         /* its row (-1: none) */
 
     std::vector<NodeIter> path_;     /* root .. the section shown */
     std::vector<int> path_selected_; /* the row each parent level had when its child was opened */

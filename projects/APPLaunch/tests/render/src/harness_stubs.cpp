@@ -9,6 +9,7 @@
 #include "app_registry.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_timedate_client.hpp"
+#include "input_presence.hpp"
 
 #include <cstdio>
 #include <ctime>
@@ -63,6 +64,25 @@ extern "C" int cp0_sudo_run_argv_async_ex(const char *const *, cp0_sudo_callback
 int cp0_timedate_set_ntp(int)
 {
     return -1;
+}
+
+/* ------------------------------------------------------------------ on-screen keyboard policy inputs (launcher_osk) */
+
+/* input_presence.cpp reads /proc and inotify on the device: here the scene says how many keyboards are present
+ * ("keyboards N", default none) and none ever went away. */
+input_presence::KeyboardSnapshot input_presence::keyboards()
+{
+    input_presence::KeyboardSnapshot snapshot;
+    snapshot.known = true;
+    snapshot.keyboards = harness::fixtures().keyboards; /* scene command "keyboards N" */
+    snapshot.now_s = 1000;
+    return snapshot;
+}
+
+/* ui_screensaver.cpp (the lock screen) is not linked: never locked */
+extern "C" int ui_screensaver_is_active(void)
+{
+    return 0;
 }
 
 int cp0_timedate_set_time(const char *)

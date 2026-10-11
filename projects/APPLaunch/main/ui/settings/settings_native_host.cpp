@@ -7,6 +7,7 @@
 #include "settings_native_host.hpp"
 
 #include "lvgl_components.hpp"
+#include "settings_keyboard_page.hpp"
 #include "settings_native_compat.hpp"
 #include "settings_native_mode.hpp"
 #include "settings_page.hpp"
@@ -135,6 +136,7 @@ SettingsNativeHost::~SettingsNativeHost()
 {
     lv_async_call_cancel(run_posted_cb, this);
     posted_.clear();
+    native_.reset(); /* its fields stop editing (input context, intercept, keyboard) before anything else goes */
     compat_.reset();
     release_rows();
     if (lv_obj_t *screen = page_root_.screen())
@@ -209,6 +211,7 @@ void SettingsNativeHost::build_rows(int selected)
         case SettingsNodeKind::Toggle: row->type = RowType::Toggle; break;
         case SettingsNodeKind::Action: row->type = RowType::Action; break;
         case SettingsNodeKind::Custom: row->type = RowType::Custom; break;
+        case SettingsNodeKind::Native: row->type = RowType::Native; break;
         case SettingsNodeKind::Plain: row->type = RowType::Plain; break;
         }
         if (row->type == RowType::Custom && !dev) continue; /* D3: a release build hides unmigrated pages */
@@ -249,6 +252,8 @@ std::vector<std::string> SettingsNativeHost::title_path() const
     std::vector<std::string> path;
     for (const NodeIter &node : path_) path.push_back(node->label);
     if (choice_row_ >= 0) path.push_back(rows_[static_cast<size_t>(choice_row_)]->node->label);
+    if (native_row_ >= 0 && native_row_ < static_cast<int>(rows_.size()))
+        path.push_back(rows_[static_cast<size_t>(native_row_)]->node->label);
     return path;
 }
 
@@ -333,6 +338,10 @@ void SettingsNativeHost::show_choice(int index)
 void SettingsNativeHost::back()
 {
     if (compat_ && compat_->active()) return; /* the compat page handles its own Esc */
+    if (native_row_ >= 0) {
+        close_native();
+        return;
+    }
     if (choice_row_ >= 0) {
         show_section(choice_row_);
         return;
@@ -395,6 +404,9 @@ void SettingsNativeHost::activate_entry(int index)
     case RowType::Custom:
         open_custom(index);
         break;
+    case RowType::Native:
+        open_native(index);
+        break;
     case RowType::Slider:
     case RowType::Plain:
         break;
@@ -428,6 +440,36 @@ void SettingsNativeHost::open_custom(int index)
     if (!settings_ui::dev_pages() || !compat_) return;
     const NodeIter node = rows_[static_cast<size_t>(index)]->node;
     compat_->open(node);
+}
+
+/* A Native row (task 014 P2b): its page takes the body; the roller hides and leaves the input group meanwhile. Esc on a
+ * field that is not editing (posted: the field is in its own event) or the header's Esc comes back. */
+void SettingsNativeHost::open_native(int index)
+{
+    const NodeIter node = rows_[static_cast<size_t>(index)]->node;
+    lv_group_t *group = page_root_.input_group();
+    if (group) lv_group_remove_obj(roller_->focus_object());
+    roller_->set_hidden(true);
+    clear_caption();
+    native_row_ = index;
+    native_ = settings_native_panel_create(node, *page_, group, [this] { post([this] { back(); }); });
+    if (!native_) {
+        close_native();
+        return;
+    }
+    page_->set_title(title_path());
+}
+
+void SettingsNativeHost::close_native()
+{
+    native_.reset();
+    native_row_ = -1;
+    roller_->set_hidden(false);
+    if (lv_group_t *group = page_root_.input_group()) {
+        lv_group_add_obj(group, roller_->focus_object());
+        lv_group_focus_obj(roller_->focus_object());
+    }
+    page_->set_title(title_path());
 }
 
 /* A value page finished (applied, or nothing to change): it is single-use, so the section gets fresh ones that read

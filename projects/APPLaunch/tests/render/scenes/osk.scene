@@ -1,0 +1,61 @@
+# Fallback on-screen keyboard (task 014 P2b) on the native Settings' development page System > Keyboard test, with
+# APPLAUNCH_OSK=force (the harness has no presence watcher; on a board the keyboard shows only when no physical
+# keyboard is present). The keys are tapped through the touch path (tapkey). Shots: the System section with
+# "On-screen keyboard: Auto", the Text field editing with the letters page, Shift armed, the 123 page, Ctrl armed, the
+# Number field on the number pad, the Password field masked. Review only: no golden (the compat Settings goldens
+# are unchanged); the page header is checked against the home grid's (run.sh header).
+title on-screen keyboard
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 1
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home ZERO
+launch Settings
+# System is the last section (Up wraps there); in it, from the end: Shutdown, Reboot, Keyboard test, On-screen keyboard
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key UP
+shot osk_setting
+key DOWN
+key ENTER
+# the Text field edits at once: letters page
+tapkey h
+tapkey i
+shot osk_letters
+header osk_letters "Settings > System > Keyboard test" "System > Keyboard test" "Keyboard test"
+tapkey SHIFT
+shot osk_shift
+tapkey A
+tapkey 123
+shot osk_123
+tapkey abc
+tapkey Ctrl
+shot osk_ctrl
+tapkey Ctrl
+# Tab: the next field (Number) and its number pad
+tapkey Tab
+tapkey 4
+tapkey 2
+shot osk_numpad
+tapkey Tab
+tapkey s
+tapkey e
+tapkey c
+tapkey r
+tapkey e
+tapkey t
+shot osk_password
+# Esc on the keyboard: the field stops editing and the keyboard goes (its Esc release is sent); a tap on the field
+# brings it back (no hide or show key: F1 rule)
+tapkey Esc
+shot osk_esc
+tapfield Password
+shot osk_retap

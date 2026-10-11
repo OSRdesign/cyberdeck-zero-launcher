@@ -81,6 +81,7 @@ typedef struct {
     int total;
     /* the device block being read */
     int is_virtual;
+    unsigned bus;
     int has_keys;
     char event[16];
     char name[CP0_KBD_PRESENCE_NAME_SIZE];
@@ -89,6 +90,7 @@ typedef struct {
 static void parser_reset_block(presence_parser_t *p)
 {
     p->is_virtual = 0;
+    p->bus = 0;
     p->has_keys = 0;
     p->event[0] = '\0';
     p->name[0] = '\0';
@@ -112,6 +114,7 @@ static void parser_flush(presence_parser_t *p)
             cp0_kbd_presence_device_t *device = &p->out->devices[p->out->count++];
             snprintf(device->path, sizeof(device->path), CP0_KBD_PRESENCE_DEV_DIR "/%s", p->event);
             snprintf(device->name, sizeof(device->name), "%s", p->name);
+            device->bus = p->bus;
         }
         p->total++;
     }
@@ -141,6 +144,7 @@ static void parser_line(presence_parser_t *p, const char *line, size_t len)
             size_t j = i + 4;
             for (; j < len && hex_value(line[j]) >= 0; j++) bus = bus * 16u + (unsigned)hex_value(line[j]);
             p->is_virtual = j > i + 4 && bus == PRESENCE_BUS_VIRTUAL;
+            p->bus = j > i + 4 ? bus : 0;
             break;
         }
     } else if (line_starts(line, len, "N: Name=", &skip)) {

@@ -6,6 +6,7 @@
 
 #include "settings_page.hpp"
 #include "settings_hw_profile.hpp"
+#include "settings_keyboard_page.hpp"
 #include "settings_native_host.hpp"
 #include "settings_native_mode.hpp"
 #include "settings_touch_page.hpp"
@@ -630,13 +631,15 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
 {
     const SettingEntry &entry = *node;
     if (entry.page_factory) {
+        if (factory_is(entry.page_factory, settings_keyboard_test_factory)) return SettingsNodeKind::Native;
         if (entry.page_type == PageType::FullCustom) return SettingsNodeKind::Custom;
         if (factory_is(entry.page_factory, roller_page_factory) ||
             factory_is(entry.page_factory, bluetooth_roller_page_factory))
             return SettingsNodeKind::Section;
         // value pages: LvSettingValuePage3Base subclasses (SettingsChoiceBinding)
         for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
-                                         confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory})
+                                         confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
+                                         settings_keyboard_choice_page_factory})
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
         // the Bluetooth alias (text entry), Date & Time "Save?" (its factory-time warning is a dialog) and any
         // other page of its own: not migrated yet (P3)
@@ -839,6 +842,8 @@ void UISettingTreePage::create_page_detail()
                 mode_tree.append_child(system,
                                        SettingEntry{"About", settings_t12b_about_page_factory, PageType::FullCustom});
         }
+        // the fallback on-screen keyboard's entries: native Settings only (the compat Settings stays as it is)
+        if (settings_ui::native_selected()) settings_keyboard::append_entries(mode_tree, system);
         settings_t12b::append_boot_action_child(
             mode_tree, system, settings_t12b::boot_actions::Action::Reboot, confirm_page3_factory);
 #if APPLAUNCH_SETTINGS_SHUTDOWN

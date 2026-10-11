@@ -9,6 +9,7 @@
 
 #include "cp0_ui_metrics_lvgl.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace cp0 {
@@ -90,6 +91,8 @@ Page::Page(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TitleFactory ma
 
 Page::~Page()
 {
+    if (inset_listener_) osk::remove_inset_listener(inset_listener_);
+    inset_listener_ = 0;
     if (root_) {
         lv_obj_remove_event_cb_with_user_data(root_, root_delete_cb, this);
         lv_obj_delete(root_);
@@ -99,7 +102,55 @@ Page::~Page()
 void Page::root_delete_cb(lv_event_t *event)
 {
     auto *self = static_cast<Page *>(lv_event_get_user_data(event));
-    if (self) self->root_ = self->header_ = self->title_ = self->caption_ = self->esc_ = nullptr;
+    if (!self) return;
+    if (self->inset_listener_) osk::remove_inset_listener(self->inset_listener_);
+    self->inset_listener_ = 0;
+    self->root_ = self->header_ = self->title_ = self->caption_ = self->esc_ = self->body_ = nullptr;
+}
+
+/* The form body: under the header, the body's height minus the keyboard's inset (task 014 P2b). */
+lv_obj_t *Page::body()
+{
+    if (body_ || !root_) return body_;
+    body_ = lv_obj_create(root_);
+    lv_obj_remove_style_all(body_);
+    lv_obj_set_pos(body_, 0, layout_.body_y);
+    lv_obj_set_size(body_, layout_.w, std::max(0, layout_.body_h - osk::bottom_inset()));
+    lv_obj_set_style_pad_top(body_, layout_.gap, 0);
+    lv_obj_set_style_pad_bottom(body_, layout_.gap, 0);
+    lv_obj_set_style_pad_row(body_, layout_.gap, 0);
+    lv_obj_set_flex_flow(body_, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_flex_align(body_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_scroll_dir(body_, LV_DIR_VER);
+    lv_obj_set_scrollbar_mode(body_, LV_SCROLLBAR_MODE_OFF);
+    lv_obj_remove_flag(body_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    lv_obj_remove_flag(body_, LV_OBJ_FLAG_SCROLL_ON_FOCUS); /* on_inset() scrolls the editing field itself */
+    if (!inset_listener_) inset_listener_ = osk::add_inset_listener([this](int inset) { on_inset(inset); });
+    if (caption_) lv_obj_move_foreground(caption_);
+    return body_;
+}
+
+void Page::clear_body()
+{
+    if (inset_listener_) osk::remove_inset_listener(inset_listener_);
+    inset_listener_ = 0;
+    if (body_) lv_obj_delete(body_);
+    body_ = nullptr;
+}
+
+/* The keyboard came or went: the body takes the room above it and the field it is up for stays in view. */
+void Page::on_inset(int inset)
+{
+    if (!body_) return;
+    lv_obj_set_height(body_, std::max(0, layout_.body_h - inset));
+    lv_obj_update_layout(body_);
+    lv_obj_t *field = osk::owner();
+    for (lv_obj_t *obj = field; obj; obj = lv_obj_get_parent(obj)) {
+        if (obj != body_) continue;
+        lv_obj_t *row = lv_obj_get_parent(field); /* the field's row: its label stays in view too */
+        lv_obj_scroll_to_view_recursive(row && row != body_ ? row : field, LV_ANIM_OFF);
+        break;
+    }
 }
 
 /* The Esc button calls the back action itself: no key is injected, so no Esc can be left pressed. */

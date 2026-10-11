@@ -61,6 +61,7 @@ struct Fixtures {
     bool bt_connected = false;
     int backlight_max = 255;
     int backlight = 200;
+    unsigned keyboards = 0;            /* physical keyboards present (on-screen keyboard policy) */
 };
 
 Fixtures &fixtures();
