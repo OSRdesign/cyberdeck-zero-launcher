@@ -8,8 +8,10 @@
  *   layout    key sizes from the layout service's tokens (cp0_ui_metrics.h): key pitch = min((w - 2 margins - 9 gaps)
  *             / 10, 10 mm); key height = the 6.5 mm token, lowered until the whole keyboard (utility row + 4 rows)
  *             fits the class height cap (report 022 section 3.2: Compact 60 %, Standard 300 px = 62.5 %, Wide 50 %,
- *             Square 40 %, Large 45 %); the utility row is 80 % of a letter row; the key area is centred (it only
- *             matters once the 10 mm cap applies, Large).
+ *             Large 45 %). Square (user test on the HackBerry 720x720): the keyboard's target is half the screen
+ *             height, the keys grow to reach it (not limited by the token; key width unchanged), and the room above
+ *             always keeps the header and one field with its label (cp0_ui_osk_field_reserve). The utility row is
+ *             80 % of a letter row; the key area is centred (it only matters once the 10 mm cap applies, Large).
  *   pages     rows from the top: (0) utility row Esc, Tab, Ctrl and, when the width allows, the four arrows at the
  *             right; (1) q..p; (2) a..l; (3) Shift z..m Backspace; (4) 123, ',', space, '.', Enter. The 123 page has
  *             1..0 on row 1 and symbols below, '#+=' a second symbol page, 'abc' goes back. A Number field gets the
@@ -85,12 +87,16 @@ typedef struct {
     int label_px;      /* key labels (even px) */
     int small_px;      /* utility and page-toggle labels (even px) */
     int cap;           /* the class height cap, px */
-    int key_h_token;   /* 6.5 mm in px (what the height would be without the cap) */
+    int key_h_token;   /* 6.5 mm in px (the key height before the cap; Square grows past it) */
     int key_w_cap;     /* 10 mm in px */
 } cp0_ui_osk_layout_t;
 
-/* Height cap of the keyboard for a class and a screen height, px (report 022 section 3.2). */
+/* Height cap of the keyboard for a class and a screen height, px (report 022 section 3.2; Square: 50 %, a target). */
 int cp0_ui_osk_height_cap(cp0_ui_class_t cls, int screen_h);
+
+/* Room a page needs above the keyboard to show the field being edited: the header, the body's top padding, the field's
+ * label line, the label / field gap, the field (ROW token) and a margin under it, px. */
+int cp0_ui_osk_field_reserve(const cp0_ui_metrics_t *m);
 
 /* The keyboard layout for the metrics m. Returns 0, or -1 (out untouched) when m is NULL or the screen is empty. */
 int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);

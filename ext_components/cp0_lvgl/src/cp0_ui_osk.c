@@ -49,10 +49,11 @@ static int imax(int a, int b) { return a > b ? a : b; }
 /* ------------------------------------------------------------------ layout */
 
 /* Height cap per class, permille of the screen height (report 022 section 3.2; Standard: the F1 rule's 300 px on the
- * deck's 480 rows). */
+ * deck's 480 rows; Square: half the screen, the user's HackBerry 720x720 test of 2026-10-11, and a target there: the
+ * keys grow to fill it). */
 static const int k_cap_permille[CP0_UI_CLASS__COUNT] = {
     [CP0_UI_COMPACT] = 600, [CP0_UI_STANDARD] = 625, [CP0_UI_WIDE] = 500,
-    [CP0_UI_SQUARE] = 400,  [CP0_UI_LARGE] = 450,    [CP0_UI_PORTRAIT] = 450,
+    [CP0_UI_SQUARE] = 500,  [CP0_UI_LARGE] = 450,    [CP0_UI_PORTRAIT] = 450,
 };
 
 int cp0_ui_osk_height_cap(cp0_ui_class_t cls, int screen_h)
@@ -73,6 +74,14 @@ static int total_height(const cp0_ui_osk_layout_t *l, int key_h)
     return l->border + 2 * l->pad_y + util_h + 4 * (l->gap + key_h);
 }
 
+int cp0_ui_osk_field_reserve(const cp0_ui_metrics_t *m)
+{
+    if (!m) return 0;
+    const int space_m = m->tok[CP0_TOK_SPACE_M];
+    const int label_line = (m->text_px[CP0_TEXT_CAPTION] * 13 + 9) / 10; /* a text line: about 1.3 x its px */
+    return m->shell.bar_h + space_m + label_line + imax(2, space_m / 3) + m->tok[CP0_TOK_ROW_H] + space_m;
+}
+
 int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
 {
     if (!m || !out || m->w <= 0 || m->h <= 0) return -1;
@@ -90,7 +99,14 @@ int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
 
     l.key_h_token = cp0_ui_mm_px(m->ppmm_x100, CP0_UI_OSK_KEY_MM_X10, CP0_UI_OSK_KEY_MIN_PX);
     l.cap = cp0_ui_osk_height_cap(m->cls, l.h);
-    l.key_h = l.key_h_token;
+    if (m->cls == CP0_UI_SQUARE) {
+        /* Square: the keys (and the utility row with them) grow until the keyboard reaches its target, half the
+         * screen, but the room above always keeps the header and one field with its label */
+        l.cap = imin(l.cap, l.h - cp0_ui_osk_field_reserve(m));
+        l.key_h = imax(CP0_UI_OSK_KEY_MIN_PX, l.cap / 4);
+    } else {
+        l.key_h = l.key_h_token;
+    }
     while (l.key_h > CP0_UI_OSK_KEY_MIN_PX && total_height(&l, l.key_h) > l.cap) l.key_h--;
     l.util_h = (l.key_h * CP0_UI_OSK_UTIL_PCT + 50) / 100;
     l.height = total_height(&l, l.key_h);

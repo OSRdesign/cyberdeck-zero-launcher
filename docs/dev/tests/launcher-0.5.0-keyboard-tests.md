@@ -40,6 +40,6 @@ Restart the service after a change.
 
 ## D. Other boards (when available)
 21. Pi 3A+ 480x320: keyboard about 190 px; the field still visible above it (the header and one field row).
-22. HackBerry 720x720 with `APPLAUNCH_OSK=force`: keyboard about 285 px, keys about 6 x 5 mm.
+22. HackBerry 720x720 with `APPLAUNCH_OSK=force`: keyboard about half the screen (356 px), keys about 6.3 x 6.4 mm; the field being edited and its label stay visible above it.
 
 Report anything odd; the Controller can capture the screen over ssh during the test.

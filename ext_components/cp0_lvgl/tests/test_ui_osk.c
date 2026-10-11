@@ -34,6 +34,8 @@ static int failures;
         }                                                                            \
     } while (0)
 
+static int imin_t(int a, int b) { return a < b ? a : b; }
+
 static cp0_ui_metrics_t metrics(int w, int h, int ppmm)
 {
     cp0_ui_metrics_t m;
@@ -57,7 +59,7 @@ static void test_layout_sizes(void)
         {480, 320, 0, 42, 33, 26, 57, 5, 7, 465, 172, 136, 189, 192, 14, 12},
         {640, 480, 1130, 55, 52, 42, 102, 8, 9, 622, 229, 181, 299, 300, 24, 18},
         {800, 480, 920, 71, 39, 31, 83, 8, 9, 782, 285, 229, 236, 240, 18, 14},
-        {720, 720, 1000, 63, 49, 39, 90, 8, 9, 702, 257, 205, 284, 288, 22, 16},
+        {720, 720, 1000, 63, 64, 51, 90, 8, 9, 702, 257, 205, 356, 360, 28, 22}, /* Square: grows to half the height */
         {1280, 720, 1160, 116, 54, 43, 116, 10, 15, 1250, 456, 368, 320, 324, 24, 18},
     };
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); ++i) {
@@ -91,7 +93,7 @@ static void test_layout_sizes(void)
         CHECK_EQ(l.height, l.border + 2 * l.pad_y + l.util_h + 4 * (l.gap + l.key_h));
         CHECK_EQ(l.util_h, (l.key_h * 80 + 50) / 100);
         CHECK(l.key_w <= l.key_w_cap);
-        CHECK(l.key_h <= l.key_h_token);
+        if (m.cls != CP0_UI_SQUARE) CHECK(l.key_h <= l.key_h_token); /* Square grows past the token */
         CHECK(l.util_key_w >= m.tok[CP0_TOK_TARGET] || l.util_key_w == 2 * l.key_w + l.gap ||
               l.util_key_w == l.key_w);
         CHECK(l.util_key_w >= l.key_w);
@@ -120,12 +122,54 @@ static void test_layout_sizes(void)
     CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_COMPACT, 320), 192);
     CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_STANDARD, 480), 300);
     CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_WIDE, 480), 240);
-    CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_SQUARE, 720), 288);
+    CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_SQUARE, 720), 360);
     CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_LARGE, 720), 324);
     CHECK_EQ(cp0_ui_osk_height_cap(CP0_UI_CLASS__COUNT, 720), 0);
 
-    /* without a cap (a tall canvas) the key height is the 6.5 mm token */
-    cp0_ui_metrics_t tall = metrics(800, 1000, 1000);
+    /* Square (HackBerry 720x720 test, 2026-10-11): the keyboard reaches about half the screen; keys grow as tall as
+     * that allows (past the 6.5 mm token on 1080x1080), their width is unchanged (10 mm cap), the utility row follows
+     * (80 %), and the room above keeps the header and one field with its label */
+    const int squares[][5] = {
+        /* side ppmm key_w key_h height */
+        {600, 1000, 51, 52, 299},
+        {720, 1000, 63, 64, 356},
+        {1080, 1000, 99, 102, 539},
+    };
+    for (size_t i = 0; i < sizeof(squares) / sizeof(squares[0]); ++i) {
+        const int side = squares[i][0];
+        cp0_ui_metrics_t sq = metrics(side, side, squares[i][1]);
+        CHECK_EQ(sq.cls, CP0_UI_SQUARE);
+        cp0_ui_osk_layout(&sq, &l);
+        CHECK_EQ(l.key_w, squares[i][2]);
+        CHECK_EQ(l.key_h, squares[i][3]);
+        CHECK_EQ(l.height, squares[i][4]);
+        CHECK(l.height <= side / 2);                                   /* at most the target ... */
+        CHECK(side / 2 - l.height < 6);                                /* ... and within one key step of it */
+        /* the tallest key that fits: one pixel more would pass the target (not limited by the 6.5 mm token) */
+        CHECK(l.border + 2 * l.pad_y + ((l.key_h + 1) * 80 + 50) / 100 + 4 * (l.gap + l.key_h + 1) > side / 2);
+        CHECK(l.key_w <= l.key_w_cap);
+        CHECK_EQ(l.key_w, imin_t((side - 2 * l.margin - 9 * l.gap) / 10, l.key_w_cap)); /* width rule unchanged */
+        CHECK_EQ(l.util_h, (l.key_h * 80 + 50) / 100);
+        CHECK(side - l.height >= cp0_ui_osk_field_reserve(&sq)); /* the field and its label stay above */
+        CHECK(l.arrows);
+    }
+    /* 720x720: what is above the keyboard (720 - 356 = 364) holds the 64 px header and one field with its label */
+    cp0_ui_metrics_t hb = metrics(720, 720, 1000);
+    cp0_ui_osk_layout(&hb, &l);
+    CHECK_EQ(cp0_ui_osk_field_reserve(&hb), 64 + 16 + 26 + 5 + 70 + 16);
+    CHECK(720 - l.height - hb.shell.bar_h >= 16 + 26 + 5 + 70);
+    /* a small square (400x400 at 11.3 px/mm): the field reserve, not the 50 % target, limits the keyboard */
+    cp0_ui_metrics_t small = metrics(400, 400, 1130);
+    CHECK_EQ(small.cls, CP0_UI_SQUARE);
+    cp0_ui_osk_layout(&small, &l);
+    CHECK_EQ(l.cap, 400 - cp0_ui_osk_field_reserve(&small));
+    CHECK(l.cap < 200);
+    CHECK(l.height <= l.cap);
+    CHECK(400 - l.height >= cp0_ui_osk_field_reserve(&small));
+
+    /* when the cap leaves room (a tall portrait canvas, not Square) the key height is the 6.5 mm token */
+    cp0_ui_metrics_t tall = metrics(700, 1000, 1000);
+    CHECK_EQ(tall.cls, CP0_UI_PORTRAIT);
     cp0_ui_osk_layout(&tall, &l);
     CHECK_EQ(l.key_h, 65);
     CHECK_EQ(l.key_h_token, 65);
