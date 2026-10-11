@@ -26,11 +26,14 @@
 #include "cp0_sudo_prompt_ui.hpp"
 #include "cp0_sudo_prompt_key_policy.hpp"
 #include "cp0_ui_metrics.h"
+#include "cp0_ui_overlay.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
 
 #include "launch.h"
+#include "launcher_media_osd.h"
 #include "launcher_toast.h"
+#include "ui_loading.h"
 #include "native_screensaver.hpp"
 #include "native_ui.hpp"
 
@@ -900,6 +903,20 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         static const std::vector<uint32_t> picture = stock_placeholder();
         cp0_display_external_blit(picture.data(), 320, 170, 320 * 4);
         settle(300);
+    } else if (cmd == "compatpage") {
+        /* a compat page (a legacy page, SSH, a terminal): the compat window is default and shows the page's own
+         * screen (a flat placeholder with a label), no external app owns the picture */
+        native_ui::begin_page(false, false);
+        lv_obj_t *screen = lv_obj_create(nullptr);
+        lv_obj_set_style_bg_color(screen, lv_color_hex(0x1c2a3a), 0);
+        lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+        lv_obj_t *label = lv_label_create(screen);
+        lv_label_set_text(label, "COMPAT PAGE 320x170");
+        lv_obj_set_style_text_color(label, lv_color_hex(0xffffff), 0);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+        lv_obj_align(label, LV_ALIGN_TOP_LEFT, 8, 40);
+        lv_screen_load(screen);
+        settle(300);
     } else if (cmd == "key") {
         if (w.size() < 2 || w.size() > 3) return fail(scene, line, "usage: key NAME [press|release|tap]");
         const uint32_t code = key_code(w[1]);
@@ -948,7 +965,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         settle(300);
     } else if (cmd == "ribbon") {
         /* external_poll() in native_ui.cpp when the runner raises the hold-Esc hint over a stock app */
-        cp0_display_set_overlay_rect(20, 4, 280, 22);
+        cp0_display_set_overlay_rect(CP0_UI_RIBBON_X, CP0_UI_RIBBON_Y, CP0_UI_RIBBON_W, CP0_UI_RIBBON_H);
         launcher_toast().show_persistent("Hold ESC 3s to return home");
         settle(200);
     } else if (cmd == "touch") {
@@ -1030,7 +1047,32 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::string text;
         for (std::size_t i = 1; i < w.size(); ++i) text += (i > 1 ? " " : "") + w[i];
         for (std::size_t at; (at = text.find("\\n")) != std::string::npos;) text.replace(at, 2, "\n");
-        launcher_toast().show_persistent(text.c_str());
+        if (text == "off") launcher_toast().hide(); /* toast off: hide the persistent toast */
+        else launcher_toast().show_persistent(text.c_str());
+        settle(200);
+    } else if (cmd == "osd") {
+        /* osd level TITLE PCT | osd mute on|off: the media OSD of the brightness / volume keys
+         * (ui_global_hint.cpp::on_key). It hides itself after 1000 ms; a shot settles 700 ms after this. */
+        if (w.size() == 4 && w[1] == "level") {
+            const int pct = to_int(w[3]);
+            const char *icon = w[2] == "Brightness" ? LV_SYMBOL_TINT : pct == 0 ? LV_SYMBOL_MUTE : LV_SYMBOL_VOLUME_MAX;
+            launcher_media_osd().show_level(w[2].c_str(), icon, pct);
+        } else if (w.size() == 3 && w[1] == "mute" && (w[2] == "on" || w[2] == "off")) {
+            launcher_media_osd().show_mute(w[2] == "on");
+        } else {
+            return fail(scene, line, "usage: osd level TITLE PCT | osd mute on|off");
+        }
+        settle(200);
+    } else if (cmd == "loading") {
+        /* loading TEXT | loading off: the "Loading..." overlay of an app launch (ui_loading.cpp) */
+        if (w.size() < 2) return fail(scene, line, "usage: loading TEXT | loading off");
+        if (w.size() == 2 && w[1] == "off") {
+            ui_loading::hide();
+        } else {
+            std::string text;
+            for (std::size_t i = 1; i < w.size(); ++i) text += (i > 1 ? " " : "") + w[i];
+            ui_loading::show(text.c_str());
+        }
         settle(200);
     } else if (cmd == "screensaver") {
         native_screensaver::init(); /* ui_screensaver_init() does this on the Pi */

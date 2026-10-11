@@ -57,6 +57,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0/cp0_fb_output.c \
     $(CP0)/src/cp0_ui_metrics.c \
     $(CP0)/src/cp0_ui_metrics_lvgl.c \
+    $(CP0)/src/cp0_ui_overlay.c \
     $(CP0)/src/cp0_ui_roller.c \
     $(CP0)/src/cp0_ui_roller_widget.cpp \
     $(CP0)/src/cp0_ui_page.cpp \
@@ -100,7 +101,7 @@ APPS_BACKEND_SYMS := _ZN12apps_backend(3run|11run_program|9available)E
 # Launcher sources (real code).
 APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
-    ui_loading.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
+    ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
     page_app/ui_app_calculator.cpp) \

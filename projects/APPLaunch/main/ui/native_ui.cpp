@@ -16,6 +16,7 @@
 #include "cp0_display.h"
 #include "cp0_statusbar.h"
 #include "cp0_ui_metrics_lvgl.h"
+#include "cp0_ui_overlay.h"
 #include "hal_lvgl_bsp.h"
 #include "cp0_esc_state.h"
 #include "input_keys.h"
@@ -611,7 +612,7 @@ void external_poll(lv_timer_t *)
     if (want_ribbon != run->ribbon) {
         run->ribbon = want_ribbon;
         if (want_ribbon) {
-            cp0_display_set_overlay_rect(20, 4, 280, 22);
+            cp0_display_set_overlay_rect(CP0_UI_RIBBON_X, CP0_UI_RIBBON_Y, CP0_UI_RIBBON_W, CP0_UI_RIBBON_H);
             launcher_toast().show_persistent("Hold ESC 3s to return home");
         } else {
             launcher_toast().hide();
