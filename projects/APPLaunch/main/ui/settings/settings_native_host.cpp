@@ -10,6 +10,7 @@
 #include "settings_keyboard_page.hpp"
 #include "settings_native_compat.hpp"
 #include "settings_native_mode.hpp"
+#include "settings_native_panel.hpp"
 #include "settings_page.hpp"
 #include "ui_app_page.hpp"
 
@@ -106,6 +107,10 @@ SettingsNativeHost::SettingsNativeHost(AppPageRoot &page, lv_obj_t *parent, Tree
     : page_root_(page), tree_(tree), go_home_(std::move(go_home))
 {
     cp0_ui_roller_page(cp0_ui_metrics_get(), native_ui::status_strip_left(), &layout_);
+    // The page's screen is in its input group (ui_app_page.cpp): a tap where no widget is (the margins beside the
+    // roller, the header) would focus it and leave the keys with nothing to drive. Touch never focuses it here.
+    if (lv_obj_t *screen = page.screen()) lv_obj_remove_flag(screen, LV_OBJ_FLAG_CLICK_FOCUSABLE);
+    if (parent) lv_obj_remove_flag(parent, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     page_ = std::make_unique<cp0::ui::Page>(
         parent, layout_, [](lv_obj_t *header, const char *text) { return native_ui::add_title(header, text); },
         [this] { back(); });
@@ -339,6 +344,7 @@ void SettingsNativeHost::back()
 {
     if (compat_ && compat_->active()) return; /* the compat page handles its own Esc */
     if (native_row_ >= 0) {
+        if (native_ && native_->back()) return; /* a level of the page's own (a dialog, a sub-list) */
         close_native();
         return;
     }
@@ -452,18 +458,17 @@ void SettingsNativeHost::open_native(int index)
     roller_->set_hidden(true);
     clear_caption();
     native_row_ = index;
-    native_ = settings_native_panel_create(node, *page_, group, [this] { post([this] { back(); }); });
-    if (!native_) {
-        close_native();
-        return;
-    }
-    page_->set_title(title_path());
+    page_->set_title(title_path()); /* before the page: a page with levels of its own sets deeper titles itself */
+    native_ = settings_native_panel_create(node, SettingsNativePanelContext{*page_, group, title_path(),
+                                                                            [this] { post([this] { back(); }); }});
+    if (!native_) close_native();
 }
 
 void SettingsNativeHost::close_native()
 {
     native_.reset();
     native_row_ = -1;
+    clear_caption(); /* a page's own status line goes with it */
     roller_->set_hidden(false);
     if (lv_group_t *group = page_root_.input_group()) {
         lv_group_add_obj(group, roller_->focus_object());

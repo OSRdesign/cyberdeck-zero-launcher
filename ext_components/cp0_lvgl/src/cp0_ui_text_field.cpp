@@ -297,7 +297,9 @@ void TextField::on_key(const struct key_item &item)
     const bool press = item.key_state == KBD_KEY_PRESSED;
     switch (item.key_code) {
     case KEY_ESC:
-        if (press) end_edit(); /* the keyboard goes; Esc again goes back */
+        if (!press) return;
+        if (events_.escape) events_.escape(); /* a dialog's Cancel */
+        else end_edit();                      /* the keyboard goes; Esc again goes back */
         return;
     case KEY_ENTER:
     case KEY_KPENTER:

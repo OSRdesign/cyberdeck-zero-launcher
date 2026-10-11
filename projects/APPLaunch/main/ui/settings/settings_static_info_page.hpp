@@ -83,6 +83,12 @@ private:
     bool scroll_animation_active_ = false;
 };
 
+// What System > About / Storage / Licenses show, for both renderers (the legacy pages below and the native
+// info pages, task 014 P3a): the page title and its lines ("Key: value", or a line alone).
+settings_t12b::about_help::Content settings_about_content();   // About: needs APPLAUNCH_BOARD for its Board row
+settings_t12b::about_help::Content settings_storage_content(); // reads the SD card now
+settings_t12b::about_help::Content settings_credit_content();
+
 std::unique_ptr<DComponens::LvglComponensBase> settings_t12b_about_page_factory(
     lv_obj_t *parent,
     const NodeIter &page_node,

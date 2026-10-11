@@ -1,0 +1,61 @@
+# Native Wi-Fi dialogs with a physical keyboard (task 014 P3b): APPLAUNCH_OSK=auto and one keyboard present, so the
+# on-screen keyboard stays away and the dialogs show their buttons (Cancel, Connect = Enter). The password dialog
+# typed on the physical keyboard, its wrong-password state, then Join Hidden Network (SSID and Password fields),
+# Disconnect from the connected network's actions, and the Wi-Fi toggle switched off (the list goes, "Wi-Fi is off").
+# Review only: no golden.
+title settings native wifi dialogs
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key DOWN
+key ENTER
+wait 1500
+# Neighbour-5G (row 4)
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+type wrongpass
+shot wifi_dialog_buttons
+key ENTER
+wait 1500
+shot wifi_dialog_wrong
+key ESC
+wait 300
+# Join Hidden Network (row 7)
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+type hidden-lab
+shot wifi_hidden
+key ESC
+wait 300
+# the connected network (row 1): its actions, Disconnect; the highlight stays on it (now a saved network, row 2)
+key UP
+key UP
+key UP
+key UP
+key UP
+key UP
+key ENTER
+key DOWN
+key DOWN
+key ENTER
+wait 1500
+shot wifi_disconnected
+# the toggle (row 0) off
+key UP
+key UP
+key ENTER
+wait 1500
+shot wifi_off

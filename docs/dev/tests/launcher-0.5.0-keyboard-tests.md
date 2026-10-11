@@ -4,9 +4,10 @@ The user runs these on a board; the Controller deploys the build and sets the en
 you saw) per line. Background: `docs/dev/tasks/014-responsive-shell.md` section "On-screen keyboard widget (P2b, as
 implemented)" and 012 F1.
 
-Scope of this build: the keyboard exists only on **native** pages. Today that is the development page
-Settings > System > Keyboard test, inside the native Settings. Compat pages (the deck's default Settings, Wi-Fi password,
-Bluetooth PIN, Store search) are unchanged: they still need a physical keyboard.
+Scope of this build: the keyboard exists only on **native** pages: the development page Settings > System > Keyboard
+test and, since task 014 P3b, the native Wi-Fi page's password and hidden-network dialogs (section E). Compat pages (the
+deck's default Settings with its Wi-Fi password page, Bluetooth PIN, Store search) are unchanged: they still need a
+physical keyboard.
 
 Setup (Controller): launcher environment (board.conf or a service drop-in) `APPLAUNCH_SETTINGS_UI=native` and
 `APPLAUNCH_DEV=1`. On the HackBerry (built-in keyboard) add `APPLAUNCH_OSK=force` to see the keyboard at all.
@@ -41,5 +42,41 @@ Restart the service after a change.
 ## D. Other boards (when available)
 21. Pi 3A+ 480x320: keyboard about 190 px; the field still visible above it (the header and one field row).
 22. HackBerry 720x720 with `APPLAUNCH_OSK=force`: keyboard about half the screen (356 px), keys about 6.3 x 6.4 mm; the field being edited and its label stay visible above it.
+
+## E. Wi-Fi page (task 014 P3b; native Settings, also in a release build: `APPLAUNCH_DEV=0` is fine)
+Have one network you can join that the board has never joined (a phone hotspot with a password is enough) and know its
+password. Do E with no physical keyboard (on-screen keyboard), then 31-33 with the Bluetooth keyboard.
+23. Settings > Wi-Fi: one page: the "Wi-Fi" switch on top, then the networks. The one in use is first, bold, with a blue
+    check; saved ones say "Saved"; secured ones have a small lock; each network has four signal bars like the top bar's.
+    Last rows: "Join Hidden Network", "Rescan". The status line (top left) shows the network and its IP.
+24. Drag the list, tap a row (it comes to the centre), tap it again (it opens). Up / Down / Enter / Esc on a keyboard do
+    the same.
+25. Rescan: "Scanning..." on its row for a moment, then the list again. Leave the page open 30 s: the list stays current
+    and does not jump.
+26. Tap the new secured network: a dialog titled with its name and a Password field; the on-screen keyboard comes up and
+    the dialog sits above it (no Connect button while the keyboard is up: the keyboard's Enter is Connect, its Esc
+    Cancel).
+27. Type a wrong password (at least 8 characters), Enter: "Connecting...", then "Wrong password" in red; the field is
+    empty and the keyboard is back. Tap the eye in the field: the text shows.
+28. Type the right password, Enter: the dialog closes, a toast says "Connected to ...", the network is first with the
+    check, the status line shows it and its IP.
+29. Enter on the connected network: Details, Forget, Disconnect. Details shows IP, Gateway, Signal, MAC. Esc twice: back on
+    the network in the list.
+30. Disconnect: the row says "Disconnecting...", then the network is "Saved" and the status line "Not connected". Tap it:
+    it connects again without a password. Then Forget (from its actions): it is no longer "Saved" (a tap asks for the
+    password again).
+31. With the Bluetooth keyboard: the same dialog shows Cancel and Connect and no on-screen keyboard; Esc cancels, Enter
+    connects; the buttons also work by touch.
+32. Join Hidden Network: SSID and Password fields; Up / Down / Tab move between them; Esc cancels. (Join a real hidden
+    network if you have one.)
+33. The "Wi-Fi" switch off: the list goes, "Wi-Fi is off"; on again: it scans and the list comes back.
+34. Esc from the dialog, the list, Details: always one level back; hold Esc 3 s from any of them: home, no restart.
+35. Pi 3A+ 480x320: in the password dialog (26-27) the dialog covers the header while the keyboard is up; the network
+    name, the field and "Wrong password" are readable above the keyboard.
+
+## F. Read-only pages (task 014 P3a)
+36. System > About, Storage, Licenses; User; Date & Time > Info: key left, value right, readable at a glance; the clock in
+    Info ticks; Licenses scrolls by drag and by Up / Down; Esc goes back. On the Pi 3A+ a long value (User > Password)
+    goes onto a smaller line or two instead of being cut.
 
 Report anything odd; the Controller can capture the screen over ssh during the test.

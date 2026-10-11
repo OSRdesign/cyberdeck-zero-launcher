@@ -96,7 +96,7 @@ focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (em
 section). Settings runs where it runs on the device: in the compat window, scaled by the display manager.
 `settings_native` (task 014 P2a, `APPLAUNCH_SETTINGS_UI=native`: root, Screen section, DarkTime list, Brightness
 slider one step darker or the Pi 3A+ on/off list, at all five sizes) and `settings_native_touch` (tap, tap to open,
-drag, the header's Esc button, at 480x320 and 800x480) and `settings_native_compat` (decision D3: User opens through
+drag, the header's Esc button, at 480x320 and 800x480) and `settings_native_compat` (decision D3: Apps opens through
 the compat path in a development build, Esc returns to the native Settings, Esc again goes home) are review-only scenes
 (no goldens; the compat Settings goldens above are unchanged); their headers are checked against the home grid by
 `run.sh header`.
@@ -104,6 +104,15 @@ the compat path in a development build, Esc returns to the native Settings, Esc 
 Keyboard test: letters, Shift armed, 123, Ctrl armed, number pad, password masked, Esc dismisses, a tap on the field
 brings the keyboard back, at all five sizes) and `osk_policy` (`APPLAUNCH_OSK=auto` at 640x480 and 800x480: setting
 Off, back to Auto through its choice list, a physical keyboard appears) are review-only scenes too.
+`settings_native_info` (task 014 P3a, a release build: Storage, Licenses as opened / scrolled / dragged, About, User,
+Date & Time Info), `settings_native_wifi` (task 014 P3b, `APPLAUNCH_OSK=force`: the network list, the password dialog
+with the keyboard, wrong password, connected, the connected network's actions and Details) and
+`settings_native_wifi_dialog` (a physical keyboard: the dialog with its buttons, Join Hidden Network, Disconnect, Wi-Fi
+off) are review-only too. Their Wi-Fi service is `src/harness_services.cpp`: `Fixtures::wifi_networks` (a connected
+saved network, a saved one, open ones, a new secured one, a weak one; no real names), Scan, Connect / ConnectHidden (a
+new secured network accepts only `Fixtures::wifi_password`, a fake; a hidden one only `wifi_hidden_ssid`),
+ProfileForget / ProfileExists, ProfileDisconnectActive, RadioSetEnabled; the OS info service answers
+NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the status strip stays comparable.
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 
 ## Goldens and fidelity
@@ -125,9 +134,9 @@ device screenshots, mostly in scaled FreeType text. `deck.py shot` stays the dev
 
 ## Not covered
 
-- Pages that need live services beyond the fixtures (Wi-Fi network list, Bluetooth scan/pairing, Apps
-  sources, sudo prompt, Date & Time info, Storage): add fixtures in `src/harness_services.cpp` as P2-P3
-  scenes need them.
+- Pages that need live services beyond the fixtures (Bluetooth scan/pairing, Apps sources, sudo prompt): add
+  fixtures in `src/harness_services.cpp` as P3 scenes need them. Storage reads the host's mounts: on a PC it shows
+  "SD card information unavailable.".
 - Stock apps (only a placeholder picture), the terminal pages, SSH, games, the loading overlay, the media
   OSD, touch feel and speed. The harness proves layout, not behaviour on the board.
 - Changes to `builtin_app_registry.cpp`'s table must be copied to `src/harness_stubs.cpp`; changes to the

@@ -1,0 +1,64 @@
+# Native read-only pages (task 014 P3a), in a release build (APPLAUNCH_DEV=0: migrated pages show there, the
+# unmigrated ones are hidden): System > Storage (the harness has no SD card: its "unavailable" line), Licenses (a
+# TextBlock: as opened, three Down presses, then a drag), About (the board row: APPLAUNCH_BOARD is set here at every
+# size, the Pi 3A+ profile's own label at 480x320), User (the account read in the background) and Date & Time > Info
+# (refreshed every second). Info rows: key left, value right; on 480x320 (Compact) a long value wraps onto a second
+# line (User: Password). Review only: no golden (the compat Settings goldens are unchanged); every header is checked
+# against the home grid's (run.sh header).
+title settings native info pages
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+@640x480,800x480,720x720,1280x720 env APPLAUNCH_BOARD harness-board
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home ZERO
+launch Settings
+# System: Up from Screen wraps to the last section
+key UP
+key ENTER
+# System (release): Storage, Licenses, About, On-screen keyboard, Reboot, Shutdown
+key ENTER
+shot info_storage
+header info_storage "Settings > System > Storage" "System > Storage" Storage
+key ESC
+key DOWN
+key ENTER
+shot info_licenses
+header info_licenses "Settings > System > Licenses" "System > Licenses" Licenses
+key DOWN
+key DOWN
+key DOWN
+wait 300
+shot info_licenses_scrolled
+drag 240 280 240 120
+shot info_licenses_dragged
+key ESC
+key DOWN
+key ENTER
+shot info_about
+header info_about "Settings > System > About" "System > About" About
+# Down moves the highlight through the table (no action on a row)
+key DOWN
+key DOWN
+shot info_about_moved
+key ESC
+key ESC
+# root: System selected; Up twice: Date & Time, then User
+key UP
+key UP
+key ENTER
+wait 1500
+shot info_user
+header info_user "Settings > User" User
+key ESC
+key DOWN
+key ENTER
+# Date & Time: Info, Network Time, Set Manually
+key ENTER
+wait 1200
+shot info_datetime
+header info_datetime "Settings > Date & Time > Info" "Date & Time > Info" Info

@@ -109,15 +109,10 @@ private:
 
 } // namespace
 
-std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter &node, cp0::ui::Page &page,
-                                                                  lv_group_t *group, std::function<void()> back)
+std::unique_ptr<SettingsNativePanel> settings_keyboard_test_panel_create(cp0::ui::Page &page, lv_group_t *group,
+                                                                         std::function<void()> back)
 {
-    const SettingPageFactory &factory = node->page_factory;
-    using Fn = std::unique_ptr<DComponens::LvglComponensBase> (*)(lv_obj_t *, const NodeIter &, std::function<void()>);
-    const Fn *target = factory.target<Fn>();
-    if (target && *target == settings_keyboard_test_factory)
-        return std::make_unique<KeyboardTestPanel>(page, group, std::move(back));
-    return nullptr;
+    return std::make_unique<KeyboardTestPanel>(page, group, std::move(back));
 }
 
 namespace settings_keyboard {

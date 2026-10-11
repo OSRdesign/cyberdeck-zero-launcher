@@ -51,10 +51,27 @@ enum class SettingsNodeKind {
     Toggle,  // an on / off entry with a status read (icon_enabled + API)
     Action,  // an entry with an API and no status
     Custom,  // a page of its own the native host has no widget for yet (decision D3: compat path in dev builds)
-    Native,  // a page built natively in the host's body (settings_native_panel_create): Keyboard test (task 014 P2b)
+    Native,  // a page built natively (settings_native_panel_create, settings_native_page() says which)
     Plain,   // nothing to open
 };
 SettingsNodeKind settings_node_kind(const NodeIter &node);
+
+// The native page of a Native node (task 014 P2b / P3a / P3b), from the node's own page factory: the development
+// Keyboard test, the read-only pages (About, User, Storage, Licenses, Date & Time > Info) and the Wi-Fi section (the
+// section whose entries hold the Networks page: one native page with the Enable toggle, the networks and Join Hidden
+// Network). None for every other node.
+enum class SettingsNativePage { None, KeyboardTest, Wifi, About, User, Storage, Licenses, DateTimeInfo };
+SettingsNativePage settings_native_page(const NodeIter &node);
+
+// The entries of the Wi-Fi section the native Wi-Fi page uses: the Enable toggle (its API: the radio state) and Join
+// Hidden Network (present on this board: the page offers the hidden-network form, with the entry's label).
+struct SettingsWifiSection {
+    bool has_enable = false;
+    NodeIter enable;
+    bool has_hidden = false;
+    std::string hidden_label;
+};
+SettingsWifiSection settings_wifi_section(const NodeIter &wifi);
 
 // Refresh a section right before it is shown: the Launcher toggles and the Touch apps follow the installed apps,
 // Date & Time re-reads Network Time, Bluetooth unblocks the radio and reads its alias.

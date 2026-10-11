@@ -558,6 +558,24 @@ TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_de
     "$root/tests/test_ui_osk.c" -o "$binary"
 "$binary"
 
+# Task 014 P3a / P3b: info row layout (key / value, key cap, dots, the two-line wrap on Compact) and the dialog layout
+# (tokens, centred above the on-screen keyboard, buttons / padding / header / scrolling steps at the five sizes)
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_ui_roller.c" \
+    "$root/src/cp0_ui_info.c" \
+    "$root/tests/test_ui_info.c" -o "$binary"
+"$binary"
+
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_ui_osk.c" \
+    "$root/src/cp0_ui_dialog.c" \
+    "$root/tests/test_ui_dialog.c" -o "$binary"
+"$binary"
+
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread \
     -I"$root/include" -I"$root/src" \
     "$root/src/cp0_ui_metrics.c" \
