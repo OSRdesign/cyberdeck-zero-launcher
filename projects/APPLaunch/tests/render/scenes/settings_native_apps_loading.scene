@@ -1,0 +1,27 @@
+# Native Settings > Apps (task 014 P3d) while the first list has not come yet: the fake Store backend
+# (src/harness_apps.cpp, HARNESS_APPS hold) never answers --summary. Shots: "Loading..." with its spinner and the
+# status line, the Sources level meanwhile (nothing starts while the list loads).
+# Review only: no golden.
+title settings native apps loading
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env HARNESS_APPS hold
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+shot apps_loading
+header apps_loading "Settings > Apps" Apps
+key RIGHT
+wait 500
+shot apps_loading_sources

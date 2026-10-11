@@ -149,6 +149,8 @@ Dialog::Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec 
         lv_obj_set_style_bg_color(button, lv_color_hex(primary ? kPrimaryPressed : kButtonPressed), LV_STATE_PRESSED);
         lv_obj_set_style_shadow_width(button, 0, 0);
         lv_obj_set_style_border_width(button, 0, 0);
+        lv_obj_set_style_bg_opa(button, LV_OPA_40, LV_STATE_DISABLED); /* set_button_enabled(): the label follows */
+        lv_obj_set_style_text_opa(button, LV_OPA_50, LV_STATE_DISABLED);
         lv_obj_set_user_data(button, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
         lv_obj_add_event_cb(button, button_event_cb, LV_EVENT_CLICKED, this);
         lv_obj_t *label = lv_label_create(button);
@@ -225,6 +227,13 @@ void Dialog::set_message(const std::string &text, bool error)
         lv_obj_update_layout(viewport_);
         keep_in_view(); /* the message shows even when the body scrolls */
     }
+}
+
+void Dialog::set_button_enabled(std::size_t index, bool enabled)
+{
+    if (index >= buttons_.size()) return;
+    if (enabled) lv_obj_remove_state(buttons_[index], LV_STATE_DISABLED);
+    else lv_obj_add_state(buttons_[index], LV_STATE_DISABLED);
 }
 
 void Dialog::raise()

@@ -15,6 +15,13 @@ int cp0_ui_roller_width(cp0_ui_class_t cls, int screen_w, int margin)
     return imax(0, imin(cap, screen_w - 2 * imax(0, margin)));
 }
 
+int cp0_ui_roller_caption_lines(const cp0_ui_roller_page_t *p, int line_h)
+{
+    if (!p || line_h <= 0) return 1;
+    const int room = p->body_y + p->edge_pad - p->gap - p->caption_y; /* down to the highlight bar, a gap above it */
+    return imax(1, imin(CP0_UI_ROLLER_CAPTION_MAX_LINES, room / line_h));
+}
+
 int cp0_ui_roller_font_px(int px)
 {
     if (px < CP0_UI_FONT_MIN_PX) return CP0_UI_FONT_MIN_PX;

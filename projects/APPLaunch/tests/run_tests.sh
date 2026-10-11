@@ -234,9 +234,11 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -o "$build_dir/test_app_registry_callback"
 "$build_dir/test_app_registry_callback"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
     "$test_root/test_settings_apps_model.cpp" \
-    "$test_root/../main/ui/settings/apps_backend.cpp" \
-    "$test_root/../main/ui/settings/apps_status_model.cpp" \
+    "$settings_ui_root/apps_backend.cpp" \
+    "$settings_ui_root/apps_status_model.cpp" \
+    "$settings_ui_root/settings_apps_model.cpp" \
     -o "$build_dir/test_settings_apps_model"
 "$build_dir/test_settings_apps_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \

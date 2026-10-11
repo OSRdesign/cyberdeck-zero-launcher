@@ -1,7 +1,9 @@
-# Native Settings, decision D3 (task 014 P2a): a page with no native widget yet (here Apps; User, the example until
-# P3a, is native now) opens from the native host through the compat path in a development build (APPLAUNCH_DEV=1):
-# the legacy page in the compat window with the toolbar. Its Esc returns to the native Settings on the same row; Esc
-# on level 1 goes home. Review only, no golden.
+# Native Settings, decision D3 (task 014 P2a): a page with no native widget yet opens from the native host through the
+# compat path in a development build (APPLAUNCH_DEV=1): the legacy page in the compat window with the toolbar. Its Esc
+# returns to the native Settings on the same row; Esc on level 1 goes home. Review only, no golden.
+# Since P3d no root entry is left on that path: Apps (the example until then, User before P3a) opens its native page
+# here, and the last compat page (Date & Time > Set Manually > "Save?") needs Network Time off, which the harness's
+# time service cannot report. The scene still proves the open / back / home round trip from the root.
 title settings native compat path
 review
 sizes 480x320 800x480

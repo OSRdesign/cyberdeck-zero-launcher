@@ -20,12 +20,13 @@
  *   Toggle   a switch; status read with SettingApiReadFlagTimeStart on a worker (Async) or polled (Direct), toggled
  *            with SettingApiActivate, exactly as the legacy submenu does
  *   Action   SettingApiActivate on Enter
- *   Custom   no native widget yet (Apps, the manual time "Save?" step): the compat path in development builds
+ *   Custom   no native widget yet (the manual time "Save?" step): the compat path in development builds
  *            (settings_native_compat.hpp), hidden in a release build (D3)
  *   Native   a page built natively instead of the roller (settings_native_panel.hpp: the development Keyboard test
  *            form, task 014 P2b; the read-only pages About, User, Storage, Licenses, Date & Time > Info, P3a; the
- *            Wi-Fi page, P3b; Bluetooth Paired Devices, Scan, Alias, P3c). Esc first goes back inside the page (its
- *            dialog, its sub-list), then to the section; the page's row is redrawn when it closes (a renamed entry)
+ *            Wi-Fi page, P3b; Bluetooth Paired Devices, Scan, Alias, P3c; Apps, P3d). Esc first goes back inside the
+ *            page (its dialog, its sub-list), then to the section; the page's row is redrawn when it closes (a renamed
+ *            entry)
  * Activation gates (Set Manually while Network Time is on) are honoured; the refusal shows in the status line.
  *
  * LVGL thread only.

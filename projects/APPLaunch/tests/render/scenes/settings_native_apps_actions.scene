@@ -1,0 +1,109 @@
+# Native Settings > Apps action lists (task 014 P3d, Controller decision), with a physical keyboard (APPLAUNCH_OSK=auto,
+# one keyboard present) on the fake catalogue (src/harness_apps.cpp). A tap on the highlighted app or source opens its
+# list; Enter keeps the legacy direct action (install, update, a source on / off) and opens the list only for an app
+# that is up to date. Shots: Packet Radar's list by a tap (Update, Remove, Cancel), its Remove confirmation, the list
+# after Cancel, back on Packet Radar (Cancel row); Field Notes by Enter (current: Remove, Cancel); Signal Meter by a tap
+# (Install, Cancel); field-kit/tools by a tap (Disable, Sync, Remove, Cancel; its failure in the status line), Sync of
+# that source alone and its result; old/archive by a tap (Enable, Remove, Cancel) and enabled.
+# Centre (highlighted) row: 480x320 y 180, 640x480 y 267, 800x480 y 268, 720x720 y 392, 1280x720 y 391.
+# Review only, no golden.
+title settings native apps action lists
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+env HARNESS_APPS catalogue
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+# Update all (2), Bench Tools, Field Notes, Packet Radar, Signal Meter, Weather Station..., Sources
+key DOWN
+key DOWN
+key DOWN
+wait 300
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 300
+shot apps_actions_update
+header apps_actions_update "Settings > Apps > Packet Radar" "Apps > Packet Radar" "Packet Radar"
+key DOWN
+key ENTER
+wait 300
+shot apps_actions_remove_confirm
+key ESC
+wait 300
+shot apps_actions_after_cancel
+key DOWN
+key ENTER
+wait 500
+shot apps_actions_closed
+header apps_actions_closed "Settings > Apps" Apps
+# Field Notes (current): Enter opens its list
+key UP
+key ENTER
+wait 300
+shot apps_actions_current
+key ESC
+wait 300
+# Signal Meter (not installed): a tap
+key DOWN
+key DOWN
+wait 300
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 300
+shot apps_actions_install
+key ESC
+wait 300
+# Sources: field-kit/tools (row 1) by a tap; Sync (this source alone)
+key RIGHT
+wait 300
+key DOWN
+wait 300
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 500
+shot apps_actions_source
+header apps_actions_source "Settings > Apps > Sources > field-kit/tools" "Apps > Sources > field-kit/tools" "Sources > field-kit/tools" "field-kit/tools"
+key DOWN
+key ENTER
+wait 3000
+# the highlight on deck-lab/apps: the status line shows the run's result ("Sync failed", red), not the source's reason
+# (which reads the build box's default route)
+key UP
+wait 300
+shot apps_actions_source_synced
+# old/archive (off, row 2): Enable
+key DOWN
+key DOWN
+wait 300
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 500
+shot apps_actions_source_off
+key ENTER
+wait 3000
+shot apps_actions_source_enabled

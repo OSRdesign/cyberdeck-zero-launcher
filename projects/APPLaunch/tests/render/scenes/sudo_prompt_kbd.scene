@@ -1,0 +1,26 @@
+# The responsive sudo prompt (task 014 P3d) with a physical keyboard: APPLAUNCH_OSK=auto and one keyboard present, so
+# the on-screen keyboard stays away and the dialog shows its Cancel / OK buttons. Typed password (masked), Enter
+# (Authenticating..., OK dimmed), a wrong password (red line, field cleared, editing again), Esc closes it. Review only.
+title sudo prompt keyboard
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+sudoprompt open
+shot sudo_kbd_open
+type hunter2
+shot sudo_kbd_typed
+key ENTER
+shot sudo_kbd_busy
+sudoprompt wrong
+shot sudo_kbd_wrong
+key ESC
+wait 300
+shot sudo_kbd_closed

@@ -127,3 +127,31 @@ keyboard), 45-48 with the Bluetooth keyboard connected.
     Rename (title "Rename" in the header).
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
+
+## H. Apps page and sudo prompt (task 014 P3d; native Settings, also in a release build)
+
+Set `APPLAUNCH_SETTINGS_UI=native` as for section G. Apps needs the Store backend and network.
+
+Apps (keyboard):
+52. Settings > Apps shows "Update all (N)" first when several updates exist, then the apps with versions, Sources last.
+53. Enter on an app that is not installed asks for the sudo password; it installs; its row spins meanwhile.
+54. U runs Update all, asking for the password once per app.
+55. D on an installed app, then Enter, removes it; Esc cancels the confirm.
+56. Right opens Sources; Left or Esc returns to Apps on the Sources row.
+57. On Sources: A, type owner/repo, Enter adds the source; S syncs.
+58. W / E / R / T never move the highlight.
+Apps (touch):
+59. Tap a row to highlight it, tap again to open its action list; drag scrolls; the header Esc goes back.
+60. Tap an app: Install / Update / Remove (as applicable) and Cancel; Remove asks first; Update starts and the row spins.
+61. Tap a source: Disable or Enable, Sync (that source only), Remove, Cancel; after a partial sync the status line is amber ("Synced 1 of 2 sources"); a long failure reason wraps.
+62. No keyboard: "Add a GitHub source" opens the on-screen keyboard; its Enter submits; Cancel and OK are 9 mm targets.
+Sudo prompt (any sudo action, e.g. an Apps install):
+63. Physical keyboard: type, Enter: "Authenticating..."; a wrong password shows the red "Wrong password (n/3)" with an empty field.
+64. Physical keyboard: Esc cancels the prompt and the page is not left in Esc state.
+65. Touch, no keyboard: the on-screen keyboard appears, the password is masked, OK and Cancel are 9 mm targets.
+66. The Enter that opened the prompt does not submit it.
+67. Plug a keyboard in while the prompt is up: the on-screen keyboard goes away.
+68. A stock app in the compat window still shows the old 240x116 box.
+
+Report anything odd; the Controller can capture the screen over ssh during the test.
+
