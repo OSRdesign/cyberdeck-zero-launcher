@@ -60,6 +60,10 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_roller.c \
     $(CP0)/src/cp0_ui_roller_widget.cpp \
     $(CP0)/src/cp0_ui_page.cpp \
+    $(CP0)/src/cp0_ui_osk.c \
+    $(CP0)/src/cp0_ui_osk_widget.cpp \
+    $(CP0)/src/cp0_ui_text_field.cpp \
+    $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \
     $(CP0)/src/cp0/cp0_keyboard_lvgl_input.c \
@@ -85,7 +89,7 @@ DPI_OBJ := $(OBJ)/dpi_scaled_redirected.o
 APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
-    native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp \
+    native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
     page_app/ui_app_calculator.cpp) \
     $(wildcard $(UI)/settings/*.cpp)

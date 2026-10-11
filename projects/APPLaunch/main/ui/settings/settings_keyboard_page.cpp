@@ -1,0 +1,134 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Settings entries of the fallback on-screen keyboard (see settings_keyboard_page.hpp).
+ */
+
+#include "settings_keyboard_page.hpp"
+
+#include "settings_native_mode.hpp"
+
+#include "../launcher_osk.hpp"
+
+#include "cp0_ui_widgets.hpp"
+
+#include <utility>
+#include <vector>
+
+// ------------------------------------------------------------------ System > On-screen keyboard: Auto / Off
+
+LvSettingKeyboardChoicePage3::LvSettingKeyboardChoicePage3(lv_obj_t *parent, const NodeIter &parent_node,
+                                                           std::function<void()> back_callback)
+    : LvSettingValuePage3Base(parent_node, {})
+{
+    current_ = launcher_osk::mode(); /* read before initialize(): it selects this row (0 Auto, 1 Off) */
+    back_callback_ = std::move(back_callback);
+    LeaveSelfPage = [this] { request_back(); };
+    initialize(parent);
+}
+
+LvSettingKeyboardChoicePage3::~LvSettingKeyboardChoicePage3()
+{
+    LeaveSelfPage = nullptr;
+    back_callback_ = nullptr;
+}
+
+int LvSettingKeyboardChoicePage3::initial_selection() const
+{
+    return current_;
+}
+
+SettingApiResult LvSettingKeyboardChoicePage3::activate_selected()
+{
+    if (selected_index != current_ && !launcher_osk::set_mode(selected_index)) return SettingApiResult::Failure;
+    current_ = selected_index;
+    request_back();
+    return SettingApiResult::Success;
+}
+
+void LvSettingKeyboardChoicePage3::request_back()
+{
+    if (back_requested_) return;
+    back_requested_ = true;
+    if (back_callback_) back_callback_();
+}
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_keyboard_choice_page_factory(
+    lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback)
+{
+    return std::make_unique<LvSettingKeyboardChoicePage3>(parent, page_node, std::move(back_callback));
+}
+
+// ------------------------------------------------------------------ System > Keyboard test (development)
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_keyboard_test_factory(lv_obj_t *, const NodeIter &,
+                                                                              std::function<void()>)
+{
+    return nullptr; /* native only: settings_native_panel_create() */
+}
+
+namespace {
+
+/* Three fields, one of each type, to try the keyboard: Text (letters page), Number (the number pad), Password (masked,
+ * with the show / hide toggle). Nothing is stored. */
+class KeyboardTestPanel : public SettingsNativePanel {
+public:
+    KeyboardTestPanel(cp0::ui::Page &page, lv_group_t *group, std::function<void()> back) : page_(page)
+    {
+        lv_obj_t *body = page.body();
+        cp0::ui::TextFieldEvents events;
+        events.back = std::move(back);
+        add(body, "Text", cp0::ui::TextType::Text, 128, events);
+        add(body, "Number", cp0::ui::TextType::Number, 16, events);
+        add(body, "Password", cp0::ui::TextType::Password, 64, events);
+        if (!group) return;
+        for (const auto &field : fields_) lv_group_add_obj(group, field->focus_object());
+        lv_group_focus_obj(fields_.front()->focus_object()); /* the first field edits: the keyboard comes */
+    }
+
+    ~KeyboardTestPanel() override
+    {
+        fields_.clear(); /* each stops editing (context, intercept, hint restored; keyboard released) */
+        page_.clear_body();
+    }
+
+private:
+    void add(lv_obj_t *body, const char *label, cp0::ui::TextType type, std::size_t max_bytes,
+             const cp0::ui::TextFieldEvents &events)
+    {
+        cp0::ui::TextFieldSpec spec;
+        spec.label = label;
+        spec.type = type;
+        spec.max_bytes = max_bytes;
+        fields_.push_back(std::make_unique<cp0::ui::TextField>(body, page_.layout(), spec, events));
+    }
+
+    cp0::ui::Page &page_;
+    std::vector<std::unique_ptr<cp0::ui::TextField>> fields_;
+};
+
+} // namespace
+
+std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter &node, cp0::ui::Page &page,
+                                                                  lv_group_t *group, std::function<void()> back)
+{
+    const SettingPageFactory &factory = node->page_factory;
+    using Fn = std::unique_ptr<DComponens::LvglComponensBase> (*)(lv_obj_t *, const NodeIter &, std::function<void()>);
+    const Fn *target = factory.target<Fn>();
+    if (target && *target == settings_keyboard_test_factory)
+        return std::make_unique<KeyboardTestPanel>(page, group, std::move(back));
+    return nullptr;
+}
+
+namespace settings_keyboard {
+
+void append_entries(Tree &tree, const NodeIter &system)
+{
+    NodeIter keyboard = tree.append_child(system, SettingEntry{"On-screen keyboard", settings_keyboard_choice_page_factory});
+    tree.append_child(keyboard, SettingEntry{"Auto"}); /* index 0 = launcher_osk::kAuto */
+    tree.append_child(keyboard, SettingEntry{"Off"});  /* index 1 = launcher_osk::kOff */
+    if (settings_ui::dev_pages())
+        tree.append_child(system, SettingEntry{"Keyboard test", settings_keyboard_test_factory, PageType::Normal});
+}
+
+} // namespace settings_keyboard

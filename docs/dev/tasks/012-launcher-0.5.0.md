@@ -15,6 +15,13 @@ Base: launcher v0.4.0 (main). Flow per ROLES.md: short-lived branch -> commit (O
 
 Phase 3 of F1 (Mesh Hop embeds the component) belongs to the apps repo and ships with Mesh Hop 0.4.x, not with the launcher.
 
+### F1 phase status (2026-10-11)
+| Phase | Status |
+|---|---|
+| 0 Presence + multi-keyboard input + `input.state` | done (merged before 014 P1a) |
+| 1 Component + launcher host | re-planned on the responsive shell (014 decision D6): the keyboard is a native shell widget for native pages. Built in 014 **P2b** (branch `p2b-osk`, review and deck tests pending): component (letters, 123, #+=, number pad, one-shot Shift / Caps, Ctrl, Esc / Tab / arrows row), press + release injector with text (`cp0_keyboard_inject_key`), text hint (`cp0_keyboard_set_text_hint`), Auto / Off setting (native Settings, config `osk_mode`), presence policy incl. the asleep-Bluetooth 10 min rule and a 2 s grace, Esc always released, dev page Settings > System > Keyboard test, `APPLAUNCH_OSK=force|auto|off`. Moves to P3: the hints and the keyboard on Wi-Fi, Bluetooth PIN / alias, Apps, SSH form and the sudo prompt (they become native pages). Deck protocol: `docs/dev/tests/launcher-0.5.0-keyboard-tests.md`. |
+| 2 Compat apps | not started (occlusion rect, gesture suspension, vfb hint, uinput Shift mapping) |
+
 ## F1 - Fallback on-screen keyboard
 
 ### Product rules (user decisions, 2026-10-10)

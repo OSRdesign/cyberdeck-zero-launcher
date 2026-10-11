@@ -60,6 +60,22 @@ extern volatile uint32_t LV_EVENT_KEYBOARD;
 void *keyboard_read_thread(void *argv);
 int cp0_keyboard_inject(uint32_t key_code, int key_state, uint32_t mods);
 int cp0_keyboard_inject_text(const char *utf8);
+/* One key as the reader thread queues it (F1 phase 1 item 4, the on-screen keyboard): key_code (Linux KEY_*, 0 for a
+ * character without a key), state (pressed / released / repeated), mods and the UTF-8 it types (NULL or "" for none;
+ * the code point is derived from it). Unlike cp0_keyboard_inject_text(), a caller sends the press AND the release,
+ * both carrying the code and the text, so consumers that read either state see the key. Any thread; returns 0 or -1
+ * (invalid state or UTF-8). */
+int cp0_keyboard_inject_key(uint32_t key_code, int key_state, uint32_t mods, const char *utf8);
+
+/* What the focused text field expects (F1 phase 1 item 5), for the on-screen keyboard and later the compat apps'
+ * hint: set by a field when it starts editing, restored when it stops. Default TEXT. */
+typedef enum {
+    KBD_TEXT_HINT_TEXT = 0,
+    KBD_TEXT_HINT_NUMBER = 1,
+    KBD_TEXT_HINT_PASSWORD = 2,
+} cp0_keyboard_text_hint_t;
+void cp0_keyboard_set_text_hint(cp0_keyboard_text_hint_t hint);
+cp0_keyboard_text_hint_t cp0_keyboard_get_text_hint(void);
 void cp0_keyboard_set_global_key_handler(cp0_keyboard_key_handler_t handler);
 /* LVGL thread only. After the screensaver filter, a nonzero result consumes the
  * key before custom events, global shortcuts, and native keypad delivery.

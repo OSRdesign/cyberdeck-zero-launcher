@@ -95,6 +95,10 @@ static void check_fixture_list(const cp0_kbd_presence_list_t *list)
     CHECK(strcmp(list->devices[3].name, "ZMK Project bb9900 Keyboard") == 0);
     CHECK(strcmp(list->devices[4].path, "/dev/input/event10") == 0);
     CHECK(strcmp(list->devices[4].name, "M4 Keyboard") == 0);
+    /* the bus tells a Bluetooth keyboard (it sleeps: on-screen keyboard policy, task 014 P2b) from a USB one */
+    CHECK(list->devices[0].bus == 0x0003 && list->devices[1].bus == 0x0003 && list->devices[2].bus == 0x0003);
+    CHECK(list->devices[3].bus == CP0_KBD_PRESENCE_BUS_BLUETOOTH);
+    CHECK(list->devices[4].bus == CP0_KBD_PRESENCE_BUS_BLUETOOTH);
 }
 
 static void test_fixture(const char *fixture)

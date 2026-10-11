@@ -1,0 +1,42 @@
+# Fallback on-screen keyboard policy (task 014 P2b), end to end with APPLAUNCH_OSK=auto (the normal rule) and the
+# harness' presence fixture ("keyboards N"): Settings > System > On-screen keyboard Off: the Keyboard test field
+# edits without a keyboard; set back to Auto through its choice list: the keyboard shows; a physical keyboard
+# appears: it goes within the policy poll (250 ms). Review only, no golden.
+title on-screen keyboard policy
+review
+sizes 640x480 800x480
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 1
+env APPLAUNCH_OSK auto
+config osk_mode 1
+keyboards 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key UP
+shot osk_policy_setting_off
+key DOWN
+key ENTER
+shot osk_policy_off
+# Esc stops editing, Esc again leaves the form; the choice list: Off is checked, Up then Enter picks Auto
+key ESC
+key ESC
+key UP
+key ENTER
+key UP
+key ENTER
+shot osk_policy_setting_auto
+key DOWN
+key ENTER
+shot osk_policy_auto
+keyboards 1
+wait 400
+shot osk_policy_keyboard_appeared

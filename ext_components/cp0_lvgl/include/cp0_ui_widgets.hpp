@@ -19,15 +19,36 @@
  *           activates, Esc goes back, Left / Right change a slider (elsewhere Right activates and Left goes back, as
  *           in today's Settings).
  *
+ *   TextField          (task 014 P2b) a label and a one-line field: Text, Number or Password (masked, with a show /
+ *                      hide toggle inside the field). It owns the UTF-8 text and the cursor. Focus (a tap, Up / Down /
+ *                      Tab from the next field) starts editing: it sets KBD_INPUT_CONTEXT_TEXT, the LVGL keypad
+ *                      intercept and the text hint, reads LV_EVENT_KEYBOARD on its screen and asks for the on-screen
+ *                      keyboard; Esc, Enter (default), focus leaving or the field's deletion stop editing and restore all
+ *                      three. Esc then Esc again goes back; a tap or Enter on the field edits again.
+ *   OnScreenKeyboard   (task 014 P2b) the fallback keyboard (cp0_ui_osk.h: layout, pages, modifiers, key events) drawn
+ *                      at the bottom of the display on its top layer. Keys are injected as press + release key_items
+ *                      with text (cp0_keyboard_inject_key), so fields, the sudo prompt and old pages read them as a
+ *                      physical keyboard's. Only the osk service below creates it: it is never user-summoned.
+ *   osk                the keyboard service: shows the keyboard for the field that asked while the host's policy allows
+ *                      it (no physical keyboard, setting Auto, no lock screen, no desktop), hides it on release, page
+ *                      change or when the policy turns false (a physical keyboard appeared: owed key releases sent,
+ *                      latched modifiers dropped), and publishes its height as the bottom inset. Page::body() shrinks
+ *                      by that inset and keeps the editing field in view; keep_above_keyboard() keeps a dialog centred
+ *                      in the room above it.
+ *
  * LVGL thread only. The objects are children of the parent given to the constructor; the destructor deletes them
  * (unless the parent went first).
  */
 #pragma once
 
+#include "cp0_ui_osk.h"
 #include "cp0_ui_roller.h"
+#include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 
+#include <cstddef>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -67,6 +88,8 @@ public:
     void select(int index, bool animated);
     int selected() const { return selected_; }
     int count() const { return static_cast<int>(rows_.size()); }
+    /* Hide the whole roller while another body (a form) takes the page; it keeps its rows. */
+    void set_hidden(bool hidden);
     /* The object to add to the page's input group and focus: it receives the keys. */
     lv_obj_t *focus_object() const { return list_; }
 
@@ -132,9 +155,16 @@ public:
     lv_obj_t *header() const { return header_; }
     const cp0_ui_roller_page_t &layout() const { return layout_; }
 
+    /* A scrollable column under the header for form rows (TextField rows), centred, roller-wide rows. Its height is
+     * the body's minus the on-screen keyboard's inset, and the field that asked for the keyboard is scrolled into
+     * view above it. Created on first use; clear_body() deletes it with its rows. */
+    lv_obj_t *body();
+    void clear_body();
+
 private:
     static void esc_event_cb(lv_event_t *event);
     static void root_delete_cb(lv_event_t *event);
+    void on_inset(int inset);
 
     cp0_ui_roller_page_t layout_;
     std::function<void()> on_back_;
@@ -143,7 +173,152 @@ private:
     lv_obj_t *title_ = nullptr;
     lv_obj_t *caption_ = nullptr;
     lv_obj_t *esc_ = nullptr;
+    lv_obj_t *body_ = nullptr;
+    int inset_listener_ = 0;
 };
+
+/* ------------------------------------------------------------------ text fields and the on-screen keyboard */
+
+enum class TextType { Text, Number, Password };
+
+struct TextFieldSpec {
+    std::string label;
+    TextType type = TextType::Text;
+    std::string text;           /* initial text */
+    std::string placeholder;
+    std::size_t max_bytes = 128; /* UTF-8 bytes */
+    bool multiline = false;      /* Tab types a tab character; Enter a new line (no submit) */
+};
+
+struct TextFieldEvents {
+    std::function<void(const std::string &text)> changed;
+    std::function<void(const std::string &text)> submit; /* Enter while editing (single line); default: stop editing */
+    std::function<void()> back;                           /* Esc while not editing: the page's back action */
+};
+
+class TextField {
+public:
+    TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextFieldSpec spec, TextFieldEvents events);
+    ~TextField();
+    TextField(const TextField &) = delete;
+    TextField &operator=(const TextField &) = delete;
+
+    const std::string &text() const { return text_; }
+    void set_text(const std::string &text);
+    bool editing() const { return editing_; }
+    void begin_edit();
+    void end_edit();
+    bool revealed() const { return revealed_; }
+    void set_revealed(bool revealed); /* Password: show the text (the toggle inside the field) */
+
+    lv_obj_t *row() const { return row_; }
+    /* The field: add it to the page's input group (focus starts editing). */
+    lv_obj_t *focus_object() const { return box_; }
+
+private:
+    static void box_event_cb(lv_event_t *event);
+    static void eye_event_cb(lv_event_t *event);
+    static void keyboard_event_cb(lv_event_t *event);
+    static void row_delete_cb(lv_event_t *event);
+
+    void on_key(const struct key_item &item);
+    void insert(const char *utf8);
+    void erase_before();
+    void erase_after();
+    void move_cursor(int delta);
+    void refresh();
+    void style_editing();
+    void focus_step(bool next);
+    void stop(bool silent);
+
+    cp0_ui_roller_page_t layout_;
+    TextFieldSpec spec_;
+    TextFieldEvents events_;
+    lv_obj_t *row_ = nullptr;
+    lv_obj_t *label_ = nullptr;
+    lv_obj_t *box_ = nullptr;
+    lv_obj_t *area_ = nullptr; /* lv_textarea, display only (not clickable, not in a group) */
+    lv_obj_t *eye_ = nullptr;
+    lv_obj_t *eye_label_ = nullptr;
+    std::string text_;
+    std::size_t cursor_ = 0; /* byte offset in text_ */
+    bool editing_ = false;
+    bool revealed_ = false;
+    /* what editing replaced, restored when it stops */
+    cp0_keyboard_input_context_t saved_context_ = KBD_INPUT_CONTEXT_NAVIGATION;
+    int saved_intercept_ = 0;
+    cp0_keyboard_text_hint_t saved_hint_ = KBD_TEXT_HINT_TEXT;
+    lv_obj_t *key_screen_ = nullptr; /* the screen LV_EVENT_KEYBOARD is read on while editing */
+};
+
+class OnScreenKeyboard {
+public:
+    /* Builds the keyboard on `layer` (a display's top layer) at layout.y, full width, layout.height high. */
+    OnScreenKeyboard(lv_obj_t *layer, const cp0_ui_osk_layout_t &layout, TextType type, bool multiline);
+    /* Sends every release still owed (an Esc pressed when the keyboard goes) and deletes the objects. */
+    ~OnScreenKeyboard();
+    OnScreenKeyboard(const OnScreenKeyboard &) = delete;
+    OnScreenKeyboard &operator=(const OnScreenKeyboard &) = delete;
+
+    TextType type() const { return type_; }
+    bool multiline() const { return multiline_; }
+    int height() const { return layout_.height; }
+    lv_obj_t *root() const { return root_; }
+    /* A physical keyboard appeared: owed releases sent, Shift / Ctrl dropped. */
+    void release_all();
+
+private:
+    struct Key {
+        cp0_ui_osk_place_t place{};
+        lv_obj_t *obj = nullptr;
+        lv_obj_t *label = nullptr;
+    };
+
+    static void key_event_cb(lv_event_t *event);
+    static void root_delete_cb(lv_event_t *event);
+    static void rebuild_cb(void *data);
+
+    void build();
+    void restyle();
+    void style_key(Key &key);
+    void inject(const cp0_ui_osk_event_t *events, int count);
+    void on_key_event(int index, lv_event_code_t code);
+
+    cp0_ui_osk_layout_t layout_;
+    TextType type_;
+    bool multiline_;
+    cp0_ui_osk_state_t state_{};
+    lv_obj_t *root_ = nullptr;
+    std::vector<Key> keys_;
+    bool rebuild_armed_ = false;
+};
+
+namespace osk {
+
+/* The host's policy (the launcher: presence, Settings Auto / Off, lock screen, desktop, APPLAUNCH_OSK): may the
+ * keyboard show now? Asked when a field requests it and every 250 ms while one does. Without a policy it never shows. */
+void set_policy(std::function<bool()> allowed);
+
+/* A field started editing (field: its focus object): the keyboard shows for it, on its display, while allowed. */
+void request(lv_obj_t *field, TextType type, bool multiline);
+/* That field stopped editing. A release from another object than the current owner is ignored. */
+void release(lv_obj_t *field);
+/* Page change, app start, lock: hide at once and forget the request (the field restores its own state). */
+void dismiss();
+
+bool visible();
+lv_obj_t *owner();   /* the field the keyboard is up (or wanted) for, or NULL */
+int bottom_inset();  /* the keyboard's height while shown, else 0 */
+
+/* Called with the new inset whenever it changes. Returns an id for remove_inset_listener(). */
+int add_inset_listener(std::function<void(int inset)> listener);
+void remove_inset_listener(int id);
+
+/* Dialog primitive: keep obj centred vertically in the room between `top` and the keyboard (whole room when it is
+ * hidden; top-aligned when it does not fit), following the keyboard until obj is deleted. */
+void keep_above_keyboard(lv_obj_t *obj, int top);
+
+} // namespace osk
 
 } // namespace ui
 } // namespace cp0

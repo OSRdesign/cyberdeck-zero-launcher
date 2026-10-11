@@ -7,6 +7,7 @@
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
 #include "launch.h"
+#include "launcher_osk.hpp"
 #include "launcher_toast.h"
 #include "native_vkbd.hpp"
 #include "touch_settings.hpp"
@@ -757,6 +758,9 @@ void refresh_apps()
 void show_home()
 {
     if (!enabled()) return;
+    // the fallback on-screen keyboard belongs to the page that asked for it: it goes with the page (task 014 P2b)
+    launcher_osk::install();
+    launcher_osk::dismiss();
     ensure_home();
 
     // Park an empty screen on the compat display so a finishing app's screen is
@@ -776,6 +780,10 @@ void show_home()
 void begin_page(bool native_layout, bool touch_list, bool touch_swipe, unsigned short swipe_tap_key)
 {
     if (!enabled()) return;
+    // A new page: the on-screen keyboard of the previous one goes (an Esc it still owes is released first, so the
+    // stuck-Esc check below sees the final state). Native pages show it again for their own fields (task 014 P2b).
+    launcher_osk::install();
+    launcher_osk::dismiss();
     // An on-screen Esc whose button was destroyed mid-press never reports its release; clear the
     // stuck state before the Esc watchdog is armed for this page (it would restart the launcher).
     if (cp0_esc_state_read() != 0) cp0_keyboard_inject(KEY_ESC, KBD_KEY_RELEASED, 0);
