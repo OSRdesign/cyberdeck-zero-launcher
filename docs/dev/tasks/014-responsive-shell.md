@@ -28,7 +28,7 @@ Status: decisions approved 2026-10-10. Study and evidence: `reports/022-responsi
 | P3b | Wi-Fi page (toggle, networks, password and hidden-network dialogs, the connected network's actions) + Dialog widget | heavy | merged (PR #29), native only |
 | P3c | Bluetooth: Paired Devices, Scan, Alias, the agent's prompts as Dialogs (PIN / passkey on the number pad) | heavy | merged (PR #31); Pi 3A+ physical tests (section G) passed; the udev rule `93-applaunch-rfkill.rules` was added to the bundle (rfkill unblock as the launcher user) |
 | P3d | Apps + sudo prompt (the SSH form is a built-in app, moved to P4/P5 with the app contract) | heavy + careful | merged (PR #32); Pi 3A+ physical tests (section H) passed |
-| P3e | Native Settings default on the deck, delete legacy renderer | savvy-light/medium | in progress: native Settings is the default on every board with the dpi-scaled backend (deck included), compat path and legacy Apps page deleted, the legacy roller kept for stock builds; deck physical test pending (section I of the keyboard tests) |
+| P3e | Native Settings default on the deck, delete legacy renderer | savvy-light/medium | PR #33: physical tests passed on the Pi 3A+ and the deck (section I), HackBerry CM5 smoke test (Settings, no Store backend there); native Settings is the default, compat path and legacy Apps page deleted, Installed / Available split, own Licenses text, Store toggle, default apps source |
 | P4 | Calculator, screensaver, toast, media OSD, loading, Esc ribbon on tokens | savvy-careful | |
 | P5 | App contract published | savvy-medium | |
 
