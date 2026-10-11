@@ -203,4 +203,39 @@ Deleted: `settings_native_compat.{hpp,cpp}` (128 lines; the host's `compat_`, `o
 
 Release channel: bundles built by `pizero2w/build.sh` are release builds (`APPLAUNCH_CHANNEL=release` unless the caller sets it), so development-only pages (System > Keyboard test, `settings_ui::dev_pages()`) stay hidden on devices. `tools/dev/wsl-build.sh` still builds `development` (it exports `APPLAUNCH_CHANNEL=development` unless the environment sets it); CI builds `prerelease`. Side effect: About and System "Channel" read `release` on boards now (`development` before for a bundle from `wsl-build.sh`; `main/SConstruct` defaults to `development` for a local scons build; `settings_static_info_page.cpp` and `settings_system_page.cpp` print the raw channel). `docs/dev/checklists/release.md` says so.
 
-New goldens: `scenes/settings.scene` sets no environment, so it renders the native Settings; its 8 goldens (`golden/{640x480,480x320}/settings_{root,screen,root_system,system}.png`) were re-shot on 2026-10-11 as the new deliberate baseline (waits added; `run.sh twice` is stable). The 28 other goldens are byte-identical. `run.sh validate` no longer compares Settings with `docs/screenshots/settings.png` (a 2026-10-03 deck capture of the compat Settings; the root README's screenshots are left as they are). The deck test is section I of `tests/launcher-0.5.0-keyboard-tests.md` (items 69 to 80); the P3e phase row stays "in progress" until it passes.
+New goldens: `scenes/settings.scene` sets no environment, so it renders the native Settings; its 8 goldens (`golden/{640x480,480x320}/settings_{root,screen,root_system,system}.png`) were re-shot on 2026-10-11 as the new deliberate baseline (waits added; `run.sh twice` is stable). The 28 other goldens are byte-identical. `run.sh validate` no longer compares Settings with `docs/screenshots/settings.png` (a 2026-10-03 deck capture of the compat Settings; the root README's screenshots are left as they are). The deck test is section I of `tests/launcher-0.5.0-keyboard-tests.md` (items 69 to 82); the P3e phase row stays "in progress" until it passes.
+
+## P3e: default app source and the Store toggle (as implemented)
+
+Two user requests after the Pi 3A+ test. (1) "Our apps repo should be provisioned by default." Decision: install time
+only, no launcher code. `pizero2w/default-sources.sh` (in the bundle next to `install.sh`, which runs it as the launcher
+user with `runuser ... env HOME=...`; `--no-default-source` skips it) writes the Store backend's source list
+`~/.local/share/cardputerzero-appstore/registries.json` (`M5APPSTORE_STATE_DIR` honoured) in exactly the format the
+Store writes (`appstore_native.cpp`: `load_config` / `save_config`, nlohmann keys sorted, two-space indent: the built-in
+hub of the file's region, then `{"enabled": true, "name": "OSRdesign/cyberdeck-zero-apps", "url":
+"https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/registry.json"}`, the URL and name that Settings >
+Apps > Add makes of `OSRdesign/cyberdeck-zero-apps`), only when the file is missing or has no source besides the hub (a
+file that was there is kept as `registries.json.bak-applaunch`), then syncs that source once through the Store backend
+(`--edit-registry URL URL --registry-name NAME`, as the Sources sync does; 120 s timeout; a failure is reported and
+never fails the install). A seed alone is not enough: Settings > Apps lists apps from synced records only
+(`--summary`), an unsynced source shows "not synced" and Available stays empty. The decision is recorded once per
+user (marker `applaunch-default-source` in the same folder), so a removed or disabled source is never added back and
+a list with the user's own sources is never touched. No Store code changed; `uninstall.sh` keeps the folder unless
+`--purge-config`. Not done (open): the launcher does not seed at first start and does not auto-sync a never-synced
+source when Settings > Apps opens (a launcher-only deploy, or an offline install, needs Sources > Sync once).
+(2) "The Store should be in the Settings > Launcher list, to be hidden" (a touch-only board cannot use it). Root cause:
+the built-in Store descriptor was `configurable = false, always_on = true` and `app_Store` was in
+`is_protected_launcher_app()` (upstream: Settings, Store and CLI are protected). Now `APPLAUNCH_LAUNCHER_STORE_TOGGLE`
+(`settings_hw_profile.hpp`: 1 on the Pi profile, 0 stock) makes the Store row of `BUILTIN_APPS` configurable and not
+always on; `app_Store` left the protected list (Settings and CLI stay), so the stock build, whose Store is not
+configurable, is unchanged. The toggle is the generic one (`make_launcher_toggle_api`, config key `app_Store`, default
+1 = shown, saved with `SetInt` + `Save` like the others) and `Launch::rebuild_builtin_apps()` re-reads it on every
+registry change, so the hidden tile stays hidden after an app install or an `applications/` rescan; the Store's exec
+stays reserved for the built-in (`launcher_builtin_app_owns_exec`), so a `.desktop` file with that exec never brings
+a second Store tile back. Both renderers
+list it (`populate_launcher_children`). Settings > Apps does not depend on the tile. Tests: `test_settings_models.cpp`
+(a configurable Store is listed, a stock one is not, Settings / CLI protected), `test_launcher_store_toggle_contract.py`
+(profile values, the Store rows of `BUILTIN_APPS` and of the harness copy), `pizero2w/tests/test-install-board.sh`
+(20 cases for the seed: fresh, re-run, removed by the user, hub-only CN file, the user's own list, already listed,
+offline, no Store, dry run, `--no-sync`). Harness: `harness_stubs.cpp`'s table follows the macro; review scene
+`settings_native_launcher.scene` (the section with Store first, Store off, reopened); every golden byte-identical.

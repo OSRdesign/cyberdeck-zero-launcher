@@ -14,6 +14,8 @@
 #   --dry-run              print the detected board and what would be done, change nothing
 #   --force                continue on an unknown board (no profile is written); replace a hand-edited
 #                          /etc/applaunch/board.conf (the old one is kept as board.conf.bak)
+#   --no-default-source    do not offer the apps repo (OSRdesign/cyberdeck-zero-apps) in Settings > Apps
+#                          (default: added once for the user if they have no source yet, see default-sources.sh)
 #
 # To remove everything this script adds, run ./uninstall.sh (see README.md, "Uninstall").
 #
@@ -29,9 +31,10 @@ FORCE=0
 DRY=0
 BOARD_ONLY=0
 BOARD_ARG=""
+DEFAULT_SOURCE=1
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
         --dry-run) DRY=1 ;;
     esac
 done
@@ -49,6 +52,7 @@ while [ $# -gt 0 ]; do
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --force) FORCE=1; shift ;;
+        --no-default-source) DEFAULT_SOURCE=0; shift ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -262,7 +266,14 @@ if [ "$DRY" = 1 ]; then
     else
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)" || echo "boot config: skipped (--no-boot-config)"
     fi
-    [ "$BOARD_ONLY" = 1 ] || echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck)"
+    if [ "$BOARD_ONLY" = 0 ]; then
+        echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck)"
+        if [ "$DEFAULT_SOURCE" = 1 ]; then
+            echo "default app source: OSRdesign/cyberdeck-zero-apps added for the user once, only if they have no source yet, then synced (default-sources.sh)"
+        else
+            echo "default app source: skipped (--no-default-source)"
+        fi
+    fi
     exit 0
 fi
 
@@ -402,6 +413,18 @@ if [ "$BOOT_CONFIG" = 1 ]; then
             REBOOT=1
         fi
     done
+fi
+
+# Settings > Apps lists the apps of the user's sources: offer the project's apps repo once, as the user (their own
+# file, no password), only if they have no source yet; a list of their own is never changed (default-sources.sh).
+say "Default app source (Settings > Apps)"
+if [ "$DEFAULT_SOURCE" = 0 ]; then
+    echo "skipped (--no-default-source)"
+elif [ ! -f "$HERE/default-sources.sh" ]; then
+    echo "default-sources.sh is not next to install.sh: skipped (add OSRdesign/cyberdeck-zero-apps in Settings > Apps > Sources)"
+else
+    runuser -u "$TARGET_USER" -- env HOME="$TARGET_HOME" sh "$HERE/default-sources.sh" </dev/null \
+        || echo "(the default app source could not be set up: add OSRdesign/cyberdeck-zero-apps in Settings > Apps > Sources)"
 fi
 
 say "Starting the launcher"

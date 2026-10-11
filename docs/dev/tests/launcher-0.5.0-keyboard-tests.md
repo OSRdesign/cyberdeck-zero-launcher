@@ -160,7 +160,8 @@ Report anything odd; the Controller can capture the screen over ssh during the t
 
 The flip: Settings is native on every Pi board with no switch and no compat path. Build: a release bundle from
 `pizero2w/build.sh` (development-only pages hidden, About / System "Channel" reads `release`). Needs the deck for 1 to 11
-and the Pi 3A+ for 12; a BT keyboard for 2, 4, 5 and 8.
+and the Pi 3A+ for 12; a BT keyboard for 2, 4, 5 and 8. Item 81 needs a bundle built with `--with-store` and network,
+item 82 any Pi board.
 
 69. Settings opens full screen, no toolbar, the header's Esc works, the status strip matches the home grid.
 70. Every section by touch only, then by the BT keyboard only.
@@ -176,5 +177,13 @@ and the Pi 3A+ for 12; a BT keyboard for 2, 4, 5 and 8.
 78. Hold Esc on a deep page goes home; the lock screen works while in Settings.
 79. A stock app opened after Settings keeps its compat window, toolbar and touch.
 80. Pi 3A+: Brightness On / Off 10 s and the About Board row; the Keyboard test page is not shown (release build).
+81. Fresh install lists our apps under Available: on a user with no app source (no
+    `~/.local/share/cardputerzero-appstore/registries.json`, or the Store's hub only), `sudo ./install.sh` prints
+    "default app source: added OSRdesign/cyberdeck-zero-apps" and "synced: N apps"; Settings > Apps > Available lists
+    LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop... (minus the installed ones) without typing anything; Sources shows
+    OSRdesign/cyberdeck-zero-apps. Remove it in Sources, run `install.sh` again: it is not added back ("already decided").
+82. Launcher > Store hides / shows the Store tile: Settings > Launcher lists Store (on); switch it off: the Store tile
+    leaves the home grid; it stays hidden after a restart of the launcher and after an app install from Settings > Apps;
+    Settings > Apps still works; switch it on: the tile is back. By touch and by keyboard.
 
 Report anything odd; the Controller can capture the screen over ssh during the test.

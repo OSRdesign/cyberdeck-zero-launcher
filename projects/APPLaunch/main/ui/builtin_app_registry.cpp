@@ -73,7 +73,8 @@ void append_builtin_app(std::list<app> &apps, const BuiltinAppRegistration &regi
 constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"Settings", "setting_100.png", "app_Setting", false, true},
      nullptr, false, true, false, append_page_app<UISettingTreePage>},
-    {{"Store", "store_100.png", "app_Store", false, true},
+    // configurable / always on: a Settings > Launcher toggle where the hardware profile says so (shown by default)
+    {{"Store", "store_100.png", "app_Store", APPLAUNCH_LAUNCHER_STORE_TOGGLE != 0, APPLAUNCH_LAUNCHER_STORE_TOGGLE == 0},
      "@appstore_exec", false, true, false, nullptr},
     {{"CLI", "cli_100.png", "app_CLI", false, true},
      nullptr, false, true, false, append_cli_app},

@@ -114,6 +114,8 @@ new secured network accepts only `Fixtures::wifi_password`, a fake; a hidden one
 ProfileForget / ProfileExists, ProfileDisconnectActive, RadioSetEnabled; the OS info service answers
 NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the status strip stays comparable.
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
+`settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
+review-only too.
 
 ## Goldens and fidelity
 

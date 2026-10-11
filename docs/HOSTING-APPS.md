@@ -8,6 +8,15 @@ under **Settings > Apps > Available**, where each one installs with Enter or a t
 Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZero Hub catalogue stays in the
 **Store** app and is not shown there.
 
+**The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (LAN Scan,
+viz1090, Wi-Fi Survey, Mesh Hop, ...) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
+Available lists its apps without typing anything. It is an ordinary source: switch it off or remove it in Sources, and
+the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
+shows after a sync (Sources > Sync my sources). Details: `projects/APPLaunch/pizero2w/README.md`, "Default app source".
+
+The **Store** tile itself needs a keyboard; on a touch-only board hide it in **Settings > Launcher** (Store). That does
+not change Settings > Apps, which uses the Store's backend directly.
+
 The complete, step by step guide, the build tools and a working example live in the template repository:
 
 **<https://github.com/OSRdesign/cyberdeck-zero-apps>** (use it as a template or fork it)
@@ -121,5 +130,6 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | --- | --- |
 | Settings > Apps page | `projects/APPLaunch/main/ui/settings/settings_native_apps_page.{hpp,cpp}` (workers: `settings_apps_jobs.*`, rules: `settings_apps_model.*`) |
 | Backend access (sources, catalogue, install flow) | `projects/APPLaunch/main/ui/settings/apps_backend.{hpp,cpp}` |
+| Default source at install (the Store's `registries.json`, once per user) | `projects/APPLaunch/pizero2w/default-sources.sh`, run by `install.sh` |
 | Example app | `apps/lanscan/` in the apps repo |
 | Switch (off on the original CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |

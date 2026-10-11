@@ -43,13 +43,24 @@ int main()
         descriptors,
         11,
         [](const Descriptor &descriptor) { return descriptor.always_on; });
-    assert(entries.size() == 4);
+    // Settings and CLI are protected even when configurable; a configurable Store (the Pi profile,
+    // APPLAUNCH_LAUNCHER_STORE_TOGGLE) is listed like any built-in app.
+    assert(entries.size() == 5);
     assert(entries[0].label == "Calculator");
     assert(entries[0].config_key == "calculator");
     assert(!entries[0].enabled);
     assert(entries[1].label == "Python" && entries[1].config_key == "app_Python");
     assert(entries[2].label == "Snake" && entries[2].config_key == "app_Game");
-    assert(entries[3].label == "ZClaw" && entries[3].config_key == "app_desktop_zclaw");
+    assert(entries[3].label == "Store" && entries[3].config_key == "app_Store");
+    assert(entries[4].label == "ZClaw" && entries[4].config_key == "app_desktop_zclaw");
+    assert(!settings_t12b::launcher::is_protected_launcher_app("app_Store"));
+    assert(settings_t12b::launcher::is_protected_launcher_app("app_Setting"));
+    assert(settings_t12b::launcher::is_protected_launcher_app("app_CLI"));
+    // The stock CardputerZero descriptor (not configurable, always on): no toggle, the tile always shows.
+    const Descriptor stock_store[] = {{"Store", "app_Store", false, true, LauncherAppOrigin::Builtin}};
+    assert(settings_t12b::launcher::configurable_entries(
+               stock_store, 1, [](const Descriptor &descriptor) { return descriptor.always_on; })
+               .empty());
     using settings_t12b::boot_actions::Action;
     using settings_t12b::boot_actions::Operation;
     assert(settings_t12b::boot_actions::presentation(Action::Reboot).confirmation_title == "Reboot?");

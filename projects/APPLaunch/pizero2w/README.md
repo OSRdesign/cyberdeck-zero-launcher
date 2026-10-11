@@ -18,7 +18,8 @@ behaviour is unchanged when neither is set.
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
 | Settings | Hardware profile (`settings_hw_profile.hpp`) hides what a Pi lacks (speaker, Ethernet, ExtPort, battery, ADB, software update) and adds Shutdown; real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. |
 | Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present. Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
-| Apps | **Settings > Apps** installs/removes apps from GitHub sources you add (`settings_native_apps_page.cpp`); LAN Scan is the first one (source in the apps repo, `apps/lanscan`). See `docs/HOSTING-APPS.md`. |
+| Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
+| Launcher | **Settings > Launcher** shows or hides the built-in tiles, the **Store** included (it needs a keyboard, so a touch-only board can hide it; shown by default, `APPLAUNCH_LAUNCHER_STORE_TOGGLE` in `settings_hw_profile.hpp`). Hiding the Store tile does not affect Settings > Apps. |
 | Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the Cardputer matrix keymap); the Bluetooth keyboard re-attaches after sleep. |
 
 ## Install on a Pi
@@ -39,6 +40,16 @@ service, masks the text console on tty1 and adds the PWM backlight overlay (orig
 
 It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
 for Debian 13 trixie. `sudo ./install.sh --dry-run` prints the detected board and what would be done.
+
+**Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
+password). When that user has no app source yet (no `~/.local/share/cardputerzero-appstore/registries.json`, or one
+with only the Store's built-in CardputerZero Hub), it adds `OSRdesign/cyberdeck-zero-apps` in the Store's own format
+and syncs it once, so Settings > Apps > Available lists its apps after the install. A list with sources of the user's
+own is never changed. The decision is taken once per user (marker file `applaunch-default-source` in that folder):
+a source you remove or switch off in Settings > Apps > Sources stays removed after the next `install.sh`. Offline
+during the install, the source is added but not synced: Settings > Apps > Sources > Sync my sources (key `S`) fetches
+it. `--no-default-source` skips all of this. By hand, as the user (never with sudo):
+`sh default-sources.sh --dry-run` shows what it would do, `sh default-sources.sh` does it.
 
 ## Boards
 
@@ -99,8 +110,9 @@ lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `
 `install.sh` added them. Reboot afterwards.
 
 It keeps by default: `~/.config/cardputerzero`, the Settings > Apps sources and install records
-(`~/.local/share/cardputerzero-appstore`), the download cache, every installed app package and its data (`/opt/...`),
-the packages `install.sh` pulled in with apt, the user's groups and lingering, and the backup files.
+(`~/.local/share/cardputerzero-appstore`, with the default source and its marker), the download cache, every installed
+app package and its data (`/opt/...`), the packages `install.sh` pulled in with apt, the user's groups and lingering,
+and the backup files. After `--purge-config` a new install offers the default app source again.
 
 | Option | Effect |
 | --- | --- |
@@ -118,6 +130,7 @@ the packages `install.sh` pulled in with apt, the user's groups and lingering, a
 | File | Purpose |
 | --- | --- |
 | `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host) / install it (Pi) / remove it again (Pi). |
+| `default-sources.sh` | Adds the apps repo to Settings > Apps once for a user with no source yet (run by `install.sh` as that user; see "Default app source"). |
 | `APPLaunch.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
@@ -127,7 +140,7 @@ the packages `install.sh` pulled in with apt, the user's groups and lingering, a
 | `50-networkmanager-netdev.rules`, `51-launcher-time-power.rules` | PolicyKit: Wi-Fi scan/connect, Network Time / clock, reboot / shutdown from a background session. |
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |
-| `tests/` | `test-install-board.sh`: board detection, profile and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board). |
+| `tests/` | `test-install-board.sh`: board detection, profile and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). |
 
 ## Settings and environment
 
@@ -137,7 +150,7 @@ orientation measured on this deck), `APPLAUNCH_STD_KEYBOARD=1`, optional `APPLAU
 optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20).
 
 User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness,
-per-app touch choice `touch_<app>`, app switches).
+per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides the Store tile).
 
 ## Known limits
 

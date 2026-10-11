@@ -71,8 +71,8 @@ for file in APPLaunch.service launcher-ntp-default.service waveshare-pwm-backlig
     cp "$HERE/$file" "$OUT/payload/etc/"
 done
 ( cd "$OUT/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$OUT/payload/share.manifest"   # for uninstall.sh
-cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
-chmod +x "$OUT/install.sh" "$OUT/uninstall.sh"
+cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/default-sources.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
+chmod +x "$OUT/install.sh" "$OUT/uninstall.sh" "$OUT/default-sources.sh"
 
 tar -C "$HERE" -czf "$HERE/pizero2w-bundle.tar.gz" bundle
 echo "== done: $HERE/pizero2w-bundle.tar.gz"

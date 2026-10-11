@@ -22,10 +22,11 @@ struct AppEntry
     bool enabled = false;
 };
 
+// Settings and CLI never get a toggle. The Store is not listed here: its descriptor decides (configurable where the
+// hardware profile sets APPLAUNCH_LAUNCHER_STORE_TOGGLE, always on and not configurable on the stock CardputerZero).
 inline bool is_protected_launcher_app(std::string_view config_key)
 {
     return config_key == "app_Setting" ||
-           config_key == "app_Store" ||
            config_key == "app_CLI";
 }
 

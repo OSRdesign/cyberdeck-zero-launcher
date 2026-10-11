@@ -58,6 +58,11 @@
 #ifndef APPLAUNCH_SETTINGS_APPS
 #define APPLAUNCH_SETTINGS_APPS 1
 #endif
+// Settings > Launcher lists the Store like the other built-in apps (shown by default, config key app_Store), so a
+// touch-only board can hide its tile: the Store needs a keyboard. Apps from sources install from Settings > Apps.
+#ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
+#define APPLAUNCH_LAUNCHER_STORE_TOGGLE 1
+#endif
 #define APPLAUNCH_TXT_HELP_HINT "H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "H: close"
 #define APPLAUNCH_TXT_SSH_HELP_HINT "F1:Help"
@@ -119,6 +124,9 @@
 #endif
 #ifndef APPLAUNCH_SETTINGS_APPS
 #define APPLAUNCH_SETTINGS_APPS 0 // stock: apps are managed in the Store
+#endif
+#ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
+#define APPLAUNCH_LAUNCHER_STORE_TOGGLE 0 // stock: the Store tile is always shown, not in Settings > Launcher
 #endif
 #define APPLAUNCH_TXT_HELP_HINT "Fn+H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "Fn+H: close"
