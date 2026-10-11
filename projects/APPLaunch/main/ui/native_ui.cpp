@@ -345,13 +345,19 @@ StatusIcons *build_status_icons(lv_obj_t *parent)
 
 StatusIcons *s_home_icons = nullptr;
 
-void build_status_bar(lv_obj_t *parent)
+lv_obj_t *build_title(lv_obj_t *parent, const char *text)
 {
     lv_obj_t *title = lv_label_create(parent);
-    lv_label_set_text(title, "ZERO");
+    lv_label_set_text(title, text);
     lv_obj_set_style_text_font(title, layout().title_font, 0);
     lv_obj_set_style_text_color(title, lv_color_hex(kGold), 0);
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, layout().title_x, layout().title_y);
+    return title;
+}
+
+void build_status_bar(lv_obj_t *parent)
+{
+    build_title(parent, "ZERO");
     s_home_icons = build_status_icons(parent);
 }
 
@@ -687,6 +693,38 @@ bool run_external(const std::string &command, bool keep_root, std::function<void
 
 void add_status_icons(lv_obj_t *parent) { build_status_icons(parent); }
 
+lv_obj_t *add_title(lv_obj_t *parent, const char *text) { return build_title(parent, text ? text : ""); }
+
+int status_strip_left()
+{
+    static int left = -1;
+    if (left >= 0) return left;
+    const Layout &l = layout();
+    const int canvas_x = l.screen_w - l.status_w;
+    cp0_statusbar_t *bar = shared_status_bar();
+    if (!bar || l.status_w <= 0) return canvas_x; /* not kept: measured when the renderer is there */
+    // draw the strip in its fullest state (Bluetooth glyph shown, all bars, a clock) into a scratch canvas and take
+    // its first column that has a pixel: the strip's own geometry, not a copy of it
+    const int rows = std::max(l.bar_h, CP0_STATUSBAR_HEIGHT) + 16;
+    std::vector<uint32_t> pixels(static_cast<size_t>(l.status_w) * rows, 0u);
+    cp0_statusbar_state_t full{};
+    full.wifi_up = 1;
+    full.wifi_pct = 100;
+    full.bt_on = 1;
+    full.bt_connected = 1;
+    std::snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
+    cp0_statusbar_render_scaled(bar, pixels.data(), l.status_w, l.status_w, 0, l.status_top, 0, &full, l.status_pct);
+    int first = l.status_w;
+    for (int y = 0; y < rows; ++y)
+        for (int x = 0; x < first; ++x)
+            if (pixels[static_cast<size_t>(y) * l.status_w + x] >> 24) {
+                first = x;
+                break;
+            }
+    left = canvas_x + (first < l.status_w ? first : 0);
+    return left;
+}
+
 bool enabled()
 {
     return cp0_display_available() != 0;
@@ -779,6 +817,8 @@ namespace native_ui {
 
 bool enabled() { return false; }
 void add_status_icons(lv_obj_t *) {}
+lv_obj_t *add_title(lv_obj_t *, const char *) { return nullptr; }
+int status_strip_left() { return 0; }
 void attach(Launch *) {}
 void set_launching_app(const std::string &) {}
 void show_home() {}

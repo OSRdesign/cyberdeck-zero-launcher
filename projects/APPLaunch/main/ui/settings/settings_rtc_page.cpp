@@ -1192,6 +1192,8 @@ LvSettingRtcPage3::~LvSettingRtcPage3()
 
 const std::string &LvSettingRtcPage3::last_error() const noexcept { return impl_->last_error; }
 
+bool LvSettingRtcPage3::choice_ready() const { return !impl_->refresh_pending; }
+
 int LvSettingRtcPage3::initial_selection() const
 {
     settings_rtc::RtcField field = settings_rtc::RtcField::YEAR;
@@ -1317,6 +1319,7 @@ void LvSettingRtcPage3::start_refresh()
 void LvSettingRtcPage3::set_error(const char *message)
 {
     impl_->last_error = message ? message : APPLAUNCH_TXT_RTC_OP_FAILED;
+    report_status(impl_->last_error, true);
     if (impl_->status_label) {
         lv_label_set_text(impl_->status_label, impl_->last_error.c_str());
         lv_obj_clear_flag(impl_->status_label, LV_OBJ_FLAG_HIDDEN);
@@ -1326,6 +1329,7 @@ void LvSettingRtcPage3::set_error(const char *message)
 void LvSettingRtcPage3::clear_error()
 {
     impl_->last_error.clear();
+    report_status("", false);
     if (impl_->status_label) {
         lv_label_set_text(impl_->status_label, "");
         lv_obj_add_flag(impl_->status_label, LV_OBJ_FLAG_HIDDEN);

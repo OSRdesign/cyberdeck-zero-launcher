@@ -69,6 +69,8 @@ public:
 
     ~LvSettingDarkTimePage3() override;
 
+    bool choice_ready() const override { return loaded_; }
+
 protected:
     int initial_selection() const override;
 

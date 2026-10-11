@@ -456,6 +456,7 @@ void LvSettingBrightnessPage3::create_status_label()
 
 void LvSettingBrightnessPage3::set_status(const std::string &text, bool error)
 {
+    report_status(text, error);
     if (!status_label_) return;
     lv_label_set_text(status_label_, text.c_str());
     lv_obj_set_style_text_color(status_label_, lv_color_hex(error ? 0xFF6666 : 0x66CC88), LV_PART_MAIN);

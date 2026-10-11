@@ -22,9 +22,10 @@ flock /tmp/wsl-build.lock bash run.sh      # build + render all scenes + compare
 
 | Command | What it does |
 |---|---|
-| `run.sh` | build, render every scene at every size, compare with `golden/` (exit 1 on any changed pixel) |
+| `run.sh` | build, render every scene at every size, compare with `golden/` (exit 1 on any changed pixel), then `header` |
 | `run.sh render [scene ...]` | render into `out/<WxH>/<shot>.png`, one contact sheet per scene in `out/sheets/<scene>.png` |
-| `run.sh compare` | compare `out/` with `golden/`; diff images in `out/diff/<WxH>/` (changed pixels red) |
+| `run.sh compare` | compare `out/` with `golden/`; diff images in `out/diff/<WxH>/` (changed pixels red). Shots of a review-only scene (listed in `out/<WxH>/review.list`) need no golden |
+| `run.sh header` | every page header cut by a scene's `header` command against the home grid's: the status strip rectangle pixel-identical (`render-harness compare`) and the title label at the same origin |
 | `run.sh golden` | copy `out/640x480` and `out/480x320` into `golden/` (a deliberate baseline change, commit it) |
 | `run.sh validate` | compare the harness with real device captures (see Fidelity) |
 | `run.sh twice` | render everything twice and check the PNGs are byte-identical |
@@ -72,6 +73,7 @@ runs at those sizes only.
 | Command | Meaning |
 |---|---|
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes to render (default the five above) |
+| `review` | the scene's shots are for review only: no golden is expected (nor made by `run.sh golden`) at 640x480 / 480x320 |
 | `profile deck\|pi3a\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings` and `Calculator` open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
@@ -83,12 +85,19 @@ runs at those sizes only.
 | `tap X Y`, `drag X1 Y1 X2 Y2 [STEPS]`, `touch X Y` + `release` | touch through the display manager's touch path (logical coordinates) |
 | `toast TEXT` (`\n` = new line), `screensaver` (+ `wait`) | launcher toast; arm the clock screensaver |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
+| `header NAME TITLE [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `native_ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home ZERO` taken on the home grid |
 | `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, `screen.state`) as `out/<WxH>/NAME.txt` |
 
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
 `screensaver`, `toast` (one and two lines), `settings` (root, Screen section, root on System, System
 section). Settings runs where it runs on the device: in the compat window, scaled by the display manager.
+`settings_native` (task 014 P2a, `APPLAUNCH_SETTINGS_UI=native`: root, Screen section, DarkTime list, Brightness
+slider one step darker or the Pi 3A+ on/off list, at all five sizes) and `settings_native_touch` (tap, tap to open,
+drag, the header's Esc button, at 480x320 and 800x480) and `settings_native_compat` (decision D3: User opens through
+the compat path in a development build, Esc returns to the native Settings, Esc again goes home) are review-only scenes
+(no goldens; the compat Settings goldens above are unchanged); their headers are checked against the home grid by
+`run.sh header`.
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 
 ## Goldens and fidelity

@@ -28,6 +28,7 @@
 #include "cp0_font_service.hpp"
 #include "settings_fonts.hpp"
 #include "cp0_lvgl_app_page_assets.h"
+#include "settings_choice_binding.hpp"
 #include "settings_tree_types.hpp"
 
 #define lv_event_get_target(e) (lv_obj_t *)lv_event_get_target(e)
@@ -7935,7 +7936,10 @@ public:
 };
 #endif
 
-class LvSettingValuePage3Base : public DComponens::LvglComponensBase {
+// A value page: the 320x150 value roller of the legacy Settings, and the ChoiceBinding the native Settings host
+// drives (settings_choice_binding.hpp). Created with a binding host as the parent it builds no view, only the
+// logic of its subclass.
+class LvSettingValuePage3Base : public DComponens::LvglComponensBase, public SettingsChoiceBinding {
 public:
     struct ActivationSink {
         AsyncToken dispatch_token;
@@ -7980,6 +7984,26 @@ public:
     int32_t selected_index = 0;
 
     LvSettingValuePage3Base() = default;
+
+    // SettingsChoiceBinding: the same Enter as on the legacy page, on option `index`.
+    int choice_count() const override
+    {
+        return static_cast<int>(item_count_);
+    }
+    int choice_selection() const override
+    {
+        return selected_index;
+    }
+    SettingApiResult choice_activate(int index) override
+    {
+        if (index < 0 || index >= static_cast<int>(item_count_)) return SettingApiResult::NotHandled;
+        selected_index = index;
+        return activate_selected();
+    }
+    void choice_set_observer(SettingsChoiceObserver *observer) override
+    {
+        choice_observer_ = observer;
+    }
 
     bool activation_pending() const noexcept
     {
@@ -8199,6 +8223,7 @@ public:
         if (item_count_ == 0) return;
         selected_index = std::clamp(index, 0, static_cast<int>(item_count_ - 1));
         scroll_to_selected(false);
+        if (choice_observer_) choice_observer_->choice_selected(selected_index);
     }
 
     lv_obj_t *row_at(int index) const
@@ -8292,6 +8317,18 @@ protected:
     const NodeIter &parent_node() const
     {
         return parent_node_;
+    }
+
+    // Subclasses pass their status line here too (the native host shows it; the legacy view keeps its label).
+    void report_status(const std::string &text, bool error)
+    {
+        if (choice_observer_) choice_observer_->choice_status(text, error);
+    }
+
+    // True when the page was created on a binding host: logic only, no view.
+    bool headless() const noexcept
+    {
+        return headless_;
     }
 
     virtual int initial_selection() const = 0;
@@ -8391,6 +8428,25 @@ protected:
         if (!parent) return;
 
         ensure_async_dispatch();
+
+        if (settings_is_binding_host(parent)) {
+            // Logic only (native Settings host): a hidden root for the subclass' own objects (status label), the
+            // option count and the initial selection; no rows, bar, arrows or key handler.
+            headless_ = true;
+            ComponensObj = lv_obj_create(parent);
+            if (!ComponensObj) return;
+            lv_obj_remove_style_all(ComponensObj);
+            lv_obj_add_flag(ComponensObj, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_remove_flag(ComponensObj, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_flag(ComponensObj, LV_OBJ_FLAG_SCROLLABLE);
+            item_count_ = 0;
+            for (auto it = parent_node_.begin(); it != parent_node_.end(); ++it) ++item_count_;
+            if (item_count_ > 0) {
+                const int saved_selection = parent_node_->selected_index;
+                select(saved_selection >= 0 ? saved_selection : initial_selection());
+            }
+            return;
+        }
 
         ComponensObj = lv_obj_create(parent);
         if (!ComponensObj) return;
@@ -8527,6 +8583,8 @@ private:
     uint64_t activation_generation_ = 0;
     int32_t activation_index_       = -1;
     bool activation_pending_        = false;
+    bool headless_                  = false;
+    SettingsChoiceObserver *choice_observer_ = nullptr;
     lv_obj_t *selection_bg_ = nullptr;
     lv_obj_t *value_list_   = nullptr;
     lv_obj_t *title_label_  = nullptr;
