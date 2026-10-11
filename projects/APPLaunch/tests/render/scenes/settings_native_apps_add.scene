@@ -1,12 +1,13 @@
-# Native Settings > Apps (task 014 P3d) with no source yet and a physical keyboard (APPLAUNCH_OSK=auto, one keyboard
-# present: the dialog keeps its buttons). The fake Store backend (src/harness_apps.cpp, HARNESS_APPS none) knows only
-# the built-in hub, which the page leaves out. Shots: the empty catalogue ("No apps: add your source in Sources"), the
+# Native Settings > Apps (task 014 P3d; P3e: Installed / Available split) with no source yet and a physical keyboard
+# (APPLAUNCH_OSK=auto, one keyboard present: the dialog keeps its buttons). The fake Store backend
+# (src/harness_apps.cpp, HARNESS_APPS none) knows only the built-in hub, which the page leaves out. Shots: the empty
+# Apps root (Installed (0), Available (0)), Installed ("No apps installed"), Available ("Nothing to install"), the
 # Sources level with only "+ Add a GitHub source" and "Sync my sources", the entry with Cancel / Add and the address
-# typed, the source added ("Source added", 4 apps), back on the Apps tab (Left) on the Sources row, under its apps.
+# typed, the source added ("Source added", 4 apps), back on the Apps root (Left) on Sources with the new counts
+# (Installed (3), Available (1)).
 # Review only: no golden.
 title settings native apps add a source
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK auto
 env HARNESS_APPS none
@@ -26,7 +27,20 @@ key ENTER
 wait 3000
 shot apps_empty
 header apps_empty "Settings > Apps" Apps
-# the Sources row (row 1)
+key ENTER
+wait 500
+shot apps_empty_installed
+header apps_empty_installed "Settings > Apps > Installed" "Apps > Installed" Installed
+key LEFT
+wait 300
+key DOWN
+key ENTER
+wait 500
+shot apps_empty_available
+header apps_empty_available "Settings > Apps > Available" "Apps > Available" Available
+key LEFT
+wait 300
+# Sources (root row 2)
 key DOWN
 key ENTER
 wait 500

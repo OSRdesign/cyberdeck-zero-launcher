@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * Settings > Apps, the workers of the native page (task 014 P3d). The legacy page's jobs (settings_apps_page.cpp),
+ * Settings > Apps, the workers of the native page (task 014 P3d). The legacy page's jobs (the page was deleted in P3e),
  * unchanged in what they run and say: the catalogue and source list (--summary, --registries; the built-in source
  * and its apps left out), the per-source sync with its failure reasons, enable / disable / remove / add a source,
  * install / update / remove an app (free space check, --prepare-package, the sudo password, --finalize-package, the

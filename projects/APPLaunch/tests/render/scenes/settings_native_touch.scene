@@ -4,7 +4,6 @@
 title settings native touch
 review
 sizes 480x320 800x480
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 1
 apps Settings Store CLI SSH Calculator
 clock 20:30

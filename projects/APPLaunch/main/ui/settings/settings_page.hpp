@@ -20,7 +20,7 @@ public:
     // Key-only list pages: on a touch display, drags/taps are turned into Up/Down/Enter.
     static constexpr bool kTouchList = true;
     // Asked by the launcher before the page is created (launch.h page_native_choice): true when the native
-    // Settings host runs (APPLAUNCH_SETTINGS_UI=native, settings_native_mode.hpp): the page then gets the native
+    // Settings host runs (the dpi-scaled backend exists, settings_native_mode.hpp): the page then gets the native
     // display, full screen, with plain pointer touch, instead of the compat window.
     static bool native_display_now();
 
@@ -50,7 +50,7 @@ enum class SettingsNodeKind {
     Choice,  // a value page (LvSettingValuePage3Base, a SettingsChoiceBinding): options, one of them current
     Toggle,  // an on / off entry with a status read (icon_enabled + API)
     Action,  // an entry with an API and no status
-    Custom,  // a page of its own the native host has no widget for yet (decision D3: compat path in dev builds)
+    Custom,  // a legacy page of another board with no native widget: hidden by the native host
     Native,  // a page built natively (settings_native_panel_create, settings_native_page() says which)
     Plain,   // nothing to open
 };

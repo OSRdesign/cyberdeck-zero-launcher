@@ -43,6 +43,7 @@ int64_t harness_wall_clock(void);
 #endif
 
 #ifdef __cplusplus
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -109,6 +110,9 @@ struct Fixtures {
     int backlight_max = 255;
     int backlight = 200;
     unsigned keyboards = 0;            /* physical keyboards present (on-screen keyboard policy) */
+    bool ntp_on = false;               /* Network Time (NtpGet answers 1 when on, 0 off); scene command "ntp on|off" */
+    bool time_settable = false;        /* cp0_timedate_set_time (Date & Time > Set Manually > Save?) succeeds; "timeset ok|fail" */
+    std::atomic<int64_t> time_set_epoch{-1}; /* the time it was last set to (LocalTime answers it from then on), -1: none */
 };
 
 Fixtures &fixtures();

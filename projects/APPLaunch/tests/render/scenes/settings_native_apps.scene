@@ -1,16 +1,18 @@
-# Native Settings > Apps (task 014 P3d), in a release build (APPLAUNCH_DEV=0: Apps shows, it is native now) with the
-# on-screen keyboard forced (APPLAUNCH_OSK=force). The fake Store backend (src/harness_apps.cpp, HARNESS_APPS
-# catalogue) has the user's sources deck-lab/apps (Packet Radar and Weather Station with an update, Field Notes
-# current, Signal Meter not installed), field-kit/tools (its last sync failed: Bad JSON, cached list kept; Bench Tools)
-# and old/archive (off). An install fails while preparing ("Unfinished install": the harness has no sudo).
-# Shots: the root with Apps, the Apps tab (Update all (2), versions, Sources last), the remove confirmation of Field
-# Notes (D), the failed install's message, the Sources level, the failed source's reason in the status line, its
-# remove confirmation (Del), the add-source entry with the keyboard (A), letters typed, the address refused, a sync
-# (S) with its result, back to Apps on the Sources row, back to the root.
+# Native Settings > Apps (task 014 P3d; P3e: Installed / Available split), in a release build (APPLAUNCH_DEV=0: Apps
+# shows, it is native now) with the on-screen keyboard forced (APPLAUNCH_OSK=force). The fake Store backend
+# (src/harness_apps.cpp, HARNESS_APPS catalogue) has the user's sources deck-lab/apps (Packet Radar and Weather Station
+# with an update, Field Notes current, Signal Meter not installed), field-kit/tools (its last sync failed: Bad JSON,
+# cached list kept; Bench Tools, not installed) and old/archive (off). An install fails while preparing ("Unfinished
+# install": the harness has no sudo).
+# Shots: the root with Apps, the Apps root (Installed (3), Available (2), Sources), Installed (Update all (2), the
+# installed apps with their versions), the remove confirmation of Field Notes (D), back on the Apps root on Installed
+# (Left), Available (Bench Tools, Signal Meter), the failed install's message (Enter on Signal Meter), the Sources
+# level, the failed source's reason in the status line, its remove confirmation (Del), the add-source entry with the
+# keyboard (A), letters typed, the address refused, a sync (S) with its result, back on the Apps root on Sources, back
+# to the Settings root.
 # Review only: no golden; headers checked against the home grid's (run.sh header).
 title settings native apps
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK force
 env HARNESS_APPS catalogue
@@ -32,22 +34,36 @@ key ENTER
 wait 3000
 shot apps_list
 header apps_list "Settings > Apps" Apps
-# Update all (2), Bench Tools, Field Notes, Packet Radar, Signal Meter, Weather Station..., Sources
-key DOWN
+# Installed: Update all (2), Field Notes, Packet Radar, Weather Station...
+key ENTER
+wait 500
+shot apps_installed
+header apps_installed "Settings > Apps > Installed" "Apps > Installed" Installed
 key DOWN
 shortcut d
 shot apps_remove_confirm
 key ESC
 wait 300
-# Signal Meter: install (the harness backend refuses it while preparing)
+key LEFT
+wait 500
+shot apps_back_installed
+# Available: Bench Tools, Signal Meter
 key DOWN
+key ENTER
+wait 500
+shot apps_available
+header apps_available "Settings > Apps > Available" "Apps > Available" Available
+# Signal Meter: install (the harness backend refuses it while preparing)
 key DOWN
 key ENTER
 wait 3000
 shot apps_install_failed
 key ENTER
 wait 300
+key LEFT
+wait 500
 # Sources: deck-lab/apps, field-kit/tools, old/archive, + Add a GitHub source, Sync my sources
+key DOWN
 key RIGHT
 wait 500
 shot apps_sources

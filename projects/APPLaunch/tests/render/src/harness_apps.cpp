@@ -13,7 +13,8 @@
  *   none       no source yet: the empty catalogue; a source added through the page brings deck-lab/apps' apps
  *   hold       the first list never comes ("Loading...")
  *   missing    the backend is not installed
- * Installs: --prepare-package answers that an earlier install is unfinished (no sudo in the harness).
+ * Installs: --prepare-package answers that an earlier install is unfinished (no sudo in the harness); with
+ * `env HARNESS_APPS_PACKAGE hold` it never answers (the app's row keeps its spinner: updating / installing).
  */
 #include "settings/apps_backend.hpp"
 
@@ -146,6 +147,11 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
     const std::string command = arg(args, 0);
     if (fixture_case() == "hold" && command == "--summary")
         for (;;) usleep(100 * 1000); /* the first list never comes */
+    if (command == "--prepare-package") {
+        const char *package = std::getenv("HARNESS_APPS_PACKAGE");
+        if (package && std::string(package) == "hold")
+            for (;;) usleep(100 * 1000); /* the package job never ends */
+    }
     std::lock_guard<std::mutex> lock(g_mutex);
     ensure_sources();
     if (command == "--summary") {

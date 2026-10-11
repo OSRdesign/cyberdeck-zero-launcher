@@ -40,6 +40,9 @@ fi
 export APPLAUNCH_HW=pizero2w                      # selects the Pi hardware profile (settings_hw_profile.hpp)
 export CONFIG_REPO_AUTOMATION=y                   # download SDK components without asking
 export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+# A bundle is a release build unless the caller sets the channel: development-only pages (System > Keyboard test) stay
+# hidden on devices, and About / System > Channel reads "release". tools/dev/wsl-build.sh passes "development".
+export APPLAUNCH_CHANNEL="${APPLAUNCH_CHANNEL:-release}"
 
 echo "== building the launcher"
 ( cd "$REPO/projects/APPLaunch" && scons -j"$(nproc)" )
@@ -68,8 +71,8 @@ for file in APPLaunch.service launcher-ntp-default.service waveshare-pwm-backlig
     cp "$HERE/$file" "$OUT/payload/etc/"
 done
 ( cd "$OUT/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$OUT/payload/share.manifest"   # for uninstall.sh
-cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
-chmod +x "$OUT/install.sh" "$OUT/uninstall.sh"
+cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/default-sources.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
+chmod +x "$OUT/install.sh" "$OUT/uninstall.sh" "$OUT/default-sources.sh"
 
 tar -C "$HERE" -czf "$HERE/pizero2w-bundle.tar.gz" bundle
 echo "== done: $HERE/pizero2w-bundle.tar.gz"

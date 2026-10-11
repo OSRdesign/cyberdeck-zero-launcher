@@ -61,7 +61,15 @@ Content credit()
 {
     return {
         "Third-Party Licenses & Credits",
-        split_lines(R"CP0_LICENSES(Our sincere thanks to all Kickstarter backers who helped make CardputerZero possible.
+        split_lines(R"CP0_LICENSES(Cyberdeck Zero launcher
+A touch launcher for Raspberry Pi cyberdecks (Pi Zero 2 W, Pi 3A+ and other boards with a capacitive screen).
+Derived from the CardputerZero launcher by M5Stack Technology CO LTD (MIT licence).
+Raspberry Pi port, responsive shell and native Settings by OSRdesign, written together with Claude (Anthropic).
+Licence: MIT, see LICENSE in the source.
+Source: github.com/OSRdesign/cyberdeck-zero-launcher
+
+Upstream CardputerZero
+Our sincere thanks to all Kickstarter backers who helped make CardputerZero possible.
 
 We also thank the early community contributors who helped shape CardputerZero: eggfly (Factory Firmware), zhuzhe1983 (Store), whywilson (RFID), JdaieLin (XiaoZhi), vicliu624 (LoFiBox-Zero), doodlewind (PocketJS), 7h30th3r0n3 (RaspyJack), bmorcelli (ESP Flasher), geo-tp (Retro-Zero), andreahaku IU4APC (Radio), n0xa (czconsole), marivaaldo (Flint), YUK_KND (ZeroTop), hishizuka (Bikecomputer), NDenchi (StackChan-Zero), GOROman.
 

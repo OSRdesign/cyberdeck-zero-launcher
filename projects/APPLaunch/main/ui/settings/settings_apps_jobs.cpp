@@ -2,10 +2,9 @@
  * SPDX-License-Identifier: MIT
  *
  * Settings > Apps, the workers of the native page (see settings_apps_jobs.hpp). The jobs, their messages and the sudo
- * hand-over are the legacy page's (settings_apps_page.cpp: Shared, task_refresh, task_sync, task_package,
- * task_finalize, start_sudo and its callbacks), copied as they are; the native page adds only the id of the app a
- * package job is for (its row shows the job) and the sync of one source (a source's action list). The legacy page keeps
- * its own copy until it is deleted with the compat Settings (task 014 P3e).
+ * hand-over are the legacy page's (Shared, task_refresh, task_sync, task_package, task_finalize, start_sudo and its
+ * callbacks; the legacy page was deleted in P3e), kept as they were; the native page adds only the id of the app a
+ * package job is for (its row shows the job) and the sync of one source (a source's action list).
  */
 
 #include "settings_apps_jobs.hpp"

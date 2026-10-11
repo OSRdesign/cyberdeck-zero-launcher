@@ -5,7 +5,6 @@
 title on-screen keyboard policy
 review
 sizes 640x480 800x480
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 1
 env APPLAUNCH_OSK auto
 config osk_mode 1

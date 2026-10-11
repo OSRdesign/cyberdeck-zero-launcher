@@ -33,7 +33,7 @@ using settings_apps::ActionKind;
 using settings_apps::Confirm;
 using settings_apps::Row;
 using settings_apps::RowType;
-using settings_apps::Tab;
+using settings_apps::Level;
 using settings_apps::Tone;
 
 constexpr uint32_t kPollMs = 200;            /* the legacy page's poll of the workers */
@@ -115,7 +115,7 @@ public:
         events.activate = [this](int row) { activate(row); };
         events.back = host_back_;
         roller_ = std::make_unique<cp0::ui::Roller>(page_.root(), page_.layout(), std::move(events));
-        // Enter, Left / Right (the tabs), Del, and the arrow codes of W / E / R / T: before the roller reads them
+        // Enter, Left / Right (the levels), Del, and the arrow codes of W / E / R / T: before the roller reads them
         lv_obj_add_event_cb(roller_->focus_object(), key_cb,
                             static_cast<lv_event_code_t>(LV_EVENT_KEY | LV_EVENT_PREPROCESS), this);
         focus_in(group_, roller_->focus_object());
@@ -157,8 +157,8 @@ public:
             close_actions();
             return true;
         }
-        if (model_.tab() == Tab::Sources) {
-            set_tab(Tab::Apps);
+        if (model_.level() != Level::Root) {
+            set_level(Level::Root);
             return true;
         }
         return false;
@@ -230,25 +230,42 @@ private:
         if (dialog_) dialog_->raise();
     }
 
-    /* "Settings > Apps", "> Sources" on the Sources tab, "> <app or source>" on an action list. */
+    /* "Settings > Apps", "> Installed" / "> Available" / "> Sources" on a level, "> <app or source>" on an action
+     * list. */
     void show_title()
     {
         std::vector<std::string> title = title_;
-        if (model_.tab() == Tab::Sources) title.push_back("Sources");
+        switch (model_.level()) {
+        case Level::Installed: title.push_back("Installed"); break;
+        case Level::Available: title.push_back("Available"); break;
+        case Level::Sources: title.push_back("Sources"); break;
+        case Level::Root: break;
+        }
         if (model_.in_actions()) title.push_back(model_.actions_title());
         page_.set_title(title);
     }
 
-    void set_tab(Tab tab)
+    static RowType row_of(Level level)
+    {
+        switch (level) {
+        case Level::Installed: return RowType::Installed;
+        case Level::Available: return RowType::Available;
+        case Level::Sources:
+        case Level::Root: break;
+        }
+        return RowType::Sources;
+    }
+
+    void set_level(Level level)
     {
         if (dialog_) return;
-        const Tab from = model_.tab();
+        const Level from = model_.level();
         const bool listed = model_.in_actions();
-        model_.set_tab(tab);
+        model_.set_level(level);
         show_title();
-        if (tab != from || listed) {
-            // Sources opens on its first row; back on Apps the highlight is on the Sources row it came from
-            rebuild(tab == Tab::Apps ? std::max(0, model_.find_row(RowType::Sources)) : 0);
+        if (level != from || listed) {
+            // a level opens on its first row; back on the root the highlight is on the row it came from
+            rebuild(level == Level::Root && from != Level::Root ? std::max(0, model_.find_row(row_of(from))) : 0);
         }
         show_caption();
     }
@@ -315,8 +332,8 @@ private:
         case ActionKind::Say:
             model_.set_status(action.message);
             break;
-        case ActionKind::ShowSources:
-            set_tab(Tab::Sources);
+        case ActionKind::ShowLevel:
+            set_level(action.level);
             return;
         case ActionKind::AddSource:
             open_add_source();
@@ -387,15 +404,16 @@ private:
             return true;
         if (model_.in_actions()) return false; /* an action list: the roller's keys (Enter, Right, Left / Esc back) */
         switch (key) {
-        case LV_KEY_ENTER: /* the legacy direct action: install, update, a source on / off */
+        case LV_KEY_ENTER: /* a level, an installed app's list, an install, a source on / off (legacy), ... */
             if (roller_ && !dialog_) run(model_.activate(roller_->selected()), roller_->selected());
             return true;
-        case LV_KEY_RIGHT: /* the legacy tab key: Sources; on Sources nothing (never an install or a toggle) */
-            if (model_.tab() == Tab::Apps) set_tab(Tab::Sources);
+        case LV_KEY_RIGHT: /* the root: opens the highlighted level; elsewhere nothing (never an install or a toggle) */
+            if (roller_ && !dialog_ && model_.level() == Level::Root)
+                run(model_.activate(roller_->selected()), roller_->selected());
             return true;
-        case LV_KEY_LEFT: /* Sources: back to Apps; Apps: the roller's back */
-            if (model_.tab() != Tab::Sources) return false;
-            set_tab(Tab::Apps);
+        case LV_KEY_LEFT: /* a level: back to the root; the root: the roller's back */
+            if (model_.level() == Level::Root) return false;
+            set_level(Level::Root);
             return true;
         case LV_KEY_DEL:
             ask_remove();
@@ -425,7 +443,7 @@ private:
             (item.mods & (KBD_MOD_CTRL | KBD_MOD_ALT)))
             return;
         const int index = roller_ ? roller_->selected() : 0;
-        if (item.key_code == KEY_U && model_.tab() == Tab::Apps) {
+        if (item.key_code == KEY_U && model_.level() == Level::Installed) {
             run(model_.update_all(), index);
         } else if (item.key_code == KEY_S) {
             run(model_.sync(), index);
@@ -562,4 +580,10 @@ private:
 std::unique_ptr<SettingsNativePanel> settings_apps_panel_create(const SettingsNativePanelContext &context)
 {
     return std::make_unique<AppsPanel>(context);
+}
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_apps_page_factory(lv_obj_t *, const NodeIter &,
+                                                                         std::function<void()>)
+{
+    return nullptr;
 }

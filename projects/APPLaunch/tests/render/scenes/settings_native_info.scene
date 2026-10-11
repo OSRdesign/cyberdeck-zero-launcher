@@ -3,11 +3,10 @@
 # TextBlock: as opened, three Down presses, then a drag), About (the board row: APPLAUNCH_BOARD is set here at every
 # size, the Pi 3A+ profile's own label at 480x320), User (the account read in the background) and Date & Time > Info
 # (refreshed every second). Info rows: key left, value right; on 480x320 (Compact) a long value wraps onto a second
-# line (User: Password). Review only: no golden (the compat Settings goldens are unchanged); every header is checked
+# line (User: Password). Review only: no golden; every header is checked
 # against the home grid's (run.sh header).
 title settings native info pages
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 @640x480,800x480,720x720,1280x720 env APPLAUNCH_BOARD harness-board
 apps Settings Store CLI SSH Calculator

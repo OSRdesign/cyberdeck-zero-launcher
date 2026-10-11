@@ -9,7 +9,6 @@
 # header scene shares (wifi 70, bt on, 20:30): the fake list's connected keyboard does not change it (BtConnectedList).
 title settings native bluetooth
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK force
 apps Settings Store CLI SSH Calculator

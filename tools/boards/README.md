@@ -8,7 +8,7 @@ accepted too); it is never stored, never on a command line (sudo reads it on std
 ```
 python board.py upload     pi3a C:/path/pizero2w-bundle.tar.gz   # upload, unpack to /tmp/applaunch-bundle, stage ~/applaunch-test
 python board.py install    pi3a [--check]                        # sudo install.sh --user <user> (--check = install.sh --dry-run)
-python board.py test-start pi5 --env APPLAUNCH_SETTINGS_UI=native --env APPLAUNCH_OSK=force
+python board.py test-start pi5 --env APPLAUNCH_OSK=force
 python board.py grab       pi5 C:/tmp/pi5.png [--raw]            # framebuffer, turned the way the user sees it
 python board.py test-stop  pi5                                   # restore desktop / service, remove test files
 python board.py status     deck
@@ -30,6 +30,7 @@ python board.py status     deck
   `install` refuses them unless `--force` (install.sh knows the deck and the Pi 3A+ only).
 - **Pi 3A+:** a command string containing `environ` drops the ssh connection; `board.py` refuses to send one (quirk
   `no_environ` in `boards.json`), before anything on the board is stopped.
+- **Pi 3A+ `/tmp` is a 208 MB tmpfs.** The bundle is about 54 MB and `upload` unpacks it there, so an earlier bundle or `/tmp/applaunch-bundle` left behind makes `upload` fail with "No space left on device" (or paramiko `OSError: Failure`). Remove the old files (`rm -rf /tmp/applaunch-bundle /tmp/applaunch-upload.tar.gz /tmp/b05 /tmp/bundle*.tar.gz`) and upload again.
 - Never `pkill -f` over ssh (kills the ssh shell); `board.py` uses `pkill -x M5CardputerZero`.
 - `python -I board.py -h` and `--dry-run` need nothing beyond the standard library. For a real run paramiko must be
   importable: if it is in the user site-packages, run without `-I`.

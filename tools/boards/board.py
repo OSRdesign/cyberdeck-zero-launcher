@@ -322,7 +322,7 @@ def build_parser(board_names):
     p = sub.add_parser("test-start", help="run the staged test launcher (desktop boards: stop lightdm first)")
     board_arg(p)
     p.add_argument("--env", action="append", metavar="K=V", help="extra launcher environment (repeatable), e.g. "
-                   "APPLAUNCH_SETTINGS_UI=native APPLAUNCH_DEV=1 APPLAUNCH_OSK=force")
+                   "APPLAUNCH_DEV=1 APPLAUNCH_OSK=force")
     p = sub.add_parser("test-stop", help="stop the test launcher, restore desktop / service, remove test files")
     board_arg(p)
     p = sub.add_parser("grab", help="framebuffer screenshot as the user sees it")

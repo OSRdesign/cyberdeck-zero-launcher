@@ -5,7 +5,6 @@
 # Review only: no golden.
 title settings native wifi dialogs
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK auto
 keyboards 1

@@ -18,8 +18,7 @@ namespace settings_ui {
 
 bool native_selected()
 {
-    const char *value = std::getenv("APPLAUNCH_SETTINGS_UI");
-    return value && std::strcmp(value, "native") == 0 && native_ui::enabled();
+    return native_ui::enabled();
 }
 
 bool dev_pages()

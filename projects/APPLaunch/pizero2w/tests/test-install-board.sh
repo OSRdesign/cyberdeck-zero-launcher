@@ -1,6 +1,7 @@
 #!/bin/sh
 # PC test of install.sh's board detection and profile handling, and of uninstall.sh's plan, against the fake
-# /proc and /sys trees in fixtures/ (SYSROOT and UNINSTALL_ROOT test hooks). Changes nothing outside a temp dir,
+# /proc and /sys trees in fixtures/ (SYSROOT and UNINSTALL_ROOT test hooks), and of default-sources.sh (the default
+# app source) against a temp state folder and a fake Store backend. Changes nothing outside a temp dir,
 # needs no root and no Pi. Run:   sh projects/APPLaunch/pizero2w/tests/test-install-board.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -142,6 +143,127 @@ check "uninstall dry-run: exit 0" '[ $RC = 0 ]'
 check "uninstall dry-run: removes board.conf" 'has "rm -f $R/etc/applaunch/board.conf"'
 check "uninstall dry-run: removes the gpio rule" 'has "rm -f $R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules"'
 check "uninstall dry-run: changed nothing" '[ -f "$R/etc/applaunch/board.conf" ]'
+
+# --- default app source: install.sh's plan and option
+R=$(root zero2w)
+run --dry-run
+check "install dry-run: default app source planned" 'has "default app source: OSRdesign/cyberdeck-zero-apps added for the user once"'
+run --dry-run --no-default-source
+check "install dry-run --no-default-source: skipped" '[ $RC = 0 ] && has "default app source: skipped (--no-default-source)"'
+check "install.sh runs default-sources.sh as the user" 'grep -q "runuser -u \"\$TARGET_USER\" -- env HOME=\"\$TARGET_HOME\" sh \"\$HERE/default-sources.sh\"" "$INSTALL"'
+check "build.sh puts default-sources.sh in the bundle" 'grep -q "\$HERE/default-sources.sh" "$HERE/../build.sh"'
+
+# --- default-sources.sh against a temp state folder (M5APPSTORE_STATE_DIR) and a fake Store backend
+SEED="$HERE/../default-sources.sh"
+SRC_URL=https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/registry.json
+FAKE="$TMP/fake-appstore"
+LOG="$TMP/fake-appstore.log"
+cat > "$FAKE" <<'EOF'
+#!/bin/sh
+# fake Store backend: logs its arguments; FAKE_FAIL=1 answers as for an unreachable registry
+printf '%s\n' "$*" >> "$FAKE_LOG"
+if [ "${FAKE_FAIL:-0}" = 1 ]; then printf 'ERROR\tregistry unavailable\t%s\n' "$2"; exit 1; fi
+printf '2026-10-11 INFO sync\nREGISTRY\tUPDATED\t%s\t%s\tok\t9\t%s\n' "$2" "$3" "$5"
+EOF
+chmod +x "$FAKE"
+# run default-sources.sh; output in $OUT, exit code in $RC; state folder $S
+seed() { OUT=$(HOME="$TMP/home" M5APPSTORE_STATE_DIR="$S" APPLAUNCH_APPSTORE_BIN="${BIN:-$FAKE}" FAKE_LOG="$LOG" \
+                FAKE_FAIL="${SYNC_FAIL:-0}" sh "$SEED" "$@" 2>&1); RC=$?; }
+calls() { if [ -f "$LOG" ]; then wc -l < "$LOG" | tr -d ' '; else echo 0; fi; }
+json_ok() { if command -v python3 >/dev/null 2>&1; then python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1"; else true; fi; }
+HUB='    {
+      "builtin": true,
+      "enabled": true,
+      "name": "CardputerZero Hub",
+      "region": "default",
+      "url": "https://cardputerzero.github.io/generated/registry.json"
+    }'
+HUB_ONLY="{
+  \"active_region\": \"default\",
+  \"region\": \"auto\",
+  \"registries\": [
+$HUB
+  ]
+}"
+EXPECT_SEED="{
+  \"active_region\": \"default\",
+  \"region\": \"auto\",
+  \"registries\": [
+$HUB,
+    {
+      \"enabled\": true,
+      \"name\": \"OSRdesign/cyberdeck-zero-apps\",
+      \"url\": \"$SRC_URL\"
+    }
+  ]
+}"
+
+# fresh install: no state folder at all
+S="$TMP/state-fresh"; rm -f "$LOG"
+seed --dry-run
+check "seed dry-run: plan and JSON, nothing written" '[ $RC = 0 ] && has "would add OSRdesign/cyberdeck-zero-apps" && has "$SRC_URL" && [ ! -e "$S" ] && [ "$(calls)" = 0 ]'
+seed
+check "seed fresh: exit 0, added and synced" '[ $RC = 0 ] && has "added OSRdesign/cyberdeck-zero-apps" && has "synced: 9 apps (ok)"'
+check "seed fresh: the Store format exactly" '[ "$(cat "$S/registries.json")" = "$EXPECT_SEED" ]'
+check "seed fresh: valid JSON" 'json_ok "$S/registries.json"'
+check "seed fresh: one sync of that source only" '[ "$(cat "$LOG")" = "--edit-registry $SRC_URL $SRC_URL --registry-name OSRdesign/cyberdeck-zero-apps" ]'
+check "seed fresh: marker written, no backup" '[ -f "$S/applaunch-default-source" ] && [ ! -e "$S/registries.json.bak-applaunch" ]'
+SUM=$(cksum < "$S/registries.json")
+seed
+check "seed second run: decided already, nothing changed, no sync" '[ $RC = 0 ] && has "already decided" && [ "$(cksum < "$S/registries.json")" = "$SUM" ] && [ "$(calls)" = 1 ]'
+# the user removed the source afterwards (the Store then keeps the hub only): a re-run does not add it back
+printf '%s\n' "$HUB_ONLY" > "$S/registries.json"
+seed
+check "seed after the user removed it: not added back" 'has "already decided" && [ "$(cat "$S/registries.json")" = "$HUB_ONLY" ]'
+
+# existing install whose list holds the built-in hub only (region China): seeded, region kept, old file backed up
+S="$TMP/state-hub"; rm -f "$LOG"; mkdir -p "$S"
+printf '%s\n' "$HUB_ONLY" | sed -e 's/"active_region": "default"/"active_region": "CN"/' -e 's/"region": "auto"/"region": "CN"/' \
+    -e 's/"name": "CardputerZero Hub"/"name": "CardputerZero Hub CN"/' -e 's/"region": "default"/"region": "CN"/' \
+    -e 's|https://cardputerzero.github.io/generated/registry.json|https://cardputer-zero-repo.oss-cn-shenzhen.aliyuncs.com/packages/cn/registry.json|' \
+    > "$S/registries.json"
+BEFORE=$(cat "$S/registries.json")
+seed --no-sync
+check "seed hub only: added, not synced (--no-sync)" '[ $RC = 0 ] && has "added OSRdesign" && has "not synced (--no-sync)" && [ "$(calls)" = 0 ]'
+check "seed hub only: CN region and hub kept" 'grep -q "^  \"region\": \"CN\",$" "$S/registries.json" && grep -q "^  \"active_region\": \"CN\",$" "$S/registries.json" && grep -q "Hub CN" "$S/registries.json" && grep -q "$SRC_URL" "$S/registries.json"'
+check "seed hub only: valid JSON, backup of the old file" 'json_ok "$S/registries.json" && [ "$(cat "$S/registries.json.bak-applaunch")" = "$BEFORE" ]'
+
+# the user's own list (another source): never changed, decision recorded, no sync
+S="$TMP/state-own"; rm -f "$LOG"; mkdir -p "$S"
+cat > "$S/registries.json" <<EOF
+{
+  "active_region": "default",
+  "region": "auto",
+  "registries": [
+$HUB,
+    {
+      "enabled": false,
+      "name": "me/my-apps",
+      "url": "https://raw.githubusercontent.com/me/my-apps/main/registry.json"
+    }
+  ]
+}
+EOF
+SUM=$(cksum < "$S/registries.json")
+seed
+check "seed own list: kept as is, no sync" '[ $RC = 0 ] && has "own sources (1) are kept" && [ "$(cksum < "$S/registries.json")" = "$SUM" ] && [ "$(calls)" = 0 ] && [ -f "$S/applaunch-default-source" ]'
+
+# the source is already there (added by hand, disabled): left alone
+S="$TMP/state-ours"; rm -f "$LOG"; mkdir -p "$S"
+printf '{"registries":[{"url":"%s","name":"OSRdesign/cyberdeck-zero-apps","enabled":false}]}\n' "$SRC_URL" > "$S/registries.json"
+SUM=$(cksum < "$S/registries.json")
+seed
+check "seed already listed: left alone" '[ $RC = 0 ] && has "already in the list" && [ "$(cksum < "$S/registries.json")" = "$SUM" ] && [ "$(calls)" = 0 ]'
+
+# sync failures never fail the install; the list stays written
+S="$TMP/state-offline"; rm -f "$LOG"
+SYNC_FAIL=1; seed; SYNC_FAIL=0
+check "seed offline: exit 0, reason shown, list written" '[ $RC = 0 ] && has "could not sync it now (registry unavailable)" && [ "$(cat "$S/registries.json")" = "$EXPECT_SEED" ]'
+S="$TMP/state-nostore"; rm -f "$LOG"
+BIN="$TMP/no-such-appstore"; seed; BIN=""
+check "seed without the Store: list written, not synced" '[ $RC = 0 ] && has "is not installed: not synced" && [ -f "$S/registries.json" ]'
+seed --bogus
+check "seed unknown option: exit 2" '[ $RC = 2 ]'
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" = 0 ]

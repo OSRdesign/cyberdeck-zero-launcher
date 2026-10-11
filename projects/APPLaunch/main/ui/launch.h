@@ -49,8 +49,8 @@ struct page_prefers_native<PageT, std::void_t<decltype(PageT::kNativeDisplay)>>
 {
 };
 
-// A page class can also choose at run time with `static bool native_display_now();` (Settings: the
-// APPLAUNCH_SETTINGS_UI switch, task 014 P2a). When it returns true the page gets the native display with plain
+// A page class can also choose at run time with `static bool native_display_now();` (Settings: the native host
+// whenever the dpi-scaled backend exists, task 014 P2a / P3e). When it returns true the page gets the native display with plain
 // pointer touch, whatever kNativeDisplay / kTouchList say; when false, or without the function, nothing changes.
 template <class PageT, class = void>
 struct page_native_choice

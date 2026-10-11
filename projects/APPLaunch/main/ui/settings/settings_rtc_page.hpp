@@ -51,6 +51,9 @@ public:
 
     const std::string &last_error() const noexcept;
     bool choice_shows_value() const override { return false; } /* Yes / No: no current value */
+    /* the native host's observer shows the factory-time warning (choice_confirm); the legacy view keeps its msgbox */
+    void choice_set_observer(SettingsChoiceObserver *observer) override;
+    void choice_confirm_reply(bool confirmed) override;
 
 protected:
     int initial_selection() const override;
@@ -65,6 +68,7 @@ private:
     void show_factory_time_warning(const ActivationSink &sink);
     void close_factory_time_warning() noexcept;
     void resolve_factory_time_warning(bool confirm);
+    void continue_after_factory_time_warning(const ActivationSink &sink, bool confirm);
     void handle_factory_time_warning_key(lv_event_t *event);
     void handle_factory_time_warning_click(lv_event_t *event);
     void create_status_label();

@@ -3,7 +3,6 @@
 # (Authenticating..., OK dimmed), a wrong password (red line, field cleared, editing again), Esc closes it. Review only.
 title sudo prompt keyboard
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK auto
 keyboards 1

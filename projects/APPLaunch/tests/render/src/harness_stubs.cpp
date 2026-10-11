@@ -10,6 +10,7 @@
 #include "cp0_lvgl_app.h"
 #include "cp0_timedate_client.hpp"
 #include "input_presence.hpp"
+#include "settings/settings_hw_profile.hpp"
 
 #include <cstdio>
 #include <ctime>
@@ -85,9 +86,20 @@ extern "C" int ui_screensaver_is_active(void)
     return 0;
 }
 
-int cp0_timedate_set_time(const char *)
+/* Date & Time > Set Manually > Save? (a worker thread): the scene's "timeset ok|fail". A set time is what LocalTime
+ * answers afterwards; the wall clock (the status strip's) stays the scene's. */
+int cp0_timedate_set_time(const char *timestamp)
 {
-    return -1;
+    harness::Fixtures &f = harness::fixtures();
+    int year = 0, month = 0, day = 0, hour = 0, minute = 0, second = 0;
+    if (!f.time_settable || !timestamp ||
+        std::sscanf(timestamp, "%d-%d-%d %d:%d:%d", &year, &month, &day, &hour, &minute, &second) != 6)
+        return -1;
+    std::tm t{};
+    t.tm_year = year - 1900, t.tm_mon = month - 1, t.tm_mday = day, t.tm_hour = hour, t.tm_min = minute,
+    t.tm_sec = second;
+    f.time_set_epoch.store(static_cast<int64_t>(timegm(&t)));
+    return 0;
 }
 
 /* ------------------------------------------------------------------- launcher app registry */
@@ -99,7 +111,7 @@ const AppDescriptor *launcher_app_registry_entries(std::size_t *count)
 {
     static const AppDescriptor entries[] = {
         {"Settings", "setting_100.png", "app_Setting", false, true},
-        {"Store", "store_100.png", "app_Store", false, true},
+        {"Store", "store_100.png", "app_Store", APPLAUNCH_LAUNCHER_STORE_TOGGLE != 0, APPLAUNCH_LAUNCHER_STORE_TOGGLE == 0},
         {"CLI", "cli_100.png", "app_CLI", false, true},
         {"Python", "python_100.png", "app_Python", true, false},
         {"SSH", "ssh_100.png", "app_SSH", true, false},

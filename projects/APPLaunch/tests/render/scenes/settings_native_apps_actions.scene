@@ -1,15 +1,15 @@
-# Native Settings > Apps action lists (task 014 P3d, Controller decision), with a physical keyboard (APPLAUNCH_OSK=auto,
-# one keyboard present) on the fake catalogue (src/harness_apps.cpp). A tap on the highlighted app or source opens its
-# list; Enter keeps the legacy direct action (install, update, a source on / off) and opens the list only for an app
-# that is up to date. Shots: Packet Radar's list by a tap (Update, Remove, Cancel), its Remove confirmation, the list
-# after Cancel, back on Packet Radar (Cancel row); Field Notes by Enter (current: Remove, Cancel); Signal Meter by a tap
-# (Install, Cancel); field-kit/tools by a tap (Disable, Sync, Remove, Cancel; its failure in the status line), Sync of
-# that source alone and its result; old/archive by a tap (Enable, Remove, Cancel) and enabled.
+# Native Settings > Apps action lists (task 014 P3d, Controller decision; P3e: Installed / Available split), with a
+# physical keyboard (APPLAUNCH_OSK=auto, one keyboard present) on the fake catalogue (src/harness_apps.cpp). On
+# Installed, Enter or a tap opens an app's list; on Available, Enter or a tap installs at once (no list); on Sources a
+# tap opens the source's list, Enter keeps the legacy on / off. Shots: Packet Radar's list by a tap (Update, Remove,
+# Cancel), its Remove confirmation, the list after Cancel, back on Packet Radar (Cancel row); Field Notes by Enter
+# (current: Remove, Cancel); Signal Meter on Available by a tap (the install starts and fails: the notice);
+# field-kit/tools by a tap (Disable, Sync, Remove, Cancel; its failure in the status line), Sync of that source alone
+# and its result; old/archive by a tap (Enable, Remove, Cancel) and enabled.
 # Centre (highlighted) row: 480x320 y 180, 640x480 y 267, 800x480 y 268, 720x720 y 392, 1280x720 y 391.
 # Review only, no golden.
 title settings native apps action lists
 review
-env APPLAUNCH_SETTINGS_UI native
 env APPLAUNCH_DEV 0
 env APPLAUNCH_OSK auto
 env HARNESS_APPS catalogue
@@ -27,8 +27,9 @@ key UP
 key UP
 key ENTER
 wait 3000
-# Update all (2), Bench Tools, Field Notes, Packet Radar, Signal Meter, Weather Station..., Sources
-key DOWN
+# Installed: Update all (2), Field Notes, Packet Radar, Weather Station...
+key ENTER
+wait 500
 key DOWN
 key DOWN
 wait 300
@@ -39,7 +40,7 @@ wait 300
 @1280x720 tap 640 391
 wait 300
 shot apps_actions_update
-header apps_actions_update "Settings > Apps > Packet Radar" "Apps > Packet Radar" "Packet Radar"
+header apps_actions_update "Settings > Apps > Installed > Packet Radar" "Apps > Installed > Packet Radar" "Installed > Packet Radar" "Packet Radar"
 key DOWN
 key ENTER
 wait 300
@@ -51,7 +52,7 @@ key DOWN
 key ENTER
 wait 500
 shot apps_actions_closed
-header apps_actions_closed "Settings > Apps" Apps
+header apps_actions_closed "Settings > Apps > Installed" "Apps > Installed" Installed
 # Field Notes (current): Enter opens its list
 key UP
 key ENTER
@@ -59,8 +60,12 @@ wait 300
 shot apps_actions_current
 key ESC
 wait 300
-# Signal Meter (not installed): a tap
+# Available: Bench Tools, Signal Meter; a tap on Signal Meter installs it (the harness refuses while preparing)
+key LEFT
+wait 300
 key DOWN
+key ENTER
+wait 500
 key DOWN
 wait 300
 @480x320 tap 240 180
@@ -68,12 +73,15 @@ wait 300
 @800x480 tap 400 268
 @720x720 tap 360 392
 @1280x720 tap 640 391
-wait 300
+wait 3000
 shot apps_actions_install
 key ESC
 wait 300
 # Sources: field-kit/tools (row 1) by a tap; Sync (this source alone)
-key RIGHT
+key LEFT
+wait 300
+key DOWN
+key ENTER
 wait 300
 key DOWN
 wait 300

@@ -6,11 +6,12 @@ implemented)" and 012 F1.
 
 Scope of this build: the keyboard exists only on **native** pages: the development page Settings > System > Keyboard
 test and, since task 014 P3b, the native Wi-Fi page's password and hidden-network dialogs (section E), since P3c the
-native Bluetooth pages' PIN / passkey dialogs, Alias and Rename (section G). Compat pages (the deck's default Settings
-with its Wi-Fi password page, Bluetooth PIN, Store search) are unchanged: they still need a physical keyboard.
+native Bluetooth pages' PIN / passkey dialogs, Alias and Rename (section G). Compat pages (Store search, stock apps) are unchanged: they
+still need a physical keyboard. Since task 014 P3e the Settings are native everywhere the dpi-scaled backend exists
+(section I); sections A to H were written while the compat Settings was the default.
 
-Setup (Controller): launcher environment (board.conf or a service drop-in) `APPLAUNCH_SETTINGS_UI=native` and
-`APPLAUNCH_DEV=1`. On the HackBerry (built-in keyboard) add `APPLAUNCH_OSK=force` to see the keyboard at all.
+Setup (Controller): the Keyboard test page needs a development build or `APPLAUNCH_DEV=1` in the launcher environment
+(board.conf or a service drop-in); the native Settings needs no setting (`APPLAUNCH_SETTINGS_UI` no longer exists). On the HackBerry (built-in keyboard) add `APPLAUNCH_OSK=force` to see the keyboard at all.
 Restart the service after a change.
 
 ## A. No physical keyboard (USB unplugged; Bluetooth keyboard off for more than 10 minutes, or never connected since the launcher started)
@@ -36,7 +37,7 @@ Restart the service after a change.
 18. Settings > System > On-screen keyboard: choose Off. Keyboard test: the field edits but no keyboard appears. Set it back to Auto: the keyboard appears again. Reboot: the choice is kept.
 
 ## C. Nothing else changed
-19. Without `APPLAUNCH_SETTINGS_UI=native` (the deck's default): Settings opens in the compat window as before, no "On-screen keyboard" entry, no keyboard anywhere.
+19. (Obsolete since P3e: there is no compat Settings on the Pi boards any more; the native Settings is checked in section I.)
 20. Stock apps (Store, a Store app) and the home grid behave as before; Esc hold 3 s in a stock app still returns home.
 
 ## D. Other boards (when available)
@@ -120,8 +121,8 @@ keyboard), 45-48 with the Bluetooth keyboard connected.
     before continuing." with OK; OK, Enter or Esc goes back to the section. Switch Power on again.
 49. Esc everywhere: dialog -> device actions -> list -> section, one level per press; hold Esc 3 s from any of them:
     home, no restart. Leaving Scan while it pairs cancels the pairing (the device is not left half-paired).
-50. Compat check (deck default, no `APPLAUNCH_SETTINGS_UI=native`): Bluetooth > Paired Devices / Scan / Alias look and
-    work exactly as before (the legacy pages: D remove, R rescan, B reset keys, the PIN prompt with physical keys).
+50. (Obsolete since P3e: the legacy Bluetooth pages are no longer reachable on the Pi boards; the native pages are
+    steps 37-49.)
 51. Pi 3A+ 480x320: with the number pad up the PIN dialog's title (the device) shows in the header's title place, the
     Esc button and the top bar unchanged; the field and an error stay readable in the dialog above the pad. The same for
     Rename (title "Rename" in the header).
@@ -130,19 +131,19 @@ Report anything odd; the Controller can capture the screen over ssh during the t
 
 ## H. Apps page and sudo prompt (task 014 P3d; native Settings, also in a release build)
 
-Set `APPLAUNCH_SETTINGS_UI=native` as for section G. Apps needs the Store backend and network.
+Apps needs the Store backend and network (the native Settings needs no setting since P3e).
 
 Apps (keyboard):
-52. Settings > Apps shows "Update all (N)" first when several updates exist, then the apps with versions, Sources last.
-53. Enter on an app that is not installed asks for the sudo password; it installs; its row spins meanwhile.
-54. U runs Update all, asking for the password once per app.
-55. D on an installed app, then Enter, removes it; Esc cancels the confirm.
-56. Right opens Sources; Left or Esc returns to Apps on the Sources row.
+52. Settings > Apps shows "Installed (N)", "Available (M)", "Sources" (P3e split); Installed shows "Update all (N)" first when several updates exist, then the installed apps with versions (an update amber); Available lists the apps not installed with their version.
+53. On Available, Enter on an app asks for the sudo password; it installs; its row spins meanwhile; then it leaves Available and the counts change ("Installed (N+1)", "Available (M-1)").
+54. On Installed, U runs Update all, asking for the password once per app.
+55. On Installed, D on an app, then Enter, removes it; Esc cancels the confirm. Enter on an app opens its actions (Update when offered, Remove, Cancel).
+56. Right or Enter on the Apps root opens the highlighted level; Left or Esc returns to the Apps root on that row (title "Apps > Installed" etc.), then to Settings.
 57. On Sources: A, type owner/repo, Enter adds the source; S syncs.
 58. W / E / R / T never move the highlight.
 Apps (touch):
-59. Tap a row to highlight it, tap again to open its action list; drag scrolls; the header Esc goes back.
-60. Tap an app: Install / Update / Remove (as applicable) and Cancel; Remove asks first; Update starts and the row spins.
+59. Tap a row to highlight it, tap again to open it (a level, an installed app's action list); drag scrolls; the header Esc goes back one level.
+60. Tap an installed app: Update (when offered), Remove, Cancel; Remove asks first; Update starts and the row spins. Tap an available app: it installs at once (no list).
 61. Tap a source: Disable or Enable, Sync (that source only), Remove, Cancel; after a partial sync the status line is amber ("Synced 1 of 2 sources"); a long failure reason wraps.
 62. No keyboard: "Add a GitHub source" opens the on-screen keyboard; its Enter submits; Cancel and OK are 9 mm targets.
 Sudo prompt (any sudo action, e.g. an Apps install):
@@ -155,3 +156,34 @@ Sudo prompt (any sudo action, e.g. an Apps install):
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
 
+## I. Native Settings by default on the deck (task 014 P3e)
+
+The flip: Settings is native on every Pi board with no switch and no compat path. Build: a release bundle from
+`pizero2w/build.sh` (development-only pages hidden, About / System "Channel" reads `release`). Needs the deck for 1 to 11
+and the Pi 3A+ for 12; a BT keyboard for 2, 4, 5 and 8. Item 81 needs a bundle built with `--with-store` and network,
+item 82 any Pi board.
+
+69. Settings opens full screen, no toolbar, the header's Esc works, the status strip matches the home grid.
+70. Every section by touch only, then by the BT keyboard only.
+71. Brightness slider by drag and by Left / Right; the level survives a restart. DarkTime 10 s locks the screen.
+72. Wi-Fi: Details; Forget, then rejoin with the password. With no keyboard present the on-screen keyboard appears.
+73. Bluetooth: Power; Discoverable; the keyboard shows Connected; Rename.
+74. A Launcher toggle hides a tile; a Touch choice still applies in Snake or Tank.
+75. Apps: the root shows Installed (N) / Available (M) / Sources; Available loads; install with the sudo dialog, and cancel;
+    Installed: an app's actions (Update / Remove / Cancel).
+76. Date & Time: Network Time off; Set Manually: change the minute and save; year 2000 shows the warning (Cancel, then
+    Confirm); Network Time back on.
+77. System: Storage; Licenses scrolls; On-screen keyboard Auto / Off; Reboot then No; Shutdown then No.
+78. Hold Esc on a deep page goes home; the lock screen works while in Settings.
+79. A stock app opened after Settings keeps its compat window, toolbar and touch.
+80. Pi 3A+: Brightness On / Off 10 s and the About Board row; the Keyboard test page is not shown (release build).
+81. Fresh install lists our apps under Available: on a user with no app source (no
+    `~/.local/share/cardputerzero-appstore/registries.json`, or the Store's hub only), `sudo ./install.sh` prints
+    "default app source: added OSRdesign/cyberdeck-zero-apps" and "synced: N apps"; Settings > Apps > Available lists
+    LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop... (minus the installed ones) without typing anything; Sources shows
+    OSRdesign/cyberdeck-zero-apps. Remove it in Sources, run `install.sh` again: it is not added back ("already decided").
+82. Launcher > Store hides / shows the Store tile: Settings > Launcher lists Store (on); switch it off: the Store tile
+    leaves the home grid; it stays hidden after a restart of the launcher and after an app install from Settings > Apps;
+    Settings > Apps still works; switch it on: the tile is back. By touch and by keyboard.
+
+Report anything odd; the Controller can capture the screen over ssh during the test.

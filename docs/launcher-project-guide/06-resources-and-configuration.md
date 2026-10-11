@@ -245,7 +245,10 @@ release-owned entries such as ZClaw whose package identity is not part of the
 static app set. Other desktop entries are treated as Store-installed or
 user-installed. The Settings `Launcher` menu includes built-in and
 release-preinstalled configurable applications, but does not expose
-Store-installed entries or the protected Settings, Store, and CLI applications.
+Store-installed entries or the protected Settings and CLI applications. The
+Store is listed only where the hardware profile makes it configurable
+(`APPLAUNCH_LAUNCHER_STORE_TOGGLE`, set on the Raspberry Pi profile); on the
+stock CardputerZero it stays always on and is not listed.
 All dynamic entries remain visible on the home launcher; only product-owned
 entries receive a Settings toggle.
 
