@@ -298,6 +298,10 @@ void Roller::fill_row(Row &row)
     lv_label_set_text(row.label, row.spec.label.c_str());
     switch (row.spec.kind) {
     case RowKind::Nav:
+        lv_label_set_text(row.value, row.spec.value.c_str());
+        lv_obj_set_style_text_color(
+            row.value, lv_color_hex(row.spec.value_rgb >= 0 ? static_cast<uint32_t>(row.spec.value_rgb) : kValue), 0);
+        break;
     case RowKind::Slider:
     case RowKind::Info:
         lv_label_set_text(row.value, row.spec.value.c_str());

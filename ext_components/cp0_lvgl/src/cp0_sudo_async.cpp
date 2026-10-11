@@ -14,6 +14,8 @@
 #include "cp0_sudo_request_factory.hpp"
 #include "cp0_sudo_command.hpp"
 #include "cp0_sudo_prompt_key_policy.hpp"
+#include "cp0_sudo_prompt_ui.hpp"
+#include "cp0_ui_metrics_lvgl.h"
 #include "cp0_dispatch_testable.hpp"
 #include "cp0_pointer_lifecycle.hpp"
 #include "cp0_signal_registration.hpp"
@@ -112,6 +114,7 @@ lv_obj_t *g_box = nullptr;
 lv_obj_t *g_password_label = nullptr;
 lv_obj_t *g_hint_label = nullptr;
 lv_obj_t *g_key_hook = nullptr;
+std::unique_ptr<cp0_sudo::PromptUi> g_prompt_ui; /* the responsive prompt (P3d); then g_overlay / g_box stay null */
 lv_group_t *g_saved_group = nullptr;
 lv_group_t *g_prompt_group = nullptr;
 lv_timer_t *g_timer = nullptr;
@@ -241,6 +244,7 @@ void destroy_prompt()
     g_saved_group = nullptr;
     lv_group_set_default(saved_group);
     if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, saved_group);
+    g_prompt_ui.reset(); /* stops the field editing and zeroes its text before the group goes */
     if (g_prompt_group) { lv_group_delete(g_prompt_group); g_prompt_group = nullptr; }
     if (g_box) { lv_obj_del(g_box); g_box = nullptr; }
     if (g_overlay) { lv_obj_del(g_overlay); g_overlay = nullptr; }
@@ -277,20 +281,12 @@ void update_password_label()
     lv_label_set_text(g_password_label, masked.c_str());
 }
 
-void create_prompt(const std::shared_ptr<Request> &request)
+/* The fixed 240x116 box of the compat window and the SDL build (drawn exactly as before task 014 P3d). */
+bool create_legacy_prompt(lv_obj_t *layer)
 {
-    if (g_prompt_request) return;
-    g_prompt_request = request;
-    g_confirm_key_gate.reset();
-    lv_obj_t *layer = lv_layer_top();
-    if (!layer) {
-        fail_prompt_creation();
-        return;
-    }
     g_overlay = lv_obj_create(layer);
     if (!g_overlay) {
-        fail_prompt_creation();
-        return;
+        return false;
     }
     lv_obj_add_event_cb(g_overlay, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_remove_style_all(g_overlay);
@@ -300,8 +296,7 @@ void create_prompt(const std::shared_ptr<Request> &request)
     lv_obj_clear_flag(g_overlay, LV_OBJ_FLAG_SCROLLABLE);
     g_box = lv_obj_create(layer);
     if (!g_box) {
-        fail_prompt_creation();
-        return;
+        return false;
     }
     lv_obj_add_event_cb(g_box, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_remove_style_all(g_box);
@@ -316,8 +311,7 @@ void create_prompt(const std::shared_ptr<Request> &request)
     lv_obj_clear_flag(g_box, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_t *title = lv_label_create(g_box);
     if (!title) {
-        fail_prompt_creation();
-        return;
+        return false;
     }
     lv_label_set_text(title, "Sudo Password");
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 14);
@@ -325,8 +319,7 @@ void create_prompt(const std::shared_ptr<Request> &request)
     lv_obj_set_style_text_font(title, &lv_font_montserrat_14, 0);
     g_password_label = lv_label_create(g_box);
     if (!g_password_label) {
-        fail_prompt_creation();
-        return;
+        return false;
     }
     lv_obj_add_event_cb(g_password_label, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
     lv_obj_set_width(g_password_label, 200);
@@ -337,8 +330,7 @@ void create_prompt(const std::shared_ptr<Request> &request)
     update_password_label();
     g_hint_label = lv_label_create(g_box);
     if (!g_hint_label) {
-        fail_prompt_creation();
-        return;
+        return false;
     }
     lv_obj_add_event_cb(g_hint_label, prompt_object_delete_cb, LV_EVENT_DELETE, nullptr);
     lv_label_set_text(g_hint_label, "Enter:OK  ESC:Cancel");
@@ -347,6 +339,64 @@ void create_prompt(const std::shared_ptr<Request> &request)
     lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0x808090), 0);
     lv_obj_set_style_text_font(g_hint_label, &lv_font_montserrat_10, 0);
     lv_obj_align(g_hint_label, LV_ALIGN_BOTTOM_MID, 0, -12);
+    return true;
+}
+
+bool responsive_prompt()
+{
+    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_current();
+    lv_display_t *display = lv_display_get_default();
+    return cp0_sudo::prompt_is_responsive(metrics != nullptr, metrics ? metrics->w : 0, metrics ? metrics->h : 0,
+        display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : 0,
+        display ? static_cast<int>(lv_display_get_vertical_resolution(display)) : 0);
+}
+
+/* The responsive prompt's events run from an async hop, outside the widget callbacks (cp0_sudo_prompt_ui.hpp). */
+void ui_submit(const std::string &password)
+{
+    DispatchScope dispatch_scope;
+    cp0::callback::invoke_direct([&] {
+        if (!g_prompt_request || g_coordinator.state(g_prompt_request->id) != cp0_sudo::State::PROMPT) return;
+        secure_clear(g_password);
+        g_password.assign(password);
+        submit_password();
+    });
+}
+
+void ui_cancel()
+{
+    DispatchScope dispatch_scope;
+    cp0::callback::invoke_direct([] {
+        if (!g_prompt_request) return;
+        std::vector<Action> actions;
+        g_coordinator.cancel(g_prompt_request->id, actions, now_ms());
+        execute_actions(std::move(actions));
+    });
+}
+
+bool create_responsive_prompt(lv_obj_t *layer)
+{
+    auto ui = std::make_unique<cp0_sudo::PromptUi>();
+    if (!ui->create(layer, {ui_submit, ui_cancel})) return false;
+    g_prompt_ui = std::move(ui);
+    return true;
+}
+
+void create_prompt(const std::shared_ptr<Request> &request)
+{
+    if (g_prompt_request) return;
+    g_prompt_request = request;
+    g_confirm_key_gate.reset();
+    lv_obj_t *layer = lv_layer_top();
+    if (!layer) {
+        fail_prompt_creation();
+        return;
+    }
+    const bool responsive = responsive_prompt();
+    if (!(responsive ? create_responsive_prompt(layer) : create_legacy_prompt(layer))) {
+        fail_prompt_creation();
+        return;
+    }
     g_key_hook = lv_screen_active();
     if (g_key_hook) {
         lv_obj_add_event_cb(g_key_hook, key_event_cb,
@@ -359,9 +409,10 @@ void create_prompt(const std::shared_ptr<Request> &request)
         fail_prompt_creation();
         return;
     }
-    lv_group_add_obj(g_prompt_group, g_overlay);
+    lv_group_add_obj(g_prompt_group, g_prompt_ui ? g_prompt_ui->focus_object() : g_overlay);
     lv_group_set_default(g_prompt_group);
     if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, g_prompt_group);
+    if (g_prompt_ui) g_prompt_ui->begin_edit(); /* the fallback keyboard comes through the field */
     const bool dispatched = schedule_apply_queued_password();
     cp0_testable::run_on_dispatch_failure(
         dispatched, [] { apply_queued_password(nullptr); });
@@ -370,10 +421,10 @@ void create_prompt(const std::shared_ptr<Request> &request)
 void show_auth_error(const std::shared_ptr<Request> &request)
 {
     g_prompt_request = request;
+    const std::string text = cp0_sudo::auth_error_text(request->auth_attempts);
+    if (g_prompt_ui) g_prompt_ui->show_error(text);
     if (g_hint_label) {
-        char text[64];
-        std::snprintf(text, sizeof(text), "Wrong password (%d/3). Try again.", request->auth_attempts);
-        lv_label_set_text(g_hint_label, text);
+        lv_label_set_text(g_hint_label, text.c_str());
         lv_obj_set_style_text_color(g_hint_label, lv_color_hex(0xFF5555), 0);
     }
     secure_clear(g_password);
@@ -592,6 +643,7 @@ void execute_actions(std::vector<Action> actions)
             }
             secure_clear(g_password);
             update_password_label();
+            if (g_prompt_ui) g_prompt_ui->show_busy("Authenticating...");
             if (g_hint_label) lv_label_set_text(g_hint_label, "Authenticating...");
             if (!password || !g_workers || !g_workers->start(
                     [request = action.request] { request->cancel_requested.store(true); },
@@ -685,8 +737,10 @@ void key_event_impl(lv_event_t *event)
 {
     auto *key = static_cast<key_item *>(lv_event_get_param(event));
     if (!key || !g_prompt_request) return;
+    const bool running = g_coordinator.state(g_prompt_request->id) == cp0_sudo::State::RUNNING;
+    if (g_prompt_ui && !running) return; /* the prompt's field reads the keys itself (it is no older than this hook) */
     lv_event_stop_processing(event);
-    if (g_coordinator.state(g_prompt_request->id) == cp0_sudo::State::RUNNING) {
+    if (running) {
         if (key->key_state == KBD_KEY_RELEASED && key->key_code == KEY_ESC) {
             std::vector<Action> actions;
             g_coordinator.cancel(g_prompt_request->id, actions, now_ms());

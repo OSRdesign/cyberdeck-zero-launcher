@@ -204,6 +204,10 @@ static void check_page(const expected_page_t *e)
     CHECK_EQ(p.caption_px, m.text_px[CP0_TEXT_CAPTION]);
     CHECK_EQ(p.caption_w, e->caption_w);
     CHECK(p.caption_x + p.caption_w < e->w / 2 - p.chevron_px / 2);
+    /* a wrapping status line (task 014 P3d): 3 lines of its own size fit above the highlight bar at every size */
+    const int line_h = p.caption_px + p.caption_px / 4;
+    CHECK_EQ(cp0_ui_roller_caption_lines(&p, line_h), CP0_UI_ROLLER_CAPTION_MAX_LINES);
+    CHECK(p.caption_y + 3 * line_h <= p.body_y + p.edge_pad - p.gap);
 }
 
 static void test_page_layout(void)
@@ -228,6 +232,14 @@ static void test_page_layout(void)
     CHECK_EQ(p.esc_x, 320 - 16 - 102);
     CHECK_EQ(cp0_ui_roller_page(&m, 700, &p), 0); /* past the screen: ignored */
     CHECK_EQ(p.strip_left, 320);
+
+    /* caption lines: the room down to the bar, 1..3 */
+    CHECK_EQ(cp0_ui_roller_caption_lines(&p, 0), 1);
+    CHECK_EQ(cp0_ui_roller_caption_lines(NULL, 20), 1);
+    CHECK_EQ(cp0_ui_roller_caption_lines(&p, 1000), 1);
+    cp0_ui_roller_page_t tight = p;
+    tight.edge_pad = tight.caption_y - tight.body_y + tight.gap + 2 * 20; /* two lines of 20 px down to the bar */
+    CHECK_EQ(cp0_ui_roller_caption_lines(&tight, 20), 2);
 
     CHECK_EQ(cp0_ui_roller_page(NULL, 0, &p), -1);
     CHECK_EQ(cp0_ui_metrics_compute(640, 40, 0, 1130, CP0_UI_DENSITY_PANEL_MM, 0, &m), 0);

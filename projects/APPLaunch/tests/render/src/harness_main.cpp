@@ -23,6 +23,8 @@
 #include "cp0/cp0_fb_output.h"
 #include "cp0/cp0_lvgl.h"
 #include "cp0_display.h"
+#include "cp0_sudo_prompt_ui.hpp"
+#include "cp0_sudo_prompt_key_policy.hpp"
 #include "cp0_ui_metrics.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
@@ -40,6 +42,7 @@
 #include <ctime>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -563,6 +566,51 @@ struct Run {
     cp0_fb_out_t view{}; /* the same logical<->buffer mapping as the display manager */
 };
 
+/* sudoprompt: the responsive sudo prompt (cp0_sudo_prompt_ui) driven without the sudo coordinator, which the harness
+ * does not link. open / busy / wrong / close stand for what cp0_sudo_async does: SHOW_PROMPT (an input group around the
+ * field, as create_prompt makes it), START_WORKER, SHOW_AUTH_ERROR, DESTROY_PROMPT. OK / Enter ends in busy by itself;
+ * Cancel / Esc closes it. */
+struct SudoPromptDemo {
+    std::unique_ptr<cp0_sudo::PromptUi> ui;
+    lv_group_t *group = nullptr;
+    lv_group_t *saved = nullptr;
+};
+SudoPromptDemo g_sudo_demo;
+
+void sudo_prompt_close()
+{
+    SudoPromptDemo &d = g_sudo_demo;
+    if (!d.ui && !d.group) return;
+    lv_group_set_default(d.saved);
+    if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, d.saved);
+    d.ui.reset();
+    if (d.group) lv_group_delete(d.group);
+    d.group = nullptr;
+}
+
+bool sudo_prompt_open()
+{
+    sudo_prompt_close();
+    SudoPromptDemo &d = g_sudo_demo;
+    d.ui = std::make_unique<cp0_sudo::PromptUi>();
+    cp0_sudo::PromptUiEvents events;
+    events.submit = [](const std::string &) {
+        if (g_sudo_demo.ui) g_sudo_demo.ui->show_busy("Authenticating...");
+    };
+    events.cancel = [] { sudo_prompt_close(); };
+    if (!d.ui->create(lv_display_get_layer_top(cp0_display_native()), std::move(events))) {
+        d.ui.reset();
+        return false;
+    }
+    d.saved = lv_group_get_default();
+    d.group = lv_group_create();
+    lv_group_add_obj(d.group, d.ui->focus_object());
+    lv_group_set_default(d.group);
+    if (lv_indev_t *indev = lv_indev_get_next(nullptr)) lv_indev_set_group(indev, d.group);
+    d.ui->begin_edit();
+    return true;
+}
+
 /* Advance the fake clock in 5 ms steps, running LVGL timers (refresh, indev reads, animations).
  * Worker threads some pages start get a little real time between steps to report back. */
 void settle(uint32_t ms)
@@ -661,7 +709,7 @@ uint32_t key_code(const std::string &name)
         {"BACKSPACE", KEY_BACKSPACE}, {"0", KEY_0}, {"1", KEY_1}, {"2", KEY_2},  {"3", KEY_3},
         {"4", KEY_4},         {"5", KEY_5},         {"6", KEY_6},                 {"7", KEY_7},
         {"8", KEY_8},         {"9", KEY_9},         {"MINUS", KEY_MINUS},         {"EQUAL", KEY_EQUAL},
-        {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH},
+        {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH}, {"DELETE", KEY_DELETE},
     };
     const auto found = keys.find(name);
     return found == keys.end() ? 0 : found->second;
@@ -874,6 +922,19 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             settle(40);
         }
         settle(200);
+    } else if (cmd == "shortcut") {
+        /* shortcut LETTER: a letter key with its key code and its text, as a physical keyboard sends it outside a text
+         * field (page shortcuts read by key code: the Apps page's U, S, A, D; "type" sends letters without a code) */
+        if (w.size() != 2 || w[1].size() != 1 || w[1][0] < 'a' || w[1][0] > 'z')
+            return fail(scene, line, "usage: shortcut a-z");
+        static const uint32_t letters[26] = {KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I,
+                                             KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R,
+                                             KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z};
+        const uint32_t code = letters[w[1][0] - 'a'];
+        harness_keyboard_inject_text(code, KBD_KEY_PRESSED, w[1].c_str());
+        settle(40);
+        harness_keyboard_inject_text(code, KBD_KEY_RELEASED, w[1].c_str());
+        settle(300);
     } else if (cmd == "ribbon") {
         /* external_poll() in native_ui.cpp when the runner raises the hold-Esc hint over a stock app */
         cp0_display_set_overlay_rect(20, 4, 280, 22);
@@ -940,6 +1001,20 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         }
         touch_at(run, 0, x2, y2);
         settle(600);
+    } else if (cmd == "sudoprompt") {
+        if (w.size() != 2) return fail(scene, line, "usage: sudoprompt open|busy|wrong|close");
+        if (w[1] == "open") {
+            if (!sudo_prompt_open()) return fail(scene, line, "the sudo prompt could not be built");
+        } else if (w[1] == "busy" && g_sudo_demo.ui) {
+            g_sudo_demo.ui->show_busy("Authenticating...");
+        } else if (w[1] == "wrong" && g_sudo_demo.ui) {
+            g_sudo_demo.ui->show_error(cp0_sudo::auth_error_text(1));
+        } else if (w[1] == "close") {
+            sudo_prompt_close();
+        } else {
+            return fail(scene, line, "usage: sudoprompt open|busy|wrong|close (open first)");
+        }
+        settle(400);
     } else if (cmd == "toast") {
         std::string text;
         for (std::size_t i = 1; i < w.size(); ++i) text += (i > 1 ? " " : "") + w[i];

@@ -67,6 +67,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_info_widget.cpp \
     $(CP0)/src/cp0_ui_dialog.c \
     $(CP0)/src/cp0_ui_dialog_widget.cpp \
+    $(CP0)/src/cp0_sudo_prompt_ui.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \
@@ -89,6 +90,13 @@ CP0_SRCS := \
 DPI_SRC := $(CP0)/src/cp0/cp0_lvgl_dpi_scaled.c
 DPI_OBJ := $(OBJ)/dpi_scaled_redirected.o
 
+# Settings > Apps' workers (task 014 P3d): compiled unchanged, then their references to the Store backend program
+# (apps_backend::run, run_program, available) are renamed to the in-process fake (src/harness_apps.cpp, namespace
+# harness_apps: as long as apps_backend, so the mangled names keep their shape) with objcopy. Nothing else is affected.
+APPS_JOBS_SRC := $(UI)/settings/settings_apps_jobs.cpp
+APPS_JOBS_OBJ := $(OBJ)/settings_apps_jobs_redirected.o
+APPS_BACKEND_SYMS := _ZN12apps_backend(3run|11run_program|9available)E
+
 # Launcher sources (real code).
 APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
@@ -96,7 +104,7 @@ APP_SRCS := $(addprefix $(UI)/,\
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
     page_app/ui_app_calculator.cpp) \
-    $(wildcard $(UI)/settings/*.cpp)
+    $(filter-out $(APPS_JOBS_SRC),$(wildcard $(UI)/settings/*.cpp))
 
 HARNESS_SRCS := $(wildcard $(HARNESS)/src/*.c $(HARNESS)/src/*.cpp)
 
@@ -106,12 +114,13 @@ LVGL_OBJS    := $(call obj_of,$(LVGL_SRCS))
 CP0_OBJS     := $(call obj_of,$(CP0_SRCS))
 APP_OBJS     := $(call obj_of,$(APP_SRCS))
 HARNESS_OBJS := $(call obj_of,$(HARNESS_SRCS))
-ALL_OBJS     := $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(call obj_of,$(DPI_SRC))
+ALL_OBJS     := $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(call obj_of,$(DPI_SRC)) \
+                $(call obj_of,$(APPS_JOBS_SRC))
 
 .PHONY: all clean
 all: $(BIN)
 
-$(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(DPI_OBJ)
+$(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(DPI_OBJ) $(APPS_JOBS_OBJ)
 	$(CXX) -o $@ $^ -Wl,--gc-sections $(FT_LIBS) $(PNG_LIBS) -lpthread -lm
 
 $(DPI_OBJ): $(call obj_of,$(DPI_SRC))
@@ -119,6 +128,12 @@ $(DPI_OBJ): $(call obj_of,$(DPI_SRC))
 	        --redefine-sym mmap=harness_fb_mmap $< $@
 	@if nm -u $@ | grep -Eqw 'open|open64|ioctl|mmap|mmap64'; then \
 	    echo "display manager still calls the real open/ioctl/mmap:"; nm -u $@; rm -f $@; exit 1; fi
+
+$(APPS_JOBS_OBJ): $(call obj_of,$(APPS_JOBS_SRC))
+	objcopy $$(nm -u $< | awk '$$2 ~ /^$(APPS_BACKEND_SYMS)/ { t = $$2; sub(/12apps_backend/, "12harness_apps", t); \
+	        printf "--redefine-sym %s=%s ", $$2, t }') $< $@
+	@if nm -u $@ | grep -Eq '$(APPS_BACKEND_SYMS)' || ! nm -u $@ | grep -q '_ZN12harness_apps3runE'; then \
+	    echo "Settings > Apps workers still call the real Store backend:"; nm -u $@; rm -f $@; exit 1; fi
 
 # LVGL (and the launcher's LVGL FreeType override): LVGL's own include set.
 $(OBJ)/SDK/%.c.o: $(ROOT)/SDK/%.c

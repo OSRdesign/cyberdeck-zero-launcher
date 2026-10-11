@@ -219,7 +219,8 @@ void SettingsNativeHost::build_rows(int selected)
         case SettingsNodeKind::Native: row->type = RowType::Native; break;
         case SettingsNodeKind::Plain: row->type = RowType::Plain; break;
         }
-        if (row->type == RowType::Custom && !dev) continue; /* D3: a release build hides unmigrated pages */
+        /* D3: a release build hides unmigrated pages; native ones (Apps since P3d) show in both */
+        if (row->type == RowType::Custom && !dev) continue;
         rows_.push_back(std::move(row));
     }
     status_tasks_ = std::make_unique<StatusTasks>();

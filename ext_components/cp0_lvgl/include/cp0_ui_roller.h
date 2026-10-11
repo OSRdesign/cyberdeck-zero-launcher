@@ -34,6 +34,7 @@ extern "C" {
 #define CP0_UI_ROLLER_FADE_PCT 20      /* ... and 20 % more transparent ... */
 #define CP0_UI_ROLLER_FADE_MIN_PCT 35  /* ... never under 35 % */
 #define CP0_UI_ROLLER_CHEVRON_PCT 55   /* chevrons: 55 % of the row height */
+#define CP0_UI_ROLLER_CAPTION_MAX_LINES 3 /* a wrapping status line (task 014 P3d): at most 3 lines */
 #define CP0_UI_ROLLER_BAR_RGB 0x2B2B2B
 #define CP0_UI_ROLLER_CHEVRON_RGB 0xFF6A3D
 
@@ -73,6 +74,10 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
 
 /* Roller width: screen width minus a margin on each side, capped by the class (CP0_UI_ROLLER_CAP_W[_LARGE]). */
 int cp0_ui_roller_width(cp0_ui_class_t cls, int screen_w, int margin);
+
+/* Lines a wrapping status line may take (task 014 P3d): as many lines of line_h as fit between caption_y and the
+ * highlight bar, a gap (SPACE_M) above it, 1..CP0_UI_ROLLER_CAPTION_MAX_LINES. 1 when p is NULL or line_h <= 0. */
+int cp0_ui_roller_caption_lines(const cp0_ui_roller_page_t *p, int line_h);
 
 /* A text size the font set has: even, CP0_UI_FONT_MIN_PX..CP0_UI_FONT_MAX_PX, an odd px goes to the larger size. */
 int cp0_ui_roller_font_px(int px);

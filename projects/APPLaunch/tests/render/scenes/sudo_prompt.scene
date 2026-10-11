@@ -1,0 +1,27 @@
+# The responsive sudo prompt (task 014 P3d), over the native Settings page: the shared Dialog "Sudo Password" with a
+# masked Password field, the status line and Cancel / OK. sudoprompt drives cp0_sudo_prompt_ui directly (the harness
+# links no sudo coordinator): open = SHOW_PROMPT, busy = START_WORKER, wrong = SHOW_AUTH_ERROR, close = DESTROY_PROMPT.
+# First with the on-screen keyboard forced (typed password masked, Authenticating..., wrong password, Cancel by a tap
+# on the dialog's button), then with a physical keyboard (no keyboard, buttons visible; Enter / Esc). Review only.
+title sudo prompt
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+sudoprompt open
+shot sudo_osk
+type secret
+shot sudo_osk_typed
+key ENTER
+shot sudo_osk_busy
+sudoprompt wrong
+shot sudo_osk_wrong
+key ESC
+wait 300
+shot sudo_osk_closed

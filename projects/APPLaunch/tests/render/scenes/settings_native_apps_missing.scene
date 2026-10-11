@@ -1,0 +1,29 @@
+# Native Settings > Apps (task 014 P3d) without the Store backend (src/harness_apps.cpp, HARNESS_APPS missing): the
+# status line says "Store backend not installed", the catalogue "The Store is needed (backend missing)"; the Sources
+# level opens, nothing in it runs (Enter on "Sync my sources" does nothing).
+# Review only: no golden.
+title settings native apps backend missing
+review
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env HARNESS_APPS missing
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+shot apps_missing
+header apps_missing "Settings > Apps" Apps
+key RIGHT
+wait 300
+key DOWN
+key ENTER
+wait 500
+shot apps_missing_sources

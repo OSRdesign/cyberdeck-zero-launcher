@@ -21,6 +21,7 @@ constexpr uint32_t kKeyBg = 0x2A2A2A;        /* the stock-app toolbar keys ... *
 constexpr uint32_t kKeyPressed = 0x2D9CDB;   /* ... and their pressed colour */
 constexpr uint32_t kCaption = 0x66CC88;      /* today's value pages: status line ... */
 constexpr uint32_t kCaptionError = 0xFF6666; /* ... and its error colour */
+constexpr uint32_t kCaptionWarn = 0xF0B400;  /* the legacy Apps page's amber (some sources failed) */
 
 int text_width(const char *text, const lv_font_t *font)
 {
@@ -203,16 +204,39 @@ void Page::apply_title(const std::vector<std::string> &path)
 
 void Page::set_caption(const std::string &text, bool error)
 {
+    set_caption(text, error ? CaptionTone::Error : CaptionTone::Normal);
+}
+
+void Page::set_caption(const std::string &text, CaptionTone tone)
+{
     if (!caption_) return;
     lv_label_set_text(caption_, text.c_str());
-    // one line: its own width, or the room it has with dots
+    // one line: its own width, or the room it has with dots (wrapping: the lines that fit above the centre row)
     const lv_font_t *font = lv_obj_get_style_text_font(caption_, LV_PART_MAIN);
     const int padded = text_width(text.c_str(), font) + 2 * lv_obj_get_style_pad_left(caption_, LV_PART_MAIN);
-    lv_obj_set_width(caption_, padded <= layout_.caption_w ? LV_SIZE_CONTENT : layout_.caption_w);
-    if (font) lv_obj_set_height(caption_, lv_font_get_line_height(font)); /* dots need a fixed height */
-    lv_obj_set_style_text_color(caption_, lv_color_hex(error ? kCaptionError : kCaption), 0);
+    const bool fits = padded <= layout_.caption_w;
+    lv_obj_set_width(caption_, fits ? LV_SIZE_CONTENT : layout_.caption_w);
+    if (font) {
+        const int line_h = lv_font_get_line_height(font);
+        int lines = 1;
+        if (caption_wrap_ && !fits) {
+            lv_point_t size{};
+            const int inner_w = layout_.caption_w - 2 * lv_obj_get_style_pad_left(caption_, LV_PART_MAIN);
+            lv_text_get_size(&size, text.c_str(), font, 0, 0, std::max(1, inner_w), LV_TEXT_FLAG_NONE);
+            lines = std::min(std::max(1, static_cast<int>(size.y) / std::max(1, line_h)),
+                             cp0_ui_roller_caption_lines(&layout_, line_h));
+        }
+        lv_obj_set_height(caption_, lines * line_h); /* dots (after the last line) need a fixed height */
+    }
+    const uint32_t colour = tone == CaptionTone::Error ? kCaptionError : tone == CaptionTone::Warn ? kCaptionWarn : kCaption;
+    lv_obj_set_style_text_color(caption_, lv_color_hex(colour), 0);
     if (!text.empty()) lv_obj_move_foreground(caption_); /* above the roller, created after the scaffold */
     show_caption();
+}
+
+void Page::set_caption_wrap(bool wrap)
+{
+    caption_wrap_ = wrap; /* the label's dots mode wraps; the height set by set_caption() gives it its lines */
 }
 
 /* The status line shows when it says something, except while a dialog's title holds the header (the page under the

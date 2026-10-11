@@ -1,0 +1,68 @@
+# Native Settings > Apps by touch (task 014 P3d), on the fake catalogue (src/harness_apps.cpp): a tap on the highlighted
+# root row opens Apps, a tap on the next row moves the highlight, a drag scrolls to the end and snaps on the Sources
+# row, a tap on it opens the Sources level, a tap on the highlighted source opens its action list, a tap on Remove
+# moves the highlight there and a second tap asks to remove it, the dialog's Cancel button is tapped, the header's Esc
+# goes back to the source list, then to Apps on the Sources row.
+# Review only, no golden.
+title settings native apps touch
+review
+sizes 480x320 800x480
+env APPLAUNCH_SETTINGS_UI native
+env APPLAUNCH_DEV 0
+env HARNESS_APPS catalogue
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+# highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 253,5 57x30 / 484,8 83x40
+@480x320 tap 240 180
+@800x480 tap 400 268
+wait 3000
+shot apps_touch_list
+header apps_touch_list "Settings > Apps" Apps
+@480x320 tap 240 224
+@800x480 tap 400 332
+shot apps_touch_moved
+@480x320 drag 240 300 240 60 30
+@800x480 drag 400 460 400 100 30
+wait 500
+shot apps_touch_dragged
+@480x320 tap 240 180
+@800x480 tap 400 268
+wait 500
+shot apps_touch_sources
+header apps_touch_sources "Settings > Apps > Sources" "Apps > Sources" Sources
+# deck-lab/apps: its list (Disable, Sync, Remove, Cancel); Remove is two rows down
+@480x320 tap 240 180
+@800x480 tap 400 268
+wait 500
+shot apps_touch_source_actions
+@480x320 tap 240 268
+@800x480 tap 400 396
+wait 500
+@480x320 tap 240 180
+@800x480 tap 400 268
+wait 300
+shot apps_touch_confirm
+# Cancel: 480x320 x 31-237 y 181-236, 800x480 x 116-396 y 266-347
+@480x320 tap 134 208
+@800x480 tap 256 306
+wait 300
+shot apps_touch_cancelled
+@480x320 tap 281 20
+@800x480 tap 525 28
+wait 500
+shot apps_touch_back_sources
+@480x320 tap 281 20
+@800x480 tap 525 28
+wait 500
+shot apps_touch_esc
+header apps_touch_esc "Settings > Apps" Apps

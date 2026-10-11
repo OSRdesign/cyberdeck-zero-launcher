@@ -642,6 +642,8 @@ SettingsNativePage settings_native_page(const NodeIter &node)
     if (factory_is(factory, bluetooth_connected_page_factory)) return SettingsNativePage::BluetoothPaired;
     if (factory_is(factory, bluetooth_scan_page_factory)) return SettingsNativePage::BluetoothScan;
     if (factory_is(factory, bluetooth_alias_page_factory)) return SettingsNativePage::BluetoothAlias;
+    // task 014 P3d: Apps (its Apps and Sources tabs, the sudo password through the shared prompt)
+    if (factory_is(factory, settings_apps_page_factory)) return SettingsNativePage::Apps;
     // task 014 P3b: the Wi-Fi section is one native page (its Enable toggle, Networks and Join Hidden Network)
     if (factory_is(factory, roller_page_factory))
         for (auto child = node.begin(); child != node.end(); ++child)

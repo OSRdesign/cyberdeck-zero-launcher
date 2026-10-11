@@ -50,6 +50,14 @@ cp0_keyboard_text_hint_t hint_of(TextType type)
     }
 }
 
+/* zero the bytes (the compiler may not drop the stores) and empty the string */
+void secure_zero(std::string &text)
+{
+    volatile char *data = text.empty() ? nullptr : &text[0];
+    for (std::size_t i = 0; data && i < text.size(); ++i) data[i] = 0;
+    text.clear();
+}
+
 bool continuation(char c)
 {
     return (static_cast<unsigned char>(c) & 0xC0) == 0x80;
@@ -157,6 +165,7 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
 
 TextField::~TextField()
 {
+    if (spec_.type == TextType::Password) secure_zero(text_); /* the display copy goes with the row */
     if (!row_) return;
     lv_obj_remove_event_cb_with_user_data(row_, row_delete_cb, this);
     stop(true);
@@ -175,6 +184,13 @@ void TextField::set_text(const std::string &text)
 {
     text_ = clip(text, spec_.max_bytes);
     cursor_ = text_.size();
+    refresh();
+}
+
+void TextField::wipe()
+{
+    secure_zero(text_);
+    cursor_ = 0;
     refresh();
 }
 
@@ -212,8 +228,13 @@ void TextField::begin_edit()
     cp0_keyboard_set_lvgl_keypad_intercept(1);
     cp0_keyboard_set_text_hint(hint_of(spec_.type));
     key_screen_ = lv_obj_get_screen(box_);
-    if (key_screen_ && LV_EVENT_KEYBOARD != 0)
+    /* a field on a display layer (the sudo prompt on the top layer): the keys go to the active screen, not the layer */
+    if (key_screen_ == lv_layer_top() || key_screen_ == lv_layer_bottom() || key_screen_ == lv_layer_sys())
+        key_screen_ = lv_screen_active();
+    if (key_screen_ && LV_EVENT_KEYBOARD != 0) {
         lv_obj_add_event_cb(key_screen_, keyboard_event_cb, static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), this);
+        lv_obj_add_event_cb(key_screen_, screen_delete_cb, LV_EVENT_DELETE, this); /* the screen may go first */
+    }
     if (lv_group_t *group = lv_obj_get_group(box_))
         if (lv_group_get_focused(group) != box_) lv_group_focus_obj(box_);
     style_editing();
@@ -230,7 +251,10 @@ void TextField::stop(bool silent)
 {
     if (!editing_) return;
     editing_ = false;
-    if (key_screen_) lv_obj_remove_event_cb_with_user_data(key_screen_, keyboard_event_cb, this);
+    if (key_screen_) {
+        lv_obj_remove_event_cb_with_user_data(key_screen_, keyboard_event_cb, this);
+        lv_obj_remove_event_cb_with_user_data(key_screen_, screen_delete_cb, this);
+    }
     key_screen_ = nullptr;
     cp0_keyboard_set_input_context(saved_context_);
     cp0_keyboard_set_lvgl_keypad_intercept(saved_intercept_);
@@ -342,6 +366,12 @@ void TextField::on_key(const struct key_item &item)
     std::memcpy(text, item.utf8, sizeof(item.utf8));
     text[sizeof(item.utf8)] = '\0';
     insert(text);
+}
+
+void TextField::screen_delete_cb(lv_event_t *event)
+{
+    auto *self = static_cast<TextField *>(lv_event_get_user_data(event));
+    if (self) self->key_screen_ = nullptr; /* its callbacks go with it */
 }
 
 void TextField::keyboard_event_cb(lv_event_t *event)

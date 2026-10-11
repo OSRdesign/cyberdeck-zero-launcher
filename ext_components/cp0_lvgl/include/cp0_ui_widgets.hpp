@@ -89,6 +89,7 @@ struct RowSpec {
     int slider_step = 1; /* one Left / Right press */
     int bars = 0;        /* Network: signal bars lit, 0..4 */
     bool secured = false; /* Network: the lock */
+    int value_rgb = -1;   /* Nav: the value's colour (0xRRGGBB, task 014 P3d: a state such as "failed"); -1 green */
 };
 
 struct RollerEvents {
@@ -163,6 +164,9 @@ private:
     bool rebuilding_ = false; /* set_rows() is replacing the rows: scroll events are ignored */
 };
 
+/* The status line's colour: green, amber (partly failed, task 014 P3d), red. */
+enum class CaptionTone { Normal, Warn, Error };
+
 class Page {
 public:
     /* make_title: creates the title label at the home grid's place (native_ui::add_title in the launcher); NULL
@@ -182,6 +186,10 @@ public:
     void set_title_override(const void *owner, const char *text);
     /* One status line under the title (empty hides it); error draws it red. */
     void set_caption(const std::string &text, bool error);
+    void set_caption(const std::string &text, CaptionTone tone);
+    /* A status line too long for its room wraps onto the lines that fit above the centre row (at most
+     * CP0_UI_ROLLER_CAPTION_MAX_LINES, cp0_ui_roller_caption_lines) instead of ending with dots on one line. */
+    void set_caption_wrap(bool wrap);
 
     lv_obj_t *root() const { return root_; }
     lv_obj_t *header() const { return header_; }
@@ -204,6 +212,7 @@ private:
     std::function<void()> on_back_;
     std::vector<std::string> title_path_;
     std::vector<std::pair<const void *, std::string>> title_overrides_; /* dialogs' titles, latest last */
+    bool caption_wrap_ = false;
     lv_obj_t *root_ = nullptr;
     lv_obj_t *header_ = nullptr;
     lv_obj_t *title_ = nullptr;
@@ -299,6 +308,9 @@ public:
     void end_edit();
     bool revealed() const { return revealed_; }
     void set_revealed(bool revealed); /* Password: show the text (the toggle inside the field) */
+    /* Overwrite the text in memory and clear the field (a Password's text is zeroed again when the field is deleted).
+     * Editing, if any, goes on. */
+    void wipe();
 
     lv_obj_t *row() const { return row_; }
     /* The field: add it to the page's input group (focus starts editing). */
@@ -309,6 +321,7 @@ private:
     static void eye_event_cb(lv_event_t *event);
     static void keyboard_event_cb(lv_event_t *event);
     static void row_delete_cb(lv_event_t *event);
+    static void screen_delete_cb(lv_event_t *event);
 
     void on_key(const struct key_item &item);
     void insert(const char *utf8);
@@ -373,6 +386,8 @@ public:
     void set_title(const std::string &title);
     /* The status line (message_line): empty clears it; error draws it red. */
     void set_message(const std::string &text, bool error);
+    /* A button the finger or Enter must not press now (the sudo prompt while it authenticates): dimmed, no clicks. */
+    void set_button_enabled(std::size_t index, bool enabled);
     void relayout();
     /* Keeps the dialog above whatever the page draws later (the page's status line). */
     void raise();
