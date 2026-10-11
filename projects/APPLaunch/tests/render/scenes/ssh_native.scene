@@ -1,0 +1,77 @@
+# Native SSH connection form (task 014 P4) with the on-screen keyboard forced (APPLAUNCH_OSK=force). The harness'
+# config service answers the profile's defaults (192.168.1.1, 22, pi). Labels sit beside their fields. Shots: Host
+# edits at once (keyboard up: no Connect / Help row, no status line) with a new host typed, Port on the number pad,
+# User typed, the whole form after Esc (keyboard down: it fits under the header), the validation error of an empty
+# host (Enter on User connects: the keyboard goes, "Host is required" in red on the status line), the keyboard back
+# up on Host with the error under the field, the help page (F1) and back. The terminal is not shot.
+# Review only: no golden; headers checked against the home grid's (run.sh header).
+title ssh native form
+review
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home ZERO
+launch SSH
+wait 300
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+type 10.0.0.5
+shot ssh_kb_host
+header ssh_kb_host SSH
+# Down: Port on the number pad (digits only), "22" replaced
+key DOWN
+key BACKSPACE
+key BACKSPACE
+type 2222
+shot ssh_kb_port
+# Down: User, "pi" replaced
+key DOWN
+key BACKSPACE
+key BACKSPACE
+type admin
+shot ssh_kb_user
+# Esc stops editing: the keyboard goes, the whole form shows (fields, Connect / Help, status line)
+key ESC
+wait 300
+shot ssh_form
+header ssh_form SSH
+# Host emptied, Enter through Port and User connects: validation refuses, the keyboard goes
+tapfield Host
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key BACKSPACE
+key ENTER
+key ENTER
+key ENTER
+wait 300
+shot ssh_error
+# a tap on Host: the keyboard is back, the error stays under the field
+tapfield Host
+wait 300
+shot ssh_error_kb
+# Esc, then F1: the help page (Esc / Left back to the form)
+key ESC
+key F1
+wait 300
+shot ssh_help
+header ssh_help "SSH > Help" Help
+key ESC
+wait 300
+shot ssh_help_back

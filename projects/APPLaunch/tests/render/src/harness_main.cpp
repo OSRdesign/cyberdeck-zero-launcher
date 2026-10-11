@@ -713,6 +713,7 @@ uint32_t key_code(const std::string &name)
         {"4", KEY_4},         {"5", KEY_5},         {"6", KEY_6},                 {"7", KEY_7},
         {"8", KEY_8},         {"9", KEY_9},         {"MINUS", KEY_MINUS},         {"EQUAL", KEY_EQUAL},
         {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH}, {"DELETE", KEY_DELETE},
+        {"F1", KEY_F1},
     };
     const auto found = keys.find(name);
     return found == keys.end() ? 0 : found->second;
@@ -881,7 +882,10 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
                 spec.icon = "A:" + fx.fixture_root + "/" + icon.substr(8);
             else
                 spec.icon = harness::resolve_resource(icon); /* launcher_platform::path(desc.icon) */
-            spec.kind = spec.name == "Settings" ? "settings" : spec.name == "Calculator" ? "calculator" : "tile";
+            spec.kind = spec.name == "Settings"     ? "settings"
+                        : spec.name == "Calculator" ? "calculator"
+                        : spec.name == "SSH"        ? "ssh"
+                                                    : "tile";
             apps.push_back(spec);
         }
         harness::set_apps(apps);

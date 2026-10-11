@@ -187,3 +187,26 @@ item 82 any Pi board.
     Settings > Apps still works; switch it on: the tile is back. By touch and by keyboard.
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
+
+## J. Overlays, Calculator, clock and SSH form (task 014 P4)
+
+Overlays (deck 640x480, Pi 3A+ 480x320, HackBerry 720x720):
+83. Connect to Wi-Fi in Settings: the toast is readable and is not full width; a wrong password shows the toast over the header without clipping.
+84. Hold Esc in Settings, then in the Calculator: the ribbon shows and returns home at 3 s.
+85. Hold Esc over a stock app: the ribbon sits at the top of the app window and the app repaints cleanly afterwards.
+86. Brightness and volume keys at home, in Settings, over a stock app: the OSD is centred and readable (bigger than before on the deck and the Pi 3A+: expected), and disappears after about 1 s; mute shows too.
+87. Launch a stock app and a native page: "Loading..." is readable and centred, then vanishes.
+Calculator and clock:
+88. Deck: the Calculator looks exactly as before; typing, `=`, an error from 1/0, hold-Esc 3 s to home work. After DarkTime the clock is the same size and place as before; touch or a key wakes it.
+89. Pi 3A+: the Calculator and the clock are unchanged (digits clear the key rows).
+90. HackBerry: the "Calculator" title sits where it does in Settings with the Esc button and status strip; the header Esc leaves; a long expression and an 8+ digit result never touch the strip or the first key row; keys are comfortable by touch; the clock is about 12 % larger and centred and wakes on touch.
+SSH form:
+91. Deck + BT keyboard: the form fits without scrolling and no on-screen keyboard shows; type a host, Down/Tab to Port and User, Enter on User connects; leaving the terminal returns to the native form.
+92. Clear Host and Connect: red "Host is required", no terminal. Port 0 shows "Port must be 1-65535"; an empty Port or User connects with ssh defaults.
+93. F1 opens help, Esc returns; the header Esc goes home.
+94. Pi 3A+ (touch): the keyboard appears on Host and the Connect/Help row hides; tap Port: only the number pad, digits only; Esc brings the buttons back; after a "Host is required" error, tapping Host shows the error in red under the field above the keyboard.
+95. Pi 3A+: Connect, use the session, exit; the saved values are back after a relaunch.
+96. HackBerry: layout, keyboard as configured, Connect and Help reachable.
+
+Report anything odd; the Controller can capture the screen over ssh during the test.
+

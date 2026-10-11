@@ -95,6 +95,14 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/keyboard_text_input.cpp" \
     -o "$build_dir/test_ssh_connection_model"
 "$build_dir/test_ssh_connection_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_ssh_native_form_model.cpp" \
+    "$test_root/../main/ui/model/ssh_native_form_model.cpp" \
+    "$test_root/../main/ui/model/ssh_connection_model.cpp" \
+    "$test_root/../main/ui/keyboard_text_input.cpp" \
+    -o "$build_dir/test_ssh_native_form_model"
+"$build_dir/test_ssh_native_form_model"
 
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_ssh_view_build_contract.cpp" \

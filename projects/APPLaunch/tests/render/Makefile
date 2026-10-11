@@ -104,7 +104,12 @@ APP_SRCS := $(addprefix $(UI)/,\
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
-    page_app/ui_app_calculator.cpp) \
+    page_app/ui_app_calculator.cpp \
+    page_app/ui_app_ssh.cpp page_app/ui_app_ssh_view.cpp page_app/ui_app_ssh_native.cpp \
+    model/ssh_connection_model.cpp model/ssh_native_form_model.cpp \
+    page_app/ui_app_st.cpp page_app/ui_app_st_parser.cpp page_app/ui_app_st_renderer.cpp \
+    page_app/ui_app_st_session.cpp page_app/ui_app_st_viewport.cpp \
+    model/st_key_encoder.cpp model/terminal_unicode.cpp model/async_operation_lifecycle.cpp) \
     $(filter-out $(APPS_JOBS_SRC),$(wildcard $(UI)/settings/*.cpp))
 
 HARNESS_SRCS := $(wildcard $(HARNESS)/src/*.c $(HARNESS)/src/*.cpp)

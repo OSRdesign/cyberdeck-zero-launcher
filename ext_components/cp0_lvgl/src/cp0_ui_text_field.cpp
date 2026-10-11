@@ -89,25 +89,40 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
     cursor_ = text_.size();
     const int field_h = layout_.row_h;
     const int inset = std::max(layout_.gap, field_h / 5);
+    // label beside the field (spec_.label_w > 0): one row of the row token's height, the field after the label column
+    const bool beside = spec_.label_w > 0 && spec_.label_w + layout_.gap < layout_.roller_w;
+    const int field_w = beside ? layout_.roller_w - spec_.label_w - layout_.gap : layout_.roller_w;
 
     row_ = lv_obj_create(parent);
     lv_obj_remove_style_all(row_);
     lv_obj_set_size(row_, layout_.roller_w, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(row_, LV_FLEX_FLOW_COLUMN);
-    lv_obj_set_style_pad_row(row_, std::max(2, layout_.gap / 3), 0);
+    if (beside) {
+        lv_obj_set_flex_flow(row_, LV_FLEX_FLOW_ROW);
+        lv_obj_set_flex_align(row_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+        lv_obj_set_style_pad_column(row_, layout_.gap, 0);
+    } else {
+        lv_obj_set_flex_flow(row_, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_style_pad_row(row_, std::max(2, layout_.gap / 3), 0);
+    }
     lv_obj_remove_flag(row_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(row_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(row_, row_delete_cb, LV_EVENT_DELETE, this);
 
     label_ = lv_label_create(row_);
     lv_label_set_text(label_, spec_.label.c_str());
-    lv_obj_set_style_text_font(label_, user_font(layout_.caption_px), 0);
+    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_get();
+    const int label_px = beside && metrics ? metrics->text_px[CP0_TEXT_BODY] : layout_.caption_px;
+    lv_obj_set_style_text_font(label_, user_font(label_px), 0);
     lv_obj_set_style_text_color(label_, lv_color_hex(kLabel), 0);
+    if (beside) {
+        lv_obj_set_width(label_, spec_.label_w);
+        lv_label_set_long_mode(label_, LV_LABEL_LONG_MODE_DOTS);
+    }
 
     box_ = lv_obj_create(row_);
     lv_obj_remove_style_all(box_);
     if (lv_obj_get_group(box_)) lv_group_remove_obj(box_); /* the page adds it to its own group */
-    lv_obj_set_size(box_, layout_.roller_w, field_h);
+    lv_obj_set_size(box_, field_w, field_h);
     lv_obj_set_style_radius(box_, cp0_ui_tok(CP0_TOK_RADIUS_S), 0);
     lv_obj_set_style_bg_color(box_, lv_color_hex(kFieldBg), 0);
     lv_obj_set_style_bg_opa(box_, LV_OPA_COVER, 0);
@@ -127,7 +142,7 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
     lv_obj_remove_flag(area_, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_remove_flag(area_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     lv_textarea_set_one_line(area_, true);
-    lv_obj_set_width(area_, layout_.roller_w - 2 * inset - (password ? eye_w - inset : 0));
+    lv_obj_set_width(area_, field_w - 2 * inset - (password ? eye_w - inset : 0));
     lv_obj_set_style_text_font(area_, user_font(layout_.value_px), 0);
     lv_obj_set_style_text_color(area_, lv_color_hex(kText), 0);
     lv_obj_set_style_text_color(area_, lv_color_hex(kPlaceholder), LV_PART_TEXTAREA_PLACEHOLDER);

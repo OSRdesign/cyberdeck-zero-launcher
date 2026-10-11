@@ -117,6 +117,9 @@ NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the 
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 `settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
 review-only too.
+`ssh_native` (task 014 P4, review-only, `APPLAUNCH_OSK=force`): the native SSH form (labels beside the fields) with the
+keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
+(keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.
 `overlays` (task 014 P4, review-only): the toast at home / over Settings / over the Calculator, the hold-Esc ribbon, the media OSD and the loading overlay at home and over a compat page, the compat ribbon over a stock app, at the five sizes.
 
 ## Goldens and fidelity
@@ -141,6 +144,6 @@ device screenshots, mostly in scaled FreeType text. `deck.py shot` stays the dev
 - Pages that need live services beyond the fixtures (Bluetooth scan/pairing, Apps sources, sudo prompt): add
   fixtures in `src/harness_services.cpp` as P3 scenes need them. Storage reads the host's mounts: on a PC it shows
   "SD card information unavailable.".
-- Stock apps (only a placeholder picture), the terminal pages, SSH, games, touch feel and speed. The harness proves layout, not behaviour on the board.
+- Stock apps (only a placeholder picture), the terminal pages (incl. the SSH session; the SSH form is covered), games, touch feel and speed. The harness proves layout, not behaviour on the board.
 - Changes to `builtin_app_registry.cpp`'s table must be copied to `src/harness_stubs.cpp`; changes to the
   device LVGL config to `config/lvgl_config.h`.

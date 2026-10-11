@@ -284,6 +284,8 @@ struct TextFieldSpec {
     std::string placeholder;
     std::size_t max_bytes = 128; /* UTF-8 bytes */
     bool multiline = false;      /* Tab types a tab character; Enter a new line (no submit) */
+    int label_w = 0; /* > 0 (task 014 P4, the SSH form): the label BESIDE the field on one row, in a column this wide, at
+                        the BODY text size, the field taking the rest of the row; 0: the label above the field */
 };
 
 struct TextFieldEvents {
