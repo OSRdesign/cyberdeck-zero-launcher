@@ -8,6 +8,7 @@
 #include "cp0_input_state.h"
 
 #include <dirent.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,22 +38,52 @@ static void test_path(void)
 
 static void test_format_parse(void)
 {
-    const cp0_input_state_t state = {2, 1760000000, 7};
-    char text[160];
+    const cp0_input_state_t state = {.keyboards = 2, .last_seen = 1760000000, .gen = 7};
+    char text[320];
     const int n = cp0_input_state_format(&state, text, sizeof(text));
     CHECK(n > 0);
-    CHECK(strcmp(text, "v=1\nkeyboards=2\nlast_seen=1760000000\ngen=7\n") == 0);
+    CHECK(strcmp(text, "v=1\nkeyboards=2\nlast_seen=1760000000\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\n"
+                       "gen=7\n") == 0);
     char tiny[8];
     CHECK(cp0_input_state_format(&state, tiny, sizeof(tiny)) == -1);
 
     cp0_input_state_t parsed;
     CHECK(cp0_input_state_parse(text, (size_t)n, &parsed) == 0);
     CHECK(parsed.keyboards == 2 && parsed.last_seen == 1760000000 && parsed.gen == 7);
+    CHECK(parsed.bt_keyboards == 0 && parsed.kb_gone == 0 && parsed.bt_gone == 0 && parsed.vkb == CP0_APP_VKB_AUTO);
 
-    /* unknown keys (a later vkb=auto line) are ignored, CRLF is tolerated, missing keys stay 0 */
+    /* the app contract additions (task 014 P5): Bluetooth count, gone times (monotonic s), the rule in force */
+    cp0_input_state_t full = {.keyboards = 1, .last_seen = 1760000000, .gen = 9};
+    full.bt_keyboards = 1;
+    full.kb_gone = 120;
+    full.bt_gone = 130;
+    full.vkb = CP0_APP_VKB_OFF;
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0);
+    CHECK(strcmp(text, "v=1\nkeyboards=1\nlast_seen=1760000000\nbt_keyboards=1\nkb_gone=120\nbt_gone=130\nvkb=off\n"
+                       "gen=9\n") == 0);
+    CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0);
+    CHECK(parsed.keyboards == 1 && parsed.bt_keyboards == 1 && parsed.kb_gone == 120 && parsed.bt_gone == 130 &&
+          parsed.vkb == CP0_APP_VKB_OFF && parsed.gen == 9);
+    full.vkb = CP0_APP_VKB_FORCE;
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\nvkb=force\n") != NULL);
+    /* the longest values still fit the writer's buffer */
+    cp0_input_state_t big = {.keyboards = 4294967295u, .last_seen = INT64_MIN, .gen = 4294967295u};
+    big.bt_keyboards = 4294967295u;
+    big.kb_gone = INT64_MAX;
+    big.bt_gone = INT64_MAX;
+    big.vkb = CP0_APP_VKB_FORCE;
+    CHECK(cp0_input_state_format(&big, text, sizeof(text)) > 0);
+
+    /* an older file (no new keys): vkb reads auto, the rest 0; unknown vkb values keep auto; CRLF is tolerated */
     const char *later = "v=1\r\nkeyboards=1\r\nvkb=auto\r\ngen=3\r\n";
     CHECK(cp0_input_state_parse(later, strlen(later), &parsed) == 0);
     CHECK(parsed.keyboards == 1 && parsed.last_seen == 0 && parsed.gen == 3);
+    const char *old = "v=1\nkeyboards=0\nlast_seen=5\ngen=2\n";
+    CHECK(cp0_input_state_parse(old, strlen(old), &parsed) == 0);
+    CHECK(parsed.vkb == CP0_APP_VKB_AUTO && parsed.bt_keyboards == 0 && parsed.kb_gone == 0 && parsed.gen == 2);
+    const char *odd = "v=1\nvkb=sometimes\nkb_gone=-5\ngen=1\n";
+    CHECK(cp0_input_state_parse(odd, strlen(odd), &parsed) == 0);
+    CHECK(parsed.vkb == CP0_APP_VKB_AUTO && parsed.kb_gone == 0);
     /* other versions and garbage are refused */
     const char *v2 = "v=2\nkeyboards=1\n";
     CHECK(cp0_input_state_parse(v2, strlen(v2), &parsed) == -1);
@@ -84,7 +115,7 @@ static void test_write(void)
     snprintf(dir, sizeof(dir), "%s/applaunch", root);
 
     const mode_t old_umask = umask(077);
-    cp0_input_state_t state = {1, 1760000100, 1};
+    cp0_input_state_t state = {.keyboards = 1, .last_seen = 1760000100, .gen = 1};
     CHECK(cp0_input_state_write(path, &state) == 0); /* creates <runtime>/applaunch */
     umask(old_umask);
     struct stat st;
@@ -106,7 +137,8 @@ static void test_write(void)
     const size_t len = fread(text, 1, sizeof(text) - 1, f);
     fclose(f);
     text[len] = '\0';
-    CHECK(strcmp(text, "v=1\nkeyboards=0\nlast_seen=1760000100\ngen=2\n") == 0);
+    CHECK(strcmp(text, "v=1\nkeyboards=0\nlast_seen=1760000100\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\n"
+                       "gen=2\n") == 0);
 
     /* unwritable place: error, no crash */
     CHECK(cp0_input_state_write("/proc/applaunch-test/input.state", &state) == -1);

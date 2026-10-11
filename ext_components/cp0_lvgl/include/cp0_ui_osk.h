@@ -36,6 +36,7 @@
  */
 #pragma once
 
+#include "cp0_app_contract.h"
 #include "cp0_ui_metrics.h"
 
 #include <stdint.h>
@@ -53,8 +54,11 @@ extern "C" {
 #define CP0_UI_OSK_ROWS 5               /* utility row + 4 */
 #define CP0_UI_OSK_MAX_KEYS 48
 #define CP0_UI_OSK_DOUBLE_TAP_MS 400u   /* second tap on an armed modifier within this: lock */
-#define CP0_UI_OSK_BT_ASLEEP_S 600      /* F1: a Bluetooth keyboard that went away counts as present for N = 10 min */
-#define CP0_UI_OSK_GRACE_S 2            /* F1: any keyboard that went away counts as present for a short grace */
+/* F1: a Bluetooth keyboard that went away counts as present for N = 10 min; any keyboard that went away counts as
+ * present for a short grace. The rule itself is the app contract's (cp0_app_osk_rule), so apps decide like the
+ * launcher. */
+#define CP0_UI_OSK_BT_ASLEEP_S CP0_APP_OSK_BT_ASLEEP_S
+#define CP0_UI_OSK_GRACE_S CP0_APP_OSK_GRACE_S
 
 /* Look (Controller design, approved mockups) */
 #define CP0_UI_OSK_BG_RGB 0x111111
@@ -220,7 +224,12 @@ typedef struct {
     int64_t bt_gone_s;   /* when the last Bluetooth keyboard went away (monotonic s; 0: never) */
 } cp0_ui_osk_policy_t;
 
-/* 1 when the keyboard may show for a focused text field (rules at the top of this file). */
+/* The on-screen keyboard rule in force (published as input.state vkb=): env OFF -> off, env FORCE -> force, the setting
+ * Off or a desktop session -> off, else auto. */
+cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting_off, int desktop_session);
+
+/* 1 when the keyboard may show for a focused text field (rules at the top of this file): never while locked, else
+ * cp0_app_osk_rule(cp0_ui_osk_effective_vkb(...), keyboards, now_s, any_gone_s, bt_gone_s). */
 int cp0_ui_osk_policy_allows(const cp0_ui_osk_policy_t *p);
 
 /* ------------------------------------------------------------------ dialogs */

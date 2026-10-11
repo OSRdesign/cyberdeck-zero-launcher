@@ -6,6 +6,7 @@
 
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
+#include "app_launch_env.hpp"
 #include "launch.h"
 #include "launcher_osk.hpp"
 #include "launcher_toast.h"
@@ -595,6 +596,9 @@ void finish_external()
     if (run->map != MAP_FAILED) ::munmap(run->map, run->size);
     if (run->fd >= 0) ::close(run->fd);
     cp0_display_set_external(0);
+    // An app built on an older cp0_lvgl may have described its 320x170 canvas in screen.state (report 023 F1):
+    // the launcher's description of the panel comes back, gen + 1.
+    (void)cp0_ui_state_republish();
     std::function<void()> on_exit = std::move(run->on_exit);
     delete run;
     if (on_exit) on_exit();
@@ -667,7 +671,10 @@ bool run_external(const std::string &command, bool keep_root, std::function<void
     }
     cp0_display_set_key_sink([](unsigned short code, int value) { native_vkbd::send(code, value); });
 
-    std::string wrapped = std::string("export APPLAUNCH_VFB=") + APPLAUNCH_VFB_DEFAULT_PATH +
+    // The app contract (cp0_app_contract.h): mode, window, canvas and state directory first, then the neutral
+    // display of the virtual framebuffer.
+    std::string wrapped = app_launch_env::export_for_current(app_launch_env::Mode::Compat) +
+                          "export APPLAUNCH_VFB=" + APPLAUNCH_VFB_DEFAULT_PATH +
                           " LV_LINUX_FBDEV_DEVICE=/dev/fb0"
                           // The wrapped app draws into the 320x170 virtual framebuffer: drop the launcher's
                           // board.conf panel geometry (rotation, logical size, scale) so its own dpi-scaled

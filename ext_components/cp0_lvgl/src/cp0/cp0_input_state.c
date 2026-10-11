@@ -34,8 +34,11 @@ int cp0_input_state_path(const char *runtime_dir, char *buf, size_t size)
 int cp0_input_state_format(const cp0_input_state_t *state, char *buf, size_t size)
 {
     if (!state || !buf) return -1;
-    const int n = snprintf(buf, size, "v=%d\nkeyboards=%u\nlast_seen=%" PRId64 "\ngen=%u\n",
-                           CP0_INPUT_STATE_VERSION, state->keyboards, state->last_seen, state->gen);
+    const int n = snprintf(buf, size,
+                           "v=%d\nkeyboards=%u\nlast_seen=%" PRId64 "\nbt_keyboards=%u\nkb_gone=%" PRId64
+                           "\nbt_gone=%" PRId64 "\nvkb=%s\ngen=%u\n",
+                           CP0_INPUT_STATE_VERSION, state->keyboards, state->last_seen, state->bt_keyboards,
+                           state->kb_gone, state->bt_gone, cp0_app_vkb_name(state->vkb), state->gen);
     if (n < 0 || (size_t)n >= size) return -1;
     return n;
 }
@@ -67,7 +70,9 @@ static int parse_number(const char *line, size_t len, const char *key, long long
 int cp0_input_state_parse(const char *text, size_t len, cp0_input_state_t *out)
 {
     if (!text || !out) return -1;
-    cp0_input_state_t state = {0, 0, 0};
+    cp0_input_state_t state;
+    memset(&state, 0, sizeof(state));
+    state.vkb = CP0_APP_VKB_AUTO;
     int version_ok = 0;
     size_t start = 0;
     while (start < len) {
@@ -80,7 +85,20 @@ int cp0_input_state_parse(const char *text, size_t len, cp0_input_state_t *out)
         else if (parse_number(line, line_len, "keyboards", &value) && value >= 0 && value <= UINT_MAX)
             state.keyboards = (unsigned)value;
         else if (parse_number(line, line_len, "last_seen", &value)) state.last_seen = value;
-        else if (parse_number(line, line_len, "gen", &value) && value >= 0 && value <= UINT_MAX)
+        else if (parse_number(line, line_len, "bt_keyboards", &value) && value >= 0 && value <= UINT_MAX)
+            state.bt_keyboards = (unsigned)value;
+        else if (parse_number(line, line_len, "kb_gone", &value) && value >= 0) state.kb_gone = value;
+        else if (parse_number(line, line_len, "bt_gone", &value) && value >= 0) state.bt_gone = value;
+        else if (line_len > 4 && memcmp(line, "vkb=", 4) == 0) {
+            char word[8];
+            size_t n = line_len - 4;
+            while (n > 0 && (line[4 + n - 1] == '\r' || line[4 + n - 1] == ' ' || line[4 + n - 1] == '\t')) n--;
+            if (n < sizeof(word)) {
+                memcpy(word, line + 4, n);
+                word[n] = '\0';
+                (void)cp0_app_vkb_parse(word, &state.vkb);
+            }
+        } else if (parse_number(line, line_len, "gen", &value) && value >= 0 && value <= UINT_MAX)
             state.gen = (unsigned)value;
         start = end + 1;
     }
@@ -129,7 +147,7 @@ int cp0_input_state_write(const char *path, const cp0_input_state_t *state)
         errno = EINVAL;
         return -1;
     }
-    char text[160];
+    char text[320];
     const int text_len = cp0_input_state_format(state, text, sizeof(text));
     char tmp[PATH_MAX];
     const int tmp_len = snprintf(tmp, sizeof(tmp), "%s.tmp.%ld", path, (long)getpid());

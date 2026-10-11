@@ -469,16 +469,19 @@ cp0_ui_osk_env_t cp0_ui_osk_env_parse(const char *value)
     return CP0_UI_OSK_ENV_UNSET;
 }
 
+cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting_off, int desktop_session)
+{
+    if (env == CP0_UI_OSK_ENV_OFF) return CP0_APP_VKB_OFF;
+    if (env == CP0_UI_OSK_ENV_FORCE) return CP0_APP_VKB_FORCE;
+    if (setting_off || desktop_session) return CP0_APP_VKB_OFF;
+    return CP0_APP_VKB_AUTO;
+}
+
 int cp0_ui_osk_policy_allows(const cp0_ui_osk_policy_t *p)
 {
     if (!p || p->locked) return 0;
-    if (p->env == CP0_UI_OSK_ENV_OFF) return 0;
-    if (p->env == CP0_UI_OSK_ENV_FORCE) return 1;
-    if (p->setting_off || p->desktop_session) return 0;
-    if (p->keyboards > 0) return 0;
-    if (p->bt_gone_s > 0 && p->now_s - p->bt_gone_s < CP0_UI_OSK_BT_ASLEEP_S) return 0;
-    if (p->any_gone_s > 0 && p->now_s - p->any_gone_s < CP0_UI_OSK_GRACE_S) return 0;
-    return 1;
+    return cp0_app_osk_rule(cp0_ui_osk_effective_vkb(p->env, p->setting_off, p->desktop_session), p->keyboards,
+                            p->now_s, p->any_gone_s, p->bt_gone_s);
 }
 
 /* ------------------------------------------------------------------ dialogs */

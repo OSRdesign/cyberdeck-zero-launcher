@@ -8,6 +8,8 @@
  */
 #pragma once
 
+#include "cp0_app_contract.h"
+
 #include <cstdint>
 
 namespace input_presence {
@@ -33,5 +35,10 @@ void configure();
 /* Start / stop publishing the policy file from the presence watcher. */
 void start();
 void stop();
+
+/* The on-screen keyboard rule in force (input.state vkb=, the app contract): set by launcher_osk when it installs and
+ * when Settings > System > On-screen keyboard changes; the file is rewritten (gen + 1) when the value changes. Until
+ * the launcher's keyboard is installed the file says off, or force / off from APPLAUNCH_OSK. Any thread. */
+void set_vkb(cp0_app_vkb_t vkb);
 
 } // namespace input_presence
