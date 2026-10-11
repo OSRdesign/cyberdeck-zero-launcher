@@ -19,346 +19,9 @@
 
 namespace {
 
-class settings_bluetooth_com {
-public:
-    struct StatusRecord {
-        bool powered = false;
-        std::string address;
-        bool discoverable = false;
-        std::string alias;
-    };
-
-    struct DeviceRecord {
-        std::string address;
-        int rssi = 0;
-        bool connected = false;
-        bool paired = false;
-        bool trusted = false;
-        std::string name;
-    };
-
-    enum class ValidationLimit : std::size_t {
-        MaxAliasBytes     = CP0_BT_NAME_MAX - 1,
-        MaxAddressBytes   = sizeof(((cp0_bt_status_t *)nullptr)->address) - 1,
-        MaxDeviceNameBytes = CP0_BT_NAME_MAX - 1,
-    };
-
-    static bool parse_boolean(std::string_view value, bool &output)
-    {
-        if (value != "0" && value != "1") return false;
-        output = value == "1";
-        return true;
-    }
-
-    static bool parse_integer(std::string_view value, int &output)
-    {
-        if (value.empty()) return false;
-        int parsed = 0;
-        const char *begin = value.data();
-        const char *end = begin + value.size();
-        const auto result = std::from_chars(begin, end, parsed, 10);
-        if (result.ec != std::errc{} || result.ptr != end) return false;
-        output = parsed;
-        return true;
-    }
-
-    static bool has_wire_control(std::string_view value)
-    {
-        for (const unsigned char byte : value) {
-            if (byte < 0x20 || byte == 0x7f) return true;
-        }
-        return false;
-    }
-
-    static bool valid_utf8(std::string_view value)
-    {
-        std::size_t index = 0;
-        while (index < value.size()) {
-            const unsigned char first = static_cast<unsigned char>(value[index]);
-            if (first <= 0x7f) {
-                ++index;
-                continue;
-            }
-
-            std::size_t width = 0;
-            unsigned char second_min = 0x80;
-            unsigned char second_max = 0xbf;
-            if (first >= 0xc2 && first <= 0xdf) {
-                width = 2;
-            } else if (first == 0xe0) {
-                width = 3;
-                second_min = 0xa0;
-            } else if (first >= 0xe1 && first <= 0xec) {
-                width = 3;
-            } else if (first == 0xed) {
-                width = 3;
-                second_max = 0x9f;
-            } else if (first >= 0xee && first <= 0xef) {
-                width = 3;
-            } else if (first == 0xf0) {
-                width = 4;
-                second_min = 0x90;
-            } else if (first >= 0xf1 && first <= 0xf3) {
-                width = 4;
-            } else if (first == 0xf4) {
-                width = 4;
-                second_max = 0x8f;
-            } else {
-                return false;
-            }
-
-            if (index + width > value.size()) return false;
-            const unsigned char second = static_cast<unsigned char>(value[index + 1]);
-            if (second < second_min || second > second_max) return false;
-            for (std::size_t continuation = 2; continuation < width; ++continuation) {
-                const unsigned char byte =
-                    static_cast<unsigned char>(value[index + continuation]);
-                if (byte < 0x80 || byte > 0xbf) return false;
-            }
-            index += width;
-        }
-        return true;
-    }
-
-    static bool valid_text_field(std::string_view value,
-                                 std::size_t maximum_bytes,
-                                 bool allow_empty = true)
-    {
-        if ((!allow_empty && value.empty()) || value.size() > maximum_bytes) return false;
-        return !has_wire_control(value) && valid_utf8(value);
-    }
-
-    static bool valid_device_address(std::string_view address)
-    {
-        if (address.size() != 17) return false;
-        for (std::size_t index = 0; index < address.size(); ++index) {
-            if ((index + 1) % 3 == 0) {
-                if (address[index] != ':') return false;
-            } else if (!std::isxdigit(static_cast<unsigned char>(address[index]))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    static bool split_fields(std::string_view record,
-                             std::size_t expected_count,
-                             std::vector<std::string_view> &fields)
-    {
-        fields.clear();
-        std::size_t start = 0;
-        while (true) {
-            const std::size_t separator = record.find('\t', start);
-            fields.emplace_back(record.substr(
-                start,
-                separator == std::string_view::npos ? std::string_view::npos : separator - start));
-            if (separator == std::string_view::npos) break;
-            start = separator + 1;
-        }
-        return fields.size() == expected_count;
-    }
-
-    static bool decode_status(std::string_view payload, StatusRecord &output)
-    {
-        std::vector<std::string_view> fields;
-        if (!split_fields(payload, 4, fields)) return false;
-
-        StatusRecord decoded;
-        if (!parse_boolean(fields[0], decoded.powered) ||
-            !parse_boolean(fields[2], decoded.discoverable))
-            return false;
-        if (fields[1].size() > static_cast<std::size_t>(ValidationLimit::MaxAddressBytes) ||
-            has_wire_control(fields[1]))
-            return false;
-        if (decoded.powered && fields[1].empty()) return false;
-        if (!fields[1].empty() && !valid_device_address(fields[1])) return false;
-        if (!valid_text_field(fields[3], static_cast<std::size_t>(ValidationLimit::MaxAliasBytes)))
-            return false;
-        decoded.address.assign(fields[1]);
-        decoded.alias.assign(fields[3]);
-        output = std::move(decoded);
-        return true;
-    }
-
-    static bool decode_device(std::string_view payload, DeviceRecord &output)
-    {
-        std::vector<std::string_view> fields;
-        if (!split_fields(payload, 6, fields)) return false;
-        DeviceRecord decoded;
-        if (!valid_device_address(fields[0]) || !parse_integer(fields[1], decoded.rssi) ||
-            !parse_boolean(fields[2], decoded.connected) ||
-            !parse_boolean(fields[3], decoded.paired) ||
-            !parse_boolean(fields[4], decoded.trusted) ||
-            !valid_text_field(fields[5], static_cast<std::size_t>(ValidationLimit::MaxDeviceNameBytes)))
-            return false;
-        decoded.address.assign(fields[0]);
-        decoded.name.assign(fields[5]);
-        output = std::move(decoded);
-        return true;
-    }
-
-    static bool decode_devices(std::string_view payload,
-                                std::vector<DeviceRecord> &output,
-                                int maximum_count = CP0_BT_DEVICE_MAX)
-    {
-        output.clear();
-        if (maximum_count < 0 || maximum_count > CP0_BT_DEVICE_MAX) return false;
-        if (payload.empty()) return true;
-        if (payload.back() == '\n') {
-            payload.remove_suffix(1);
-            if (payload.empty() || payload.back() == '\n') return false;
-        }
-        std::size_t start = 0;
-        while (start < payload.size()) {
-            const std::size_t separator = payload.find('\n', start);
-            const std::size_t end = separator == std::string_view::npos ? payload.size() : separator;
-            const std::string_view line = payload.substr(start, end - start);
-            if (line.empty() || static_cast<int>(output.size()) >= maximum_count) return false;
-            DeviceRecord device;
-            if (!decode_device(line, device)) return false;
-            output.push_back(std::move(device));
-            if (separator == std::string_view::npos) break;
-            start = separator + 1;
-        }
-        return true;
-    }
-
-    static bool decode_device_list_reply(int code,
-                                         std::string_view payload,
-                                         std::vector<DeviceRecord> &output,
-                                         int maximum_count = CP0_BT_DEVICE_MAX)
-    {
-        output.clear();
-        if (code < 0 || code > maximum_count) return false;
-        if (!decode_devices(payload, output, maximum_count)) return false;
-        return static_cast<int>(output.size()) == code;
-    }
-
-    static bool valid_alias(std::string_view alias)
-    {
-        return valid_text_field(alias, static_cast<std::size_t>(ValidationLimit::MaxAliasBytes), false);
-    }
-
-    static bool success_without_payload(int code, std::string_view payload)
-    {
-        return code == 0 && (payload.empty() || payload == "ok");
-    }
-
-    static std::list<std::string> status_request() { return {"BtStatus"}; }
-
-    static std::list<std::string> power_request(bool enabled)
-    {
-        return {"BtPower", enabled ? "1" : "0"};
-    }
-
-    static std::list<std::string> discoverable_request(bool enabled)
-    {
-        return {"BtDiscoverable", enabled ? "1" : "0"};
-    }
-
-    static bool alias_request(std::string_view alias, std::list<std::string> &request)
-    {
-        if (!valid_alias(alias)) return false;
-        request = {"BtAlias", std::string(alias)};
-        return true;
-    }
-
-    static bool list_request(bool connected_only, int maximum_count,
-                             std::list<std::string> &request)
-    {
-        if (maximum_count < 1 || maximum_count > CP0_BT_DEVICE_MAX) return false;
-        request = {connected_only ? "BtConnectedList" : "BtList", std::to_string(maximum_count)};
-        return true;
-    }
-
-    static bool scan_request(int maximum_count, std::list<std::string> &request)
-    {
-        if (maximum_count < 1 || maximum_count > CP0_BT_DEVICE_MAX) return false;
-        request = {"BtScan", std::to_string(maximum_count)};
-        return true;
-    }
-
-    static bool discovery_start_request(std::list<std::string> &request)
-    {
-        request = {"BtDiscoveryStart"};
-        return true;
-    }
-
-    static std::list<std::string> discovery_start_request()
-    {
-        return {"BtDiscoveryStart"};
-    }
-
-    static bool discovery_stop_request(std::list<std::string> &request)
-    {
-        request = {"BtDiscoveryStop"};
-        return true;
-    }
-
-    static std::list<std::string> discovery_stop_request()
-    {
-        return {"BtDiscoveryStop"};
-    }
-
-    static bool device_request(const char *command,
-                               std::string_view address,
-                               std::list<std::string> &request)
-    {
-        if (!command || !valid_device_address(address)) return false;
-        const std::string command_text(command);
-        if (command_text != "BtPair" && command_text != "BtCancelPairing" && command_text != "BtConnect" &&
-            command_text != "BtDisconnect" && command_text != "BtRemove")
-            return false;
-        request = {command_text, std::string(address)};
-        return true;
-    }
-};
-
-void copy_text(char *target, std::size_t capacity, std::string_view value)
-{
-    if (!target || capacity == 0) return;
-    const std::size_t length = std::min(capacity - 1, value.size());
-    if (length > 0) std::memcpy(target, value.data(), length);
-    target[length] = '\0';
-}
-
-void copy_device_record(const settings_bluetooth_com::DeviceRecord &source,
-                        cp0_bt_device_t &target)
-{
-    target = {};
-    copy_text(target.address, sizeof(target.address), source.address);
-    copy_text(target.name, sizeof(target.name), source.name);
-    target.rssi = source.rssi;
-    target.connected = source.connected ? 1 : 0;
-    target.paired = source.paired ? 1 : 0;
-    target.trusted = source.trusted ? 1 : 0;
-}
-
-bool is_agent_authorization_method(std::string_view method)
-{
-    return method == "RequestAuthorization" || method == "AuthorizeService";
-}
-
-std::string normalized_mac_text(std::string_view text)
-{
-    std::string result;
-    result.reserve(text.size());
-    for (const unsigned char character : text) {
-        if (std::isxdigit(character))
-            result.push_back(static_cast<char>(std::tolower(character)));
-        else if (character != ':' && character != '-' && character != '_' && character != ' ')
-            return {};
-    }
-    return result;
-}
-
-bool should_hide_named_only_device(const settings_bluetooth_com::DeviceRecord &device)
-{
-    if (device.name.empty()) return true;
-    const std::string name_hex = normalized_mac_text(device.name);
-    const std::string address_hex = normalized_mac_text(device.address);
-    return !name_hex.empty() && (name_hex == address_hex || name_hex.size() == 12);
-}
+// The service's wire format and the list / agent rules are shared with the native pages (task 014 P3c,
+// settings_bluetooth_model.hpp); they moved there unchanged.
+using settings_bluetooth::copy_device_record;
 
 } // namespace
 
@@ -825,24 +488,12 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
                                 devices_.clear();
                                 error_message_ = "Bluetooth device list unavailable.";
                             } else {
-                                if (settings_bluetooth_named_only_enabled()) {
-                                    decoded_devices.erase(
-                                        std::remove_if(
-                                            decoded_devices.begin(),
-                                            decoded_devices.end(),
-                                            should_hide_named_only_device),
-                                        decoded_devices.end());
-                                }
-                                if (mode_ == LvSettingBluetoothListMode::Connected) {
-                                    decoded_devices.erase(
-                                        std::remove_if(
-                                            decoded_devices.begin(),
-                                            decoded_devices.end(),
-                                            [](const settings_bluetooth_com::DeviceRecord &device) {
-                                                return !device.connected && !device.paired;
-                                            }),
-                                        decoded_devices.end());
-                                }
+                                settings_bluetooth::filter_devices(
+                                    decoded_devices,
+                                    settings_bluetooth_named_only_enabled(),
+                                    mode_ == LvSettingBluetoothListMode::Connected
+                                        ? settings_bluetooth::ListMode::Paired
+                                        : settings_bluetooth::ListMode::Scan);
                                 devices_.clear();
                                 devices_.reserve(decoded_devices.size());
                                 for (const auto &device : decoded_devices) {
@@ -954,8 +605,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
             api_dispatch_->agent_events.clear();
         }
         clear_agent_prompt();
-        agent_pairing_device_.clear();
-        agent_authorized_device_.clear();
+        agent_session_.reset();
         cancel_action();
         warning_active_ = false;
         status_pending_ = false;
@@ -1121,8 +771,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         }
 
         // A new explicit operation requires a fresh authorization decision.
-        agent_pairing_device_.clear();
-        agent_authorized_device_.clear();
+        agent_session_.reset();
         action_pending_ = true;
         action_address_ = address;
         ++generation_;
@@ -1253,8 +902,7 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
         const bool succeeded = settings_bluetooth_com::success_without_payload(code, data);
         cancel_action();
         if (!succeeded) {
-            agent_pairing_device_.clear();
-            agent_authorized_device_.clear();
+            agent_session_.reset();
             error_message_ = data.empty() ? "Bluetooth action failed."
                                            : "Bluetooth action failed: " + data;
             render();
@@ -1515,19 +1163,13 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
     {
         // A new numeric-comparison request starts a fresh pairing session;
         // never carry an earlier connection approval into that session.
-        if (request.method == "RequestConfirmation") {
-            agent_pairing_device_.clear();
-            agent_authorized_device_.clear();
-        }
-
         // BlueZ may ask for authorization once per profile after the user has
         // already approved the connection. Keep the first user decision, then
         // acknowledge subsequent requests for that same device in this
         // session so identical dialogs are not shown repeatedly.
+        // (settings_bluetooth::AgentSession, shared with the native pages)
         const std::string request_device = request.device.empty() ? action_address_ : request.device;
-        if (is_agent_authorization_method(request.method) &&
-            !agent_authorized_device_.empty() &&
-            request_device == agent_authorized_device_) {
+        if (agent_session_.auto_accept(request.method, request_device)) {
             if (request.reply) {
                 try { request.reply(true, {}); } catch (...) {}
             }
@@ -1737,29 +1379,14 @@ LvSettingBluetoothPage3::~LvSettingBluetoothPage3()
             ? lv_textarea_get_text(agent_input_textarea_) : nullptr;
         const std::string text = textarea_text ? textarea_text : "";
         if (accepted) {
-            const bool passkey = request.method == "RequestPasskey";
-            const bool confirmation = request.method == "RequestConfirmation" ||
-                                      request.method == "RequestAuthorization" ||
-                                      request.method == "AuthorizeService";
-            if (!confirmation && ((passkey && text.size() != 6) ||
-                                  (!passkey && (text.empty() || text.size() > 16)))) {
-                agent_error_ = passkey ? "Passkey must be 6 digits." : "PIN must be 1-16 characters.";
-                render_agent_prompt();
-                return;
-            }
-            if (!confirmation && passkey && !std::all_of(text.begin(), text.end(), [](unsigned char c) {
-                    return std::isdigit(c) != 0;
-                })) {
-                agent_error_ = "Passkey must be 6 digits.";
+            const std::string input_error = settings_bluetooth::agent_input_error(request.method, text);
+            if (!input_error.empty()) {
+                agent_error_ = input_error;
                 render_agent_prompt();
                 return;
             }
             const std::string request_device = request.device.empty() ? action_address_ : request.device;
-            if (request.method == "RequestConfirmation")
-                agent_pairing_device_ = request_device;
-            if (is_agent_authorization_method(request.method) &&
-                (action_pending_ || request_device == agent_pairing_device_))
-                agent_authorized_device_ = request_device;
+            agent_session_.accepted(request.method, request_device, action_pending_);
         }
         clear_agent_prompt();
         if (request.reply) {

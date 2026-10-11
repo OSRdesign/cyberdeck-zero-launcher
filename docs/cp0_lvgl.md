@@ -240,13 +240,13 @@ int cp0_time_ntp_set(int enable);
 
 ### 蓝牙：`cp0_signal_bt_api(args, cb)`
 
-常规查询/扫描命令：`BtStatus`、`BtList [max=16]`、`BtConnectedList [max=16]`、`BtScan [max=16]`。控制命令：`BtReset`、`BtPower 0|1`、`BtAlias name`、`BtDiscoverable 0|1`、`BtDiscoveryStart`、`BtDiscoveryStop`、`BtPair address`、`BtCancelPairing address`、`BtConnect address`、`BtDisconnect address`、`BtRemove address`。address 必须是 `XX:XX:XX:XX:XX:XX`；列表每行是 `address\trssi\tconnected\tpaired\ttrusted\tname`；状态是 `powered\taddress\tdiscoverable\talias`。`BtScan`、配对和连接操作的最终回调可能异步到达。
+常规查询/扫描命令：`BtStatus`、`BtList [max=16]`、`BtConnectedList [max=16]`、`BtScan [max=16]`。控制命令：`BtReset`、`BtPower 0|1`、`BtAlias name`、`BtDiscoverable 0|1`、`BtDiscoveryStart`、`BtDiscoveryStop`、`BtPair address`、`BtCancelPairing address`、`BtConnect address`、`BtDisconnect address`、`BtRemove address`、`BtDeviceAlias address name`（已知设备的名称，即 BlueZ `Device1.Alias`；名称规则同 `BtAlias`：1-63 字节，不含控制字符）。address 必须是 `XX:XX:XX:XX:XX:XX`；列表每行是 `address\trssi\tconnected\tpaired\ttrusted\tname`；状态是 `powered\taddress\tdiscoverable\talias`。`BtScan`、配对和连接操作的最终回调可能异步到达。
 
 长操作可使用会话命令：`BtSessionInit`（返回非零 session id）、`BtSessionDeinit id`、`BtStatusGet id`、`BtConnectedListInit id`、`BtConnectedListGet id`、`BtConnectedListDeinit id`、`BtScanOn id`、`BtScanOff id`。`BtScanOn` 会在后台线程持续扫描，通常每 3 秒回调一次；不用时必须 `BtScanOff` 后再销毁会话。
 
 ### 蓝牙 Agent：`cp0_signal_bt_agent`
 
-签名：`(uint64_t id, std::string method, std::string device, std::string value, std::function<void(bool accepted, std::string text)> reply)`。请求来自 BlueZ worker 线程，UI 必须切到自己的 LVGL/event loop 后显示确认框，再调用 `reply`。`method` 可能是 `RequestConfirmation`（value 为 passkey）或 PIN/UUID 相关请求；没有 UI 订阅者时后端会拒绝不安全请求。reply 必须最终调用一次。
+签名：`(uint64_t id, std::string method, std::string device, std::string value, std::function<void(bool accepted, std::string text)> reply)`。请求来自 BlueZ worker 线程，UI 必须切到自己的 LVGL/event loop 后显示确认框，再调用 `reply`。`method` 可能是 `RequestConfirmation`（value 为 passkey）或 PIN/UUID 相关请求；没有 UI 订阅者时后端会拒绝不安全请求。reply 必须最终调用一次。`DisplayPasskey`（value 为 6 位 passkey）和 `DisplayPinCode`（value 为 PIN）只是通知：BlueZ 已经得到应答，用户在远端设备（如键盘）上输入该代码；它们的 `reply` 不起作用，且仅在有订阅者时发送。
 
 ### 设置：`cp0_signal_settings_api(args, cb)`
 

@@ -251,7 +251,7 @@ case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
 esac
-echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 99-bt-keyboard"
+echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 93-applaunch-rfkill, 99-bt-keyboard"
 echo "  - board profile $PROFILE (and $PROFILE_DIR if it is then empty)"
 echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power"
 if [ "$BOOT_CONFIG" = 1 ]; then
@@ -338,7 +338,7 @@ fi
 
 say "Removing udev and polkit rules"
 UDEV_CHANGED=0
-for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlight-gpio.rules 99-bt-keyboard.rules; do
+for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlight-gpio.rules 93-applaunch-rfkill.rules 99-bt-keyboard.rules; do
     exists "$UDEV_DIR/$f" && UDEV_CHANGED=1
     rm_sys "$UDEV_DIR/$f"
 done

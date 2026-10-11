@@ -333,6 +333,7 @@ chmod -R a+rX "$APP_ROOT"
 say "Installing udev rules (keyboard: \"$KEYBOARD_NAME\")"
 install -m 644 "$PAYLOAD/etc/90-backlight-unblank.rules" /etc/udev/rules.d/90-backlight-unblank.rules
 install -m 644 "$PAYLOAD/etc/91-applaunch-vkbd.rules" /etc/udev/rules.d/91-applaunch-vkbd.rules
+install -m 644 "$PAYLOAD/etc/93-applaunch-rfkill.rules" /etc/udev/rules.d/93-applaunch-rfkill.rules
 cat > /etc/udev/rules.d/99-bt-keyboard.rules <<EOF
 # Stable name for the Bluetooth keyboard (it gets a new event node each time it reconnects).
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="$KEYBOARD_NAME", SYMLINK+="input/bt-keyboard"

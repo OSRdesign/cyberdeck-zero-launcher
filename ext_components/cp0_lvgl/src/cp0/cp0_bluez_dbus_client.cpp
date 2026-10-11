@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <condition_variable>
 #include <map>
@@ -144,7 +145,8 @@ public:
         listeners_.push_back(std::move(listener));
     }
 
-    void command(const char *kind, const char *value, cp0_bluez_dbus::Completion completion)
+    void command(const char *kind, const char *value, cp0_bluez_dbus::Completion completion,
+                 const char *text = nullptr)
     {
         if (!ensure_started()) {
             if (completion)
@@ -157,6 +159,7 @@ public:
                 completion(-1, "out of memory");
             return;
         }
+        if (text) request->text = text;
         cp0_zmq_logf("bt", "command queued kind=%s value=%s", request->kind.c_str(), request->value.c_str());
         request->generation = command_generation_.load();
         if (!invoke([request](BluezWorker *self) {
@@ -210,6 +213,7 @@ private:
         cp0_bluez_dbus::Completion completion;
         bool connection_call = false;
         uint64_t generation = 0;
+        std::string text; /* device_alias: the new name (value is the address) */
     };
 
     struct PairCleanupRequest {
@@ -751,6 +755,10 @@ private:
                     return;
                 }
             }
+            if (request->kind == "device_alias") {
+                set_device_property(path, "Alias", g_variant_new_string(request->text.c_str()), request);
+                return;
+            }
             const char *method = nullptr;
             if (request->kind == "pair") method = "Pair";
             else if (request->kind == "cancel_pairing") method = "CancelPairing";
@@ -821,6 +829,16 @@ private:
         GVariant *parameters = g_variant_new("(ssv)", kAdapter, property, value);
         request->connection_call = true;
         g_dbus_connection_call(connection_, kBluez, snapshot_.adapter_path.c_str(), kProperties, "Set",
+                               parameters, nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, command_cancellable_,
+                               method_done, request);
+    }
+
+    /* A known device's writable property (Device1.Alias). */
+    void set_device_property(const std::string &path, const char *property, GVariant *value, CommandRequest *request)
+    {
+        GVariant *parameters = g_variant_new("(ssv)", kDevice, property, value);
+        request->connection_call = true;
+        g_dbus_connection_call(connection_, kBluez, path.c_str(), kProperties, "Set",
                                parameters, nullptr, G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, command_cancellable_,
                                method_done, request);
     }
@@ -1046,6 +1064,7 @@ private:
         }
         if (std::strcmp(method, "DisplayPinCode") == 0 || std::strcmp(method, "DisplayPasskey") == 0) {
             g_dbus_method_invocation_return_value(invocation, nullptr);
+            notify_display(method, parameters);
             return;
         }
         const guint64 id = next_agent_request_id_++;
@@ -1109,6 +1128,40 @@ private:
         g_dbus_method_invocation_return_dbus_error(invocation, "org.bluez.Error.Rejected", "pairing agent is not connected");
         g_object_unref(agent_requests_.at(id).invocation);
         agent_requests_.erase(id);
+    }
+
+    /* DisplayPasskey (device, passkey u, entered q) / DisplayPinCode (device, pincode s): BlueZ needs no answer, the
+     * user types the code on the remote device (a keyboard). The listener gets it as a notice (task 014 P3c): the
+     * request is not kept, so a reply to it changes nothing. */
+    void notify_display(const char *method, GVariant *parameters)
+    {
+        cp0_bluez_dbus::AgentListener listener;
+        {
+            std::lock_guard<std::mutex> lock(agent_listener_mutex_);
+            listener = agent_listener_;
+        }
+        if (!listener || !parameters || g_variant_n_children(parameters) < 2) return;
+        cp0_bluez_dbus::AgentRequest request{};
+        request.id = next_agent_request_id_++;
+        request.method = method;
+        const gchar *device = nullptr;
+        g_variant_get_child(parameters, 0, "&o", &device);
+        request.device = device ? device : "";
+        if (std::strcmp(method, "DisplayPasskey") == 0) {
+            guint32 passkey = 0;
+            g_variant_get_child(parameters, 1, "u", &passkey);
+            char text[16];
+            std::snprintf(text, sizeof(text), "%06u", static_cast<unsigned>(passkey));
+            request.passkey = text;
+        } else {
+            const gchar *pincode = nullptr;
+            g_variant_get_child(parameters, 1, "&s", &pincode);
+            request.passkey = pincode ? pincode : "";
+        }
+        try {
+            listener(request);
+        } catch (...) {
+        }
     }
 
     void complete_agent_request(guint64 id, bool accepted, const std::string &text)
@@ -1248,9 +1301,9 @@ BluezWorker &worker()
     return value;
 }
 
-void command(const char *kind, const char *value, cp0_bluez_dbus::Completion completion)
+void command(const char *kind, const char *value, cp0_bluez_dbus::Completion completion, const char *text = nullptr)
 {
-    worker().command(kind, value, std::move(completion));
+    worker().command(kind, value, std::move(completion), text);
 }
 
 } // namespace
@@ -1276,6 +1329,10 @@ void cancel_pairing_async(const char *address, Completion completion) { command(
 void connect_async(const char *address, Completion completion) { command("connect", address, std::move(completion)); }
 void disconnect_async(const char *address, Completion completion) { command("disconnect", address, std::move(completion)); }
 void remove_async(const char *address, Completion completion) { command("remove", address, std::move(completion)); }
+void set_device_alias_async(const char *address, const char *alias, Completion completion)
+{
+    command("device_alias", address, std::move(completion), alias ? alias : "");
+}
 
 int set_power(int enabled) { set_power_async(enabled, {}); return 0; }
 int set_alias(const char *alias) { set_alias_async(alias, {}); return 0; }

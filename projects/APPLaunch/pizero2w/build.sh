@@ -63,7 +63,7 @@ if [ "$WITH_STORE" = 1 ] && [ -d "$REPO/projects/AppStore/dist/APPLaunch" ]; the
     cp -a "$REPO/projects/AppStore/dist/APPLaunch/." "$OUT/payload/share/"
 fi
 for file in APPLaunch.service launcher-ntp-default.service waveshare-pwm-backlight.dts \
-            90-backlight-unblank.rules 91-applaunch-vkbd.rules \
+            90-backlight-unblank.rules 91-applaunch-vkbd.rules 93-applaunch-rfkill.rules \
             50-networkmanager-netdev.rules 51-launcher-time-power.rules; do
     cp "$HERE/$file" "$OUT/payload/etc/"
 done

@@ -107,9 +107,9 @@ Wi-Fi のコマンドは `Status`、`Scan [0..32]`、`Connect ssid [password]`�
 
 ### Bluetooth と Agent
 
-`cp0_signal_bt_api` は `BtStatus`、`BtList [max=16]`、`BtConnectedList [max=16]`、`BtScan [max=16]`、`BtReset`、`BtPower 0|1`、`BtAlias name`、`BtDiscoverable 0|1`、`BtDiscoveryStart`、`BtDiscoveryStop`、`BtPair address`、`BtCancelPairing address`、`BtConnect address`、`BtDisconnect address`、`BtRemove address` をサポートします。address は `XX:XX:XX:XX:XX:XX`。session API は `BtSessionInit`、`BtSessionDeinit id`、`BtStatusGet id`、`BtConnectedListInit/Get/Deinit id`、`BtScanOn id`、`BtScanOff id` です。`BtScanOn` は約 3 秒ごとに worker から報告するため、終了前に停止してください。
+`cp0_signal_bt_api` は `BtStatus`、`BtList [max=16]`、`BtConnectedList [max=16]`、`BtScan [max=16]`、`BtReset`、`BtPower 0|1`、`BtAlias name`、`BtDiscoverable 0|1`、`BtDiscoveryStart`、`BtDiscoveryStop`、`BtPair address`、`BtCancelPairing address`、`BtConnect address`、`BtDisconnect address`、`BtRemove address`、`BtDeviceAlias address name`（既知デバイスの名前、BlueZ `Device1.Alias`。名前の規則は `BtAlias` と同じ：1-63 バイト、制御文字なし）をサポートします。address は `XX:XX:XX:XX:XX:XX`。session API は `BtSessionInit`、`BtSessionDeinit id`、`BtStatusGet id`、`BtConnectedListInit/Get/Deinit id`、`BtScanOn id`、`BtScanOff id` です。`BtScanOn` は約 3 秒ごとに worker から報告するため、終了前に停止してください。
 
-`cp0_signal_bt_agent` のシグネチャは `(uint64_t id, std::string method, std::string device, std::string value, std::function<void(bool accepted, std::string text)> reply)`。BlueZ worker スレッドから来るので、UI 処理を LVGL スレッドへ marshal してから reply を 1 回だけ呼びます。
+`cp0_signal_bt_agent` のシグネチャは `(uint64_t id, std::string method, std::string device, std::string value, std::function<void(bool accepted, std::string text)> reply)`。BlueZ worker スレッドから来るので、UI 処理を LVGL スレッドへ marshal してから reply を 1 回だけ呼びます。`DisplayPasskey`（value は 6 桁の passkey）と `DisplayPinCode`（value は PIN）は通知です：BlueZ には応答済みで、ユーザーはリモートデバイス（キーボードなど）でそのコードを入力します。これらの `reply` は何もせず、購読者がいるときだけ送られます。
 
 ### Settings: `cp0_signal_settings_api(args, cb)`、process: `cp0_signal_process_api(args, cb)`、OS 情報: `cp0_signal_osinfo_api(args, cb)` / `cp0_signal_timedate_api(args, cb)`
 

@@ -5,9 +5,9 @@ you saw) per line. Background: `docs/dev/tasks/014-responsive-shell.md` section 
 implemented)" and 012 F1.
 
 Scope of this build: the keyboard exists only on **native** pages: the development page Settings > System > Keyboard
-test and, since task 014 P3b, the native Wi-Fi page's password and hidden-network dialogs (section E). Compat pages (the
-deck's default Settings with its Wi-Fi password page, Bluetooth PIN, Store search) are unchanged: they still need a
-physical keyboard.
+test and, since task 014 P3b, the native Wi-Fi page's password and hidden-network dialogs (section E), since P3c the
+native Bluetooth pages' PIN / passkey dialogs, Alias and Rename (section G). Compat pages (the deck's default Settings
+with its Wi-Fi password page, Bluetooth PIN, Store search) are unchanged: they still need a physical keyboard.
 
 Setup (Controller): launcher environment (board.conf or a service drop-in) `APPLAUNCH_SETTINGS_UI=native` and
 `APPLAUNCH_DEV=1`. On the HackBerry (built-in keyboard) add `APPLAUNCH_OSK=force` to see the keyboard at all.
@@ -71,12 +71,59 @@ password. Do E with no physical keyboard (on-screen keyboard), then 31-33 with t
     network if you have one.)
 33. The "Wi-Fi" switch off: the list goes, "Wi-Fi is off"; on again: it scans and the list comes back.
 34. Esc from the dialog, the list, Details: always one level back; hold Esc 3 s from any of them: home, no restart.
-35. Pi 3A+ 480x320: in the password dialog (26-27) the dialog covers the header while the keyboard is up; the network
-    name, the field and "Wrong password" are readable above the keyboard.
+35. Pi 3A+ 480x320: in the password dialog (26-27) the network name shows in the header's title place while the
+    keyboard is up (the Esc button and the top bar stay as they are, nothing of the page title peeks out); the field and
+    "Wrong password" are readable in the dialog above the keyboard.
 
 ## F. Read-only pages (task 014 P3a)
 36. System > About, Storage, Licenses; User; Date & Time > Info: key left, value right, readable at a glance; the clock in
     Info ticks; Licenses scrolls by drag and by Up / Down; Esc goes back. On the Pi 3A+ a long value (User > Password)
     goes onto a smaller line or two instead of being cut.
+
+## G. Bluetooth pages (task 014 P3c; native Settings, also in a release build)
+Needs: a phone, a Bluetooth keyboard that is NOT yet paired with this board (or forget it first, step 45), ideally an
+old headset or car kit that asks for a PIN. The Controller deploys a build with the cp0_lvgl backend change of P3c (the
+keyboard's passkey reaches the page: steps 41-42 cannot work without it). Do 37-44 with no physical keyboard (on-screen
+keyboard), 45-48 with the Bluetooth keyboard connected.
+37. Settings > Bluetooth: the Power / Discoverable / Named Only switches as before; "Alias: <name>", "Paired Devices" and
+    "Scan" now open native pages (header like the home grid, Esc button, no bottom toolbar), also in a release build.
+38. Paired Devices: the paired devices, each with "Connected" or "Paired"; a long name ends with dots. The status line
+    shows the board's Bluetooth name and address. Drag / tap / Up / Down / Enter / Esc work as on the other pages.
+39. Scan: a "Scan" switch on top (on), then the devices found, refreshed about every 1.5 s, unpaired ones with their
+    signal ("-60 dBm"). With Named Only on, devices without a name (or only an address as name) are not listed; turn
+    Named Only off in the section, open Scan again: they are listed.
+40. Pair the phone: tap it in Scan. Its row says "Pairing..."; a dialog "Confirm Bluetooth pairing" shows the phone's
+    name, address and "Pairing code: ######" with No / Yes; the phone shows the same code. Yes on the board, confirm on
+    the phone: the status line says "Paired with <phone>", the list is scanned again, the highlight stays on the phone,
+    which is now "Connected" or "Paired". (If the phone then asks to allow a service, a "Allow Bluetooth service?"
+    dialog shows: Yes.)
+41. Pair the keyboard with a passkey: Scan, tap the keyboard. A dialog "Bluetooth Passkey" shows "Type this code on the
+    device, then press its Enter:" and a 6-digit code. Type it on the keyboard and press its Enter: the dialog closes by
+    itself, "Paired with <keyboard>", the keyboard types in the launcher.
+42. (If the keyboard is an old model) the same with a PIN shown instead of a passkey ("Bluetooth PIN Code"): same steps.
+43. Pair a device that asks for a PIN (old headset, car kit; often 0000): a dialog titled with the device has a
+    "Bluetooth PIN code" field and the on-screen NUMBER PAD (no buttons while it is up). The pad's Enter on an empty field says "PIN must be 1-16
+    characters." in red and the dialog stays. Type the PIN, the pad's Enter: paired. Try once more on another device
+    (or forget it first) and press the pad's Esc (or the header's Esc): the request is rejected, "Bluetooth action
+    failed: ..." in red in the status line, the device is not paired.
+44. Alias: the page shows "Name" with the current name in a field and the on-screen keyboard. Change it, Enter: back in
+    the Bluetooth section, which now says "Alias: <new name>"; the phone sees the new name (refresh its Bluetooth list).
+    An empty name + Enter: "Name must be 1-63 UTF-8 bytes." in red, the page stays.
+45. Forget (Bluetooth keyboard connected now): Paired Devices, Enter on a device: Connect (or Disconnect), Forget,
+    Rename. Forget: a dialog "Forget this device?" with its name, Cancel / Forget (the keyboard's Esc / Enter act for
+    them). Forget: "Forgot <name>", the device leaves the list. It must be paired again to be used.
+46. Disconnect / Connect a paired device from its actions: its row says "Disconnecting..." / "Connecting...", then
+    "Paired" / "Connected", and the status line says so.
+47. Rename a paired device: a dialog with its name in a field, Cancel / Save; change it, Enter: "Renamed to <name>", the
+    list shows the new name (BlueZ keeps it across reboots).
+48. Switch Power off in the section, open Paired Devices or Scan: a notice "Bluetooth power is off / Turn on Power
+    before continuing." with OK; OK, Enter or Esc goes back to the section. Switch Power on again.
+49. Esc everywhere: dialog -> device actions -> list -> section, one level per press; hold Esc 3 s from any of them:
+    home, no restart. Leaving Scan while it pairs cancels the pairing (the device is not left half-paired).
+50. Compat check (deck default, no `APPLAUNCH_SETTINGS_UI=native`): Bluetooth > Paired Devices / Scan / Alias look and
+    work exactly as before (the legacy pages: D remove, R rescan, B reset keys, the PIN prompt with physical keys).
+51. Pi 3A+ 480x320: with the number pad up the PIN dialog's title (the device) shows in the header's title place, the
+    Esc button and the top bar unchanged; the field and an error stay readable in the dialog above the pad. The same for
+    Rename (title "Rename" in the header).
 
 Report anything odd; the Controller can capture the screen over ssh during the test.

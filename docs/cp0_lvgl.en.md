@@ -130,11 +130,11 @@ Commands are `Status`, `Scan [0..32]`, `Connect ssid [password]`, `ConnectHidden
 
 ### Bluetooth and Agent
 
-`cp0_signal_bt_api` supports `BtStatus`, `BtList [max=16]`, `BtConnectedList [max=16]`, `BtScan [max=16]`, `BtReset`, `BtPower 0|1`, `BtAlias name`, `BtDiscoverable 0|1`, `BtDiscoveryStart`, `BtDiscoveryStop`, `BtPair address`, `BtCancelPairing address`, `BtConnect address`, `BtDisconnect address`, and `BtRemove address`. Addresses must be `XX:XX:XX:XX:XX:XX`. Status data is `powered<TAB>address<TAB>discoverable<TAB>alias`; device lines are `address<TAB>rssi<TAB>connected<TAB>paired<TAB>trusted<TAB>name`.
+`cp0_signal_bt_api` supports `BtStatus`, `BtList [max=16]`, `BtConnectedList [max=16]`, `BtScan [max=16]`, `BtReset`, `BtPower 0|1`, `BtAlias name`, `BtDiscoverable 0|1`, `BtDiscoveryStart`, `BtDiscoveryStop`, `BtPair address`, `BtCancelPairing address`, `BtConnect address`, `BtDisconnect address`, `BtRemove address`, and `BtDeviceAlias address name` (a known device's name, BlueZ `Device1.Alias`; the name follows the `BtAlias` rules: 1-63 bytes, no control characters). Addresses must be `XX:XX:XX:XX:XX:XX`. Status data is `powered<TAB>address<TAB>discoverable<TAB>alias`; device lines are `address<TAB>rssi<TAB>connected<TAB>paired<TAB>trusted<TAB>name`.
 
 Session commands are `BtSessionInit` (returns an id), `BtSessionDeinit id`, `BtStatusGet id`, `BtConnectedListInit id`, `BtConnectedListGet id`, `BtConnectedListDeinit id`, `BtScanOn id`, and `BtScanOff id`. `BtScanOn` reports from a worker about every three seconds; stop it before destroying the session. `BtScan`, pairing, and connection operations can complete asynchronously.
 
-`cp0_signal_bt_agent` has signature `(uint64_t id, std::string method, std::string device, std::string value, std::function<void(bool accepted, std::string text)> reply)`. It originates on a BlueZ worker thread. Marshal UI work to the LVGL/event loop, then call `reply` exactly once.
+`cp0_signal_bt_agent` has signature `(uint64_t id, std::string method, std::string device, std::string value, std::function<void(bool accepted, std::string text)> reply)`. It originates on a BlueZ worker thread. Marshal UI work to the LVGL/event loop, then call `reply` exactly once. `method` is `RequestPinCode`, `RequestPasskey`, `RequestConfirmation` (value: the 6-digit code), `RequestAuthorization` or `AuthorizeService` (value: the service UUID). `DisplayPasskey` (value: the 6-digit passkey) and `DisplayPinCode` (value: the PIN) are notices: BlueZ was already answered and the user types the code on the remote device (a keyboard); their `reply` does nothing, and they are only sent while a subscriber exists.
 
 ### Settings
 

@@ -19,6 +19,7 @@ enum class Command {
     ScanOn, ScanOff,
     Status, Power, Alias, Discoverable, Scan, DiscoveryStart, DiscoveryStop,
     List, ConnectedList, Pair, CancelPairing, Connect, Disconnect, Remove, Reset,
+    DeviceAlias, /* BtDeviceAlias address name: a known device's name (BlueZ Device1.Alias) */
 };
 
 struct Request {
@@ -27,6 +28,7 @@ struct Request {
     int max_count = 16;
     uint64_t session_id = 0;
     std::string text;
+    std::string alias; /* DeviceAlias: the new name (text is the address) */
 };
 
 struct Reply {

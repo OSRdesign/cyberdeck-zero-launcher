@@ -56,11 +56,23 @@ enum class SettingsNodeKind {
 };
 SettingsNodeKind settings_node_kind(const NodeIter &node);
 
-// The native page of a Native node (task 014 P2b / P3a / P3b), from the node's own page factory: the development
-// Keyboard test, the read-only pages (About, User, Storage, Licenses, Date & Time > Info) and the Wi-Fi section (the
+// The native page of a Native node (task 014 P2b / P3a / P3b / P3c), from the node's own page factory: the development
+// Keyboard test, the read-only pages (About, User, Storage, Licenses, Date & Time > Info), the Wi-Fi section (the
 // section whose entries hold the Networks page: one native page with the Enable toggle, the networks and Join Hidden
-// Network). None for every other node.
-enum class SettingsNativePage { None, KeyboardTest, Wifi, About, User, Storage, Licenses, DateTimeInfo };
+// Network) and Bluetooth > Paired Devices, Scan and Alias. None for every other node.
+enum class SettingsNativePage {
+    None,
+    KeyboardTest,
+    Wifi,
+    About,
+    User,
+    Storage,
+    Licenses,
+    DateTimeInfo,
+    BluetoothPaired,
+    BluetoothScan,
+    BluetoothAlias,
+};
 SettingsNativePage settings_native_page(const NodeIter &node);
 
 // The entries of the Wi-Fi section the native Wi-Fi page uses: the Enable toggle (its API: the radio state) and Join

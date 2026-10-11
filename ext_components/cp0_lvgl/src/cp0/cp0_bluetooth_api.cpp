@@ -5,6 +5,7 @@
  */
 
 #include "cp0_bluetooth_backend.hpp"
+#include "cp0_bluetooth_error_policy.hpp"
 #include "cp0_bluez_dbus_client.hpp"
 #include "cp0_lvgl_log.h"
 #include "../cp0_init_once.hpp"
@@ -340,6 +341,8 @@ void api_call(std::list<std::string> args, std::function<void(int, std::string)>
         cp0_bluez_dbus::connect_async(request.text.c_str(), std::move(completion));
     else if (request.command == Command::Disconnect)
         cp0_bluez_dbus::disconnect_async(request.text.c_str(), std::move(completion));
+    else if (request.command == Command::DeviceAlias)
+        cp0_bluez_dbus::set_device_alias_async(request.text.c_str(), request.alias.c_str(), std::move(completion));
     else
         cp0_bluez_dbus::remove_async(request.text.c_str(), std::move(completion));
 }
@@ -356,6 +359,14 @@ extern "C" void init_bluetooth(void)
         // enqueue the prompt on the LVGL thread. Replies are marshalled back
         // through the worker's agent_reply() entry point.
         cp0_bluez_dbus::set_agent_listener([](const cp0_bluez_dbus::AgentRequest &request) {
+            // DisplayPasskey / DisplayPinCode (task 014 P3c): BlueZ was already answered (the code is shown, the
+            // remote device types it); a visible Settings page shows the code. Nobody listening: nothing to do.
+            if (cp0::bluetooth::policy::is_agent_display_method(request.method)) {
+                if (!cp0_signal_bt_agent.empty())
+                    cp0_signal_bt_agent(request.id, request.method, request.device, request.passkey,
+                                        [](bool, std::string) {});
+                return;
+            }
             // The bridge remains installed for the lifetime of the backend,
             // while the Settings page subscribes only when visible. Never
             // leave a BlueZ Agent1 invocation pending when no UI can answer.

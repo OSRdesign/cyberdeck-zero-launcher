@@ -647,6 +647,7 @@ private:
         cp0::ui::DialogSpec spec;
         spec.title = title;
         spec.message_line = true;
+        spec.page = &page_; /* small screens with the keyboard up: the title in the header (cp0_ui_dialog.h) */
         spec.buttons = {{"Cancel", cp0::ui::ButtonRole::Cancel, [this] { post([this] { cancel_dialog(); }); }},
                         {"Connect", cp0::ui::ButtonRole::Primary, [this] { post([this] { submit_dialog(); }); }}};
         dialog_ = std::make_unique<cp0::ui::Dialog>(page_.root(), page_.layout(), std::move(spec));
