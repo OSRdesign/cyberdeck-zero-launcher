@@ -22,20 +22,20 @@ Status: decisions approved 2026-10-10. Study and evidence: `reports/022-responsi
 | P1a | Headless PC render harness (PNG at 480x320, 640x480, 800x480, 720x720, 1280x720; goldens and pixel diff) | savvy-heavy | merged (PR #24) |
 | P1b | Layout service `cp0_ui_metrics`, panel mm density, pinned presets (deck and 3A+ pixel-identical) | savvy-heavy | merged (PR #25) |
 | P1c | Home grid, status bar, bottom toolbar on tokens; Controller design for Wide/Square/Large | savvy-careful | merged (PR #26) |
-| P2a | Widget library, Settings scaffold and generic tree renderer (roller look), ChoiceBinding extraction | savvy-heavy | implemented on branch `p2a-native-settings`, behind `APPLAUNCH_SETTINGS_UI=native` (default compat); Controller review and physical tests pending |
-| P2b | On-screen keyboard widget + TextFieldRow + inset/scroll, press+release injector, text hint, Auto/Off | savvy-heavy | implemented on branch `p2b-osk` (native pages only, behind `APPLAUNCH_SETTINGS_UI=native`); Controller review and physical tests (`tests/launcher-0.5.0-keyboard-tests.md`) pending |
-| P3a | Info pages (About, User, Storage, Licenses, Date & Time > Info): InfoRow / InfoTable, TextBlock | medium | implemented on branch `p3ab-info-wifi` (native only, behind `APPLAUNCH_SETTINGS_UI=native`); Controller review and physical tests pending |
-| P3b | Wi-Fi page (toggle, networks, password and hidden-network dialogs, the connected network's actions) + Dialog widget | heavy | implemented on branch `p3ab-info-wifi` (same switch); Controller review and physical tests (`tests/launcher-0.5.0-keyboard-tests.md` section E) pending |
-| P3c | Bluetooth: Paired Devices, Scan, Alias, the agent's prompts as Dialogs (PIN / passkey on the number pad) | heavy | implemented on branch `p3c-bluetooth` (native only, same switch; shown in a release build); Controller review and physical tests (`tests/launcher-0.5.0-keyboard-tests.md` section G) pending; includes a small cp0_lvgl Bluetooth backend change that needs a deck test |
-| P3d | Apps + sudo prompt (the SSH form is a built-in app, moved to P4/P5 with the app contract) | heavy + careful | implemented on branch `p3d-apps-sudo-ssh` (same switch; Apps shown in a release build); Controller review done, physical tests (`tests/launcher-0.5.0-keyboard-tests.md` section H) pending |
-| P3e | Native Settings default on the deck, delete legacy renderer | savvy-light/medium | |
+| P2a | Widget library, Settings scaffold and generic tree renderer (roller look), ChoiceBinding extraction | savvy-heavy | merged (PR #27), behind `APPLAUNCH_SETTINGS_UI=native` |
+| P2b | On-screen keyboard widget + TextFieldRow + inset/scroll, press+release injector, text hint, Auto/Off | savvy-heavy | merged (PR #28), native pages only |
+| P3a | Info pages (About, User, Storage, Licenses, Date & Time > Info): InfoRow / InfoTable, TextBlock | medium | merged (PR #29), native only |
+| P3b | Wi-Fi page (toggle, networks, password and hidden-network dialogs, the connected network's actions) + Dialog widget | heavy | merged (PR #29), native only |
+| P3c | Bluetooth: Paired Devices, Scan, Alias, the agent's prompts as Dialogs (PIN / passkey on the number pad) | heavy | merged (PR #31); Pi 3A+ physical tests (section G) passed; the udev rule `93-applaunch-rfkill.rules` was added to the bundle (rfkill unblock as the launcher user) |
+| P3d | Apps + sudo prompt (the SSH form is a built-in app, moved to P4/P5 with the app contract) | heavy + careful | merged (PR #32); Pi 3A+ physical tests (section H) passed |
+| P3e | Native Settings default on the deck, delete legacy renderer | savvy-light/medium | in progress: native Settings becomes the default on every board (deck included), legacy renderer and dead examples deleted; deck physical test pending |
 | P4 | Calculator, screensaver, toast, media OSD, loading, Esc ribbon on tokens | savvy-careful | |
 | P5 | App contract published | savvy-medium | |
 
 Controller owns: all visual design (Settings on wide/large classes, keyboard look, Wide/Square/Large home), acceptance, deploy to the Pi 3A+ (and the deck), screenshots. The user runs physical tests per phase (listed in report 022 section 5).
 
 ## Rolling blockers
-- Merge T1-T4 + phase 0 first (baseline).
+- (done) T1-T4 + phase 0 merged (PR #23, released as v0.5.0); the responsive shell (P1 to P3d, PRs #24 to #32) and the dev tooling (PR #30) are on `main`, not released yet.
 - Deck capture of `/proc/bus/input/devices` with the RTL-SDR dongle (IR node), still wanted before the keyboard phase.
 - Hold-Esc exit with a USB-only keyboard (small follow-up of phase 0: `cp0_external_app_runner` watches only the old device).
 - Exact panel mm for HyperPixel 4", HackBerry 720x720, uConsole 5" (ruler measurement).
