@@ -2,6 +2,16 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-10-13: the minimum resolution for new work is 640x480 (the deck); app guidelines come first.**
+  - 480x320 (the Pi 3A+) is too small for the apps the project wants to build. New apps and new launcher screens
+    are designed for 640x480 and up. The launcher keeps working at 480x320 as it does today (nothing is removed, no
+    regression), but 480x320 is best effort: a new app declares `X-MinSize=640x480` by default (hidden on the
+    Pi 3A+) unless it is cheap to support there (for example a text-mode app in the native terminal).
+  - If making something work at 480x320 needs heavy effort or rework, the project acts on this decision and does
+    not do it. The Compact class and its goldens stay as they are until they cost something.
+  - Before the first new apps: an app guidelines document (`docs/APP-GUIDELINES.md`) that pins down the UI elements,
+    colours, fonts, size requirements and rules every LVGL app follows so it runs on all boards (extracted from the
+    launcher's tokens and widgets), plus a template app that follows it.
 - **2026-10-05: Settings > Apps decisions (task 006).**
   - The home grid order is stored in the launcher's own config (`app_order` in `~/.config/cardputerzero/config.json`,
     FNV-1a keys of the `.desktop` names), because the Store backend (`projects/AppStore` submodule) cannot be changed.
