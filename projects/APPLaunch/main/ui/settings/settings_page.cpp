@@ -9,6 +9,7 @@
 #include "settings_keyboard_page.hpp"
 #include "settings_native_host.hpp"
 #include "settings_native_mode.hpp"
+#include "settings_session.hpp"
 #include "settings_touch_page.hpp"
 #include "settings_native_apps_page.hpp"
 
@@ -885,6 +886,8 @@ void UISettingTreePage::create_page_detail()
         }
         // the fallback on-screen keyboard's entries: native Settings only (the compat Settings stays as it is)
         if (settings_ui::native_selected()) settings_keyboard::append_entries(mode_tree, system);
+        // Quit to desktop: a launcher started by the desktop boards' unit only (settings_session_model.hpp)
+        settings_session::append_quit_to_desktop(mode_tree, system, confirm_page3_factory);
         settings_t12b::append_boot_action_child(
             mode_tree, system, settings_t12b::boot_actions::Action::Reboot, confirm_page3_factory);
 #if APPLAUNCH_SETTINGS_SHUTDOWN

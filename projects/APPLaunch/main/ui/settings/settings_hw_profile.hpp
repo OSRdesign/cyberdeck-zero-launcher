@@ -63,6 +63,11 @@
 #ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
 #define APPLAUNCH_LAUNCHER_STORE_TOGGLE 1
 #endif
+// Settings > System > Quit to desktop: shown at run time only to a launcher started by applaunch-desktop.service on a
+// desktop board (APPLAUNCH_SESSION=desktop, settings_session_model.hpp); the appliance boards never see it.
+#ifndef APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP
+#define APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP 1
+#endif
 #define APPLAUNCH_TXT_HELP_HINT "H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "H: close"
 #define APPLAUNCH_TXT_SSH_HELP_HINT "F1:Help"
@@ -127,6 +132,9 @@
 #endif
 #ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
 #define APPLAUNCH_LAUNCHER_STORE_TOGGLE 0 // stock: the Store tile is always shown, not in Settings > Launcher
+#endif
+#ifndef APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP
+#define APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP 0 // stock: the launcher is the device's only screen
 #endif
 #define APPLAUNCH_TXT_HELP_HINT "Fn+H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "Fn+H: close"

@@ -287,3 +287,65 @@ Deck and Pi 3A+ (needs network for the sync; check item 124 first with `ssh <boa
 127. With a source of your own already there on a board that has no `apps_default_source`: the first opening of Settings > Apps adds nothing; the flag is set (item 125's grep).
 128. Switch a source off (Enter on it), open the Store, come back: it is still off.
 129. Seeded source survives opening the Store first: on a board where `install.sh` seeded the source (or after `registries.json` has the source and `apps_default_source` is not yet set), restart the launcher, wait 10 seconds, open the Store before Settings > Apps, close it: `grep -c url ~/.local/share/cardputerzero-appstore/registries.json` still shows the source, and Settings > Apps > Sources lists it.
+
+## N. Text console and desktop boards (`applaunch-console`, `applaunch-desktop.service`; task 012 F2)
+
+Background: `projects/APPLaunch/pizero2w/README.md`, sections "Text console" and "Desktop boards". The Controller
+installs the bundle with `python tools/boards/board.py install <board>` (deck, Pi 3A+, HackBerry) and keeps an ssh
+session open for the checks in backquotes. Answer PASS / FAIL (+ what you saw) per line.
+
+Appliance boards (the deck and the Pi 3A+), after the install and one reboot:
+130. During the boot the usual boot lines scroll on the panel as before; the launcher then starts on a clean screen.
+131. `systemctl is-active applaunch-console.service` prints `active`; `python tools/boards/board.py status <board>`
+     shows `console-unit: active` and `text-console: vtcon1 bind=0` (the vtcon number may differ).
+132. On the board (ssh): `sudo chvt 2; sudo chvt 1`. The launcher stays intact: no boot lines, no login prompt, no
+     text drawn over it, also after you tap around the home grid and Settings.
+133. While the launcher runs, `sudo apt-get install --reinstall -y <a few packages>` (or a real install of about 100
+     packages): nothing is drawn over the launcher during or after it.
+134. `sudo reboot` from ssh, then Settings > System > Reboot: each time the boot lines show during the boot and the
+     launcher comes up clean (the unit is enabled: `systemctl is-enabled applaunch-console.service` prints `enabled`).
+135. Settings > System > Shutdown: the board powers off as before. Settings > System has no "Quit to desktop" entry.
+136. Hold Esc for 4 s in Settings: the hold-Esc ribbon returns to the home grid at 3 s as before; the launcher keeps
+     running (the exit-75 recovery only fires when the page is stuck; it then restarts the user service as before).
+
+HackBerry CM5 (Raspberry Pi OS desktop), after the install (`board.py install hackberry`; `--check` first shows
+`session: desktop (display manager lightdm.service enabled; ...)` and the unit text):
+137. The install printed "not started now" and the desktop is still there. `systemctl is-enabled
+     applaunch-desktop.service` prints `static` (cannot be enabled); `systemctl --user is-enabled APPLaunch.service`
+     says it does not exist; `systemctl is-enabled getty@tty1.service` is unchanged (`enabled`).
+138. Reboot: the board boots to its normal desktop; the launcher does not start by itself.
+139. Applications menu (Accessories): "CardputerZero Launcher" is listed (no icon of its own yet). Open it: no password is asked, the
+     desktop goes away within a few seconds and the launcher fills the screen (home grid, touch and keyboard work).
+     `board.py status hackberry` shows `lightdm: inactive`, `applaunch-desktop.service: active`, `text-console: ...
+     bind=0`.
+140. Keys typed in the launcher (a Wi-Fi password field, the terminal) go nowhere else: `fgconsole` (sudo) prints `7`,
+     and `journalctl -b -u getty@tty1 --since -5min` shows no login attempt.
+141. Settings > System lists "Quit to desktop" (above Reboot and Shutdown). Open it, answer No: nothing happens. Open it
+     again, answer Yes: the launcher closes and the desktop comes back within a few seconds (as after a boot: the
+     login screen, or the desktop when lightdm logs the user in by itself). `journalctl -b -u applaunch-desktop.service | tail` shows
+     `[SESSION] quit requested`, the unit stopping with status 0 and `desktop: lightdm.service started again`.
+142. Start the launcher again from the menu, then Settings > System > Shutdown > Yes: the board powers off WITHOUT the
+     desktop appearing in between (watch the screen until it is dark). After the next boot:
+     `journalctl -b -1 -u applaunch-desktop.service | tail` shows `the system is shutting down: lightdm.service is not
+     started again`.
+143. Same with Settings > System > Reboot: the board reboots straight to the desktop (no desktop flash before the
+     reboot), the launcher does not start by itself.
+144. Start the launcher, then from ssh `sudo pkill -9 -x M5CardputerZero` (a crash): the desktop comes back within a
+     few seconds; starting the launcher from the menu works again right away.
+145. Hold Esc for 4 s in Settings: the hold-Esc ribbon returns to the home grid at 3 s; the launcher keeps running and
+     the desktop does not come back (the ribbon is not a quit). The exit-75 recovery (a stuck page) cannot be caused
+     on purpose; it ends like item 144: `systemctl show -p Restart applaunch-desktop.service` prints `Restart=no`, so
+     any exit gives the desktop back and nothing restarts the launcher in a loop.
+146. Start the launcher, then from ssh `sudo chvt 2; sudo chvt 7`: nothing is drawn over the launcher. Quit to desktop,
+     then switch to a text console (Ctrl+Alt+F2 on the built-in keyboard, or `sudo chvt 2`): the text console shows
+     there (it was given back), `sudo chvt 7` returns to the desktop.
+147. While the launcher runs, `sudo apt-get install --reinstall -y <a few packages>` from ssh: nothing is drawn over
+     the launcher.
+148. The launcher's state files exist while it runs, also with no ssh session open during the start:
+     `ls /run/user/$(id -u)/applaunch/` lists `screen.state` and `input.state`; sounds (if the board has audio) play.
+149. From ssh, `systemctl start applaunch-desktop.service` as the user (no sudo) works without a password;
+     `systemctl stop applaunch-desktop.service` (no sudo) brings the desktop back. `systemctl restart lightdm` without
+     sudo still asks for a password (nothing else was opened up; answer Ctrl+C).
+150. `./uninstall.sh --dry-run` from the bundle lists the desktop unit, the menu entry and `52-applaunch-desktop.rules`;
+     after a real `./uninstall.sh` (from ssh) the menu entry is gone, the desktop is running and
+     `cat /sys/class/vtconsole/vtcon1/bind` prints `1`.

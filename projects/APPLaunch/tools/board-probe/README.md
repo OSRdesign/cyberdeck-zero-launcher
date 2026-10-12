@@ -78,7 +78,9 @@ python3 fb-test-pattern.py --rotate-hint
 sudo systemctl start lightdm                      # after the test
 ```
 
-The launcher needs the same on such boards: it cannot draw while the desktop is running.
+The launcher needs the same on such boards: it cannot draw while the desktop is running. `install.sh` therefore
+installs it there as the desktop variant: opened from the applications menu, it stops lightdm while it runs and starts
+it again when it exits (`pizero2w/README.md`, "Desktop boards").
 
 ## If something goes wrong
 

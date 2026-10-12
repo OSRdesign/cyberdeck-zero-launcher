@@ -67,9 +67,13 @@ if [ "$WITH_STORE" = 1 ] && [ -d "$REPO/projects/AppStore/dist/APPLaunch" ]; the
 fi
 for file in APPLaunch.service launcher-ntp-default.service waveshare-pwm-backlight.dts \
             90-backlight-unblank.rules 91-applaunch-vkbd.rules 93-applaunch-rfkill.rules \
-            50-networkmanager-netdev.rules 51-launcher-time-power.rules; do
+            50-networkmanager-netdev.rules 51-launcher-time-power.rules \
+            applaunch-console.service applaunch-desktop.service 52-applaunch-desktop.rules applaunch.desktop; do
     cp "$HERE/$file" "$OUT/payload/etc/"
 done
+# the text console helper the units run (install.sh puts it in /usr/share/APPLaunch/bin)
+cp "$HERE/applaunch-console" "$OUT/payload/bin/"
+chmod +x "$OUT/payload/bin/applaunch-console"
 ( cd "$OUT/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$OUT/payload/share.manifest"   # for uninstall.sh
 cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/default-sources.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
 chmod +x "$OUT/install.sh" "$OUT/uninstall.sh" "$OUT/default-sources.sh"
