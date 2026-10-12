@@ -13,7 +13,7 @@ clock 20:30
 wifi 70
 bt on
 home
-header home ZERO
+header home
 launch SSH
 wait 300
 key BACKSPACE

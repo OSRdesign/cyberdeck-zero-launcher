@@ -49,7 +49,7 @@
 
 /* The Apps entry's page identity in the Settings tree (settings_native_page() and the legacy roller know the entry by
  * this function). The legacy Apps page was deleted in P3e: it builds nothing, and the legacy roller (stock
- * CardputerZero, the SDL simulator) tolerates a null page, so the entry does nothing there. */
+ * stock builds, the SDL simulator) tolerates a null page, so the entry does nothing there. */
 std::unique_ptr<DComponens::LvglComponensBase> settings_apps_page_factory(
     lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 

@@ -3,7 +3,7 @@
  *
  * Two LVGL displays share one framebuffer:
  *   - native : full panel resolution (e.g. 640x480). Used by native screens.
- *   - compat : the legacy 320x170 CardputerZero resolution. Its output is
+ *   - compat : the legacy 320x170 stock resolution. Its output is
  *              blitted 2x into a window at the top of the panel, so the stock
  *              pages keep working unmodified.
  * The default LVGL display follows the mode, so code that creates screens or

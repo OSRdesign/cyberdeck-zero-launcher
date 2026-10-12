@@ -164,7 +164,7 @@ struct LoraRuntimeState {
     float last_rssi          = 0.0f;
     float last_snr           = 0.0f;
     char last_rx[128]        = {};
-    char last_tx[128]        = "Hello from M5 LoRa-1262";
+    char last_tx[128]        = "Hello from LoRa-1262";
     char last_diag[256]      = "idle";
     char probe_summary[256]  = "probe not started";
     char probe_display[128]  = "SPI: probing...";
@@ -603,7 +603,7 @@ static void lora_send_demo_packet(void)
 {
     if (!g_lora.initialized || g_lora.radio == NULL) return;
     if (!g_lora.tx_mode) return;
-    snprintf(g_lora.last_tx, sizeof(g_lora.last_tx), "Hello from M5 LoRa-1262 #%lu", (unsigned long)g_lora.tx_counter);
+    snprintf(g_lora.last_tx, sizeof(g_lora.last_tx), "Hello from LoRa-1262 #%lu", (unsigned long)g_lora.tx_counter);
     g_lora.has_sent_message     = true;
     g_lora.pending_rx_after_tx  = false;
     g_lora.tx_done              = false;

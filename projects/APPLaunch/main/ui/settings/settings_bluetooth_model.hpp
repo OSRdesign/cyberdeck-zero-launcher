@@ -549,7 +549,7 @@ public:
         std::function<void()> done;                           /* saved: the page goes back */
     };
 
-    /* initial: the alias the tree shows (an invalid one becomes "CardputerZero", as the legacy page does) */
+    /* initial: the alias the tree shows (an invalid one becomes "CyberdeckZero", as the legacy page does) */
     AliasModel(std::string initial, Hooks hooks);
     ~AliasModel();
     AliasModel(const AliasModel &) = delete;

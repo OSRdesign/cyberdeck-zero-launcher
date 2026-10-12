@@ -1,3 +1,7 @@
+# Inherited from the upstream CardputerZero launcher and kept for reference: not used on this repository.
+# It runs only on a 'master' branch (and ci/**), which this repository does not have; CyberdeckZero Launcher
+# releases are built with projects/APPLaunch/pizero2w/build.sh.
+
 name: Build APPLauncher
 
 on:

@@ -17,7 +17,7 @@ bt on
 ntp on
 timeset fail
 home
-header home ZERO
+header home
 launch Settings
 # root: Up from Screen wraps to System, Up again is Date & Time
 key UP

@@ -1,9 +1,11 @@
 #!/bin/sh
-# Uninstall the launcher port from a Raspberry Pi Zero 2W: the counterpart of install.sh.
+# Uninstall CyberdeckZero Launcher from a Raspberry Pi board: the counterpart of install.sh.
 #
 # Run on the Pi as the deck user (sudo is used only for the system parts):   ./uninstall.sh [options]
 # It is idempotent: running it again only reports what is already gone. It never writes or logs a password
-# (sudo asks for it itself) and never uses pkill: the launcher is stopped through systemd.
+# (sudo asks for it itself) and never uses pkill: the launcher is stopped through systemd. It knows the names of this
+# release (cyberdeckzero.service, ...) and those of v0.6.0 and before (APPLaunch.service, ...), so it also cleans a
+# board that was never migrated, or only half.
 #
 # By default the user's data is kept: ~/.config/cardputerzero, the Settings > Apps sources and records
 # (~/.local/share/cardputerzero-appstore), the download cache, and every installed app package with its data.
@@ -46,7 +48,7 @@ while [ $# -gt 0 ]; do
         --disable-linger) DISABLE_LINGER=1; shift ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --payload) [ $# -ge 2 ] || { echo "--payload needs a directory" >&2; exit 2; }; PAYLOAD_ARG="$2"; shift 2 ;;
-        -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -59,9 +61,31 @@ BOOT="$ROOT/boot/firmware"
 UDEV_DIR="$ROOT/etc/udev/rules.d"
 POLKIT_DIR="$ROOT/etc/polkit-1/rules.d"
 SYSTEMD_DIR="$ROOT/etc/systemd/system"
-DESKTOP_ENTRY="$ROOT/usr/share/applications/applaunch.desktop"
+MENU_DIR="$ROOT/usr/share/applications"
+DOC_DIR="$ROOT/usr/share/doc/cyberdeckzero-launcher"
 PROFILE_DIR="$ROOT/etc/applaunch"
 PROFILE="$PROFILE_DIR/board.conf"
+
+# The names of this release, then those of v0.6.0 and before (as in install.sh, "Names")
+LAUNCHER_BIN=cyberdeckzero
+CONSOLE_HELPER=cyberdeckzero-console
+USER_UNIT=cyberdeckzero.service
+CONSOLE_UNIT=cyberdeckzero-console.service
+DESKTOP_UNIT=cyberdeckzero-desktop.service
+DESKTOP_RULES=52-cyberdeckzero-desktop.rules
+DESKTOP_ENTRY_NAME=cyberdeckzero.desktop
+# branding-allow-begin: the binary name of v0.6.0 and before (a link to the new binary after a migration)
+OLD_LAUNCHER_BIN=M5CardputerZero-APPLaunch
+# branding-allow-end
+OLD_CONSOLE_HELPER=applaunch-console
+OLD_USER_UNIT=APPLaunch.service
+OLD_CONSOLE_UNIT=applaunch-console.service
+OLD_DESKTOP_UNIT=applaunch-desktop.service
+OLD_DESKTOP_RULES=52-applaunch-desktop.rules
+OLD_DESKTOP_ENTRY_NAME=applaunch.desktop
+# Files of earlier bundles that the current one no longer ships (install.sh: RETIRED_FILES): not in its manifest
+RETIRED_FILES="share/images/logo_lcd.png share/images/launcher_brand_logo.png share/images/carousel_zero_wordmark.png
+adb/cardputer-adb adb/cardputer-adb-gadget"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 
@@ -236,7 +260,8 @@ GETTY_STATE=$(systemctl is-enabled getty@tty1.service 2>/dev/null || true)
 # ---------------------------------------------------------------------------------------------------------
 # Plan and confirmation
 # ---------------------------------------------------------------------------------------------------------
-if grep -q -e 'APPLaunch.service' -e 'applaunch-desktop.service' /proc/self/cgroup 2>/dev/null && [ "$DRY" = 0 ]; then
+if grep -q -e "$USER_UNIT" -e "$DESKTOP_UNIT" -e "$OLD_USER_UNIT" -e "$OLD_DESKTOP_UNIT" /proc/self/cgroup 2>/dev/null \
+        && [ "$DRY" = 0 ]; then
     echo "this shell runs inside the launcher's service (the launcher's terminal): stopping the service would kill the" >&2
     echo "uninstall half way. Run it from an ssh session or a text console instead." >&2
     exit 1
@@ -244,20 +269,24 @@ fi
 
 say "Uninstall plan (user: $TARGET_USER, home: $TARGET_HOME)"
 [ "$DRY" = 1 ] && echo "DRY RUN: nothing will be changed."
-echo "Will remove:"
-echo "  - user service APPLaunch.service (stop, disable, delete, reset-failed)"
-echo "  - system service applaunch-console.service (appliance boards: the panel goes back to the text console)"
-echo "  - system service applaunch-desktop.service (desktop boards: stopped first if it runs, so the desktop comes"
-echo "    back) and the menu entry ${DESKTOP_ENTRY#"$ROOT"}"
+echo "Will remove (the names of this release, then those of v0.6.0 and before, whichever are there):"
+echo "  - user service $USER_UNIT / $OLD_USER_UNIT (stop, disable, delete, reset-failed)"
+echo "  - system service $CONSOLE_UNIT / $OLD_CONSOLE_UNIT (appliance boards: the panel goes back to the text"
+echo "    console)"
+echo "  - system service $DESKTOP_UNIT / $OLD_DESKTOP_UNIT (desktop boards: stopped first if it runs, so the"
+echo "    desktop comes back) and the menu entry ${MENU_DIR#"$ROOT"}/$DESKTOP_ENTRY_NAME / $OLD_DESKTOP_ENTRY_NAME"
 echo "  - system service launcher-ntp-default.service"
-echo "  - $APP_ROOT/bin/M5CardputerZero-APPLaunch, M5CardputerZero-AppStore, applaunch-console, lib/libapplaunch_vfb.so"
+echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
+echo "    lib/libapplaunch_vfb.so"
 case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
 esac
+echo "  - files of earlier bundles no longer shipped: $(echo $RETIRED_FILES | sed 's/ /, /g') (those there)"
+echo "  - licences and notices $DOC_DIR"
 echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 93-applaunch-rfkill, 99-bt-keyboard"
 echo "  - board profile $PROFILE (and $PROFILE_DIR if it is then empty)"
-echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, 52-applaunch-desktop"
+echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${DESKTOP_RULES%.rules}, ${OLD_DESKTOP_RULES%.rules}"
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
         echo "  - $CONFIG restored from $CONFIG.bak-before-pwm (a timestamped backup of the current file is made first)"
@@ -304,48 +333,59 @@ fi
 
 # ---------------------------------------------------------------------------------------------------------
 say "Stopping and removing the user service"
-if as_user systemctl --user cat APPLaunch.service >/dev/null 2>&1 || exists "$UNIT_DIR/APPLaunch.service"; then
-    act_try as_user systemctl --user stop APPLaunch.service
-    act_try as_user systemctl --user disable APPLaunch.service
-else
-    note "APPLaunch.service is not installed"
-fi
-# a dead user bus must not leave the unit behind
-if exists "$UNIT_DIR/APPLaunch.service"; then act rm -f "$UNIT_DIR/APPLaunch.service"; else note "already gone: $UNIT_DIR/APPLaunch.service"; fi
-if exists "$UNIT_DIR/default.target.wants/APPLaunch.service"; then act rm -f "$UNIT_DIR/default.target.wants/APPLaunch.service"; fi
-act_try as_user systemctl --user daemon-reload
-act_try as_user systemctl --user reset-failed APPLaunch.service
+for unit in "$USER_UNIT" "$OLD_USER_UNIT"; do
+    if exists "$UNIT_DIR/$unit" || exists "$UNIT_DIR/default.target.wants/$unit" \
+            || as_user systemctl --user cat "$unit" >/dev/null 2>&1; then
+        act_try as_user systemctl --user stop "$unit"
+        act_try as_user systemctl --user disable "$unit"
+        # a dead user bus must not leave the unit behind
+        if exists "$UNIT_DIR/$unit"; then act rm -f "$UNIT_DIR/$unit"; else note "already gone: $UNIT_DIR/$unit"; fi
+        if exists "$UNIT_DIR/default.target.wants/$unit"; then act rm -f "$UNIT_DIR/default.target.wants/$unit"; fi
+        act_try as_user systemctl --user daemon-reload
+        act_try as_user systemctl --user reset-failed "$unit"
+    else
+        note "$unit is not installed"
+    fi
+done
 for d in "$UNIT_DIR/default.target.wants" "$UNIT_DIR"; do
     if [ -d "$d" ] && [ -z "$(ls -A "$d" 2>/dev/null)" ]; then act rmdir "$d"; fi
 done
 
 # ---------------------------------------------------------------------------------------------------------
-# The text console and the desktop variant, before the launcher files (their units run bin/applaunch-console).
+# The text console and the desktop variant, before the launcher files (their units run the console helper).
 say "Removing the text console and desktop units"
 UNITS_CHANGED=0
-if exists "$SYSTEMD_DIR/applaunch-desktop.service"; then
-    # stopping it runs its ExecStopPost=: the text console and the desktop come back
-    act_try $SUDO systemctl stop applaunch-desktop.service
-    rm_sys "$SYSTEMD_DIR/applaunch-desktop.service"
-    UNITS_CHANGED=1
-else
-    note "already gone: applaunch-desktop.service"
-fi
-if exists "$SYSTEMD_DIR/applaunch-console.service"; then
-    # stopping it runs its ExecStop=: the panel goes back to the text console
-    act_try $SUDO systemctl disable --now applaunch-console.service
-    rm_sys "$SYSTEMD_DIR/applaunch-console.service"
-    UNITS_CHANGED=1
-else
-    note "already gone: applaunch-console.service"
-fi
+for unit in "$DESKTOP_UNIT" "$OLD_DESKTOP_UNIT"; do
+    if exists "$SYSTEMD_DIR/$unit"; then
+        # stopping it runs its ExecStopPost=: the text console and the desktop come back
+        act_try $SUDO systemctl stop "$unit"
+        rm_sys "$SYSTEMD_DIR/$unit"
+        UNITS_CHANGED=1
+    else
+        note "already gone: $unit"
+    fi
+done
+for unit in "$CONSOLE_UNIT" "$OLD_CONSOLE_UNIT"; do
+    if exists "$SYSTEMD_DIR/$unit"; then
+        # stopping it runs its ExecStop=: the panel goes back to the text console
+        act_try $SUDO systemctl disable --now "$unit"
+        rm_sys "$SYSTEMD_DIR/$unit"
+        if exists "$SYSTEMD_DIR/multi-user.target.wants/$unit"; then rm_sys "$SYSTEMD_DIR/multi-user.target.wants/$unit"; fi
+        UNITS_CHANGED=1
+    else
+        note "already gone: $unit"
+    fi
+done
 if [ "$UNITS_CHANGED" = 1 ]; then
     act_try $SUDO systemctl daemon-reload
-    act_try $SUDO systemctl reset-failed applaunch-desktop.service applaunch-console.service
+    act_try $SUDO systemctl reset-failed "$DESKTOP_UNIT" "$CONSOLE_UNIT" "$OLD_DESKTOP_UNIT" "$OLD_CONSOLE_UNIT"
 fi
 # whatever the units did: the framebuffer console bound again (idempotent, nothing to do when it is)
-if exists "$APP_ROOT/bin/applaunch-console"; then act_try $SUDO "$APP_ROOT/bin/applaunch-console" bind; fi
-rm_sys "$DESKTOP_ENTRY"
+for helper in "$CONSOLE_HELPER" "$OLD_CONSOLE_HELPER"; do
+    if exists "$APP_ROOT/bin/$helper"; then act_try $SUDO "$APP_ROOT/bin/$helper" bind; break; fi
+done
+rm_sys "$MENU_DIR/$DESKTOP_ENTRY_NAME"
+rm_sys "$MENU_DIR/$OLD_DESKTOP_ENTRY_NAME"
 
 # ---------------------------------------------------------------------------------------------------------
 if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then
@@ -375,14 +415,26 @@ for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlig
     rm_sys "$UDEV_DIR/$f"
 done
 [ "$UDEV_CHANGED" = 1 ] && act_try $SUDO udevadm control --reload
-for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules 52-applaunch-desktop.rules; do rm_sys "$POLKIT_DIR/$f"; done
+for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules "$DESKTOP_RULES" "$OLD_DESKTOP_RULES"; do
+    rm_sys "$POLKIT_DIR/$f"
+done
 
 say "Removing the board profile"
 rm_sys "$PROFILE"
 if [ -d "$PROFILE_DIR" ] && [ -z "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$PROFILE_DIR"; fi
 
 say "Removing the launcher files in $APP_ROOT"
-for f in bin/M5CardputerZero-APPLaunch bin/M5CardputerZero-AppStore bin/applaunch-console lib/libapplaunch_vfb.so; do rm_sys "$APP_ROOT/$f"; done
+for f in "bin/$LAUNCHER_BIN" "bin/$OLD_LAUNCHER_BIN" bin/M5CardputerZero-AppStore "bin/$CONSOLE_HELPER" \
+         "bin/$OLD_CONSOLE_HELPER" lib/libapplaunch_vfb.so; do
+    rm_sys "$APP_ROOT/$f"
+done
+# files of earlier bundles that the current bundle (and so its manifest) no longer has
+for f in $RETIRED_FILES; do
+    if exists "$APP_ROOT/$f"; then rm_sys "$APP_ROOT/$f"; fi
+done
+if [ -d "$APP_ROOT/adb" ] && [ -z "$(ls -A "$APP_ROOT/adb" 2>/dev/null)" ]; then act $SUDO rmdir "$APP_ROOT/adb"; fi
+# the licences and notices (a fixed folder of this launcher alone)
+if [ -d "$DOC_DIR" ]; then act $SUDO rm -rf "$DOC_DIR"; CHANGED_SYS=1; else note "already gone: $DOC_DIR"; fi
 if [ -s "$ASSETS_TMP" ]; then
     # one sudo call for the whole list instead of one per file
     LIST_TMP=$(mktemp)
@@ -483,7 +535,7 @@ if [ "$PURGE_CONFIG" = 1 ]; then
     for d in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR"; do
         if [ -d "$d" ]; then
             # these paths are fixed names under the user's home, never a wildcard
-            case "$d" in */cardputerzero|*/cardputerzero-appstore) act rm -rf "$d" ;; *) note "not removing unexpected path $d" ;; esac
+            case "$d" in */.config/cardputerzero|*/cardputerzero-appstore) act rm -rf "$d" ;; *) note "not removing unexpected path $d" ;; esac
         else
             note "already gone: $d"
         fi

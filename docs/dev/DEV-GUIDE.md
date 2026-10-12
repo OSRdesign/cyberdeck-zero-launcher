@@ -18,7 +18,7 @@ request with the Controller.
 
 - Raspberry Pi Zero 2W, Raspberry Pi OS Lite 64-bit (Debian 13), Waveshare 2.8" DPI touch LCD (`/dev/fb0` is
   640x480, 32 bpp), Bluetooth keyboard, RTL-SDR dongle on the OTG port. Host `zero7.local`, user `osrde`.
-- The launcher runs as the user service `APPLaunch.service` (`systemctl --user ...`). Installed apps are
+- The launcher runs as the user service `cyberdeckzero.service` (`systemctl --user ...`; `APPLaunch.service` before v0.7.0). Installed apps are
   `.deb` packages; their `.desktop` files are in `/usr/share/APPLaunch/applications/`.
 - Passwords are never written to a file, a commit or a prompt that is saved: the Controller gives the password to
   the device operator through the `PIPW` environment variable.
@@ -38,7 +38,7 @@ build in `flock /tmp/wsl-build.lock ...`. Use your own git worktree so build dir
 wsl -e sh -c 'cd /mnt/c/CLAUDE/zero7/launcher/projects/APPLaunch && export PATH=/mnt/c/CLAUDE/zero7/launcher/.venv-pizero2w/bin:$PATH \
   APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk && scons -j$(nproc)'
 ```
-The binary is `dist/M5CardputerZero-APPLaunch`. An LVGL app project builds the same way and produces `dist/<Name>`; app sources
+The binary is `dist/cyberdeckzero`. An LVGL app project builds the same way and produces `dist/<Name>`; app sources
 live in the apps repo (`apps/<id>/src`, built by `apps/<id>/build/build.sh` in a scratch project under `projects/`). The full bundle is `projects/APPLaunch/pizero2w/build.sh --with-store`.
 
 Packages: write `apps/<id>/app.json`, put the files in `apps/<id>/root/` exactly as they must land on the device,

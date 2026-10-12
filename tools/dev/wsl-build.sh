@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# wsl-build.sh: build the Pi bundle (pizero2w-bundle.tar.gz) of this checkout in WSL, under the shared build lock.
+# wsl-build.sh: build the Pi bundle of this checkout in WSL, under the shared build lock: the tarball
+# cyberdeckzero-launcher-<version>-arm64.tar.gz (<version>: APPLAUNCH_VERSION, default "dev") and its copy
+# pizero2w-bundle.tar.gz (the earlier quick-start name; build.sh leaves it out with LEGACY_BUNDLE_NAME=0).
 #
 #   tools/dev/wsl-build.sh [--with-store] [--build-dir DIR] [--log FILE]
 #
@@ -10,9 +12,10 @@
 #      ~/zero7/<checkout folder name> (build/, dist/ and .git excluded; see lib.sh sync_tree)
 #   3. source ~/zero7/venv/bin/activate; APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y
 #      CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk; bash build.sh in projects/APPLaunch/pizero2w
-#   4. prints the last 25 lines of the build, the full log's path, the bundle's path and size
+#   4. prints the last 25 lines of the build, the full log's path, the bundle's path and size (and the copy's)
 #
-#   APPLAUNCH_CHANNEL in the environment sets the channel (default development here; build.sh alone defaults to release)
+#   APPLAUNCH_CHANNEL in the environment sets the channel (default development here; build.sh alone defaults to release);
+#   APPLAUNCH_VERSION and LEGACY_BUNDLE_NAME go through to build.sh as they are
 #
 #   --with-store     also build the Store (passed to pizero2w/build.sh)
 #   --build-dir DIR  WSL build tree (default ~/zero7/<checkout folder name>)
@@ -72,7 +75,9 @@ echo "-- last 25 lines of the build --"
 tail -n 25 "$log"
 echo "----------------------------------"
 echo "full log: $log"
-bundle=$build_dir/projects/APPLaunch/pizero2w/pizero2w-bundle.tar.gz
+out_dir=$build_dir/projects/APPLaunch/pizero2w
+bundle=$out_dir/cyberdeckzero-launcher-${APPLAUNCH_VERSION:-dev}-arm64.tar.gz
+legacy=$out_dir/pizero2w-bundle.tar.gz
 if ((rc != 0)); then
     echo "BUILD FAILED (exit $rc, ${secs}s)"
     exit "$rc"
@@ -82,7 +87,11 @@ if [[ ! -f $bundle ]]; then
     exit 1
 fi
 echo "BUILD OK (${secs}s)"
-echo "bundle: $bundle ($(du -h "$bundle" | cut -f1), $(stat -c %s "$bundle") bytes, $(date -r "$bundle" '+%F %T'))"
-if [[ -n ${WSL_DISTRO_NAME:-} ]]; then
-    echo "from Windows: \\\\wsl.localhost\\$WSL_DISTRO_NAME${bundle//\//\\}"
-fi
+for f in "$bundle" "$legacy"; do
+    [[ -f $f ]] || continue
+    [[ $f == "$legacy" ]] && label="bundle (copy, earlier name)" || label=bundle
+    echo "$label: $f ($(du -h "$f" | cut -f1), $(stat -c %s "$f") bytes, $(date -r "$f" '+%F %T'))"
+    if [[ -n ${WSL_DISTRO_NAME:-} ]]; then
+        echo "  from Windows: \\\\wsl.localhost\\$WSL_DISTRO_NAME${f//\//\\}"
+    fi
+done

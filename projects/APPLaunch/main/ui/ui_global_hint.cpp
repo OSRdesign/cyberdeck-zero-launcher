@@ -14,8 +14,8 @@
  *       "Hold ESC 3s to return home". Short taps (released
  *       before 0.5s) show nothing, so a quick "back" press inside
  *       an app no longer flashes the return-home toast.
- *   (b) Single press of SYM (physical "SYM" key on the M5
- *       CardputerZero; currently best-effort mapped) -> show
+ *   (b) Single press of SYM (physical "SYM" key on the stock
+ *       device; currently best-effort mapped) -> show
  *       "Double-tap to lock" for ~1.5s. Synthetic Shift events are
  *       ignored because they do not identify the physical key gesture.
  *

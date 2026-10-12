@@ -81,8 +81,8 @@ void test_account_payload_compatibility()
 {
     cp0_account_info_t source{};
     std::strcpy(source.user, "operator");
-    std::strcpy(source.hostname, "cardputer-zero");
-    assert(cp0::osinfo::encode_account_info(source) == "operator\ncardputer-zero");
+    std::strcpy(source.hostname, "cyberdeck-zero");
+    assert(cp0::osinfo::encode_account_info(source) == "operator\ncyberdeck-zero");
 
     cp0_account_info_t decoded{};
     std::memset(&decoded, 0x7f, sizeof(decoded));

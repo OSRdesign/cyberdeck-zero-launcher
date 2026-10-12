@@ -214,9 +214,10 @@ void home_key_cb(lv_event_t *event)
 // (native_ui::fill_status); refreshed when the home grid is shown.
 cp0::ui::StatusStrip *s_home_strip = nullptr;
 
+// The home header has no title word (rebranding plan 025, decision 3): the status strip only. The pages keep their
+// title at the shell's title origin (add_title()).
 void build_status_bar(lv_obj_t *parent)
 {
-    cp0::ui::add_title(parent, "ZERO");
     s_home_strip = cp0::ui::StatusStrip::add(parent, native_ui::fill_status);
 }
 

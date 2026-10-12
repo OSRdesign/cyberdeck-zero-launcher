@@ -13,7 +13,7 @@ clock 20:30
 wifi 70
 bt on
 home
-header home ZERO
+header home
 launch Settings
 # System is the last section (Up wraps there); in it, from the end: Shutdown, Reboot, Keyboard test, On-screen keyboard
 key UP

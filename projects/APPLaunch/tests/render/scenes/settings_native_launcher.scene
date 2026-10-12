@@ -1,6 +1,7 @@
 # Native Settings > Launcher (task 014 P3e): the home-tile toggles of the built-in apps. On the Pi profile the Store is
 # one of them (APPLAUNCH_LAUNCHER_STORE_TOGGLE, settings_hw_profile.hpp; shown by default, config key app_Store), so a
-# touch-only board can hide it. Shots: the section (Store on, first row), the Store switched off with Enter, and the
+# touch-only board can hide it; a read-only row under it credits the bundled Store ("CardputerZero Store by M5Stack",
+# rebranding plan 025). Shots: the section (Store on, first row), the Store switched off with Enter, and the
 # section opened again (the value is read back from the config). The harness's home grid is the scene's `apps` line,
 # not the registry, so the hidden tile itself is checked on the board (keyboard tests, section I).
 # Review only: no golden; headers checked against the home grid's (run.sh header).
@@ -12,7 +13,7 @@ clock 20:30
 wifi 70
 bt on
 home
-header home ZERO
+header home
 launch Settings
 # root: Screen, Wi-Fi, Bluetooth, Launcher, Touch, Apps, User, Date & Time, System
 key DOWN

@@ -776,6 +776,22 @@ lv_obj_t *find_label(lv_obj_t *obj, const std::vector<std::string> &texts)
     return nullptr;
 }
 
+/* The first visible label under obj (depth first) with a text whose screen origin is (x, y). */
+lv_obj_t *find_label_at(lv_obj_t *obj, int x, int y)
+{
+    if (!obj || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return nullptr;
+    if (lv_obj_check_type(obj, &lv_label_class)) {
+        const char *text = lv_label_get_text(obj);
+        lv_area_t area;
+        lv_obj_get_coords(obj, &area);
+        if (text && text[0] && area.x1 == x && area.y1 == y) return obj;
+    }
+    const uint32_t count = lv_obj_get_child_count(obj);
+    for (uint32_t i = 0; i < count; ++i)
+        if (lv_obj_t *found = find_label_at(lv_obj_get_child(obj, static_cast<int32_t>(i)), x, y)) return found;
+    return nullptr;
+}
+
 Image crop_image(const Image &in, int x, int y, int w, int h)
 {
     Image out;
@@ -1133,8 +1149,10 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
          * pixel, its Bluetooth icon, to the right edge, bar_h high) cut out as out/<WxH>/header/NAME.png, and the
          * screen origin of the title label (the first visible label on the native screen whose text is one of
          * TITLE ...) as out/<WxH>/header/NAME.txt ("x y text"). run.sh header requires both to equal the home grid's
-         * (header home ZERO). */
-        if (w.size() < 3) return fail(scene, line, "usage: header NAME TITLE [TITLE ...]");
+         * (header home). The home grid has no title (rebranding plan 025): without TITLE the origin written is the
+         * shell's title origin (the layout service's shell.title_x / title_y, where every page puts its title), and
+         * no visible label may stand there. */
+        if (w.size() < 2) return fail(scene, line, "usage: header NAME [TITLE ...]");
         const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
         if (!m) return fail(scene, line, "the display manager published no metrics");
         settle(500);
@@ -1144,6 +1162,17 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         const std::string dir = run.out_dir + "/" + run.size.name() + "/header/";
         if (!save_png(dir + w[1] + ".png", crop_image(grab(run), strip_x, 0, run.size.w - strip_x, strip_h)))
             return fail(scene, line, "cannot write " + dir + w[1] + ".png");
+        if (w.size() == 2) {
+            const int tx = m->shell.title_x, ty = m->shell.title_y;
+            if (lv_obj_t *stray = find_label_at(lv_display_get_screen_active(cp0_display_native()), tx, ty))
+                return fail(scene, line, std::string("a title label stands at the title origin: ") +
+                                             lv_label_get_text(stray));
+            std::ofstream out(dir + w[1] + ".txt");
+            out << tx << " " << ty << " (no title)\n";
+            if (!out) return fail(scene, line, "cannot write " + dir + w[1] + ".txt");
+            std::printf("%s%s.png\n", dir.c_str(), w[1].c_str());
+            return true;
+        }
         const std::vector<std::string> titles(w.begin() + 2, w.end());
         lv_obj_t *title = find_label(lv_display_get_screen_active(cp0_display_native()), titles);
         if (!title) return fail(scene, line, "no title label with the text " + w[2] + " on the native screen");

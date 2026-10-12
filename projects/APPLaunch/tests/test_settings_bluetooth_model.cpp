@@ -456,7 +456,7 @@ void test_alias()
     hooks.done = [&] { ++done; };
     {
         AliasModel model("", hooks); /* an invalid tree label: the legacy default */
-        assert(model.alias() == "CardputerZero");
+        assert(model.alias() == "CyberdeckZero");
         model.open();
         service.answer("BtStatus", 0, kStatusOn);
         assert(model.alias() == "deck" && model.take_text() && !model.take_text());

@@ -56,8 +56,8 @@ archived outside the repos (`C:\CLAUDE\zero7rchive\AdsbRadar-source.zip`, build
 
 2026-10-05: Settings > Apps polish (task 006) passed deck verification (report 010) and was accepted by the user: tile
 order kept on upgrade, installed vs available version with Update / Update all, per-source sync progress with
-failure reasons, install/remove feedback, letter shortcuts U/S/A/D. This changes the launcher binary
-(`M5CardputerZero-APPLaunch`); the Store backend is unchanged. Documented in `docs/HOSTING-APPS.md`.
+failure reasons, install/remove feedback, letter shortcuts U/S/A/D. This changes the launcher binary;
+the Store backend is unchanged. Documented in `docs/HOSTING-APPS.md`.
 
 2026-10-07 to 2026-10-09: **Mesh Hop** (`mesh-hop`, apps repo, tasks 010 and 011, reports 013 to 018): a full-screen 640x480 MeshCore client for a companion radio board on USB. Phase 1 (0.1.x: chats, contacts, settings, radio presets), phase 1b (conversation options, history deletion, preset list refresh) and phase 2 (0.2.x: message search, contacts select and groups, Nearby, statistics, path hash size, repeat, scheduled advert, per-board data, factory reset) are built and tested against the simulator and, for the earlier versions, on the deck by the user. Still `"draft": true`: not in `registry.json`, installed as a local `.deb`. Map and Terminal are placeholders and there is no BLE link yet. Documented on `apps/mesh-hop/README.md` in the apps repo (status `accepting`).
 

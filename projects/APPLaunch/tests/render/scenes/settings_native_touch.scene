@@ -10,7 +10,7 @@ clock 20:30
 wifi 70
 bt on
 home
-header home ZERO
+header home
 launch Settings
 # highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 253,5 57x30 / 484,8 83x40
 @480x320 tap 240 224

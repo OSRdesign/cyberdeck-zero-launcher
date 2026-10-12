@@ -99,7 +99,7 @@ ZeroMQ; SDL builds select the SDL platform sources.
 ## Documentation maintenance
 
 When a module, service, event contract, or build dependency changes, update
-this snapshot and the matching detailed chapter under `docs/launcher-project-guide/`.
+this snapshot and the matching detailed chapter under `docs/upstream/launcher-project-guide/`.
 The component license inventory is maintained separately in
 `docs/OPEN_SOURCE_COMPONENTS.md`.
 

@@ -18,7 +18,7 @@ class home_base : public AppPage
 public:
     home_base()
     {
-        set_page_title("ZERO");
+        set_page_title(""); // no title word on the home header (rebranding plan 025)
     }
 
     lv_obj_t *content_container() const { return ui_APP_Container; }

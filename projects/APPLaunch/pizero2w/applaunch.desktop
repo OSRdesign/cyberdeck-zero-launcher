@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=CardputerZero Launcher
-Comment=Full-screen launcher: the desktop stops while it runs and comes back when you quit it
-Exec=systemctl --no-block start applaunch-desktop.service
-Terminal=false
-Categories=Utility;

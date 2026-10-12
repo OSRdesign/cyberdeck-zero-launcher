@@ -216,8 +216,8 @@ shutil.copytree(_static_source,
                 _staged_applaunch,
                 ignore=shutil.ignore_patterns(*_static_copy_ignore_patterns))
 STATIC_FILES += [(_staged_applaunch, 'APPLaunch')]
-# register the component to the build system
-env['COMPONENTS'].append({'target':'M5CardputerZero-APPLaunch',
+# register the component to the build system: dist/cyberdeckzero (installed as /usr/share/APPLaunch/bin/cyberdeckzero)
+env['COMPONENTS'].append({'target':'cyberdeckzero',
                           'SRCS':SRCS,
                           'INCLUDE':INCLUDE,
                           'PRIVATE_INCLUDE':PRIVATE_INCLUDE,

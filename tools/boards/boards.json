@@ -1,12 +1,12 @@
 {
   "_comment": [
     "Known boards for board.py. No passwords here: board.py reads the SSH password from the PW (or PIPW) environment variable.",
-    "kind: 'service' = the launcher is installed and runs as the user service APPLaunch.service (systemctl --user);",
+    "kind: 'service' = the launcher is installed and runs as the user service cyberdeckzero.service (systemctl --user; APPLaunch.service up to v0.6.0);",
     "      'desktop' = Raspberry Pi OS desktop (lightdm + labwc) owns the screen: the test launcher stops lightdm and test-stop starts it again;",
-    "      install.sh installs the desktop variant there (applaunch-desktop.service, started from the applications menu, gives the desktop back on exit).",
+    "      install.sh installs the desktop variant there (cyberdeckzero-desktop.service, started from the applications menu, gives the desktop back on exit).",
     "fb: the panel's framebuffer as the board reports it (width x height in buffer orientation, bpp, pixel format);",
     "rotate: degrees counter-clockwise that turn a raw framebuffer capture into what the user sees (PIL Image.rotate).",
-    "test_env: the launcher environment of test-start (from APPLaunch.service, install.sh board profiles and the scratchpad test runs).",
+    "test_env: the launcher environment of test-start (from cyberdeckzero.service, install.sh board profiles and the scratchpad test runs).",
     "quirks: no_environ = an ssh command string containing the word 'environ' drops the connection (Pi 3A+): board.py refuses such a command."
   ],
   "boards": {

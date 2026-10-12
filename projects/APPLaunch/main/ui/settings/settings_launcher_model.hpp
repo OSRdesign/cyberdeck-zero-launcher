@@ -30,6 +30,15 @@ inline bool is_protected_launcher_app(std::string_view config_key)
            config_key == "app_CLI";
 }
 
+// The bundled Store is the stock one, unchanged: Settings > Launcher credits it in a read-only row right under its toggle
+// (only where the toggle exists, i.e. the Store row is listed). Same text as the Licenses page.
+inline constexpr const char *kStoreCredit = "CardputerZero Store by M5Stack";
+
+inline bool store_credit_follows(std::string_view config_key)
+{
+    return config_key == "app_Store";
+}
+
 inline bool is_launcher_settings_origin(LauncherAppOrigin origin)
 {
     return origin == LauncherAppOrigin::Builtin ||

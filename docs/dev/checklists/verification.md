@@ -20,7 +20,7 @@ screenshot path). A FAIL goes back to the owner; the Controller is told. Do not 
 - [ ] The tile appears on the home grid with its icon; the app opens; the keyboard (awake and asleep) and touch work.
 - [ ] Screenshots: the home grid (top bar identical to the launcher's), the app's main screens. Compared with the
       previous accepted screenshots where they exist.
-- [ ] No errors in `journalctl` for `APPLaunch.service` (`sudo journalctl _SYSTEMD_USER_UNIT=APPLaunch.service`).
+- [ ] No errors in `journalctl` for `cyberdeckzero.service` (`sudo journalctl _SYSTEMD_USER_UNIT=cyberdeckzero.service`; `APPLaunch.service` before v0.7.0).
 - [ ] Quit paths work (Esc, Esc held for 3 s, the app's own close).
 - [ ] Remove through Settings > Apps leaves nothing behind (tile, files, `dpkg -s`).
 - [ ] The launcher still starts at boot, the startup lines scroll and the grid is clean after the boot.

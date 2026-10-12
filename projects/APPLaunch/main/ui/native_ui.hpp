@@ -50,7 +50,7 @@ void set_launching_app(const std::string &name);
 /* Rebuild the home grid from the launcher's app list. */
 void refresh_apps();
 
-/* Run a stock (framebuffer) CardputerZero app inside the compat window, scaled up. The app runs on a
+/* Run a stock (framebuffer) app inside the compat window, scaled up. The app runs on a
  * worker thread (the UI stays alive: toolbar, Esc hold); on_exit is called on the UI thread when it
  * has ended. Returns false if the app could not be started (on_exit is not called then). */
 bool run_external(const std::string &command, bool keep_root, std::function<void()> on_exit);

@@ -61,6 +61,10 @@ int main()
     assert(settings_t12b::launcher::configurable_entries(
                stock_store, 1, [](const Descriptor &descriptor) { return descriptor.always_on; })
                .empty());
+    // The Store credit row follows the Store toggle only (it exists only where the Store is listed).
+    assert(std::string(settings_t12b::launcher::kStoreCredit) == "CardputerZero Store by M5Stack");
+    assert(settings_t12b::launcher::store_credit_follows("app_Store"));
+    assert(!settings_t12b::launcher::store_credit_follows("app_Python"));
     using settings_t12b::boot_actions::Action;
     using settings_t12b::boot_actions::Operation;
     assert(settings_t12b::boot_actions::presentation(Action::Reboot).confirmation_title == "Reboot?");
@@ -91,9 +95,22 @@ int main()
     assert(about_board.lines.size() == about.lines.size() + 1);
     assert(about_board.lines[1] == "Board: pi3a-luckfox35");
     assert(credit.title == "Third-Party Licenses & Credits");
-    assert(credit.lines.size() > 300);
-    assert(credit.lines.front() == "Cyberdeck Zero launcher");
-    assert(credit.lines[7] == "Upstream CardputerZero");
-    assert(credit.lines[8].find("Kickstarter backers") != std::string::npos);
+    assert(about.lines.front() == "CyberdeckZero Launcher");
+    assert(about.lines.back() == "Not affiliated with M5Stack"); // the disclaimer, short form, last
+    assert(credit.lines.size() > 80);
+    assert(credit.lines.front() == "CyberdeckZero Launcher");
+    // our notice, then the disclaimer, then the credit of what it derives from and of the bundled Store
+    assert(credit.lines[6].rfind("CyberdeckZero Launcher is an independent hobby project", 0) == 0);
+    assert(credit.lines[6].find("not affiliated with, sponsored or endorsed by M5Stack") != std::string::npos);
+    assert(credit.lines[8] == "Derived from");
+    assert(credit.lines[9] == "The CardputerZero launcher by M5Stack Technology CO LTD");
+    assert(credit.lines[13] == "Bundled");
+    assert(credit.lines[14] == "CardputerZero Store by M5Stack, unchanged");
+    assert(credit.lines[18] == "Upstream");
+    assert(credit.lines[19].find("Kickstarter backers") != std::string::npos);
+    for (const auto &line : credit.lines) {
+        assert(line.find("CardputerZero is built with") == std::string::npos); // upstream's product sentence
+        assert(line.find("Proxmark") == std::string::npos);                    // upstream OS image's list
+    }
     assert(credit.lines.back() == "CC0-1.0");
 }

@@ -750,7 +750,7 @@ std::string DeviceListModel::status_line(bool &error) const
 
 AliasModel::AliasModel(std::string initial, Hooks hooks) : hooks_(std::move(hooks)), alias_(std::move(initial))
 {
-    if (!settings_bluetooth_com::valid_alias(alias_)) alias_ = "CardputerZero";
+    if (!settings_bluetooth_com::valid_alias(alias_)) alias_ = "CyberdeckZero";
     backend_alias_ = alias_;
 }
 

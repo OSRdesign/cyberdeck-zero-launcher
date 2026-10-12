@@ -91,7 +91,7 @@ development keyboard form (`settings_keyboard_page.cpp`).
   -1 and logs `no fixture`.
 - Scene: `scenes/settings_native_<name>.scene`. Template: `scenes/settings_native_wifi.scene`
   (`env APPLAUNCH_DEV 0`, `env APPLAUNCH_OSK force`, `apps ...`, `home`,
-  `header home ZERO`, `launch Settings`, `key DOWN` / `key ENTER`, `wait`, `shot NAME`, `header NAME "Settings > X" X`,
+  `header home`, `launch Settings`, `key DOWN` / `key ENTER`, `wait`, `shot NAME`, `header NAME "Settings > X" X`,
   `tapkey` for the on-screen keyboard). `review` marks shots without goldens. Without a `sizes` line a scene renders
   at 480x320, 640x480, 800x480, 720x720 and 1280x720 (`src/harness_main.cpp`).
 - Run `tools/dev/check-all.sh` (unit tests, render, compare, twice, header); the contact sheet of the scene is

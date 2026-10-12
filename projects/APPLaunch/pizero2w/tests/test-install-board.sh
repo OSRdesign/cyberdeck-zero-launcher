@@ -1,13 +1,18 @@
 #!/bin/sh
 # PC test of install.sh's board detection and profile handling, and of uninstall.sh's plan, against the fake
-# /proc and /sys trees in fixtures/ (SYSROOT and UNINSTALL_ROOT test hooks), and of default-sources.sh (the default
-# app source) against a temp state folder and a fake Store backend. Changes nothing outside a temp dir,
-# needs no root and no Pi. Run:   sh projects/APPLaunch/pizero2w/tests/test-install-board.sh
+# /proc and /sys trees in fixtures/ (SYSROOT and UNINSTALL_ROOT test hooks), of default-sources.sh (the default
+# app source) against a temp state folder and a fake Store backend, and of a whole install, the migration from the
+# names of v0.6.0 and before, and a whole uninstall into a fake root (INSTALL_FAKE_SYSTEM=1, stand-ins for systemctl,
+# runuser, sudo and the other system commands first on PATH). Changes nothing outside a temp dir, needs no root and
+# no Pi. Run:   sh projects/APPLaunch/pizero2w/tests/test-install-board.sh
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd)
 INSTALL="$HERE/../install.sh"
 UNINSTALL="$HERE/../uninstall.sh"
 FIX="$HERE/fixtures"
+# branding-allow-begin: the launcher binary's name of v0.6.0 and before (the migration keeps it as a link)
+OLDBIN=M5CardputerZero-APPLaunch
+# branding-allow-end
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 export INSTALL_GLIBC_VERSION=2.41
@@ -152,8 +157,8 @@ for B in zero2w pi3a-luckfox35; do
     R=$(root $B)
     run --dry-run --user tester
     check "$B dry-run: appliance session" 'has "session: appliance" && ! has "session: desktop"'
-    check "$B dry-run: user service and console unit as before" 'has "user service (as for the deck)" && has "applaunch-console.service frees the panel"'
-    check "$B dry-run: no desktop variant" '! has "applaunch-desktop.service" && ! has "52-applaunch-desktop"'
+    check "$B dry-run: user service and console unit as before" 'has "user service (as for the deck): cyberdeckzero.service" && has "cyberdeckzero-console.service frees the panel"'
+    check "$B dry-run: no desktop variant" '! has "cyberdeckzero-desktop.service" && ! has "52-cyberdeckzero-desktop"'
 done
 
 # --- desktop markers in a fake root: the display manager enabled for boot (Debian's alias link), running processes
@@ -167,8 +172,8 @@ desktop() {  # desktop ROOT [DM_UNIT|-] [PROCESS ...]: "-" = no display-manager.
     pid=700
     for p in "$@"; do pid=$((pid + 1)); mkdir -p "$d/proc/$pid"; printf '%s\n' "$p" > "$d/proc/$pid/comm"; done
 }
-unit_text() { printf '%s\n' "$OUT" | sed -n '/^--- \/etc\/systemd\/system\/applaunch-desktop.service$/,/^--- /p'; }
-rules_text() { printf '%s\n' "$OUT" | sed -n '/^--- \/etc\/polkit-1\/rules.d\/52-applaunch-desktop.rules$/,$p'; }
+unit_text() { printf '%s\n' "$OUT" | sed -n '/^--- \/etc\/systemd\/system\/cyberdeckzero-desktop.service$/,/^--- /p'; }
+rules_text() { printf '%s\n' "$OUT" | sed -n '/^--- \/etc\/polkit-1\/rules.d\/52-cyberdeckzero-desktop.rules$/,$p'; }
 
 # --- Pi 5 + HyperPixel 4 on a Lite image (no desktop): known board, appliance variant
 R=$(root pi5-hyperpixel4)
@@ -185,21 +190,22 @@ check "hackberry dry-run: board hackberry-cm5, exit 0" '[ $RC = 0 ] && has "boar
 check "hackberry dry-run: desktop session and its evidence" 'has "session: desktop (display manager lightdm.service enabled; running: labwc+Xwayland+lightdm)"'
 check "hackberry dry-run: profile from test_env (fb0, 720x720, rotate 0)" 'has "APPLAUNCH_BOARD=hackberry-cm5" && has "APPLAUNCH_FB=/dev/fb0" && has "APPLAUNCH_LOGICAL=720x720" && has "APPLAUNCH_ROTATE=0" && has "LV_LINUX_FBDEV_DEVICE=/dev/fb0"'
 check "hackberry dry-run: no boot config, no user service, getty left alone" 'has "boot config: none on a desktop board" && has "no user service, no lingering, getty@tty1 left as it is" && ! has "user service (as for the deck)" && ! has "PWM backlight"'
-check "hackberry dry-run: menu entry, polkit rule, not started now" 'has "/usr/share/applications/applaunch.desktop" && has "52-applaunch-desktop.rules: tester may start and stop" && has "not started now"'
-check "hackberry dry-run: no text console unit (the desktop unit does it)" '! has "applaunch-console.service frees"'
+check "hackberry dry-run: menu entry, polkit rule, not started now" 'has "/usr/share/applications/cyberdeckzero.desktop: \"CyberdeckZero Launcher\"" && has "52-cyberdeckzero-desktop.rules: tester may start and stop cyberdeckzero-desktop.service" && has "not started now"'
+check "hackberry dry-run: no text console unit (the desktop unit does it)" '! has "cyberdeckzero-console.service frees"'
 check "hackberry dry-run: nothing written" '[ ! -e "$R/etc/applaunch" ] && [ ! -e "$R/etc/polkit-1" ] && [ ! -e "$R/usr" ]'
 U=$(unit_text)
 uhas() { case "$U" in *"$1"*) return 0 ;; esac; return 1; }
 check "desktop unit: runs as the user, with a login session" 'uhas "User=tester" && uhas "PAMName=login"'
 check "desktop unit: stops the display manager, ordered" 'uhas "Conflicts=lightdm.service" && uhas "After=lightdm.service"'
-check "desktop unit: frees the panel from the text console as root, then a VT without a login prompt" 'uhas "ExecStartPre=-+/usr/share/APPLaunch/bin/applaunch-console unbind
+check "desktop unit: frees the panel from the text console as root, then a VT without a login prompt" 'uhas "ExecStartPre=-+/usr/share/APPLaunch/bin/cyberdeckzero-console unbind
 ExecStartPre=-+/usr/bin/timeout 5 /usr/bin/chvt 7"'
-check "desktop unit: gives the desktop back as root, the poweroff guard in the helper" 'uhas "ExecStopPost=+/usr/share/APPLaunch/bin/applaunch-console restore-desktop lightdm.service"'
+check "desktop unit: gives the desktop back as root, the poweroff guard in the helper" 'uhas "ExecStopPost=+/usr/share/APPLaunch/bin/cyberdeckzero-console restore-desktop lightdm.service"'
 check "desktop unit: never restarted, no [Install] (cannot be enabled)" 'uhas "Restart=no" && ! printf "%s\n" "$U" | grep -qx "\[Install\]" && ! uhas "WantedBy"'
-check "desktop unit: board profile, session marker, launcher" 'uhas "EnvironmentFile=-/etc/applaunch/board.conf" && uhas "Environment=APPLAUNCH_SESSION=desktop" && uhas "Environment=APPLAUNCH_DISPLAY=dpi-scaled" && uhas "ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch"'
+check "desktop unit: board profile, session marker, launcher" 'uhas "EnvironmentFile=-/etc/applaunch/board.conf" && uhas "WorkingDirectory=/usr/share/APPLaunch" && uhas "Environment=APPLAUNCH_SESSION=desktop" && uhas "Environment=APPLAUNCH_DISPLAY=dpi-scaled" && uhas "ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero"'
+check "desktop unit: described as the product" 'uhas "Description=CyberdeckZero Launcher (takes the screen"'
 check "desktop unit: every placeholder filled" '! uhas "@USER@" && ! uhas "@DM@"'
 U=$(rules_text)
-check "desktop polkit rule: that user, that unit, start/stop/restart" 'uhas "subject.user == \"tester\"" && uhas "action.lookup(\"unit\") == \"applaunch-desktop.service\"" && uhas "org.freedesktop.systemd1.manage-units" && ! uhas "@USER@"'
+check "desktop polkit rule: that user, that unit, start/stop/restart" 'uhas "subject.user == \"tester\"" && uhas "action.lookup(\"unit\") == \"cyberdeckzero-desktop.service\"" && uhas "org.freedesktop.systemd1.manage-units" && ! uhas "@USER@"'
 run --board-only
 P="$R/etc/applaunch/board.conf"
 EXPECT='APPLAUNCH_BOARD=hackberry-cm5
@@ -231,7 +237,7 @@ R=$(root pi5-hyperpixel4)
 desktop "$R" - wayfire
 run --dry-run --user tester
 check "pi5 compositor only: lightdm.service assumed" 'has "no display manager unit found: lightdm.service assumed; running: wayfire"'
-# the deck has no desktop variant (its settings live in APPLaunch.service)
+# the deck has no desktop variant (its settings live in cyberdeckzero.service)
 R=$(root zero2w)
 desktop "$R" lightdm.service lightdm
 run --dry-run --user tester
@@ -244,14 +250,19 @@ check "pi3a with a desktop: desktop variant with its profile" 'has "session: des
 
 # --- the units and files shipped in the bundle
 D="$HERE/.."
-check "console unit: after multi-user.target, inside the boot transaction" 'grep -qx "DefaultDependencies=no" "$D/applaunch-console.service" && grep -qx "After=multi-user.target" "$D/applaunch-console.service" && grep -qx "WantedBy=multi-user.target" "$D/applaunch-console.service"'
-check "console unit: unbind at start, bind at stop" 'grep -qx "ExecStart=/usr/share/APPLaunch/bin/applaunch-console unbind" "$D/applaunch-console.service" && grep -qx "ExecStop=/usr/share/APPLaunch/bin/applaunch-console bind" "$D/applaunch-console.service" && grep -qx "RemainAfterExit=yes" "$D/applaunch-console.service"'
-check "launcher user service still waits for the system to be running" 'grep -q "is-system-running --wait" "$D/APPLaunch.service"'
-check "menu entry: starts the unit, no terminal" 'grep -qx "Exec=systemctl --no-block start applaunch-desktop.service" "$D/applaunch.desktop" && grep -qx "Terminal=false" "$D/applaunch.desktop" && grep -qx "Name=CardputerZero Launcher" "$D/applaunch.desktop"'
-for f in applaunch-console applaunch-console.service applaunch-desktop.service 52-applaunch-desktop.rules applaunch.desktop; do
+check "console unit: after multi-user.target, inside the boot transaction" 'grep -qx "DefaultDependencies=no" "$D/cyberdeckzero-console.service" && grep -qx "After=multi-user.target" "$D/cyberdeckzero-console.service" && grep -qx "WantedBy=multi-user.target" "$D/cyberdeckzero-console.service"'
+check "console unit: unbind at start, bind at stop" 'grep -qx "ExecStart=/usr/share/APPLaunch/bin/cyberdeckzero-console unbind" "$D/cyberdeckzero-console.service" && grep -qx "ExecStop=/usr/share/APPLaunch/bin/cyberdeckzero-console bind" "$D/cyberdeckzero-console.service" && grep -qx "RemainAfterExit=yes" "$D/cyberdeckzero-console.service"'
+check "launcher user service still waits for the system to be running" 'grep -q "is-system-running --wait" "$D/cyberdeckzero.service"'
+check "user service: the product's description, the new binary, the board profile and working directory as before" 'grep -qx "Description=CyberdeckZero Launcher" "$D/cyberdeckzero.service" && grep -qx "ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero" "$D/cyberdeckzero.service" && grep -qx "EnvironmentFile=-/etc/applaunch/board.conf" "$D/cyberdeckzero.service" && grep -qx "WorkingDirectory=/usr/share/APPLaunch" "$D/cyberdeckzero.service"'
+check "units: no board or panel name in a description" '! grep -h "^Description=" "$D"/*.service | grep -q -e "Zero 2" -e Waveshare'
+check "menu entry: starts the unit, no terminal" 'grep -qx "Exec=systemctl --no-block start cyberdeckzero-desktop.service" "$D/cyberdeckzero.desktop" && grep -qx "Terminal=false" "$D/cyberdeckzero.desktop" && grep -qx "Name=CyberdeckZero Launcher" "$D/cyberdeckzero.desktop"'
+for f in cyberdeckzero.service cyberdeckzero-console cyberdeckzero-console.service cyberdeckzero-desktop.service \
+         52-cyberdeckzero-desktop.rules cyberdeckzero.desktop dist/cyberdeckzero payload/doc; do
     check "build.sh puts $f in the bundle" 'grep -q "$f" "$D/build.sh"'
 done
-check "applaunch-console: valid sh" 'sh -n "$D/applaunch-console"'
+check "build.sh leaves the stock start-up logo and the ADB helpers out" 'grep -q "rm -f \"\$OUT/payload/share/share/images/logo_lcd.png\"" "$D/build.sh" && grep -q "rm -rf \"\$OUT/payload/share/adb\"" "$D/build.sh"'
+check "build.sh names the tarball by version, with the earlier name as a copy" 'grep -q "TARBALL=\"cyberdeckzero-launcher-\$VERSION-arm64.tar.gz\"" "$D/build.sh" && grep -q "LEGACY_TARBALL=\"pizero2w-bundle.tar.gz\"" "$D/build.sh"'
+check "cyberdeckzero-console: valid sh" 'sh -n "$D/cyberdeckzero-console"'
 
 # --- applaunch-console against a fake /sys/class/vtconsole and a fake systemctl
 SYS="$TMP/sys"
@@ -272,7 +283,7 @@ case "$1" in
 esac
 EOF
 chmod +x "$SCTL"
-con() { OUT=$(APPLAUNCH_SYSFS="$SYS" APPLAUNCH_SYSTEMCTL="$SCTL" FAKE_SCTL_LOG="$SCTL_LOG" sh "$D/applaunch-console" "$@" 2>&1); RC=$?; }
+con() { OUT=$(APPLAUNCH_SYSFS="$SYS" APPLAUNCH_SYSTEMCTL="$SCTL" FAKE_SCTL_LOG="$SCTL_LOG" sh "$D/cyberdeckzero-console" "$@" 2>&1); RC=$?; }
 vt() { cat "$SYS/class/vtconsole/vtcon1/bind"; }
 fake_vt 1
 con unbind
@@ -315,19 +326,236 @@ check "restore-desktop (degraded, other jobs): the desktop comes back" '[ $RC = 
 con restore-desktop
 check "restore-desktop without a unit: exit 2" '[ $RC = 2 ]'
 
-# --- uninstall.sh plan for the new units and files
+# --- uninstall.sh plan for the units and files, both generations (a half-migrated board has some of each)
 R=$(root pi3a-luckfox35)
-mkdir -p "$R/etc/systemd/system" "$R/usr/share/applications" "$R/usr/share/APPLaunch/bin" "$R/etc/polkit-1/rules.d"
-for f in applaunch-console.service applaunch-desktop.service; do : > "$R/etc/systemd/system/$f"; done
+mkdir -p "$R/etc/systemd/system" "$R/usr/share/applications" "$R/usr/share/APPLaunch/bin" "$R/etc/polkit-1/rules.d" \
+         "$R/usr/share/APPLaunch/share/images" "$R/usr/share/APPLaunch/adb" "$R/usr/share/doc/cyberdeckzero-launcher"
+for f in applaunch-console.service applaunch-desktop.service cyberdeckzero-console.service cyberdeckzero-desktop.service; do
+    : > "$R/etc/systemd/system/$f"
+done
 : > "$R/usr/share/applications/applaunch.desktop"; : > "$R/etc/polkit-1/rules.d/52-applaunch-desktop.rules"
-: > "$R/usr/share/APPLaunch/bin/applaunch-console"
+: > "$R/usr/share/applications/cyberdeckzero.desktop"; : > "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules"
+: > "$R/usr/share/APPLaunch/bin/applaunch-console"; : > "$R/usr/share/APPLaunch/bin/cyberdeckzero-console"
+: > "$R/usr/share/APPLaunch/bin/cyberdeckzero"; ln -s cyberdeckzero "$R/usr/share/APPLaunch/bin/$OLDBIN"
+: > "$R/usr/share/APPLaunch/share/images/logo_lcd.png"; : > "$R/usr/share/APPLaunch/adb/cardputer-adb"
+: > "$R/usr/share/doc/cyberdeckzero-launcher/LICENSE"
 OUT=$(HOME="$TMP/home" UNINSTALL_ROOT="$R" sh "$UNINSTALL" --dry-run --no-boot-config 2>&1); RC=$?
-check "uninstall dry-run: desktop unit stopped (desktop back) and removed" '[ $RC = 0 ] && has "systemctl stop applaunch-desktop.service" && has "rm -f $R/etc/systemd/system/applaunch-desktop.service"'
-check "uninstall dry-run: console unit disabled, stopped (console back) and removed" 'has "systemctl disable --now applaunch-console.service" && has "rm -f $R/etc/systemd/system/applaunch-console.service"'
-check "uninstall dry-run: console bound again, helper removed" 'has "$R/usr/share/APPLaunch/bin/applaunch-console bind" && has "rm -f $R/usr/share/APPLaunch/bin/applaunch-console"'
-check "uninstall dry-run: menu entry and polkit rule removed" 'has "rm -f $R/usr/share/applications/applaunch.desktop" && has "rm -f $R/etc/polkit-1/rules.d/52-applaunch-desktop.rules"'
-check "uninstall dry-run: units handled before the launcher files" '[ "$(printf "%s\n" "$OUT" | grep -n "applaunch-console bind" | head -n 1 | cut -d: -f1)" -lt "$(printf "%s\n" "$OUT" | grep -n "rm -f $R/usr/share/APPLaunch/bin/applaunch-console" | head -n 1 | cut -d: -f1)" ]'
-check "uninstall dry-run: still nothing changed" '[ -f "$R/etc/systemd/system/applaunch-desktop.service" ] && [ -f "$R/usr/share/applications/applaunch.desktop" ]'
+check "uninstall dry-run: plan names both generations" '[ $RC = 0 ] && has "user service cyberdeckzero.service / APPLaunch.service" && has "cyberdeckzero-console.service / applaunch-console.service" && has "cyberdeckzero-desktop.service / applaunch-desktop.service" && has "52-cyberdeckzero-desktop, 52-applaunch-desktop"'
+for u in applaunch-desktop.service cyberdeckzero-desktop.service; do
+    check "uninstall dry-run: $u stopped (desktop back) and removed" 'has "systemctl stop $u" && has "rm -f $R/etc/systemd/system/$u"'
+done
+for u in applaunch-console.service cyberdeckzero-console.service; do
+    check "uninstall dry-run: $u disabled, stopped (console back) and removed" 'has "systemctl disable --now $u" && has "rm -f $R/etc/systemd/system/$u"'
+done
+check "uninstall dry-run: console bound again with the new helper, both helper names removed" 'has "$R/usr/share/APPLaunch/bin/cyberdeckzero-console bind" && has "rm -f $R/usr/share/APPLaunch/bin/cyberdeckzero-console" && has "rm -f $R/usr/share/APPLaunch/bin/applaunch-console"'
+check "uninstall dry-run: both menu entries and polkit rules removed" 'has "rm -f $R/usr/share/applications/applaunch.desktop" && has "rm -f $R/etc/polkit-1/rules.d/52-applaunch-desktop.rules" && has "rm -f $R/usr/share/applications/cyberdeckzero.desktop" && has "rm -f $R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules"'
+check "uninstall dry-run: the binary and its earlier name (a link) removed" 'has "rm -f $R/usr/share/APPLaunch/bin/cyberdeckzero" && has "rm -f $R/usr/share/APPLaunch/bin/$OLDBIN"'
+check "uninstall dry-run: retired files and the licences removed" 'has "rm -f $R/usr/share/APPLaunch/share/images/logo_lcd.png" && has "rm -f $R/usr/share/APPLaunch/adb/cardputer-adb" && has "rm -rf $R/usr/share/doc/cyberdeckzero-launcher"'
+check "uninstall dry-run: units handled before the launcher files" '[ "$(printf "%s\n" "$OUT" | grep -n "cyberdeckzero-console bind" | head -n 1 | cut -d: -f1)" -lt "$(printf "%s\n" "$OUT" | grep -n "rm -f $R/usr/share/APPLaunch/bin/cyberdeckzero-console" | head -n 1 | cut -d: -f1)" ]'
+check "uninstall dry-run: still nothing changed" '[ -f "$R/etc/systemd/system/applaunch-desktop.service" ] && [ -f "$R/usr/share/applications/applaunch.desktop" ] && [ -L "$R/usr/share/APPLaunch/bin/$OLDBIN" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSE" ]'
+# the old helper only: it binds the console (a board that was never migrated)
+rm -f "$R/usr/share/APPLaunch/bin/cyberdeckzero-console"
+OUT=$(HOME="$TMP/home" UNINSTALL_ROOT="$R" sh "$UNINSTALL" --dry-run --no-boot-config 2>&1); RC=$?
+check "uninstall dry-run, never migrated: the earlier helper binds the console" '[ $RC = 0 ] && has "$R/usr/share/APPLaunch/bin/applaunch-console bind"'
+
+# --- migration from the names of v0.6.0 and before
+U=$(id -un)
+UHOME=$(getent passwd "$U" | cut -d: -f6)
+# old_install ROOT appliance|desktop HOME: what an install of v0.6.0 left (HOME: the user's home, without ROOT)
+old_install() {
+    r=$1; a="$1/usr/share/APPLaunch"
+    mkdir -p "$a/bin" "$a/share/images" "$a/adb" "$a/applications" "$r/etc/systemd/system"
+    printf 'old launcher\n' > "$a/bin/$OLDBIN"; chmod 755 "$a/bin/$OLDBIN"
+    printf '#!/bin/sh\n' > "$a/bin/applaunch-console"; chmod 755 "$a/bin/applaunch-console"
+    for f in logo_lcd.png launcher_brand_logo.png carousel_zero_wordmark.png; do echo old > "$a/share/images/$f"; done
+    echo old > "$a/adb/cardputer-adb"; echo old > "$a/adb/cardputer-adb-gadget"
+    echo app > "$a/applications/some-app.desktop"                       # an installed app's entry: kept
+    if [ "$2" = appliance ]; then
+        h="$r$3/.config/systemd/user"
+        mkdir -p "$h/default.target.wants" "$r/etc/systemd/system/multi-user.target.wants"
+        echo "[Unit]" > "$h/APPLaunch.service"
+        ln -s ../APPLaunch.service "$h/default.target.wants/APPLaunch.service"
+        echo "[Unit]" > "$r/etc/systemd/system/applaunch-console.service"
+        ln -s ../applaunch-console.service "$r/etc/systemd/system/multi-user.target.wants/applaunch-console.service"
+    else
+        mkdir -p "$r/etc/polkit-1/rules.d" "$r/usr/share/applications"
+        echo "[Unit]" > "$r/etc/systemd/system/applaunch-desktop.service"
+        echo "rule" > "$r/etc/polkit-1/rules.d/52-applaunch-desktop.rules"
+        echo "[Desktop Entry]" > "$r/usr/share/applications/applaunch.desktop"
+    fi
+}
+
+# dry run over an earlier install: every step listed, found or not, nothing changed
+R=$(root pi3a-luckfox35)
+old_install "$R" appliance /home/tester
+run --dry-run --user tester
+check "migration dry-run: exit 0, the old user service found and planned" '[ $RC = 0 ] && has "user service APPLaunch.service of tester: found: stopped, disabled and removed"'
+check "migration dry-run: done before the new units" 'has "done before the new units are enabled, so two launchers never"'
+check "migration dry-run: old console unit found, desktop unit, rule and menu entry not found" 'has "applaunch-console.service: found: disabled and stopped" && has "applaunch-desktop.service: not found" && has "/etc/polkit-1/rules.d/52-applaunch-desktop.rules: not found" && has "/usr/share/applications/applaunch.desktop: not found"'
+check "migration dry-run: earlier binary and helper become links" 'has "/usr/share/APPLaunch/bin/$OLDBIN: found: replaced by a link to cyberdeckzero" && has "/usr/share/APPLaunch/bin/applaunch-console: found: replaced by a link to cyberdeckzero-console"'
+check "migration dry-run: retired files listed" 'has "/usr/share/APPLaunch/share/images/logo_lcd.png" && has "/usr/share/APPLaunch/share/images/carousel_zero_wordmark.png" && has "/usr/share/APPLaunch/adb/cardputer-adb-gadget"'
+check "migration dry-run: board.conf and the user data kept, licences planned" 'has "/etc/applaunch/board.conf, the user" && has "/usr/share/doc/cyberdeckzero-launcher"'
+check "migration dry-run: nothing changed" '[ -f "$R/home/tester/.config/systemd/user/APPLaunch.service" ] && [ -f "$R/etc/systemd/system/applaunch-console.service" ] && [ ! -L "$R/usr/share/APPLaunch/bin/$OLDBIN" ] && [ -f "$R/usr/share/APPLaunch/share/images/logo_lcd.png" ] && [ ! -e "$R/etc/applaunch" ]'
+R=$(root zero2w)
+run --dry-run --user tester
+check "migration dry-run on a fresh board: nothing found, links still planned" '[ $RC = 0 ] && has "user service APPLaunch.service of tester: not found" && has "applaunch-console.service: not found" && has "$OLDBIN: not found: created as a link to cyberdeckzero" && has "adb/): none found"'
+R=$(root hackberry-cm5)
+desktop "$R" lightdm.service lightdm labwc
+old_install "$R" desktop /home/tester
+run --dry-run --user tester
+check "migration dry-run, desktop board: the old desktop unit, rule and menu entry found" '[ $RC = 0 ] && has "applaunch-desktop.service: found: stopped if it runs (the earlier launcher quits, the desktop comes back), removed" && has "/etc/polkit-1/rules.d/52-applaunch-desktop.rules: found: removed" && has "/usr/share/applications/applaunch.desktop: found: removed"'
+
+# --- a whole install into a fake root: a bundle as build.sh assembles it, stand-ins for the system commands
+BUN="$TMP/bundle"
+rm -rf "$BUN"; mkdir -p "$BUN/payload/bin" "$BUN/payload/lib" "$BUN/payload/etc" "$BUN/payload/share/share/images" \
+    "$BUN/payload/share/share/font" "$BUN/payload/doc/LICENSES" "$BUN/payload/doc/fonts"
+cp "$D/install.sh" "$D/uninstall.sh" "$D/default-sources.sh" "$BUN/"
+printf '#!/bin/sh\necho launcher\n' > "$BUN/payload/bin/cyberdeckzero"
+cp "$D/cyberdeckzero-console" "$BUN/payload/bin/"
+chmod 755 "$BUN/payload/bin/cyberdeckzero" "$BUN/payload/bin/cyberdeckzero-console"
+: > "$BUN/payload/lib/libapplaunch_vfb.so"
+for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts 90-backlight-unblank.rules \
+         91-applaunch-vkbd.rules 93-applaunch-rfkill.rules 50-networkmanager-netdev.rules 51-launcher-time-power.rules \
+         cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules cyberdeckzero.desktop; do
+    cp "$D/$f" "$BUN/payload/etc/"
+done
+echo png > "$BUN/payload/share/share/images/setting_100.png"
+echo ofl > "$BUN/payload/share/share/font/JetBrainsMono-OFL.txt"
+( cd "$BUN/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$BUN/payload/share.manifest"
+echo "MIT License" > "$BUN/payload/doc/LICENSE"; echo mit > "$BUN/payload/doc/LICENSES/LVGL-MIT.txt"
+echo ofl > "$BUN/payload/doc/fonts/JetBrainsMono-OFL.txt"
+
+FAKEBIN="$TMP/fakebin"; CALLS="$TMP/calls.log"
+mkdir -p "$FAKEBIN"
+cat > "$FAKEBIN/systemctl" <<'EOF'
+#!/bin/sh
+# stand-in systemctl: logs the call; is-active answers from FAKE_ACTIVE (unit names); "cat" knows no unit
+printf 'systemctl %s\n' "$*" >> "$FAKE_CALLS"
+case " $* " in
+    *" is-active "*) for a in "$@"; do [ -n "$a" ] || continue; case " ${FAKE_ACTIVE:-} " in *" $a "*) exit 0 ;; esac; done; exit 3 ;;
+    *" cat "*) exit 1 ;;
+esac
+exit 0
+EOF
+cat > "$FAKEBIN/runuser" <<'EOF'
+#!/bin/sh
+# stand-in runuser (runuser -u USER -- env XDG_RUNTIME_DIR=... CMD): logs the call; is-active from FAKE_USER_ACTIVE
+printf 'runuser %s\n' "$*" >> "$FAKE_CALLS"
+case " $* " in
+    *" is-active "*) for a in "$@"; do [ -n "$a" ] || continue; case " ${FAKE_USER_ACTIVE:-} " in *" $a "*) exit 0 ;; esac; done; exit 3 ;;
+esac
+exit 0
+EOF
+cat > "$FAKEBIN/sudo" <<'EOF'
+#!/bin/sh
+# stand-in sudo: logs the call and runs it as the caller
+printf 'sudo %s\n' "$*" >> "$FAKE_CALLS"
+[ "$1" = -v ] && exit 0
+exec "$@"
+EOF
+printf '#!/bin/sh\necho aarch64\n' > "$FAKEBIN/uname"
+printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 1\n' > "$FAKEBIN/apt-get"
+for c in loginctl udevadm usermod chown dpkg dtc; do
+    printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
+done
+chmod 755 "$FAKEBIN"/*
+# full ROOT [options]: install.sh of the fake bundle into ROOT for the user U; output $OUT, exit code $RC, calls in $CALLS
+full() {
+    r=$1; shift
+    : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$r" INSTALL_FAKE_SYSTEM=1 \
+          sh "$BUN/install.sh" --user "$U" --no-boot-config --no-default-source "$@" 2>&1); RC=$?
+}
+# line of the first call matching $1 in $CALLS (0 if none)
+at() { n=$(grep -n -F -- "$1" "$CALLS" | head -n 1 | cut -d: -f1); echo "${n:-0}"; }
+called() { grep -q -F -- "$1" "$CALLS"; }
+# every file and link under $1 with its checksum or target (no times)
+snapshot() { ( cd "$1" && find . \( -type f -o -type l \) | LC_ALL=C sort | while IFS= read -r f; do
+    if [ -L "$f" ]; then echo "$f -> $(readlink "$f")"; else echo "$f $(cksum < "$f")"; fi; done ); }
+
+OUT=$(SYSROOT="$TMP/none" INSTALL_FAKE_SYSTEM=0 sh "$INSTALL" 2>&1); RC=$?
+check "SYSROOT with INSTALL_FAKE_SYSTEM other than 1: still refused" '[ $RC = 2 ]'
+
+# fresh appliance board (Pi 3A+): the new names only
+R=$(root pi3a-luckfox35)
+A="$R/usr/share/APPLaunch"; H="$R$UHOME/.config/systemd/user"
+full "$R"
+check "fake install, fresh: exit 0" '[ $RC = 0 ]'
+check "fake install, fresh: binary, helper and their earlier names as links" '[ -x "$A/bin/cyberdeckzero" ] && [ ! -L "$A/bin/cyberdeckzero" ] && [ "$(readlink "$A/bin/$OLDBIN")" = cyberdeckzero ] && [ -x "$A/bin/cyberdeckzero-console" ] && [ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ]'
+check "fake install, fresh: user unit and console unit by the new names, none of the old" '[ -f "$H/cyberdeckzero.service" ] && [ -f "$R/etc/systemd/system/cyberdeckzero-console.service" ] && [ ! -e "$H/APPLaunch.service" ] && [ ! -e "$R/etc/systemd/system/applaunch-console.service" ]'
+check "fake install, fresh: units enabled and started by the new names" 'called "systemctl enable --now cyberdeckzero-console.service" && called "systemctl --user enable cyberdeckzero.service" && called "systemctl --user restart cyberdeckzero.service"'
+check "fake install, fresh: nothing to migrate" 'has "nothing to migrate" && ! called "APPLaunch.service"'
+check "fake install, fresh: licences in /usr/share/doc/cyberdeckzero-launcher" '[ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSE" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSES/LVGL-MIT.txt" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/fonts/JetBrainsMono-OFL.txt" ]'
+check "fake install, fresh: board profile written, assets copied" '[ -f "$R/etc/applaunch/board.conf" ] && [ -f "$A/share/images/setting_100.png" ]'
+check "fake install, fresh: no apt-get, nothing written outside the fake root" '! called "apt-get" && [ ! -e /usr/share/doc/cyberdeckzero-launcher ] && [ ! -e /etc/systemd/system/cyberdeckzero-console.service ]'
+
+# appliance board installed with v0.6.0 (Pi 3A+): migrated
+R=$(root pi3a-luckfox35)
+A="$R/usr/share/APPLaunch"; H="$R$UHOME/.config/systemd/user"
+SYSROOT="$R" sh "$INSTALL" --board-only > /dev/null 2>&1
+# board.conf as v0.6.0 wrote it: the same values, the earlier wording of the header
+sed -i '2s/.*/# Loaded by APPLaunch.service (EnvironmentFile). Edit freely: install.sh then leaves it alone unless --force./' "$R/etc/applaunch/board.conf"
+CONF_SUM=$(cksum < "$R/etc/applaunch/board.conf")
+old_install "$R" appliance "$UHOME"
+full "$R"
+check "fake migration: exit 0" '[ $RC = 0 ]'
+check "fake migration: old user service stopped and disabled through the user's systemd" 'called "systemctl --user disable --now APPLaunch.service"'
+check "fake migration: ... before the new user service is enabled" '[ "$(at "disable --now APPLaunch.service")" -lt "$(at "systemctl --user enable cyberdeckzero.service")" ] && [ "$(at "disable --now APPLaunch.service")" -gt 0 ]'
+check "fake migration: old console unit disabled before the new one is enabled" '[ "$(at "systemctl disable --now applaunch-console.service")" -gt 0 ] && [ "$(at "systemctl disable --now applaunch-console.service")" -lt "$(at "systemctl enable --now cyberdeckzero-console.service")" ]'
+check "fake migration: old units and their enablement links removed" '[ ! -e "$H/APPLaunch.service" ] && [ ! -L "$H/default.target.wants/APPLaunch.service" ] && [ ! -e "$R/etc/systemd/system/applaunch-console.service" ] && [ ! -L "$R/etc/systemd/system/multi-user.target.wants/applaunch-console.service" ]'
+check "fake migration: new units installed" '[ -f "$H/cyberdeckzero.service" ] && [ -f "$R/etc/systemd/system/cyberdeckzero-console.service" ]'
+check "fake migration: earlier binary and helper are links to the new files now" '[ "$(readlink "$A/bin/$OLDBIN")" = cyberdeckzero ] && [ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ] && [ "$(cat "$A/bin/$OLDBIN")" = "$(cat "$A/bin/cyberdeckzero")" ]'
+check "fake migration: retired files and the empty adb folder removed" '[ ! -e "$A/share/images/logo_lcd.png" ] && [ ! -e "$A/share/images/launcher_brand_logo.png" ] && [ ! -e "$A/share/images/carousel_zero_wordmark.png" ] && [ ! -e "$A/adb" ]'
+check "fake migration: an installed app and board.conf are kept as they are" '[ "$(cat "$A/applications/some-app.desktop")" = app ] && [ "$(cksum < "$R/etc/applaunch/board.conf")" = "$CONF_SUM" ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ]'
+check "fake migration: the steps are reported" 'has "== Migrating an earlier install" && has "user service APPLaunch.service of $U: stopped, disabled and removed" && has "applaunch-console.service disabled and removed" && has "removed /usr/share/APPLaunch/share/images/logo_lcd.png"'
+SNAP1=$(snapshot "$R")
+full "$R"
+check "fake migration, second run: exit 0, nothing to migrate, nothing of the old names called" '[ $RC = 0 ] && has "nothing to migrate" && ! called "APPLaunch.service" && ! called "applaunch-console.service"'
+SNAP2=$(snapshot "$R")
+if [ "$SNAP1" = "$SNAP2" ]; then ok "fake migration, second run: the same files, links and contents"; else
+    ko "fake migration, second run: the same files, links and contents" "$(printf '%s\n' "$SNAP1" > "$TMP/s1"; printf '%s\n' "$SNAP2" | diff "$TMP/s1" - )"; fi
+
+# the earlier user service still running after its stop (it did not stop): the new one is not started on top of it
+R=$(root pi3a-luckfox35)
+old_install "$R" appliance "$UHOME"
+FAKE_USER_ACTIVE=APPLaunch.service; export FAKE_USER_ACTIVE
+full "$R"
+unset FAKE_USER_ACTIVE
+check "fake migration, old service will not stop: new one enabled, not started, warned" '[ $RC = 0 ] && has "WARNING: APPLaunch.service is still running" && called "systemctl --user enable cyberdeckzero.service" && ! called "restart cyberdeckzero.service"'
+
+# desktop board installed with v0.6.0 (HackBerry), its launcher running during the install
+R=$(root hackberry-cm5)
+A="$R/usr/share/APPLaunch"
+desktop "$R" lightdm.service lightdm labwc
+old_install "$R" desktop "$UHOME"
+FAKE_ACTIVE=applaunch-desktop.service; export FAKE_ACTIVE
+full "$R"
+unset FAKE_ACTIVE
+check "fake desktop migration: exit 0" '[ $RC = 0 ]'
+check "fake desktop migration: the running earlier launcher stopped (desktop back), its unit, rule and menu entry removed" 'called "systemctl stop applaunch-desktop.service" && [ ! -e "$R/etc/systemd/system/applaunch-desktop.service" ] && [ ! -e "$R/etc/polkit-1/rules.d/52-applaunch-desktop.rules" ] && [ ! -e "$R/usr/share/applications/applaunch.desktop" ]'
+check "fake desktop migration: new unit, rule and menu entry, filled in" 'grep -qx "User=$U" "$R/etc/systemd/system/cyberdeckzero-desktop.service" && grep -q "\"cyberdeckzero-desktop.service\"" "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" && grep -qx "Name=CyberdeckZero Launcher" "$R/usr/share/applications/cyberdeckzero.desktop"'
+check "fake desktop migration: no user service, no console unit, not started" '[ ! -e "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && has "not started now" && ! called "start cyberdeckzero-desktop.service"'
+check "fake desktop migration: the earlier helper name links to the new one (ExecStopPost= of a loaded old unit)" '[ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ]'
+SNAP1=$(snapshot "$R")
+full "$R"
+check "fake desktop migration, second run: nothing to migrate, same tree" '[ $RC = 0 ] && has "nothing to migrate" && [ "$(snapshot "$R")" = "$SNAP1" ]'
+
+# a whole uninstall of a half-migrated board (both generations there): everything of both goes, user data stays
+R=$(root pi3a-luckfox35)
+A="$R/usr/share/APPLaunch"; H="$R$UHOME/.config/systemd/user"
+full "$R"
+old_install "$R" appliance "$UHOME"
+rm -f "$A/bin/$OLDBIN"; printf 'old launcher\n' > "$A/bin/$OLDBIN"         # an earlier binary file, not a link
+mkdir -p "$R/etc/polkit-1/rules.d" "$R/usr/share/applications"
+: > "$R/etc/polkit-1/rules.d/52-applaunch-desktop.rules"; : > "$R/usr/share/applications/applaunch.desktop"
+: > "$CALLS"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --yes --no-boot-config 2>&1); RC=$?
+check "fake uninstall, half-migrated: exit 0" '[ $RC = 0 ]'
+check "fake uninstall: both user services stopped and removed" 'called "systemctl --user stop cyberdeckzero.service" && called "systemctl --user stop APPLaunch.service" && [ ! -e "$H/cyberdeckzero.service" ] && [ ! -e "$H/APPLaunch.service" ] && [ ! -L "$H/default.target.wants/APPLaunch.service" ]'
+check "fake uninstall: both console units, rules and menu entries removed" '[ -z "$(ls "$R/etc/systemd/system" | grep -e cyberdeckzero -e applaunch)" ] && [ ! -e "$R/etc/systemd/system/multi-user.target.wants/applaunch-console.service" ] && [ -z "$(ls "$R/etc/polkit-1/rules.d")" ] && [ -z "$(ls "$R/usr/share/applications" 2>/dev/null)" ]'
+check "fake uninstall: binaries, helpers (both names), retired files and licences gone" '[ ! -e "$A/bin/cyberdeckzero" ] && [ ! -e "$A/bin/$OLDBIN" ] && [ ! -e "$A/bin/cyberdeckzero-console" ] && [ ! -e "$A/bin/applaunch-console" ] && [ ! -e "$A/share/images/logo_lcd.png" ] && [ ! -e "$A/adb" ] && [ ! -e "$R/usr/share/doc/cyberdeckzero-launcher" ]'
+check "fake uninstall: the installed app and the user data stay, the profile goes" '[ -f "$A/applications/some-app.desktop" ] && [ ! -e "$R/etc/applaunch/board.conf" ]'
 
 # --- default app source: install.sh's plan and option
 R=$(root zero2w)

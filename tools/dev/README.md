@@ -6,7 +6,8 @@ from Git Bash (they re-run themselves in WSL through `wsl.exe`). `-h` prints the
 | Script | What it does |
 | --- | --- |
 | `wsl-build.sh [--with-store]` | Syncs this checkout into its WSL build tree, takes the build lock, builds the Pi bundle with `projects/APPLaunch/pizero2w/build.sh`. Prints the last 25 build lines, the full log's path, and the bundle's path and size (also as a `\\wsl.localhost\...` path for Windows tools such as `tools/boards/board.py upload`). Exit status = the build's. |
-| `check-all.sh` | Syncs, takes the lock, then runs `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`), `app-unit` (`projects/APPLaunch/tests/run_tests.sh`), `render` (`tests/render/run.sh render`), `compare`, `twice`, `header`, `contract` (same script; the app contract probe, `app-contract-probe/`). One line per step: `PASS|FAIL <step> (<seconds>s)`; a failing step also shows its last 40 lines. Logs in `/tmp/check-all-<checkout>/`. Exit 1 if any step failed. |
+| `check-all.sh` | Syncs, takes the lock, then runs `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`), `app-unit` (`projects/APPLaunch/tests/run_tests.sh`), `render` (`tests/render/run.sh render`), `compare`, `twice`, `header`, `contract` (same script; the app contract probe, `app-contract-probe/`), `branding` (`check-branding.sh` on the checkout). One line per step: `PASS|FAIL <step> (<seconds>s)`; a failing step also shows its last 40 lines. Logs in `/tmp/check-all-<checkout>/`. Exit 1 if any step failed. |
+| `check-branding.sh [--allow FILE] [ROOT]` | Fails (exit 1, prints `file:line: text`) when a tracked file names the upstream brand outside the technical names of `NAMING.md`, the `branding-allow-begin/end` blocks (credits) and the paths of `branding-allow.txt` (one glob per line, with the reason). POSIX sh, runs anywhere git does (in WSL it uses `git.exe` for a worktree made on Windows). For the apps repo: copy it to `tools/branding/check-branding.sh` there, with `branding-allow.apps-template.txt` as `tools/branding/branding-allow.txt`. |
 | `lib.sh` | Shared helpers (sourced): WSL re-exec, build lock, tree sync. |
 
 Both use the same recipe as the scripts the earlier sessions ran by hand:
@@ -41,5 +42,5 @@ through `VENV`); `~/zero7/launcher/SDK` populated by one earlier build.
 - **Pi 3A+: no "environ" in an ssh command.** An ssh command string that contains the word `environ` drops the
   connection (`/proc/PID/environ`, but also `EnvironmentFile=`). `tools/boards/board.py` refuses such commands.
 - **Pi 3A+ user service restart:** start it detached so the ssh call returns:
-  `setsid nohup systemctl --user restart APPLaunch.service > /dev/null 2>&1 < /dev/null &`.
+  `setsid nohup systemctl --user restart cyberdeckzero.service > /dev/null 2>&1 < /dev/null &` (`APPLaunch.service` before v0.7.0).
 - Deploying to boards: see `tools/boards/` (`board.py`, `boards.json`).

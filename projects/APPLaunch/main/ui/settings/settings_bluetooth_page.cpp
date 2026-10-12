@@ -1615,7 +1615,7 @@ LvSettingBluetoothAliasPage3::LvSettingBluetoothAliasPage3()
           api_dispatch_(std::make_shared<LvSettingBluetoothAliasPage3::ApiDispatchState>())
 {
         LeaveSelfPage = std::move(back_callback);
-        if (!settings_bluetooth_com::valid_alias(alias_)) alias_ = "CardputerZero";
+        if (!settings_bluetooth_com::valid_alias(alias_)) alias_ = "CyberdeckZero";
         backend_alias_ = alias_;
         cursor_ = alias_.size();
         create_ui(parent);
