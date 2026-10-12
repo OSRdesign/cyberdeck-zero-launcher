@@ -191,6 +191,9 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
         return answer(0, "REGISTRY\tUPDATED\t" + source->url + "\t" + source->url + "\t" + status + "\t" +
                              std::to_string(source->apps) + "\t" + source->name + "\n");
     }
+    /* The source list the Store imports (apps_registry_mirror): not modelled, the workers then leave the mirror and the
+     * default source alone. */
+    if (command == "--registry-config") return answer(1, "");
     if (command == "--prepare-package")
         return answer(1, "ERROR\tanother package transaction is pending\nPENDING_CONFLICT\tbench\t1\tBench Tools\n");
     std::fprintf(stderr, "[harness] apps backend: no fixture for %s\n", command.c_str());

@@ -67,6 +67,11 @@ public:
     bool remove_source(const std::string &url);
     bool add_source(const std::string &url, const std::string &name);
 
+    /* Once at launcher start (native_ui::show_home, the first time): the backend's source list is mirrored into the
+     * Store's shared keys on a detached thread a moment later. Local only (--registry-config and the config write):
+     * no sync, no add. A source seeded by install.sh then survives the Store being opened before Settings > Apps. */
+    static void mirror_at_start();
+
     JobsUpdate take();
     /* LVGL thread: the prepared package job asks for the sudo password (the shared prompt); the privileged step and
      * --finalize-package follow on the workers. */

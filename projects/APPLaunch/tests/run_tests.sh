@@ -281,6 +281,14 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_settings_apps_model"
 "$build_dir/test_settings_apps_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    -I"$test_root/../../AppStore/main/interface" \
+    "$test_root/test_settings_apps_registry_mirror.cpp" \
+    "$settings_ui_root/settings_apps_registry_mirror.cpp" \
+    "$test_root/../../AppStore/main/interface/shared_registry_store.cpp" \
+    -o "$build_dir/test_settings_apps_registry_mirror"
+"$build_dir/test_settings_apps_registry_mirror"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_dynamic_app_registry.cpp" \
     -o "$build_dir/test_dynamic_app_registry"
 "$build_dir/test_dynamic_app_registry" "$test_root/../main/ui/desktop_app_loader.cpp"

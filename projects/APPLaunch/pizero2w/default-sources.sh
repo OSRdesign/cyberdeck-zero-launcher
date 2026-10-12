@@ -11,7 +11,11 @@
 # source) and only when it is missing or holds no source besides the built-in CardputerZero Hub; a file that was there
 # is kept as registries.json.bak-applaunch. A list with sources of the user's own is never changed.
 # The decision is taken once: the marker applaunch-default-source in the same folder records it, so a source the user
-# removes is not added back by the next install.sh. uninstall.sh --purge-config deletes the folder, marker included.
+# removes is not added back by the next install.sh.
+# The Store UI keeps its own copy of the list in the launcher's config.json and writes it over registries.json at every
+# start, so this file alone does not survive opening the Store. The launcher therefore mirrors the file into that copy
+# (Settings > Apps, settings_apps_registry_mirror.*) and, once per user (config key apps_default_source), adds this
+# same source itself when the user has none. Both are idempotent by URL: nothing is added twice. uninstall.sh --purge-config deletes the folder, marker included.
 #
 # Options:
 #   --dry-run   print what would be done, change nothing
@@ -27,7 +31,7 @@ for arg in "$@"; do
     case "$arg" in
         --dry-run) DRY=1 ;;
         --no-sync) SYNC=0 ;;
-        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done

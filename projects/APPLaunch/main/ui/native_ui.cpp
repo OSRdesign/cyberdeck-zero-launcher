@@ -11,6 +11,7 @@
 #include "launcher_osk.hpp"
 #include "launcher_toast.h"
 #include "native_vkbd.hpp"
+#include "settings/settings_apps_jobs.hpp"
 #include "touch_settings.hpp"
 #include "ui_global_hint.h"
 
@@ -803,6 +804,11 @@ void refresh_apps()
 void show_home()
 {
     if (!enabled()) return;
+    static bool mirror_started = false;   // the Store's shared source list follows the backend, once per launch
+    if (!mirror_started) {
+        mirror_started = true;
+        settings_apps::Jobs::mirror_at_start();
+    }
     // the fallback on-screen keyboard belongs to the page that asked for it: it goes with the page (task 014 P2b)
     launcher_osk::install();
     launcher_osk::dismiss();
