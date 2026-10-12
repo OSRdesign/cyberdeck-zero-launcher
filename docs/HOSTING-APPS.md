@@ -110,6 +110,22 @@ Esc at the password prompt gives a red `Cancelled`.
 
 The letters are read from the physical key, so `W`, `E`, `R` and `T` never move the selection or change levels. `F`, `X`, `Z` and `C` still act as up, down, left and right.
 
+## Why a source survives opening the Store
+
+The Store keeps its own copy of the source list in the launcher's `config.json` (keys `appstore.registry.*`) and, every
+time it starts, writes that copy over the backend's `registries.json`. A source that exists only in the backend file
+would be wiped the next time the Store opens. So Settings > Apps mirrors the backend list into those keys, in the
+Store's own format, after every add, remove, on / off and sync, once shortly after the launcher starts (local only: no
+network, so a source `install.sh` seeded survives opening the Store first), and again when Settings > Apps opens (the backend
+list always wins; an empty list is never written over a non-empty one). A source you add in Settings > Apps is
+therefore still there after you open the Store.
+
+**The default source.** The first time Settings > Apps opens, if you have no source of your own, it adds
+`OSRdesign/cyberdeck-zero-apps` and syncs it (the footer shows `Adding ...`), then records the decision once as
+`apps_default_source` in `config.json`. If you already have a source of your own, only the decision is recorded. A
+source you remove later is not added back. Without network the add fails, the footer says why, and the next opening
+tries again. `install.sh` still seeds the same source in the backend file (the two are idempotent by URL).
+
 ## Full-screen apps (Pi port)
 
 An app can take over the whole 640x480 panel instead of running in the scaled 320x170 window with the toolbar:
@@ -147,5 +163,6 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | Settings > Apps page | `projects/APPLaunch/main/ui/settings/settings_native_apps_page.{hpp,cpp}` (workers: `settings_apps_jobs.*`, rules: `settings_apps_model.*`) |
 | Backend access (sources, catalogue, install flow) | `projects/APPLaunch/main/ui/settings/apps_backend.{hpp,cpp}` |
 | Default source at install (the Store's `registries.json`, once per user) | `projects/APPLaunch/pizero2w/default-sources.sh`, run by `install.sh` |
+| The Store's shared source list (mirror) and the default source | `settings_apps_registry_mirror.{hpp,cpp}` (pure), `settings_apps_jobs.cpp` (adapter), test `tests/test_settings_apps_registry_mirror.cpp` |
 | Example app | `apps/lanscan/` in the apps repo |
 | Switch (off on the original CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |

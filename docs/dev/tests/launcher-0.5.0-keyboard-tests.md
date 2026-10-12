@@ -277,3 +277,13 @@ HackBerry (720x720, 16 KB pages):
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
 
+## M. Apps sources persist (task 014, Apps sources persistence fix; deck and Pi 3A+)
+
+Deck and Pi 3A+ (needs network for the sync; check item 124 first with `ssh <board> "grep -c url ~/.local/share/cardputerzero-appstore/registries.json"`).
+
+124. Settings > Apps > Sources: add a source (any `owner/repo` that has a registry.json, for example `OSRdesign/cyberdeck-zero-apps` when it is not listed). Leave Settings, open the Store from the home grid, close it and come back to Settings > Apps > Sources: the source is still listed. `ssh <board> "grep -c url ~/.local/share/cardputerzero-appstore/registries.json"` shows the source (the hub and the source: 2 or more), also after the Store was opened.
+125. Fresh board (or a board that has no source of its own and no `apps_default_source` yet): the first time Settings > Apps opens, the footer shows `Adding OSRdesign/cyberdeck-zero-apps...`, then Sources lists it and Available lists its apps. `ssh <board> "grep -o '\"appstore.registry[^,]*\|\"apps_default_source[^,]*' ~/.config/cardputerzero/config.json"` shows the `appstore.registry.*` keys and `apps_default_source`.
+126. Remove that source (Sources, D, confirm), close and reopen Settings > Apps, then restart the launcher (`sudo systemctl restart applaunch`, or the board's usual restart): the source stays removed (it is not added back).
+127. With a source of your own already there on a board that has no `apps_default_source`: the first opening of Settings > Apps adds nothing; the flag is set (item 125's grep).
+128. Switch a source off (Enter on it), open the Store, come back: it is still off.
+129. Seeded source survives opening the Store first: on a board where `install.sh` seeded the source (or after `registries.json` has the source and `apps_default_source` is not yet set), restart the launcher, wait 10 seconds, open the Store before Settings > Apps, close it: `grep -c url ~/.local/share/cardputerzero-appstore/registries.json` still shows the source, and Settings > Apps > Sources lists it.

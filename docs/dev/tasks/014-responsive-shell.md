@@ -240,6 +240,27 @@ list it (`populate_launcher_children`). Settings > Apps does not depend on the t
 offline, no Store, dry run, `--no-sync`). Harness: `harness_stubs.cpp`'s table follows the macro; review scene
 `settings_native_launcher.scene` (the section with Store first, Store off, reopened); every golden byte-identical.
 
+## Apps sources persistence fix (as implemented)
+
+Deck report: "Settings > Apps is not retaining my GitHub source". Root cause: the Store UI
+(`registry_persistence_service.cpp`, `RegistryPersistenceService::initialize`) keeps its own copy of the source list in the
+launcher's config (`appstore.registry.count`, `.region`, `.active_region`, `.N.entry` = `name TAB url TAB enabled TAB
+builtin TAB region`, escaped, 16 at most; `shared_registry_store.cpp`) and at every start imports it over the backend's
+`registries.json` (`--replace-registry-config`), so a source written only to the backend file (Settings > Apps, `install.sh`)
+was wiped when the Store opened. Fix, launcher side only (the Store is M5Stack's code, untouched):
+`settings_apps_registry_mirror.{hpp,cpp}` (pure: pack / parse in exactly the Store's format, 16 limit, unused slots cleared,
+empty list never written, an entry too long for a config value (255) left out, and the pure `plan()` of what to do from the
+backend list, the mirror and the flag). The adapter in `settings_apps_jobs.cpp` reads `--registry-config` (CONFIG /
+CONFIG_REG) and writes the mirror with one `SetManyAndSave`: at the end of `task_refresh`, which runs after every add,
+remove, on / off, sync and when the page opens (the backend is the truth; a stale mirror is overwritten, never the
+reverse). Default source: on the first open, `task_default_source` adds `OSRdesign/cyberdeck-zero-apps` (same
+normalisation as the page's add, the backend syncs it as it adds it; "Adding ..." in the footer) when the backend has no
+non-built-in source, and sets `apps_default_source` in `config.json`; with a source of the user's it only sets the flag; a
+failed add leaves the flag open (retry on the next open); "registry already exists" (install.sh was first) counts as done. The
+flag makes a later removal stick. Tests: `tests/test_settings_apps_registry_mirror.cpp` (also compiles the Store's
+`shared_registry_store.cpp` read-only to prove the format both ways and replays the Store's start-up import).
+The mirror is also pushed once about 3 s after the launcher starts (`Jobs::mirror_at_start`, called from the first `native_ui::show_home`; detached thread, `--registry-config` and the config write only, no network, provisioning stays on the first Apps open), so a seeded source survives opening the Store first. Keyboard tests section M. Harness: the fake backend answers `--registry-config` with a failure, so the scenes are unchanged.
+
 ## Overlays, Calculator, clock and SSH form (P4, as implemented)
 
 Overlays (`cp0_ui_overlay.h/.c`, test `test_ui_overlay.c`): the toast, the Hold-Esc ribbon (the toast with its text), the global hints, the media OSD and the loading overlay take their size from one pure module, chosen by display. A display up to 320 px wide (the compat window, stock CardputerZero, SDL) keeps today's numbers byte-identically: toast 280x22 / 38, OSD 190x82, loading 200x40. The native display gets the pinned DECK (x2) and COMPACT (x3/2) tables, which equal today's rendering there, and a computed size elsewhere. The computed toast width is the smaller of `DIALOG_MAX_W` and `w - 2*SPACE_L`, BODY font, line height + 2*`SPACE_S`, top `SPACE_S`, radius `RADIUS_M`, over the header. The computed OSD and loading are today's box scaled by BODY/12 and BODY/14. The OSD and loading now follow the default display; the toast, OSD and loading re-apply their size on every show. The ribbon over a stock app is unchanged, with one shared rectangle `CP0_UI_RIBBON_*`. On the deck and the Pi 3A+ the OSD and loading are now readable (2x and 1.5x the old boxes, a deliberate visible change). Review scene: `overlays.scene`.

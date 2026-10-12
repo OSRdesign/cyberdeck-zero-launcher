@@ -10,11 +10,15 @@
 #include "settings_apps_jobs.hpp"
 
 #include "settings_apps_model.hpp"
+#include "settings_apps_registry_mirror.hpp"
 
 #include "cp0_lvgl_app.h"
+#include "hal_lvgl_bsp.h"
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
+#include <list>
 #include <fstream>
 #include <functional>
 #include <mutex>
@@ -156,6 +160,108 @@ apps_status::SyncProbe probe_source(const std::string &url, const std::string &b
     return apps_status::curl_probe(result.rc, result.out);
 }
 
+// ---- The Store's shared source list (settings_apps_registry_mirror.hpp) and the default source -------------------
+// The adapter between the pure mirror module, the backend (--registry-config) and the launcher's config service.
+// The config call is made from a worker thread and waited for with a timeout (as the screen settings page does).
+namespace registry_sync {
+
+namespace mirror = apps_registry_mirror;
+
+struct ConfigReply {
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool done = false;
+    int code = -1;
+    std::string data;
+};
+
+bool config_call(std::list<std::string> arguments, std::string *data = nullptr)
+{
+    auto reply = std::make_shared<ConfigReply>();
+    try {
+        cp0_signal_config_api(std::move(arguments), [reply](int code, std::string text) {
+            std::lock_guard<std::mutex> lock(reply->mutex);
+            if (reply->done) return;
+            reply->code = code;
+            reply->data = std::move(text);
+            reply->done = true;
+            reply->condition.notify_one();
+        });
+    } catch (...) {
+        return false;
+    }
+    std::unique_lock<std::mutex> lock(reply->mutex);
+    if (!reply->condition.wait_for(lock, std::chrono::seconds(3), [&] { return reply->done; })) return false;
+    if (data) *data = reply->data;
+    return reply->code == 0;
+}
+
+bool read_backend(mirror::Config &config)
+{
+    const auto result = apps_backend::run({"--registry-config"}, 30);
+    return result.rc == 0 && mirror::parse_backend(result.out, config);
+}
+
+bool read_mirror(mirror::Config &config)
+{
+    bool reachable = true;
+    const bool present = mirror::parse([&](const std::string &key) {
+        std::string value;
+        if (!config_call({"GetStr", key, ""}, &value)) {
+            reachable = false;
+            return std::string();
+        }
+        return value;
+    }, config);
+    return present && reachable;
+}
+
+bool write_mirror(const mirror::Config &config)
+{
+    mirror::KeyValues keys;
+    int skipped = 0;
+    if (!mirror::pack(config, keys, &skipped)) return false;   // never an empty list over a non-empty one
+    std::list<std::string> request = {"SetManyAndSave"};
+    for (const auto &pair : keys) {
+        request.push_back(pair.first);
+        request.push_back(pair.second);
+    }
+    return config_call(std::move(request));
+}
+
+bool flag_is_set()
+{
+    std::string value;
+    return config_call({"GetStr", mirror::kDefaultFlagKey, ""}, &value) && !value.empty();
+}
+
+bool set_flag()
+{
+    return config_call({"SetManyAndSave", mirror::kDefaultFlagKey, "1"});
+}
+
+// Reads the backend list and the mirror and, when they differ, writes the backend's list as the mirror. Returns what
+// the pure plan decided (add_default / set_flag are acted on by the caller; the mirror write is done here).
+mirror::Plan reconcile(bool with_flag)
+{
+    mirror::PlanInput input;
+    input.backend_read = read_backend(input.backend);
+    if (!input.backend_read) return {};
+    input.mirror_present = read_mirror(input.mirror);
+    input.flag_set = with_flag ? flag_is_set() : true;
+    const mirror::Plan plan = mirror::plan(input);
+    if (plan.write_mirror) write_mirror(input.backend);
+    return plan;
+}
+
+// After every source change and every sync (task_refresh) and when Settings > Apps opens.
+void push_backend_to_mirror()
+{
+    reconcile(false);
+}
+
+} // namespace registry_sync
+
 // Settings > Apps is for sideloading: only the sources the user added themselves are shown. The built-in
 // CardputerZero Hub stays in the Store app.
 void task_refresh(const std::shared_ptr<Shared> &s)
@@ -171,10 +277,39 @@ void task_refresh(const std::shared_ptr<Shared> &s)
         return std::none_of(sources.begin(), sources.end(),
                             [&](const apps_backend::Source &x) { return x.name == app.source; });
     }), apps.end());
-    std::lock_guard<std::mutex> lock(s->mutex);
+    std::unique_lock<std::mutex> lock(s->mutex);
     s->apps = std::move(apps);
     s->sources = std::move(sources);
     s->apps_ready = s->sources_ready = true;
+    lock.unlock();
+    registry_sync::push_backend_to_mirror();   // the Store imports its own copy at start: keep it equal to the backend
+}
+
+// The first time Settings > Apps opens (once per user, the config key apps_default_source): when the Store holds no source of
+// the user's own, the project's source is added (the backend fetches it as it adds it: "Adding ..." is the page's
+// normal progress) and the decision is kept, so a source the user removes later is not added back. A source of
+// theirs already there: only the decision is kept. A failed add (no network) leaves the decision open for the next time.
+void task_default_source(const std::shared_ptr<Shared> &s)
+{
+    const auto plan = registry_sync::reconcile(true);
+    if (plan.set_flag) registry_sync::set_flag();
+    if (!plan.add_default) {
+        s->finish("");
+        return;
+    }
+    std::string url, name, error;
+    if (!apps_backend::normalize_source(apps_registry_mirror::kDefaultSource, url, name, error)) {
+        s->finish("");
+        return;
+    }
+    s->say("Adding " + name + "...");
+    const auto result = apps_backend::run({"--add-registry", url, "--registry-name", name}, 90);
+    // "already exists": the other writer (install.sh) was first; the list has it, which is what matters
+    const bool present = result.rc == 0 || result.out.find("registry already exists") != std::string::npos;
+    if (present) registry_sync::set_flag();
+    task_refresh(s);
+    if (present) s->finish(result.rc == 0 ? "Source added" : "");
+    else s->finish(apps_backend::error_text(result.out, "Could not add the default source"), false, true);
 }
 
 void spawn(std::function<void()> work)
@@ -372,7 +507,7 @@ void Jobs::load()
     shared->say("Loading...");
     spawn([shared] {
         task_refresh(shared);
-        shared->finish("");
+        task_default_source(shared);
     });
 }
 
@@ -448,6 +583,15 @@ bool Jobs::add_source(const std::string &url, const std::string &name)
         shared->finish(result.rc == 0 ? "Source added" : apps_backend::error_text(result.out, "Could not add the source"));
     });
     return true;
+}
+
+void Jobs::mirror_at_start()
+{
+    if (!available()) return;
+    spawn([] {
+        std::this_thread::sleep_for(std::chrono::seconds(3));   // after the home screen is up
+        registry_sync::push_backend_to_mirror();
+    });
 }
 
 JobsUpdate Jobs::take()
