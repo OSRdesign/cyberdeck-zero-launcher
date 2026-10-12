@@ -193,6 +193,15 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 Build: compile the `.c` files with your app, `-I` the folders of the headers. Example of a complete user:
 `tools/dev/app-contract-probe/build.sh`.
 
+**Not copy-in: the LVGL widget set.** An LVGL app links `cp0_lvgl` (statically, from a pinned launcher commit) and gets
+the `cp0::ui` widgets (`include/cp0_ui_widgets.hpp`: Page, Roller, InfoTable, TextBlock, TextField, Dialog, the on-screen
+keyboard) and the launcher's **status strip and title**: `cp0::ui::StatusStrip::add(header)` (clock pill, Wi-Fi bars,
+Bluetooth glyph, laid out from the tokens at every size, updated by its own timers, freed with its parent),
+`cp0::ui::status_strip_left()` and `cp0::ui::add_title()`. They are part of the component, not files to copy: an app
+never keeps its own copy of the strip, the widgets or `cp0_statusbar.[ch]`, and never draws its own clock or icons
+(API: `docs/cp0_lvgl.en.md`, "Status strip and title"). Only non-LVGL apps (a framebuffer shim, a headless renderer)
+may still copy `cp0_statusbar.[ch]`; `docs/dev/deck/check_statusbar_drift.py` checks those copies.
+
 Minimal reader:
 
 ```c

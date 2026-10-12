@@ -62,6 +62,8 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_roller.c \
     $(CP0)/src/cp0_ui_roller_widget.cpp \
     $(CP0)/src/cp0_ui_page.cpp \
+    $(CP0)/src/cp0_ui_status_strip.c \
+    $(CP0)/src/cp0_ui_status_strip_widget.cpp \
     $(CP0)/src/cp0_ui_osk.c \
     $(CP0)/src/cp0_ui_osk_widget.cpp \
     $(CP0)/src/cp0_ui_text_field.cpp \

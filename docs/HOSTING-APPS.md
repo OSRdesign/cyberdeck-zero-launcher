@@ -132,14 +132,18 @@ An app can take over the whole 640x480 panel instead of running in the scaled 32
 add `X-Fullscreen=true` to its `.desktop` file. The launcher then stops drawing and waits for the app to exit
 (the Esc-hold watchdog still applies). The launcher's top bar (clock, Wi-Fi bars, Bluetooth) is one shared
 renderer, `ext_components/cp0_lvgl/{include/cp0_statusbar.h,src/cp0/cp0_statusbar.c}`, so a full-screen app can
-draw exactly the same bar into its own frame. The viz1090 package in the apps repository is a complete
-example (SDL2 programs run through a small display and input bridge; it also draws a close button).
+draw exactly the same bar into its own frame. An LVGL app that links `cp0_lvgl` gets it ready-made as a widget,
+with the launcher's title: `cp0::ui::StatusStrip::add(header)` and `cp0::ui::add_title()` (`cp0_ui_widgets.hpp`,
+API in `docs/cp0_lvgl.en.md`); it keeps no copy. The viz1090 package in the apps repository is a complete example
+of a non-LVGL app (SDL2 programs run through a small display and input bridge; it also draws a close button).
 
 The panel is not always 640x480 (the Pi 3A+ is 480x320 rotated at 16 bpp, the HackBerry 720x720): a full-screen app
 should take its size, rotation, depth and framebuffer from the app contract (next section) instead of hard-coding
 them. If it really needs a minimum size, add `X-MinSize=WxH` (logical pixels, for example `X-MinSize=640x480`): on a
 smaller screen the launcher hides its tile (and it does not appear in Settings > Apps either). An older launcher
-ignores the key, so the app must still start there and say that the screen is too small.
+ignores the key, so the app must still start there and say that the screen is too small. New native (LVGL) apps
+declare `X-MinSize=640x480` by default (decision of 2026-10-13): they are hidden on the 480x320 Pi 3A+, while
+text-mode apps (`Terminal=true`) may still run there.
 
 ## Responsive apps (the app contract)
 

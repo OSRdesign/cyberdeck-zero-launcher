@@ -57,6 +57,29 @@ runner 在一个进程中只允许成功运行一次。流程为：`lv_init` -> 
 
 页面对象必须在 LVGL 线程创建和销毁。页面析构前不要手动删除其 root screen；基类负责 LVGL 对象生命周期。顶部栏固定高度为 `AppPageRoot::kTopBarHeightPx`（20 px）。
 
+### 状态条和标题（`include/cp0_ui_widgets.hpp`、`include/cp0_ui_status_strip.h`）
+
+启动器右上角的状态条（时钟胶囊、Wi-Fi 信号条、蓝牙图标）和主页网格的标题属于 `cp0::ui` 控件集。原生应用直接使用它们：不要自己绘制时钟或图标，也不要复制这段代码。
+
+```cpp
+using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
+StatusSource default_status_source();          // sysfs / procfs，不需要任何服务
+class StatusStrip {
+public:
+    static StatusStrip *add(lv_obj_t *parent, StatusSource source = StatusSource());
+    void refresh();
+    lv_obj_t *canvas() const;
+};
+int status_strip_left();                       // 状态条最左侧已绘制像素的 x
+lv_obj_t *add_title(lv_obj_t *parent, const char *text);
+```
+
+- `StatusStrip::add(parent)` 在 `parent`（全宽 screen 或 `Page::header()`，y 为 0）的右上角绘制状态条，位置和缩放来自布局服务（shell 的 `bar_h`、`status_w`、`status_top`、`status_pct`）。状态条归 `parent` 所有：`parent` 删除时，它停止 1 秒时钟定时器和 2 秒状态定时器并释放自己。不要自行 delete。在 SDL 模拟器下返回 NULL（FreeType 渲染器 `cp0_statusbar.c` 只在设备构建中编译）。
+- source 填写 `wifi_up`、`wifi_pct`、`bt_on` 和 `bt_connected`；时钟由状态条自己设置。source 在 LVGL 线程上运行：添加时一次，状态条所在 screen 处于活动状态时每 2 秒一次，以及调用 `refresh()` 时。它必须立即返回。没有 source 时读取 sysfs 和 procfs（`cp0_statusbar_read_state`）。启动器传入自己的 source（`native_ui::fill_status`：它的 Wi-Fi 和蓝牙服务）。`cp0_ui_status_set_wifi()` 实现信号条规则：已连接时至少显示一格。
+- 加载 screen 之后立即调用 `refresh()`，图标马上就是最新状态。
+- 字体：通过 `cp0_file_path_c` 查找 `share/font/Montserrat-Medium.ttf` 和 `FontAwesome5-Solid+Brands+Regular.woff`，找不到时使用 `/usr/share/APPLaunch/share/font`。应用不打包这些字体。
+- `status_strip_left()` 是 `cp0_ui_roller_page()` 的 `strip_left` 参数：页眉把自己的控件放在它左边。`add_title()` 就是 `Page` 的 `TitleFactory` 创建的标签（shell 的 `title_x`、`title_y`、`title_px`，金色 `#F0B400`）。
+
 ## 3. C ABI 公共接口
 
 声明集中在 `include/cp0_lvgl_app.h` 和 `include/hal_lvgl_bsp.h`。`cp0_lvgl_init()` 负责按 Kconfig 初始化服务；通常由 runner 调用一次，不要在服务运行后重复手动初始化。除特别说明外，返回 0 表示成功，负值表示失败；字符串输出均要求调用方提供有效缓冲区。

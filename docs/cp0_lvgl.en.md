@@ -45,6 +45,29 @@ The runner supports one successful run per process. Its order is `lv_init`, `aft
 
 `AppPageRoot` owns an LVGL screen and input group. `AppPage` adds the standard content container `ui_APP_Container` and top bar. `AppPageWithBottomBarLayout` adds `ui_BOTTOM_Container`. Use `cp0_lvgl_start_app_page(AppPageRoot&)` for an existing page or `cp0_lvgl_start_app<PageT>(args...)` to construct and load one. Create and destroy page objects on the LVGL thread. The standard top bar is 20 px high.
 
+### Status strip and title (`include/cp0_ui_widgets.hpp`, `include/cp0_ui_status_strip.h`)
+
+The launcher's top-right status strip (clock pill, Wi-Fi bars, Bluetooth glyph) and the home grid's title are part of the `cp0::ui` widget set. Native apps use them as they are: never draw your own clock or icons and never copy the code.
+
+```cpp
+using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
+StatusSource default_status_source();          // sysfs / procfs, needs no service
+class StatusStrip {
+public:
+    static StatusStrip *add(lv_obj_t *parent, StatusSource source = StatusSource());
+    void refresh();
+    lv_obj_t *canvas() const;
+};
+int status_strip_left();                       // x of the strip's leftmost drawn pixel
+lv_obj_t *add_title(lv_obj_t *parent, const char *text);
+```
+
+- `StatusStrip::add(parent)` draws the strip at the top right of `parent` (a full-width screen or `Page::header()`, at y 0), placed and scaled by the layout service (shell `bar_h`, `status_w`, `status_top`, `status_pct`). It belongs to `parent`: its 1 s clock timer and 2 s status timer stop and it frees itself when `parent` is deleted. Never delete it yourself. Under the SDL simulator it returns NULL (the FreeType renderer `cp0_statusbar.c` is built for the device only).
+- The source fills `wifi_up`, `wifi_pct`, `bt_on` and `bt_connected`; the strip sets the clock itself. It runs on the LVGL thread when the strip is added, every 2 s while the strip's screen is active, and on `refresh()`. It must return at once. Without a source the strip reads sysfs and procfs (`cp0_statusbar_read_state`). The launcher passes its own source (`native_ui::fill_status`: its Wi-Fi and Bluetooth services). `cp0_ui_status_set_wifi()` applies the bars' rule: connected shows at least one bar.
+- Call `refresh()` right after loading the screen, so the icons are current at once.
+- Fonts: `share/font/Montserrat-Medium.ttf` and `FontAwesome5-Solid+Brands+Regular.woff` through `cp0_file_path_c`, else `/usr/share/APPLaunch/share/font`. Apps do not bundle them.
+- `status_strip_left()` is the `strip_left` argument of `cp0_ui_roller_page()`: a header keeps its own controls left of it. `add_title()` is the label `Page`'s `TitleFactory` makes (shell `title_x`, `title_y`, `title_px`, gold `#F0B400`).
+
 ## Public C ABI
 
 Declarations are in `include/cp0_lvgl_app.h` and `include/hal_lvgl_bsp.h`. Unless noted otherwise, 0 means success and a negative value means failure.

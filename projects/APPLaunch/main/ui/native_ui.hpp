@@ -10,6 +10,8 @@
  */
 #pragma once
 
+#include "cp0_statusbar.h"
+
 #include <cstddef>
 #include <functional>
 #include <string>
@@ -22,18 +24,11 @@ namespace native_ui {
 /* True when the dpi-scaled backend (two displays) is active. */
 bool enabled();
 
-/* Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native 640x480 screen
- * (same as the home grid); updates itself and is freed with the parent. */
-void add_status_icons(lv_obj_t *parent);
-
-/* The home grid's title label ("ZERO" there) with another text: same place, font and colour, for native pages
- * whose header must line up with the home screen (native Settings, task 014 P2a). Returns the label. */
-lv_obj_t *add_title(lv_obj_t *parent, const char *text);
-
-/* Screen x of the leftmost pixel the status strip draws (its Bluetooth icon), measured once with the strip renderer
- * in its fullest state, so it does not move with the Wi-Fi / Bluetooth state. Native headers put their own controls
- * left of it. */
-int status_strip_left();
+/* The launcher's source for the shared status strip (cp0::ui::StatusStrip, cp0_ui_widgets.hpp): Wi-Fi from the
+ * launcher's Wi-Fi service, Bluetooth from its Bluetooth service. Native pages add the strip with
+ * cp0::ui::StatusStrip::add(header, native_ui::fill_status), the title with cp0::ui::add_title and keep their controls
+ * left of cp0::ui::status_strip_left() (task L1). No-op under the SDL simulator. */
+void fill_status(cp0_statusbar_state_t &state);
 
 /* Remember the launcher whose app list drives the home grid. */
 void attach(Launch *launch);

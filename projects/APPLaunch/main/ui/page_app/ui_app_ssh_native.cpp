@@ -85,9 +85,9 @@ void UISSHPage::build_native()
     if (!parent) return;
 
     cp0_ui_roller_page_t layout{};
-    if (cp0_ui_roller_page(cp0_ui_metrics_get(), native_ui::status_strip_left(), &layout) != 0) return;
+    if (cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout) != 0) return;
     native_page_ = std::make_unique<cp0::ui::Page>(
-        parent, layout, [](lv_obj_t *header, const char *text) { return native_ui::add_title(header, text); },
+        parent, layout, [](lv_obj_t *header, const char *text) { return cp0::ui::add_title(header, text); },
         [this] {
             // the header's Esc: the help goes back to the form, the form leaves to home
             if (view_state_ == ViewState::HELP) {
@@ -226,7 +226,7 @@ void UISSHPage::native_screen_loaded_cb(lv_event_t *event)
     auto *self = static_cast<UISSHPage *>(lv_event_get_user_data(event));
     if (!self || self->native_strip_added_ || !self->native_page_) return;
     self->native_strip_added_ = true;
-    native_ui::add_status_icons(self->native_page_->header());
+    cp0::ui::StatusStrip::add(self->native_page_->header(), native_ui::fill_status);
 }
 
 void UISSHPage::native_set_status()
