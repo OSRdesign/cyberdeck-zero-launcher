@@ -11,6 +11,7 @@
 #   run.sh golden     copy out/640x480 and out/480x320 into golden/ (a deliberate baseline change)
 #   run.sh validate   compare the harness with real device captures (reference/, docs/screenshots/)
 #   run.sh twice      render everything twice and check the PNGs are byte-identical
+#   run.sh contract   app contract: the host app-contract-probe --report against the metrics scene (docs/APP-CONTRACT.md)
 #
 # Environment: JOBS (make -j, default nproc), OUT (default out/). Runs in WSL/Linux with gcc, g++,
 # pkg-config, FreeType and libpng headers; no SDL. See README.md.
@@ -165,6 +166,120 @@ validate() {
     return $rc
 }
 
+contract() {
+    # App contract 1 (docs/APP-CONTRACT.md, task 014 P5-3): the host build of tools/dev/app-contract-probe reads, in
+    # --report mode, what an app started by this launcher would see: the per-launch environment the metrics scene
+    # wrote with the launcher's own builder (out/<WxH>/metrics.{compat,fullscreen}.env = the APPLAUNCH_SCREEN_* panel
+    # variables + app_launch_env::export_for_current), screen.state from the harness's runtime directory
+    # (out/<WxH>/runtime/applaunch) and an input.state fixture written there (vkb=force). Its facts must equal the
+    # layout service's numbers (out/<WxH>/metrics.facts): size, class, density, rotation, canvas, window, scale. Then the
+    # degrade rules: no environment (screen.state only) and nothing at all.
+    local probe_dir="$root/tools/dev/app-contract-probe" probe size dir facts mode rep n=0 bad=0 sizes_done=0
+    local want_size want_class want_ppmm want_rot want_compat want_scale w h canvas window scale cppmm
+    probe="$probe_dir/build/host/app-contract-probe"
+    echo "== contract: app-contract-probe --report against the harness's runtime directory"
+    if ! sh "$probe_dir/build.sh" host >"$here/build/probe.log" 2>&1; then
+        cat "$here/build/probe.log"
+        echo "FAIL: the probe does not build"
+        return 1
+    fi
+    render metrics >/dev/null || { echo "FAIL: the metrics scene did not render"; return 1; }
+
+    fact() { sed -n "s/^$1=//p" "$facts" | head -1; }
+    expect() { # file key value
+        local got
+        got=$(sed -n "s/^$2=//p" "$1" | head -1)
+        n=$((n + 1))
+        if [[ $got != "$3" ]]; then
+            echo "$size $(basename "$1"): $2=$got, expected $3"
+            bad=$((bad + 1))
+        fi
+    }
+
+    for size in 480x320 640x480 800x480 720x720 1280x720 1024x600; do
+        dir="$out/$size"
+        facts="$dir/metrics.facts"
+        if [[ ! -f $facts ]]; then
+            [[ $size == 1024x600 ]] && continue
+            echo "MISSING $size/metrics.facts (the metrics scene must render at $size)"
+            bad=$((bad + 1))
+            continue
+        fi
+        sizes_done=$((sizes_done + 1))
+        want_size=$(fact size) want_class=$(fact class) want_ppmm=$(fact ppmm) want_rot=$(fact rot)
+        want_compat=$(fact compat) want_scale=$(fact scale)
+        w=${want_size%x*} h=${want_size#*x}
+        [[ $size == "$want_size" ]] || { echo "$size: the layout service says $want_size"; bad=$((bad + 1)); }
+        printf 'v=1\nkeyboards=0\nbt_keyboards=0\nlast_seen=0\nkb_gone=0\nbt_gone=0\nvkb=force\ngen=7\n' \
+            >"$dir/runtime/applaunch/input.state"
+
+        for mode in compat fullscreen; do
+            rep="$dir/contract.$mode.txt"
+            env -i bash -c ". '$dir/metrics.$mode.env' && exec '$probe' --report --no-fb --tag $mode" >"$rep"
+            if [[ $mode == compat ]]; then
+                canvas=320x170 window=$want_compat scale=$want_scale
+            else
+                canvas=$want_size window=0,0,$w,$h scale=1
+            fi
+            cppmm=$(((want_ppmm + scale / 2) / scale))
+            expect "$rep" env.ok 1
+            expect "$rep" env.contract 1
+            expect "$rep" env.state_dir "$dir/runtime/applaunch"
+            expect "$rep" env.screen_class "$want_class"
+            expect "$rep" screen.ok 1
+            expect "$rep" screen.size "$want_size"
+            expect "$rep" screen.class "$want_class"
+            expect "$rep" screen.ppmm "$want_ppmm"
+            expect "$rep" screen.rot "$want_rot"
+            expect "$rep" screen.compat "$want_compat"
+            expect "$rep" screen.scale "$want_scale"
+            expect "$rep" screen.kb_inset 0
+            expect "$rep" input.ok 1
+            expect "$rep" input.vkb force
+            expect "$rep" derived.source contract
+            expect "$rep" derived.mode "$mode"
+            expect "$rep" derived.screen "$want_size"
+            expect "$rep" derived.rot "$want_rot"
+            expect "$rep" derived.class "$want_class"
+            expect "$rep" derived.ppmm "$want_ppmm"
+            expect "$rep" derived.canvas "$canvas"
+            expect "$rep" derived.window "$window"
+            expect "$rep" derived.canvas_scale "$scale"
+            expect "$rep" derived.canvas_ppmm "$cppmm"
+            expect "$rep" derived.tokens_from file
+            expect "$rep" derived.osk_allowed 1
+            expect "$rep" summary "$mode $canvas $window scale $scale $want_class $want_ppmm"
+        done
+
+        # degrade: started without the contract (ssh, an older launcher) but screen.state is there
+        rep="$dir/contract.nocontract.txt"
+        env -i XDG_RUNTIME_DIR="$dir/runtime" "$probe" --report --no-fb --tag nocontract >"$rep"
+        expect "$rep" env.ok 0
+        expect "$rep" derived.source state
+        expect "$rep" derived.mode none
+        expect "$rep" derived.canvas "$want_size"
+        expect "$rep" derived.class "$want_class"
+        expect "$rep" derived.ppmm "$want_ppmm"
+    done
+
+    # degrade: nothing at all (no environment, no file): still exit 0, defaults
+    rep="$out/contract.nothing.txt"
+    if ! env -i APPLAUNCH_STATE_DIR=/nonexistent "$probe" --report --no-fb --tag nothing >"$rep"; then
+        echo "nothing: the probe did not exit 0"
+        bad=$((bad + 1))
+    fi
+    size=none
+    expect "$rep" derived.source none
+    expect "$rep" derived.ppmm 1130
+    expect "$rep" derived.tokens_from none
+
+    if ((bad)); then
+        echo "FAIL: $bad of $n contract checks differ ($sizes_done sizes; reports in $out/<WxH>/contract.*.txt)"
+        return 1
+    fi
+    echo "PASS: $n contract checks at $sizes_done sizes (reports in $out/<WxH>/contract.*.txt)"
+}
+
 twice() {
     local first="$out" second="$out-again" n=0 bad=0 f
     render
@@ -194,6 +309,7 @@ case $mode in
     golden) golden ;;
     validate) validate ;;
     twice) build; twice ;;
-    -h|--help) sed -n '4,17p' "$0" ;;
-    *) echo "unknown mode $mode (all|build|render|compare|header|golden|validate|twice)"; exit 2 ;;
+    contract) build; contract ;;
+    -h|--help) sed -n '4,18p' "$0" ;;
+    *) echo "unknown mode $mode (all|build|render|compare|header|golden|validate|twice|contract)"; exit 2 ;;
 esac

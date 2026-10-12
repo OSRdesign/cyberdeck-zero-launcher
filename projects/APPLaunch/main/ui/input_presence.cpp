@@ -18,20 +18,43 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <mutex>
 
 namespace {
 
 struct Publisher {
     char path[512] = {};
-    cp0_input_state_t state = {0, 0, 0}; // what the file says now
+    cp0_input_state_t state = {};        // what the file says now
     unsigned watcher_generation = 0;     // list generation last published
     bool published = false;
     bool write_failed = false;
 };
 
-// Written by start() before the listener exists, then only by listener calls (the watcher serialises them).
+// Written by start() before the listener exists, then by listener calls (the watcher thread) and set_vkb() (the UI
+// thread), under s_mutex.
 Publisher s_publisher;
+std::mutex s_mutex;
 cp0_kbd_presence_watcher_t *s_watcher = nullptr;
+
+// vkb until launcher_osk says which rule is in force: off (the launcher's keyboard is not installed yet, or never: a
+// desktop session), unless APPLAUNCH_OSK says force / off.
+cp0_app_vkb_t initial_vkb()
+{
+    const char *env = std::getenv("APPLAUNCH_OSK");
+    if (env && std::strcmp(env, "force") == 0) return CP0_APP_VKB_FORCE;
+    return CP0_APP_VKB_OFF;
+}
+
+// Caller holds s_mutex.
+void write_locked(Publisher &p)
+{
+    if (cp0_input_state_write(p.path, &p.state) != 0) {
+        if (!p.write_failed) SLOGW("[KBD] cannot write %s: %s", p.path, std::strerror(errno));
+        p.write_failed = true;
+    } else {
+        p.write_failed = false;
+    }
+}
 
 // The on-screen keyboard policy's view (input_presence::keyboards()), written by the listener, read by the UI thread.
 std::atomic<bool> s_known{false};
@@ -62,14 +85,18 @@ void track_for_policy(const cp0_kbd_presence_list_t *list)
 
 void on_keyboards(const cp0_kbd_presence_list_t *list, unsigned generation, void *)
 {
+    std::lock_guard<std::mutex> lock(s_mutex);
     Publisher &p = s_publisher;
     if (p.published && generation == p.watcher_generation) return; // the same list twice (start-up)
     track_for_policy(list);
 
-    cp0_input_state_t next;
+    cp0_input_state_t next = p.state;
     next.keyboards = list->count;
     next.last_seen = cp0_input_state_next_last_seen(p.state.keyboards, p.state.last_seen, list->count,
                                                     static_cast<int64_t>(std::time(nullptr)));
+    next.bt_keyboards = s_bt_count.load();
+    next.kb_gone = s_any_gone.load();
+    next.bt_gone = s_bt_gone.load();
     next.gen = p.state.gen + 1;
     p.state = next;
     p.watcher_generation = generation;
@@ -85,13 +112,7 @@ void on_keyboards(const cp0_kbd_presence_list_t *list, unsigned generation, void
         used += static_cast<size_t>(n);
     }
     SLOGI("[KBD] keyboards=%u gen=%u: %s", next.keyboards, next.gen, list->count ? names : "none");
-
-    if (cp0_input_state_write(p.path, &next) != 0) {
-        if (!p.write_failed) SLOGW("[KBD] cannot write %s: %s", p.path, std::strerror(errno));
-        p.write_failed = true;
-    } else {
-        p.write_failed = false;
-    }
+    write_locked(p);
 }
 
 } // namespace
@@ -109,19 +130,27 @@ void configure()
 void start()
 {
     if (s_watcher) return;
-    Publisher &p = s_publisher;
-    p = Publisher();
-    if (cp0_input_state_path(std::getenv("XDG_RUNTIME_DIR"), p.path, sizeof(p.path)) != 0) {
-        SLOGW("[KBD] XDG_RUNTIME_DIR is too long: input state not published");
-        return;
+    {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        Publisher &p = s_publisher;
+        p = Publisher();
+        p.state.vkb = initial_vkb();
+        if (cp0_input_state_path(std::getenv("XDG_RUNTIME_DIR"), p.path, sizeof(p.path)) != 0) {
+            SLOGW("[KBD] XDG_RUNTIME_DIR is too long: input state not published");
+            return;
+        }
+        // A restarted launcher keeps last_seen and continues gen from the file of its previous run; the policy
+        // inputs (Bluetooth count, gone times) start again, like the launcher's own policy.
+        cp0_input_state_t previous;
+        if (cp0_input_state_read(p.path, &previous) == 0) {
+            p.state.last_seen = previous.last_seen;
+            p.state.gen = previous.gen;
+        }
     }
-    // A restarted launcher keeps last_seen and continues gen from the file of its previous run.
-    cp0_input_state_t previous;
-    if (cp0_input_state_read(p.path, &previous) == 0) p.state = previous;
 
     s_watcher = cp0_kbd_presence_shared_acquire();
     if (!s_watcher) {
-        SLOGW("[KBD] keyboard presence watcher unavailable: %s not published", p.path);
+        SLOGW("[KBD] keyboard presence watcher unavailable: %s not published", s_publisher.path);
         return;
     }
     if (cp0_kbd_presence_watcher_add_listener(s_watcher, on_keyboards, nullptr) != 0) {
@@ -150,6 +179,18 @@ KeyboardSnapshot keyboards()
     return snapshot;
 }
 
+void set_vkb(cp0_app_vkb_t vkb)
+{
+    std::lock_guard<std::mutex> lock(s_mutex);
+    Publisher &p = s_publisher;
+    if (p.state.vkb == vkb) return;
+    p.state.vkb = vkb;
+    if (!p.published || !p.path[0]) return; // the first presence report writes it
+    p.state.gen += 1;
+    SLOGI("[KBD] vkb=%s gen=%u", cp0_app_vkb_name(vkb), p.state.gen);
+    write_locked(p);
+}
+
 } // namespace input_presence
 
 #else
@@ -160,6 +201,7 @@ void configure() {}
 void start() {}
 void stop() {}
 KeyboardSnapshot keyboards() { return KeyboardSnapshot(); }
+void set_vkb(cp0_app_vkb_t) {}
 
 } // namespace input_presence
 

@@ -6,15 +6,23 @@
  *   keyboards=N        real keyboards present now (cp0_keyboard_presence.h rule)
  *   last_seen=T        unix seconds of the last time keyboards was > 0 (0 = never seen since boot); exact at
  *                      the moment keyboards drops to 0, and while keyboards > 0 the time of the last write
- *   gen=G              increases on every write (every change of the keyboard list)
+ *   bt_keyboards=N     of them, Bluetooth keyboards (bus 0x0005)
+ *   kb_gone=S          monotonic seconds when the keyboard count last dropped to 0 (0 = never since the launcher
+ *                      started)
+ *   bt_gone=S          monotonic seconds when the Bluetooth keyboard count last dropped to 0 (0 = never)
+ *   vkb=auto|off|force the on-screen keyboard rule in force (cp0_ui_osk_effective_vkb)
+ *   gen=G              increases on every write (every change of the keyboard list or of vkb)
  *
- * Readers must ignore unknown keys (later versions add lines). last_seen exists for a later rule ("a
- * sleeping Bluetooth keyboard still counts as present for N minutes"); nothing applies that rule yet.
+ * Readers must ignore unknown keys (later versions add lines). Apps read it with cp0_app_input_read() and decide
+ * with cp0_app_osk_allowed() (the app contract, cp0_app_contract.h); kb_gone / bt_gone are the launcher's own
+ * policy inputs (task 014 P2b), so an app and the launcher decide alike.
  *
  * Device builds only (src/cp0); no LVGL dependency.
  */
 #ifndef CP0_INPUT_STATE_H
 #define CP0_INPUT_STATE_H
+
+#include "cp0_app_contract.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -32,13 +40,19 @@ typedef struct {
     unsigned keyboards;
     int64_t last_seen;
     unsigned gen;
+    /* app contract additions (task 014 P5) */
+    unsigned bt_keyboards;
+    int64_t kb_gone;   /* monotonic s, 0 = never */
+    int64_t bt_gone;   /* monotonic s, 0 = never */
+    cp0_app_vkb_t vkb; /* a missing line parses as auto */
 } cp0_input_state_t;
 
 /* Path of the state file: <runtime_dir>/applaunch/input.state, or the /tmp fallback when runtime_dir is NULL
  * or empty. Pass getenv("XDG_RUNTIME_DIR"). Returns 0, or -1 when `buf` is too small. */
 int cp0_input_state_path(const char *runtime_dir, char *buf, size_t size);
 
-/* The file text ("v=1\nkeyboards=..\nlast_seen=..\ngen=..\n"). Returns its length, or -1 if it does not fit. */
+/* The file text ("v=1\nkeyboards=..\nlast_seen=..\nbt_keyboards=..\nkb_gone=..\nbt_gone=..\nvkb=..\ngen=..\n").
+ * Returns its length, or -1 if it does not fit. */
 int cp0_input_state_format(const cp0_input_state_t *state, char *buf, size_t size);
 
 /* Parse the file text. Returns 0 when it is a v=1 file (missing keys stay 0), -1 otherwise. */

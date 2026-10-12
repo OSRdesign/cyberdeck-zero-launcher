@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Probe full
+Exec=/usr/share/APPLaunch/bin/app-contract-probe --tag full
+Terminal=false
+X-Fullscreen=true

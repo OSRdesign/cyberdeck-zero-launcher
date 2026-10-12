@@ -430,17 +430,47 @@ int cp0_ui_state_path(const char *runtime_dir, char *buf, size_t size)
     return 0;
 }
 
-int cp0_ui_state_format(const cp0_ui_metrics_t *m, unsigned gen, char *buf, size_t size)
+/* a device path as one line of the file: "" when absent or when it would break the line format */
+static const char *state_text(const char *s)
+{
+    if (!s) return "";
+    for (const char *p = s; *p; p++)
+        if (*p == '\n' || *p == '\r') return "";
+    return s;
+}
+
+int cp0_ui_state_format(const cp0_ui_metrics_t *m, const cp0_ui_panel_t *panel, unsigned gen, char *buf, size_t size)
 {
     if (!m || !buf) return -1;
-    const int n = snprintf(buf, size,
-                           "v=%d\nw=%d\nh=%d\nrot=%d\nppmm=%d\ndensity=%s\nclass=%s\ncompat=%d,%d,%d,%d\nscale=%d\n"
-                           "toolbar=%d\nkb_inset=0\ngen=%u\n",
-                           CP0_UI_STATE_VERSION, m->w, m->h, m->rot, m->ppmm_x100,
-                           cp0_ui_density_src_name(m->density_src), cp0_ui_class_name(m->cls), m->compat.x, m->compat.y,
-                           m->compat.w, m->compat.h, m->compat.scale, m->compat.toolbar_h, gen);
+    const int *t = m->tok;
+    const int *x = m->text_px;
+    const int n = snprintf(
+        buf, size,
+        "v=%d\nw=%d\nh=%d\nrot=%d\nppmm=%d\ndensity=%s\nclass=%s\ncompat=%d,%d,%d,%d\nscale=%d\ntoolbar=%d\n"
+        "fb=%s\nbpp=%d\ntouch=%s\n"
+        "space=%d,%d,%d\nradius=%d,%d,%d\nheader=%d\nrow=%d\ntarget=%d\ndialog_max_w=%d\ntext=%d,%d,%d,%d\n"
+        "kb_inset=0\ngen=%u\n",
+        CP0_UI_STATE_VERSION, m->w, m->h, m->rot, m->ppmm_x100, cp0_ui_density_src_name(m->density_src),
+        cp0_ui_class_name(m->cls), m->compat.x, m->compat.y, m->compat.w, m->compat.h, m->compat.scale,
+        m->compat.toolbar_h, state_text(panel ? panel->fb : NULL), panel && panel->bpp > 0 ? panel->bpp : 0,
+        state_text(panel ? panel->touch : NULL), t[CP0_TOK_SPACE_S], t[CP0_TOK_SPACE_M], t[CP0_TOK_SPACE_L],
+        t[CP0_TOK_RADIUS_S], t[CP0_TOK_RADIUS_M], t[CP0_TOK_RADIUS_L], t[CP0_TOK_HEADER_H], t[CP0_TOK_ROW_H],
+        t[CP0_TOK_TARGET], t[CP0_TOK_DIALOG_MAX_W], x[CP0_TEXT_TITLE], x[CP0_TEXT_HEADING], x[CP0_TEXT_BODY],
+        x[CP0_TEXT_CAPTION], gen);
     if (n < 0 || (size_t)n >= size) return -1;
     return n;
+}
+
+static int (*g_republisher)(void);
+
+void cp0_ui_state_set_republisher(int (*fn)(void))
+{
+    g_republisher = fn;
+}
+
+int cp0_ui_state_republish(void)
+{
+    return g_republisher ? g_republisher() : -1;
 }
 
 /* "key=<unsigned decimal>" filling the line; 1 when found */

@@ -6,7 +6,7 @@ from Git Bash (they re-run themselves in WSL through `wsl.exe`). `-h` prints the
 | Script | What it does |
 | --- | --- |
 | `wsl-build.sh [--with-store]` | Syncs this checkout into its WSL build tree, takes the build lock, builds the Pi bundle with `projects/APPLaunch/pizero2w/build.sh`. Prints the last 25 build lines, the full log's path, and the bundle's path and size (also as a `\\wsl.localhost\...` path for Windows tools such as `tools/boards/board.py upload`). Exit status = the build's. |
-| `check-all.sh` | Syncs, takes the lock, then runs `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`), `app-unit` (`projects/APPLaunch/tests/run_tests.sh`), `render` (`tests/render/run.sh render`), `compare`, `twice`, `header` (same script). One line per step: `PASS|FAIL <step> (<seconds>s)`; a failing step also shows its last 40 lines. Logs in `/tmp/check-all-<checkout>/`. Exit 1 if any step failed. |
+| `check-all.sh` | Syncs, takes the lock, then runs `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`), `app-unit` (`projects/APPLaunch/tests/run_tests.sh`), `render` (`tests/render/run.sh render`), `compare`, `twice`, `header`, `contract` (same script; the app contract probe, `app-contract-probe/`). One line per step: `PASS|FAIL <step> (<seconds>s)`; a failing step also shows its last 40 lines. Logs in `/tmp/check-all-<checkout>/`. Exit 1 if any step failed. |
 | `lib.sh` | Shared helpers (sourced): WSL re-exec, build lock, tree sync. |
 
 Both use the same recipe as the scripts the earlier sessions ran by hand:

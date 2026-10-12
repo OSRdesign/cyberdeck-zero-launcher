@@ -19,6 +19,7 @@
 
 #include <png.h>
 
+#include "app_launch_env.hpp"
 #include "commount.h"
 #include "cp0/cp0_fb_output.h"
 #include "cp0/cp0_lvgl.h"
@@ -1091,12 +1092,29 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             return fail(scene, line, "the display manager published no metrics");
         std::string report = text;
         report += "environment";
+        /* the panel variables every child inherits, as "export ...; " for run.sh contract (app contract 1) */
+        std::string panel_exports = "export";
         for (const char *name : {"APPLAUNCH_SCREEN_W", "APPLAUNCH_SCREEN_H", "APPLAUNCH_SCREEN_ROTATE",
-                                 "APPLAUNCH_SCREEN_PPMM", "APPLAUNCH_SCREEN_CLASS"}) {
+                                 "APPLAUNCH_SCREEN_PPMM", "APPLAUNCH_SCREEN_CLASS", "APPLAUNCH_SCREEN_FB",
+                                 "APPLAUNCH_SCREEN_TOUCH"}) {
             const char *value = std::getenv(name);
             report += std::string(" ") + name + "=" + (value ? value : "(unset)");
+            if (value) panel_exports += std::string(" ") + name + "=" + app_launch_env::shell_quote(value);
         }
         report += "\n";
+        /* what run_external (compat) and launch_Exec (fullscreen) put in front of an app's command line */
+        const std::string compat_env = app_launch_env::export_for_current(app_launch_env::Mode::Compat);
+        const std::string full_env = app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen);
+        report += "launch compat     " + compat_env + "\n";
+        report += "launch fullscreen " + full_env + "\n";
+        const std::string base = run.out_dir + "/" + run.size.name() + "/" + w[1];
+        std::ofstream(base + ".compat.env") << panel_exports << "; " << compat_env << "\n";
+        std::ofstream(base + ".fullscreen.env") << panel_exports << "; " << full_env << "\n";
+        /* the layout service's own numbers, for run.sh contract to check what the probe read against */
+        std::ofstream(base + ".facts") << "size=" << m->w << "x" << m->h << "\nclass=" << cp0_ui_class_name(m->cls)
+                                       << "\nppmm=" << m->ppmm_x100 << "\nrot=" << m->rot << "\ncompat=" << m->compat.x
+                                       << "," << m->compat.y << "," << m->compat.w << "," << m->compat.h
+                                       << "\nscale=" << m->compat.scale << "\n";
         char state_path[1024];
         if (cp0_ui_state_path(std::getenv("XDG_RUNTIME_DIR"), state_path, sizeof(state_path)) == 0) {
             std::ifstream state(state_path);

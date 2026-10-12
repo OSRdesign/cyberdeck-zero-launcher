@@ -77,6 +77,18 @@ int cp0_file_read_first_line(const char *path, char *out, int out_size);
 
 `cp0_battery_read` は最新のバックグラウンド snapshot のみを読み、ハードウェア I/O は行いません。`valid == 1` の場合だけ利用します。`cp0_bq27220_calibrate` の index は 0..3、バックライト書き込みは 0..max に clamp されます。`cp0_time_set` の形式は `YYYY-MM-DD HH:MM:SS` で、RTC を永続化するには NTP を無効にします。Ethernet/account 情報、時刻文字列、背景更新、LoRa 初期化停止 API も提供します。
 
+### アプリ契約リーダー（`include/cp0_app_contract.h`）
+
+タスク 014 P5 から公開。ランチャーが起動するアプリ向けです。純粋な C99 + POSIX で、LVGL や cp0 ランタイムには依存しません。アプリは `include/cp0_app_contract.h` + `src/cp0_app_contract.c` と、`include/cp0_ui_metrics.h` + `src/cp0_ui_metrics.c`（画面クラス名、トークンのフォールバック計算）をそのままコピーできます。回転したフレームバッファや 16 bpp に描画する場合は `src/cp0/cp0_fb_output.{h,c}` も使います。
+
+- `cp0_app_env_read`：起動時の環境変数を読みます。契約 1 のランチャーから起動された場合は 0、それ以外は -1。
+- `cp0_app_state_path`：状態ファイルのパス（`APPLAUNCH_STATE_DIR`、なければ `$XDG_RUNTIME_DIR/applaunch/`、なければ `/tmp/applaunch-*`）。
+- `cp0_app_screen_read` / `cp0_app_screen_parse`：`screen.state` を読みます。ファイルがない場合は `cp0_app_screen_compute` が同じ規則で計算します。
+- `cp0_app_input_read` / `cp0_app_input_parse`：`input.state` を読みます。
+- `cp0_app_osk_allowed`、`cp0_app_osk_rule`、`cp0_app_monotonic_s`：オンスクリーンキーボードの規則。ランチャー自身（`cp0_ui_osk_policy_allows`）も同じ関数を使います。
+
+読み取り関数は 0 または -1 を返し、`out` を常に埋めます（失敗時はクリア）。未知のキーは無視されます。環境変数、ファイルのキー、失敗時の扱い、安定性の約束は [`APP-CONTRACT.md`](APP-CONTRACT.md)（英語）を参照してください。
+
 ## `cp0_signal_*` 完全な使い方
 
 以下の `args` はすべて `std::list<std::string>` で、0 番目がコマンドです。特記しない request callback は `void(int code, std::string data)` です。

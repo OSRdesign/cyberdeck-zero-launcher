@@ -10,6 +10,7 @@
 #include "app_registry.h"
 #include "app_display_order.hpp"
 #include "cp0_lvgl_app.h"
+#include "cp0_ui_metrics.h"
 #include "desktop_entry.h"
 #include "launch.h"
 #include "launcher_platform.hpp"
@@ -195,6 +196,15 @@ void launcher_append_desktop_apps(std::list<app> &apps)
             const std::optional<DesktopEntry> entry = parse_desktop_entry(desktop_data);
             if (!entry) {
                 std::fprintf(stderr, "applications_load: skip %s (missing Name or Exec)\n", path.c_str());
+                continue;
+            }
+            // X-MinSize (app contract 1): hidden, like Hidden=true, on a screen smaller than the app needs. The
+            // launcher's own metrics (the home grid's); none (stock / SDL builds) = shown.
+            const cp0_ui_metrics_t *screen = cp0_ui_metrics_current();
+            if (!desktop_min_size_fits(entry->min_w, entry->min_h, screen != nullptr, screen ? screen->w : 0,
+                                       screen ? screen->h : 0)) {
+                std::fprintf(stderr, "applications_load: hide %s (X-MinSize %dx%d > screen %dx%d)\n",
+                             path.c_str(), entry->min_w, entry->min_h, screen->w, screen->h);
                 continue;
             }
 

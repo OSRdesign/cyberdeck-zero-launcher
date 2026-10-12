@@ -26,6 +26,8 @@ request with the Controller.
 - Screens: the launcher draws two displays. Stock apps run in a 320x170 window scaled 2x with a toolbar; a
   full-screen app (`X-Fullscreen=true`) owns all 640x480. The top bar (clock, Wi-Fi, Bluetooth) is one shared
   renderer (`ext_components/cp0_lvgl/.../cp0_statusbar.*`); use it, never redraw your own.
+- Other boards have other panels: an app learns its mode, canvas, the panel's size, rotation, density and the
+  keyboard rule from the app contract (`docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`).
 
 ## Building
 

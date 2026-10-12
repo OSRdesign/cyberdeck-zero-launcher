@@ -155,6 +155,18 @@ int cp0_time_ntp_set(int enable);
 - `cp0_desktop_exec_is_safe`：返回安全检查结果并写入原因。
 - `cp0_lora_request_stop`、`cp0_lora_clear_stop`：取消/清除 LoRa 初始化停止请求。
 
+### 应用契约读取接口（`include/cp0_app_contract.h`）
+
+自 task 014 P5 起公开，供 launcher 启动的应用使用。纯 C99 + POSIX，不依赖 LVGL 和 cp0 运行时：应用可以直接复制 `include/cp0_app_contract.h` + `src/cp0_app_contract.c`，以及 `include/cp0_ui_metrics.h` + `src/cp0_ui_metrics.c`（屏幕类别名称、token 回退计算）；需要在旋转或 16 bpp framebuffer 上绘制时再加上 `src/cp0/cp0_fb_output.{h,c}`。
+
+- `cp0_app_env_read`：读取启动环境变量；由契约 1 的 launcher 启动时返回 0，否则返回 -1。
+- `cp0_app_state_path`：状态文件路径（`APPLAUNCH_STATE_DIR`，否则 `$XDG_RUNTIME_DIR/applaunch/`，否则 `/tmp/applaunch-*`）。
+- `cp0_app_screen_read` / `cp0_app_screen_parse`：读取 `screen.state`；`cp0_app_screen_compute`：没有文件时按同样规则计算。
+- `cp0_app_input_read` / `cp0_app_input_parse`：读取 `input.state`。
+- `cp0_app_osk_allowed`、`cp0_app_osk_rule`、`cp0_app_monotonic_s`：屏幕键盘规则，与 launcher 自身（`cp0_ui_osk_policy_allows`）使用同一函数。
+
+读取函数返回 0 或 -1，并总是填充 `out`（失败时清零）；未知键会被忽略。环境变量、文件键、失败处理和稳定性承诺见 [`APP-CONTRACT.md`](APP-CONTRACT.md)（英文）。
+
 ## 4. `cp0_signal_*` 完整用法
 
 以下命令中的 `args` 都是 `std::list<std::string>`，命令名位于第 0 个元素。除单向信号外，回调签名统一为 `void(int code, std::string data)`。

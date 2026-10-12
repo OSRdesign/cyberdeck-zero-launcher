@@ -523,11 +523,13 @@ static void touch_read_compat(lv_indev_t *indev, lv_indev_data_t *data)
 }
 
 static char touch_desc[768] = "none";
+static char touch_path[300] = ""; /* the touch device read (screen.state touch=, APPLAUNCH_SCREEN_TOUCH) */
 
 static void init_touch(void)
 {
     char path[300], name[128];
     const char *how = "";
+    touch_path[0] = '\0';
     if (resolve_touch_device(path, sizeof(path), name, sizeof(name), &how) != 0) {
         fprintf(stderr, "[dpi] no touch device found (set APPLAUNCH_TOUCH_DEVICE)\n");
         snprintf(touch_desc, sizeof(touch_desc), "none (%s)", how);
@@ -550,6 +552,7 @@ static void init_touch(void)
     if (ioctl(tc.fd, EVIOCGABS(ABS_MT_POSITION_Y), &ai) < 0 && ioctl(tc.fd, EVIOCGABS(ABS_Y), &ai) < 0)
         ai.minimum = 0, ai.maximum = g.ph - 1;
     tc.min_y = ai.minimum; tc.max_y = ai.maximum;
+    snprintf(touch_path, sizeof(touch_path), "%s", path);
     tc.swap = env_int("APPLAUNCH_TOUCH_SWAP_XY", 0);
     tc.inv_x = env_int("APPLAUNCH_TOUCH_INVERT_X", 0);
     tc.inv_y = env_int("APPLAUNCH_TOUCH_INVERT_Y", 0);
@@ -892,7 +895,8 @@ lv_display_t *cp0_dpi_scaled_create(void)
             metrics.compat.toolbar_y, metrics.shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck");
     /* Early in start-up, before the services' threads, like the other setenv calls of the display and
      * keyboard set-up (fbdev backend, keyboard init). */
-    if (cp0_ui_metrics_publish(&metrics, getenv("XDG_RUNTIME_DIR")) != 0)
+    const cp0_ui_panel_t panel = {dev, g.bpp * 8, touch_path};
+    if (cp0_ui_metrics_publish(&metrics, &panel, getenv("XDG_RUNTIME_DIR")) != 0)
         fprintf(stderr, "[display-metrics] screen state not written: %s\n", strerror(errno));
     return g.compat;
 }

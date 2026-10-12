@@ -43,6 +43,12 @@ bool call_config(std::list<std::string> arguments, std::string *data = nullptr)
     return ok;
 }
 
+/* input.state vkb=: the rule in force for apps (the app contract), the same inputs as allowed() */
+void publish_vkb()
+{
+    input_presence::set_vkb(cp0_ui_osk_effective_vkb(s_env, mode() == kOff, !native_ui::enabled()));
+}
+
 bool allowed()
 {
     cp0_ui_osk_policy_t policy{};
@@ -79,6 +85,7 @@ bool set_mode(int value)
     if (value != kAuto && value != kOff) return false;
     if (!call_config({"SetInt", kConfigKey, std::to_string(value)}) || !call_config({"Save"})) return false;
     s_mode = value;
+    if (s_installed) publish_vkb();
     return true;
 }
 
@@ -88,6 +95,7 @@ void install()
     s_installed = true;
     s_env = cp0_ui_osk_env_parse(std::getenv("APPLAUNCH_OSK"));
     cp0::ui::osk::set_policy(allowed);
+    publish_vkb();
 }
 
 void dismiss()

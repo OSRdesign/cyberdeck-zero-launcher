@@ -6,6 +6,7 @@
 
 #include "launch.h"
 
+#include "app_launch_env.hpp"
 #include "app_registry.h"
 #include "builtin_app_registry.hpp"
 #include "desktop_app_loader.hpp"
@@ -199,15 +200,21 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
     // active in the backend, but stop every Launcher timer/flush until the
     // child exits; drawing an LVGL toast here would overwrite the child UI.
     lv_timer_enable(false);
+    // The app contract (cp0_app_contract.h): a fullscreen app learns its mode, the whole logical screen as window and
+    // canvas, and where the state files are. Without layout metrics (stock build, SDL) the command is unchanged.
+    const std::string command =
+        fullscreen ? app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen) + exec : exec;
     int result = -1;
     try {
         cp0_signal_process_api(
-            {"ExecBlocking", exec, keep_root ? "1" : "0"},
+            {"ExecBlocking", command, keep_root ? "1" : "0"},
             [&](int code, std::string) { result = code; });
     } catch (...) {
         result = -1;
     }
     SLOGI("External app exited with code %d", result);
+    // the launcher's description of the panel comes back if the app replaced it (report 023 F1)
+    (void)cp0_ui_state_republish();
 
     lv_timer_enable(true);
     if (indev) lv_indev_set_group(indev, UILaunchPage::home_input_group());

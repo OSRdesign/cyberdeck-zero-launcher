@@ -20,7 +20,8 @@
  * Pure C, no LVGL and no system call in this header's core functions: unit-tested on the PC by
  * tests/test_ui_metrics.c. cp0_ui_metrics_lvgl.h adds the LVGL side (fonts, the native display's metrics).
  * cp0_ui_metrics_publish() / cp0_ui_state_write() (src/cp0/cp0_ui_state.c) are device builds only.
- * Internal for now (D10): the contract for apps is published in P5.
+ * Published for apps with the app contract (task 014 P5, cp0_app_contract.h): an app may copy this header and
+ * cp0_ui_metrics.c to compute the tokens itself when screen.state is missing (cp0_app_screen_compute).
  */
 #pragma once
 
@@ -179,18 +180,36 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
 void cp0_ui_metrics_set_current(const cp0_ui_metrics_t *m);
 const cp0_ui_metrics_t *cp0_ui_metrics_current(void);
 
-/* Screen state file published for apps: $XDG_RUNTIME_DIR/applaunch/screen.state (/tmp/applaunch-screen.state when
- * XDG_RUNTIME_DIR is unset), one key per line, readers ignore unknown keys:
+/* Screen state file published for apps (the app contract, cp0_app_contract.h): $XDG_RUNTIME_DIR/applaunch/screen.state
+ * (/tmp/applaunch-screen.state when XDG_RUNTIME_DIR is unset), one key per line, readers ignore unknown keys:
  *   v=1  w=  h=  rot=  ppmm= (x100)  density=default|panel_mm|fbdev  class=  compat=x,y,w,h  scale=  toolbar= (px)
- *   kb_inset=0 (on-screen keyboard, later)  gen= (increases on every write) */
+ *   fb= bpp= touch= (the panel's framebuffer, its depth, the touch device; "" / 0 when unknown)
+ *   space=s,m,l radius=s,m,l header= row= target= dialog_max_w= text=title,heading,body,caption (tokens, px)
+ *   kb_inset=0 (reserved, always 0 in contract 1)  gen= (increases on every write) */
 #define CP0_UI_STATE_VERSION 1
 #define CP0_UI_STATE_SUBDIR "applaunch"
 #define CP0_UI_STATE_FILE "screen.state"
 #define CP0_UI_STATE_FALLBACK_PATH "/tmp/applaunch-screen.state"
 
+/* The panel behind the logical canvas (what the display manager opened). Strings may be NULL. */
+typedef struct {
+    const char *fb;    /* framebuffer device */
+    int bpp;           /* its depth in bits (16, 32), 0 = unknown */
+    const char *touch; /* touch device, NULL / "" = none */
+} cp0_ui_panel_t;
+
 int cp0_ui_state_path(const char *runtime_dir, char *buf, size_t size); /* 0, or -1 when buf is too small */
-int cp0_ui_state_format(const cp0_ui_metrics_t *m, unsigned gen, char *buf, size_t size); /* length or -1 */
+/* The file text. panel may be NULL (fb= and touch= empty, bpp=0); a device path holding a newline is written empty.
+ * Returns the length or -1. */
+int cp0_ui_state_format(const cp0_ui_metrics_t *m, const cp0_ui_panel_t *panel, unsigned gen, char *buf, size_t size);
 unsigned cp0_ui_state_parse_gen(const char *text, size_t len); /* gen= of a v=1 file, 0 when none */
+
+/* Rewrites screen.state with gen + 1 (the launcher, after every app it started exits: an app built on an older
+ * cp0_lvgl may have overwritten it). Does nothing and returns -1 when this process never published (an app, the SDL
+ * simulator, the stock build). LVGL thread. */
+int cp0_ui_state_republish(void);
+/* Device side (cp0_ui_state.c): installs the function cp0_ui_state_republish() calls. */
+void cp0_ui_state_set_republisher(int (*fn)(void));
 
 /* Human-readable summary (render harness, logs). Returns the length or -1 when it does not fit. */
 int cp0_ui_metrics_describe(const cp0_ui_metrics_t *m, char *buf, size_t size);
@@ -200,11 +219,13 @@ int cp0_ui_metrics_describe(const cp0_ui_metrics_t *m, char *buf, size_t size);
 /* Atomic write of `text` to `path` (directory created, one level, 0755; file 0644). 0 or -1 (errno set). */
 int cp0_ui_state_write(const char *path, const char *text, size_t len);
 
-/* For the processes the launcher starts: APPLAUNCH_SCREEN_W, _H, _ROTATE, _PPMM (x100), _CLASS in the environment
- * (call before any thread reads the environment: display creation), and the state file under runtime_dir with
- * gen = the previous file's gen + 1. Returns 0, or -1 when the file could not be written (the environment is set
- * anyway). */
-int cp0_ui_metrics_publish(const cp0_ui_metrics_t *m, const char *runtime_dir);
+/* For the processes the launcher starts: APPLAUNCH_SCREEN_W, _H, _ROTATE, _PPMM (x100), _CLASS, _FB, _TOUCH in the
+ * environment (call before any thread reads the environment: display creation), and the state file under
+ * runtime_dir with gen = the previous file's gen + 1; afterwards cp0_ui_state_republish() rewrites it.
+ * In a process the launcher started (APPLAUNCH_APP_MODE set: a cp0_lvgl app drawing into the virtual framebuffer, or
+ * a fullscreen app) it does nothing and returns 0: only the launcher describes the panel (report 023 F1).
+ * Returns 0, or -1 when the file could not be written (the environment is set anyway). */
+int cp0_ui_metrics_publish(const cp0_ui_metrics_t *m, const cp0_ui_panel_t *panel, const char *runtime_dir);
 
 #ifdef __cplusplus
 }

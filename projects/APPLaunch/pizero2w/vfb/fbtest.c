@@ -4,6 +4,7 @@
 #include <linux/fb.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -23,11 +24,15 @@ int main(void)
     var.yres_virtual = var.yres * 2; /* ask for two pages */
     ioctl(fd, FBIOPUT_VSCREENINFO, &var);
     ioctl(fd, FBIOGET_FSCREENINFO, &fix);
+    fprintf(stderr, "fb flip: virt %ux%u smem=%u\n", var.xres_virtual, var.yres_virtual, fix.smem_len);
     const unsigned w = var.xres, h = var.yres, stride = fix.line_length / 4;
     uint32_t *fb = mmap(NULL, fix.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (fb == MAP_FAILED) { perror("mmap"); return 1; }
 
-    for (int frame = 0; frame < 25 * 30; frame++) {
+    /* FBTEST_FRAMES=N: stop after N frames (the host test, test_vfb.sh) */
+    const char *frames_env = getenv("FBTEST_FRAMES");
+    const int frames = frames_env && atoi(frames_env) > 0 ? atoi(frames_env) : 25 * 30;
+    for (int frame = 0; frame < frames; frame++) {
         const unsigned page = frame & 1;
         uint32_t *buf = fb + (size_t)page * h * stride;
         /* colour bars + a thin 1-pixel border so the 2x scaling is easy to see */

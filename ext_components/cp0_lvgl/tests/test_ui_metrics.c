@@ -574,22 +574,37 @@ static void test_state_text(void)
     char small[10];
     CHECK(cp0_ui_state_path("/run/user/1000", small, sizeof(small)) == -1);
 
+    /* the deck: panel fb0 32 bpp with its touch screen; the tokens are those of test_targets() */
     cp0_ui_metrics_t m = compute(640, 480, 0, 0);
-    char text[512];
-    const int n = cp0_ui_state_format(&m, 1, text, sizeof(text));
+    const cp0_ui_panel_t deck = {"/dev/fb0", 32, "/dev/input/event1"};
+    char text[1024];
+    const int n = cp0_ui_state_format(&m, &deck, 1, text, sizeof(text));
     CHECK(n > 0);
     CHECK(strcmp(text, "v=1\nw=640\nh=480\nrot=0\nppmm=1130\ndensity=default\nclass=standard\ncompat=0,0,640,340\n"
-                       "scale=2\ntoolbar=140\nkb_inset=0\ngen=1\n") == 0);
+                       "scale=2\ntoolbar=140\nfb=/dev/fb0\nbpp=32\ntouch=/dev/input/event1\n"
+                       "space=8,16,20\nradius=8,18,28\nheader=56\nrow=79\ntarget=102\ndialog_max_w=560\n"
+                       "text=32,28,24,18\nkb_inset=0\ngen=1\n") == 0);
     CHECK(cp0_ui_state_parse_gen(text, (size_t)n) == 1);
     char tiny[16];
-    CHECK(cp0_ui_state_format(&m, 1, tiny, sizeof(tiny)) == -1);
+    CHECK(cp0_ui_state_format(&m, &deck, 1, tiny, sizeof(tiny)) == -1);
 
-    m = compute(480, 320, 630, 1);
+    /* the Pi 3A+: fb1 16 bpp, pre-rotated 90; no panel known: empty fb / touch, bpp 0 */
+    m = compute(480, 320, 610, 1);
     m.rot = 90;
-    CHECK(cp0_ui_state_format(&m, 42, text, sizeof(text)) > 0);
-    CHECK(strcmp(text, "v=1\nw=480\nh=320\nrot=90\nppmm=630\ndensity=panel_mm\nclass=compact\ncompat=80,25,320,170\n"
-                       "scale=1\ntoolbar=100\nkb_inset=0\ngen=42\n") == 0);
+    const cp0_ui_panel_t pi3a = {"/dev/fb1", 16, "/dev/input/event0"};
+    CHECK(cp0_ui_state_format(&m, &pi3a, 42, text, sizeof(text)) > 0);
+    CHECK(strcmp(text, "v=1\nw=480\nh=320\nrot=90\nppmm=610\ndensity=panel_mm\nclass=compact\ncompat=80,25,320,170\n"
+                       "scale=1\ntoolbar=100\nfb=/dev/fb1\nbpp=16\ntouch=/dev/input/event0\n"
+                       "space=5,10,14\nradius=6,14,20\nheader=40\nrow=43\ntarget=55\ndialog_max_w=440\n"
+                       "text=24,20,18,14\nkb_inset=0\ngen=42\n") == 0);
     CHECK(cp0_ui_state_parse_gen(text, strlen(text)) == 42);
+    CHECK(cp0_ui_state_format(&m, NULL, 3, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "\ntoolbar=100\nfb=\nbpp=0\ntouch=\nspace=5,10,14\n") != NULL);
+    /* a device path that would break the line format is written empty */
+    const cp0_ui_panel_t odd = {"/dev/fb0\ngen=99", 32, NULL};
+    CHECK(cp0_ui_state_format(&m, &odd, 3, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "\nfb=\nbpp=32\ntouch=\n") != NULL);
+    CHECK(cp0_ui_state_parse_gen(text, strlen(text)) == 3);
 
     const char *crlf = "v=1\r\nw=640\r\ngen=7\r\n";
     CHECK(cp0_ui_state_parse_gen(crlf, strlen(crlf)) == 7);
@@ -644,40 +659,79 @@ static void test_publish(void)
 
     cp0_ui_metrics_t m = compute(800, 480, 921, 0);
     m.density_src = CP0_UI_DENSITY_FBDEV;
-    const mode_t old_umask = umask(077);
-    CHECK(cp0_ui_metrics_publish(&m, root) == 0); /* creates <runtime>/applaunch */
-    umask(old_umask);
+    const cp0_ui_panel_t panel = {"/dev/fb0", 32, "/dev/input/event5"};
+    char text[1024];
     struct stat st;
+
+    /* nothing published in this process yet: nothing to rewrite */
+    CHECK(cp0_ui_state_republish() == -1);
+
+    /* An app the launcher started (APPLAUNCH_APP_MODE set, report 023 F1): a cp0_lvgl app in the 320x170 virtual
+     * framebuffer must neither write screen.state nor change the panel variables it inherited. */
+    cp0_ui_metrics_t canvas = compute(320, 170, 0, 0);
+    setenv("APPLAUNCH_APP_MODE", "compat", 1);
+    setenv("APPLAUNCH_SCREEN_W", "640", 1);
+    unsetenv("APPLAUNCH_SCREEN_FB");
+    CHECK(cp0_ui_metrics_publish(&canvas, &panel, root) == 0);
+    CHECK(stat(path, &st) != 0);                                          /* no file */
+    CHECK(strcmp(getenv("APPLAUNCH_SCREEN_W"), "640") == 0);             /* the panel's value kept */
+    CHECK(getenv("APPLAUNCH_SCREEN_FB") == NULL);
+    CHECK(cp0_ui_state_republish() == -1);                                /* still nothing to rewrite */
+    unsetenv("APPLAUNCH_APP_MODE");
+
+    const mode_t old_umask = umask(077);
+    CHECK(cp0_ui_metrics_publish(&m, &panel, root) == 0); /* creates <runtime>/applaunch */
+    umask(old_umask);
     CHECK(stat(path, &st) == 0 && (st.st_mode & 0777) == 0644);
     CHECK(stat(dir, &st) == 0 && S_ISDIR(st.st_mode));
-    char text[512];
     read_file(path, text, sizeof(text));
     CHECK(strcmp(text, "v=1\nw=800\nh=480\nrot=0\nppmm=921\ndensity=fbdev\nclass=wide\ncompat=80,18,640,340\n"
-                       "scale=2\ntoolbar=103\nkb_inset=0\ngen=1\n") == 0);
+                       "scale=2\ntoolbar=103\nfb=/dev/fb0\nbpp=32\ntouch=/dev/input/event5\n"
+                       "space=8,14,20\nradius=8,16,24\nheader=56\nrow=64\ntarget=83\ndialog_max_w=600\n"
+                       "text=32,26,22,18\nkb_inset=0\ngen=1\n") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_W") && strcmp(getenv("APPLAUNCH_SCREEN_W"), "800") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_H") && strcmp(getenv("APPLAUNCH_SCREEN_H"), "480") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_ROTATE") && strcmp(getenv("APPLAUNCH_SCREEN_ROTATE"), "0") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_PPMM") && strcmp(getenv("APPLAUNCH_SCREEN_PPMM"), "921") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_CLASS") && strcmp(getenv("APPLAUNCH_SCREEN_CLASS"), "wide") == 0);
+    CHECK(getenv("APPLAUNCH_SCREEN_FB") && strcmp(getenv("APPLAUNCH_SCREEN_FB"), "/dev/fb0") == 0);
+    CHECK(getenv("APPLAUNCH_SCREEN_TOUCH") && strcmp(getenv("APPLAUNCH_SCREEN_TOUCH"), "/dev/input/event5") == 0);
 
     /* a restarted launcher continues gen; the file is replaced, no temporary is left */
-    CHECK(cp0_ui_metrics_publish(&m, root) == 0);
+    CHECK(cp0_ui_metrics_publish(&m, &panel, root) == 0);
     read_file(path, text, sizeof(text));
     CHECK(strstr(text, "\ngen=2\n") != NULL);
     CHECK(count_entries(dir) == 1);
 
+    /* After an app: an old cp0_lvgl app overwrote the file with its 320x170 canvas; the launcher's rewrite brings the
+     * panel back with gen + 1 (the environment is not touched again). */
+    char clobber[1024];
+    const int clobber_len = cp0_ui_state_format(&canvas, NULL, 3, clobber, sizeof(clobber));
+    CHECK(clobber_len > 0 && cp0_ui_state_write(path, clobber, (size_t)clobber_len) == 0);
+    CHECK(cp0_ui_state_republish() == 0);
+    read_file(path, text, sizeof(text));
+    CHECK(strncmp(text, "v=1\nw=800\nh=480\n", 16) == 0);
+    CHECK(strstr(text, "\ntouch=/dev/input/event5\n") != NULL);
+    CHECK(strstr(text, "\ngen=4\n") != NULL);
+    CHECK(count_entries(dir) == 1);
+
     /* a file of another version restarts gen at 1 */
     CHECK(cp0_ui_state_write(path, "v=9\ngen=50\n", 11) == 0);
-    CHECK(cp0_ui_metrics_publish(&m, root) == 0);
+    CHECK(cp0_ui_metrics_publish(&m, &panel, root) == 0);
     read_file(path, text, sizeof(text));
     CHECK(strstr(text, "\ngen=1\n") != NULL);
 
+    /* no panel: empty device variables */
+    CHECK(cp0_ui_metrics_publish(&m, NULL, root) == 0);
+    CHECK(getenv("APPLAUNCH_SCREEN_FB") && strcmp(getenv("APPLAUNCH_SCREEN_FB"), "") == 0);
+    CHECK(getenv("APPLAUNCH_SCREEN_TOUCH") && strcmp(getenv("APPLAUNCH_SCREEN_TOUCH"), "") == 0);
+
     /* unwritable place: error, no crash, environment still set */
     unsetenv("APPLAUNCH_SCREEN_W");
-    CHECK(cp0_ui_metrics_publish(&m, "/proc/applaunch-test") == -1);
+    CHECK(cp0_ui_metrics_publish(&m, &panel, "/proc/applaunch-test") == -1);
     CHECK(getenv("APPLAUNCH_SCREEN_W") && strcmp(getenv("APPLAUNCH_SCREEN_W"), "800") == 0);
     CHECK(cp0_ui_state_write("/proc/applaunch-test/screen.state", "x", 1) == -1);
-    CHECK(cp0_ui_metrics_publish(NULL, root) == -1);
+    CHECK(cp0_ui_metrics_publish(NULL, &panel, root) == -1);
 
     char cmd[600];
     snprintf(cmd, sizeof(cmd), "rm -rf '%s'", root);

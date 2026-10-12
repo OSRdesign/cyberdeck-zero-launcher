@@ -79,7 +79,7 @@ static unsigned previous_gen(const char *path)
 {
     const int fd = open(path, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return 0;
-    char text[512];
+    char text[1024 + 2 * PATH_MAX]; /* gen= is the last line, after the device paths */
     size_t len = 0;
     for (;;) {
         const ssize_t n = read(fd, text + len, sizeof(text) - len);
@@ -92,12 +92,46 @@ static unsigned previous_gen(const char *path)
     return cp0_ui_state_parse_gen(text, len);
 }
 
-int cp0_ui_metrics_publish(const cp0_ui_metrics_t *m, const char *runtime_dir)
+/* What the launcher published, for cp0_ui_state_republish() after each app. */
+static struct {
+    int valid;
+    cp0_ui_metrics_t m;
+    char fb[PATH_MAX];
+    int bpp;
+    char touch[PATH_MAX];
+    char path[PATH_MAX];
+} g_last;
+
+static int write_state(void)
+{
+    const cp0_ui_panel_t panel = {g_last.fb, g_last.bpp, g_last.touch};
+    char text[1024 + 2 * PATH_MAX];
+    const int len = cp0_ui_state_format(&g_last.m, &panel, previous_gen(g_last.path) + 1, text, sizeof(text));
+    if (len < 0) {
+        errno = EOVERFLOW;
+        return -1;
+    }
+    return cp0_ui_state_write(g_last.path, text, (size_t)len);
+}
+
+static int republish(void)
+{
+    return g_last.valid ? write_state() : -1;
+}
+
+int cp0_ui_metrics_publish(const cp0_ui_metrics_t *m, const cp0_ui_panel_t *panel, const char *runtime_dir)
 {
     if (!m) {
         errno = EINVAL;
         return -1;
     }
+    /* An app the launcher started (a cp0_lvgl app in the virtual framebuffer, a fullscreen app): the panel is the
+     * launcher's to describe; the app's own 320x170 canvas must not replace it (report 023 F1). */
+    const char *app_mode = getenv("APPLAUNCH_APP_MODE");
+    if (app_mode && app_mode[0]) return 0;
+
+    const char *fb = panel && panel->fb ? panel->fb : "";
+    const char *touch = panel && panel->touch ? panel->touch : "";
     char value[32];
     snprintf(value, sizeof(value), "%d", m->w);
     setenv("APPLAUNCH_SCREEN_W", value, 1);
@@ -108,17 +142,18 @@ int cp0_ui_metrics_publish(const cp0_ui_metrics_t *m, const char *runtime_dir)
     snprintf(value, sizeof(value), "%d", m->ppmm_x100);
     setenv("APPLAUNCH_SCREEN_PPMM", value, 1);
     setenv("APPLAUNCH_SCREEN_CLASS", cp0_ui_class_name(m->cls), 1);
+    setenv("APPLAUNCH_SCREEN_FB", fb, 1);
+    setenv("APPLAUNCH_SCREEN_TOUCH", touch, 1);
 
-    char path[PATH_MAX];
-    if (cp0_ui_state_path(runtime_dir, path, sizeof(path)) != 0) {
+    if (cp0_ui_state_path(runtime_dir, g_last.path, sizeof(g_last.path)) != 0) {
         errno = ENAMETOOLONG;
         return -1;
     }
-    char text[512];
-    const int len = cp0_ui_state_format(m, previous_gen(path) + 1, text, sizeof(text));
-    if (len < 0) {
-        errno = EOVERFLOW;
-        return -1;
-    }
-    return cp0_ui_state_write(path, text, (size_t)len);
+    g_last.m = *m;
+    snprintf(g_last.fb, sizeof(g_last.fb), "%s", fb);
+    g_last.bpp = panel ? panel->bpp : 0;
+    snprintf(g_last.touch, sizeof(g_last.touch), "%s", touch);
+    g_last.valid = 1;
+    cp0_ui_state_set_republisher(republish);
+    return write_state();
 }

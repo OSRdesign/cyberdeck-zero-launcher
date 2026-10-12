@@ -51,6 +51,43 @@ bool desktop_entry_filename_valid(std::string_view name)
     return true;
 }
 
+namespace {
+bool parse_dimension(std::string_view text, int &out)
+{
+    while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
+    while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.remove_suffix(1);
+    if (text.empty() || text.size() > 5) return false;
+    int value = 0;
+    for (const char character : text) {
+        if (character < '0' || character > '9') return false;
+        value = value * 10 + (character - '0');
+    }
+    if (value < 1 || value > 65535) return false;
+    out = value;
+    return true;
+}
+} // namespace
+
+bool parse_desktop_min_size(std::string_view value, int &w, int &h)
+{
+    const size_t separator = value.find_first_of("xX");
+    if (separator == std::string_view::npos) return false;
+    int parsed_w = 0;
+    int parsed_h = 0;
+    if (!parse_dimension(value.substr(0, separator), parsed_w) ||
+        !parse_dimension(value.substr(separator + 1), parsed_h))
+        return false;
+    w = parsed_w;
+    h = parsed_h;
+    return true;
+}
+
+bool desktop_min_size_fits(int min_w, int min_h, bool has_screen, int screen_w, int screen_h)
+{
+    if (!has_screen) return true;
+    return screen_w >= min_w && screen_h >= min_h;
+}
+
 std::optional<DesktopEntry> parse_desktop_entry(std::string_view contents)
 {
     DesktopEntry entry;
@@ -81,6 +118,13 @@ std::optional<DesktopEntry> parse_desktop_entry(std::string_view contents)
         else if (key == "Terminal") entry.terminal = parse_bool(value);
         else if (key == "Sysplause") entry.sysplause = parse_bool(value);
         else if (key == "X-Fullscreen") entry.fullscreen = parse_bool(value);
+        else if (key == "X-MinSize") {
+            int w = 0;
+            int h = 0;
+            if (!parse_desktop_min_size(value, w, h)) w = h = 0; // unparsable: no restriction
+            entry.min_w = w;
+            entry.min_h = h;
+        }
         else if (key == "Hidden" || key == "NoDisplay") hidden = hidden || parse_bool(value);
         else if (key == "Type") valid_type = value == "Application";
     }

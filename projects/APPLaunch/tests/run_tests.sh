@@ -223,6 +223,20 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$build_dir/calculator_layout_metrics.o" \
     -o "$build_dir/test_calculator_layout"
 "$build_dir/test_calculator_layout"
+# P5: the app contract's per-launch environment (the real layout service and the contract's reader)
+${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_app_contract.c" \
+    -o "$build_dir/app_launch_env_contract.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_app_launch_env.cpp" \
+    "$test_root/../main/ui/app_launch_env.cpp" \
+    "$build_dir/calculator_layout_metrics.o" \
+    "$build_dir/app_launch_env_contract.o" \
+    -o "$build_dir/test_app_launch_env"
+"$build_dir/test_app_launch_env"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_lockscreen_state_model.cpp" \
