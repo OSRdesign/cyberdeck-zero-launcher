@@ -8,19 +8,27 @@ and asked it to adapt the CardputerZero launcher to that machine. This repositor
 CardputerZero launcher running on a Pi Zero 2W, with touch, a 2x upscaled window for the stock 320x170
 apps, a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings and a PWM backlight.
 
+It has since grown beyond that one machine: one code base now adapts its layout to the screen, and it also runs on a
+Raspberry Pi 3A+ with a 3.5" SPI panel and on a HackBerry CM5 (720x720). It has a native, touch-friendly Settings, a
+fallback on-screen keyboard that shows only when no physical keyboard is present, a small
+[app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
+([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
+
 > **This is a hobby project and a derivative work.** Almost all of the code is the work of the CardputerZero
 > and M5Stack teams and of the open-source projects listed in the credits below. My changes are the Pi port
 > (see [`projects/APPLaunch/pizero2w/`](projects/APPLaunch/pizero2w/)) and were written together with Claude.
 
 ## Screenshots
 
-Captured from the deck's own framebuffer (640x480).
+Captured from the deck's own framebuffer (640x480). Network names are pixelated.
 
 | Home grid | Settings |
 | --- | --- |
 | ![Home grid](docs/screenshots/home.png) | ![Settings](docs/screenshots/settings.png) |
 | **Settings > Wi-Fi** | **Settings > Bluetooth** |
 | ![Wi-Fi settings](docs/screenshots/settings-wifi.png) | ![Bluetooth settings](docs/screenshots/settings-bluetooth.png) |
+| **Calculator** | **SSH** |
+| ![Calculator](docs/screenshots/calculator.png) | ![SSH form](docs/screenshots/ssh.png) |
 
 The Store (stock CardputerZero app, upscaled 2x) while it syncs its catalog:
 
