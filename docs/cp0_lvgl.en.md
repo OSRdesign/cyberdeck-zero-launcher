@@ -96,6 +96,22 @@ int cp0_wifi_radio_set_enabled(int enabled);
 
 Other C functions read Ethernet/default network information, account information, time text, desktop execution safety, start background updates, and request/clear LoRa initialization stop.
 
+### App contract reader (`include/cp0_app_contract.h`)
+
+Public since task 014 P5, for apps the launcher starts. Pure C99 + POSIX, no LVGL and no cp0 runtime: an app may copy `include/cp0_app_contract.h` + `src/cp0_app_contract.c` with `include/cp0_ui_metrics.h` + `src/cp0_ui_metrics.c` (class names, token fallback), and `src/cp0/cp0_fb_output.{h,c}` to draw on a rotated or 16 bpp framebuffer.
+
+```c
+int cp0_app_env_read(cp0_app_env_t *out);                         /* 0: started by a contract-1 launcher, -1 otherwise */
+int cp0_app_state_path(const char *file, char *buf, size_t size); /* APPLAUNCH_STATE_DIR, XDG_RUNTIME_DIR/applaunch, /tmp */
+int cp0_app_screen_read(const char *path, cp0_app_screen_t *out); /* NULL = default path; parse: cp0_app_screen_parse */
+int cp0_app_screen_compute(int w, int h, int rot, int ppmm_x100, cp0_app_screen_t *out); /* no file: same numbers */
+int cp0_app_input_read(const char *path, cp0_app_input_t *out);   /* parse: cp0_app_input_parse */
+int cp0_app_osk_allowed(const cp0_app_input_t *in, int64_t now_mono_s); /* the shared on-screen keyboard rule */
+int64_t cp0_app_monotonic_s(void);
+```
+
+The readers return 0 or -1 and always fill `out` (cleared on failure); unknown keys are ignored. `cp0_ui_osk_policy_allows()` calls the same `cp0_app_osk_rule()`, so apps and the launcher decide alike. Variables, file keys, failure modes and the stability promise: [`APP-CONTRACT.md`](APP-CONTRACT.md).
+
 ## Complete `cp0_signal_*` Usage
 
 All `args` below are `std::list<std::string>` with the command at element zero. Request callbacks use `void(int code, std::string data)` unless a different signature is shown.

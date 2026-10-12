@@ -29,6 +29,7 @@ flock /tmp/wsl-build.lock bash run.sh      # build + render all scenes + compare
 | `run.sh golden` | copy `out/640x480` and `out/480x320` into `golden/` (a deliberate baseline change, commit it) |
 | `run.sh validate` | compare the harness with real device captures (see Fidelity) |
 | `run.sh twice` | render everything twice and check the PNGs are byte-identical |
+| `run.sh contract` | app contract 1 (`docs/APP-CONTRACT.md`): builds the host `tools/dev/app-contract-probe`, renders the `metrics` scene, then runs the probe in `--report` mode with the per-launch environment the launcher's builder wrote (`out/<WxH>/metrics.{compat,fullscreen}.env`) against `out/<WxH>/runtime/applaunch` (plus an `input.state` fixture, `vkb=force`), and checks size, class, density, rotation, canvas, window, scale and the keyboard rule against the layout service (`out/<WxH>/metrics.facts`); also the degrade cases (no environment, nothing). Reports: `out/<WxH>/contract.*.txt` |
 
 First build about 1-2 minutes (all of LVGL incl. ThorVG), all scenes at all sizes about 5 s.
 The binary also has `render-harness compare a.png b.png [--diff d.png] [--tolerance N] [--ignore x,y,w,h]`,
@@ -90,7 +91,7 @@ runs at those sizes only.
 | `osd level TITLE PCT`, `osd mute on`/`off`, `loading TEXT` / `loading off`, `compatpage` | the media OSD of the brightness / volume keys (it hides itself after 1000 ms: a shot settles 700 ms after the command), the "Loading..." overlay, a compat page (the compat window is default, a flat placeholder screen, no external app) |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
 | `header NAME TITLE [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `native_ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home ZERO` taken on the home grid |
-| `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, `screen.state`) as `out/<WxH>/NAME.txt` |
+| `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, the per-launch environment of both modes, `screen.state`) as `out/<WxH>/NAME.txt`; for `run.sh contract` also `NAME.compat.env` / `NAME.fullscreen.env` (the panel variables + `app_launch_env::export_for_current()`, as `export ...;` lines) and `NAME.facts` (size, class, ppmm, rot, compat window, scale) |
 
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),

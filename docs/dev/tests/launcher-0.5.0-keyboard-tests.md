@@ -227,3 +227,54 @@ Deck and HackBerry (with a physical keyboard):
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
 
+## L. App contract (task 014 P5)
+
+Background: `docs/APP-CONTRACT.md`. The probe app is installed by hand (`tools/dev/app-contract-probe/README.md`,
+"Install on a board"): three tiles, **Probe compat**, **Probe full** (fullscreen) and **Probe min** (fullscreen,
+`X-MinSize=640x480`). Each probe writes its report to `/tmp/app-contract-probe-<compat|full|min>.txt` and leaves with
+Esc or Q (or after 5 minutes). The commands below run in an ssh session on the board as the launcher's user.
+
+Deck (640x480), **baseline before the new build is deployed** (old launcher):
+107. Open the Store, leave it, then run `cat /run/user/$(id -u)/applaunch/screen.state`: note `w=` (expected `w=320`:
+     the old Store overwrote the launcher's file, report 023 F1). Note the `gen=` line if there is one.
+
+Deck, after the deploy (new launcher, probe installed):
+108. Home, Settings and the Calculator look as before. The Store, LAN Scan and Wi-Fi Survey open in the 2x window
+     with the toolbar under it; hold-Esc returns home from each.
+109. Open and leave the Store, then `cat /run/user/$(id -u)/applaunch/screen.state`: `w=640`, `h=480`, `class=standard`,
+     and a `gen=` higher than before the Store was opened (run the command once before opening the Store to compare).
+110. Mesh Hop and viz1090 open and close as before.
+111. Probe compat: the pattern fills the window above the toolbar (white and red border on the window's edge, grid,
+     orange square at the bottom right). `grep summary /tmp/app-contract-probe-compat.txt` prints
+     `summary=compat 320x170 0,0,640,340 scale 2 standard 1130`. Esc (keyboard or toolbar) leaves.
+112. Probe full: the pattern fills the whole screen (border on the panel's edge). Measure the orange square with a
+     ruler: 9 mm per side (it covers 9 x 9 grid cells; the bright grid lines are 10 mm apart). `grep summary
+     /tmp/app-contract-probe-full.txt` prints `summary=fullscreen 640x480 0,0,640,480 scale 1 standard 1130`.
+113. `input.state`: with the Bluetooth keyboard connected, `cat /run/user/$(id -u)/applaunch/input.state` shows
+     `keyboards=1` (or more), `bt_keyboards=1`, `vkb=auto`. Switch the Bluetooth keyboard off and run it again:
+     `keyboards=0`, `bt_keyboards=0`, `bt_gone=` a non-zero number, and a higher `gen=`.
+114. Settings > System > On-screen keyboard: Off, then `grep vkb /run/user/$(id -u)/applaunch/input.state` prints
+     `vkb=off`; set it back to Auto: `vkb=auto`. (With Probe full open, its line "gen ... vkb ..." follows within a
+     second.)
+115. The Probe min tile is shown (640x480 is not smaller than 640x480) and opens like Probe full.
+
+Pi 3A+ (480x320, rotated, 16 bpp):
+116. Home, Settings, the Calculator and a stock app look as before (tests 108 and 109 on this board: `w=480`, `h=320`,
+     `class=compact`, `rot=90`).
+117. Probe compat opens at 1x in the window at (80,25) above the toolbar: `grep summary /tmp/app-contract-probe-compat.txt`
+     prints `summary=compat 320x170 80,25,320,170 scale 1 compact` followed by the density (about 630).
+118. Probe full is upright (text reads normally, the square is at the bottom right), the colours are right (orange
+     square, green summary line) in 16 bpp, and the square measures 9 mm.
+119. There is no Probe min tile, in the home grid nor in Settings > Apps (480x320 is smaller than 640x480).
+
+HackBerry (720x720, 16 KB pages):
+120. Baseline before the new build: does LAN Scan open today? (Expected no, or a black window: report 023 F3.) Note
+     what you see.
+121. After the deploy: LAN Scan and Wi-Fi Survey open in the 2x window with the toolbar; hold-Esc returns home.
+122. Probe full fills the screen and `grep summary /tmp/app-contract-probe-full.txt` prints
+     `summary=fullscreen 720x720 0,0,720,720 scale 1 square` and the density. The Probe min tile is shown.
+123. With `APPLAUNCH_OSK=force` in the launcher's environment (the Controller sets it), `grep vkb
+     /run/user/$(id -u)/applaunch/input.state` prints `vkb=force`.
+
+Report anything odd; the Controller can capture the screen over ssh during the test.
+

@@ -119,6 +119,22 @@ renderer, `ext_components/cp0_lvgl/{include/cp0_statusbar.h,src/cp0/cp0_statusba
 draw exactly the same bar into its own frame. The viz1090 package in the apps repository is a complete
 example (SDL2 programs run through a small display and input bridge; it also draws a close button).
 
+The panel is not always 640x480 (the Pi 3A+ is 480x320 rotated at 16 bpp, the HackBerry 720x720): a full-screen app
+should take its size, rotation, depth and framebuffer from the app contract (next section) instead of hard-coding
+them. If it really needs a minimum size, add `X-MinSize=WxH` (logical pixels, for example `X-MinSize=640x480`): on a
+smaller screen the launcher hides its tile (and it does not appear in Settings > Apps either). An older launcher
+ignores the key, so the app must still start there and say that the screen is too small.
+
+## Responsive apps (the app contract)
+
+Every app the launcher starts is told, through environment variables and two small state files, which mode it runs
+in (`compat` or `fullscreen`), where its picture is on the screen, how many pixels it draws (`APPLAUNCH_CANVAS`) and
+at what scale, the panel's size, rotation, density (px/mm) and screen class, the launcher's design tokens, and the
+on-screen keyboard rule. A compat app still draws 320x170 but can size things in millimetres; a full-screen app can
+use the whole panel at any size. The reference, with a copy-ready C reader (no LVGL), is
+[`docs/APP-CONTRACT.md`](APP-CONTRACT.md); the test app `tools/dev/app-contract-probe` shows what a board tells its
+apps.
+
 ## Trust
 
 An installed package runs as root during installation and the app runs with the deck user's rights. Only add

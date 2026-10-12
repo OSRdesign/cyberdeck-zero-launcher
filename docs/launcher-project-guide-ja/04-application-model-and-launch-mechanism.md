@@ -438,3 +438,14 @@ User releases ENTER
 - 動的 `.desktop` アプリケーションには少なくとも `Name` と `Exec` が必要です。`Terminal=true` はコマンドラインプログラムに適しており、グラフィカルまたは排他的 framebuffer プログラムでは `Terminal=false` を使うべきです。
 - 動的アプリケーションは `Name` ではなく `Exec` で重複排除されます。同じコマンドを使う複数エントリがある場合、最初の 1 つだけが保持されます。
 - `applications/` を変更した後は、watcher が再読み込みするまで最大 3 秒待ってください。watcher が初期化されていない、またはプラットフォームが対応していない場合は、APPLaunch を再起動して変更を確認してください。
+
+## 15. アプリ契約 (App contract)
+
+外部アプリはすべて **アプリ契約**（バージョン 1、タスク 014 P5）付きで起動されます。`app_launch_env.{hpp,cpp}` がレイアウトサービスの値から起動ごとの環境変数（`APPLAUNCH_CONTRACT=1`、`APPLAUNCH_APP_MODE=compat|fullscreen`、`APPLAUNCH_WINDOW`、`APPLAUNCH_CANVAS`、`APPLAUNCH_CANVAS_SCALE`、`APPLAUNCH_STATE_DIR`）を組み立て、コマンドの前に付けます。互換アプリ（拡大表示される 320x170 の仮想フレームバッファ）は `native_ui::run_external()`、`X-Fullscreen=true` のアプリは `Launch::launch_Exec()` がこれを行います。
+
+- パネル自体は、プロセス全体に設定される `APPLAUNCH_SCREEN_*` 変数と `screen.state` で表されます。`screen.state` はディスプレイマネージャが書き込み、アプリが終了するたびに `gen` を増やして書き直されます（`cp0_ui_state_republish()`）。
+- `input.state` には接続中のキーボードとオンスクリーンキーボードの規則（`vkb=auto|off|force`）が入ります。
+- `.desktop` の `X-MinSize=WxH` が画面より大きいエントリは、`desktop_app_loader.cpp` によって非表示になります（Settings > Apps にも表示されません）。古いランチャーはこのキーを無視します。
+- アプリ側は `cp0_app_contract.h`（LVGL 不要の C コード）で読み取ります。互換アプリは引き続き 320x170 で描画しますが、モード・倍率・画面クラス・密度（px/mm）を知ることができます。
+
+仕様（英語、規範文書）: [`docs/APP-CONTRACT.md`](../APP-CONTRACT.md)。テスト用アプリ: `tools/dev/app-contract-probe`。

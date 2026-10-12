@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Probe min
+Exec=/usr/share/APPLaunch/bin/app-contract-probe --tag min
+Terminal=false
+X-Fullscreen=true
+X-MinSize=640x480

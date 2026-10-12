@@ -40,7 +40,8 @@
  *    An app that has text fields and no physical keyboard draws its own on-screen keyboard when
  *    cp0_app_osk_allowed() says so (the launcher never draws over a fullscreen app).
  *
- * 4. .desktop keys: X-Fullscreen=true (fullscreen mode). (X-MinSize: task 014 P5-2.)
+ * 4. .desktop keys: X-Fullscreen=true (fullscreen mode); X-MinSize=WxH (the tile is hidden on a smaller screen; an
+ *    older launcher ignores it). Full reference: docs/APP-CONTRACT.md.
  *
  * Failure modes: an app started another way (ssh, an older launcher, the stock CardputerZero) has no contract env and
  * maybe no files: cp0_app_env_read() returns -1, the readers return -1, and the app uses its own probe (fbdev

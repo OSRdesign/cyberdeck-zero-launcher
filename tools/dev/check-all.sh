@@ -13,6 +13,7 @@
 #     compare         run.sh compare   (640x480 and 480x320 against golden/, byte-identical)
 #     twice           run.sh twice     (everything rendered twice, PNGs byte-identical)
 #     header          run.sh header    (page headers against the home grid)
+#     contract        run.sh contract  (app contract: the host app-contract-probe against the metrics scene)
 #   and prints "PASS|FAIL <step> (<seconds>s)" per step; for a failing step also the last 40 lines of its output.
 #   Every step runs even after a failure. Exit status 1 when any step failed.
 #
@@ -82,5 +83,6 @@ step render bash "$render" render
 step compare bash "$render" compare
 step twice bash "$render" twice
 step header bash "$render" header
+step contract bash "$render" contract
 echo "logs: $logs/"
 exit "$failed"

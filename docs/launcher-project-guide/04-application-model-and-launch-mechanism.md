@@ -97,6 +97,10 @@ home active
 
 The root-retention flag is passed to the shared process service. ESC state is exchanged through the atomic `cp0_esc_state_*` C ABI rather than a shared variable address. Process execution details therefore belong to `cp0_lvgl`; APPLaunch owns only UI suspension and restoration.
 
+### 7.1 The app contract
+
+Every external app is started with the **app contract** (version 1, task 014 P5). `app_launch_env.{hpp,cpp}` builds the per-launch variables (`APPLAUNCH_CONTRACT=1`, `APPLAUNCH_APP_MODE=compat|fullscreen`, `APPLAUNCH_WINDOW`, `APPLAUNCH_CANVAS`, `APPLAUNCH_CANVAS_SCALE`, `APPLAUNCH_STATE_DIR`) from the layout service's metrics and puts them in front of the command: `native_ui::run_external()` for a compat app (the 320x170 virtual framebuffer in the scaled window), `Launch::launch_Exec()` for an `X-Fullscreen=true` app. The panel itself is described by the process-wide `APPLAUNCH_SCREEN_*` variables and by `screen.state` (written by the display manager, and rewritten with a higher `gen` after every app exits, `cp0_ui_state_republish()`); `input.state` carries the keyboards and the on-screen keyboard rule. `desktop_app_loader.cpp` hides an entry whose `X-MinSize=WxH` is larger than the screen. Apps read all of it with `cp0_app_contract.h`. Reference: [`docs/APP-CONTRACT.md`](../APP-CONTRACT.md).
+
 ## 8. Adding an Entry
 
 For an internal page, add the class under `main/ui/page_app/`, ensure it is included by the generated page aggregate, then add a typed entry to `BUILTIN_APPS` in `builtin_app_registry.cpp`. For a command-backed entry, provide the command and flags with no page appender. Use `@name` for paths resolved by `launcher_platform::path()`.
