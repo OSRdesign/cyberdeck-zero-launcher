@@ -268,13 +268,12 @@ Pi 3A+ (480x320, rotated, 16 bpp):
 119. There is no Probe min tile, in the home grid nor in Settings > Apps (480x320 is smaller than 640x480).
 
 HackBerry (720x720, 16 KB pages):
-120. Baseline before the new build: does LAN Scan open today? (Expected no, or a black window: report 023 F3.) Note
-     what you see.
-121. After the deploy: LAN Scan and Wi-Fi Survey open in the 2x window with the toolbar; hold-Esc returns home.
+120. (Only on a HackBerry that has the Store backend installed; in test mode it has none, so this was not run there: Probe compat in item 122b covers the same 16 KB-page code path.) Baseline before the new build: does LAN Scan open today? (Expected no, or a black window: report 023 F3.) Note what you see.
+121. (Same condition.) After the deploy: LAN Scan and Wi-Fi Survey open in the 2x window with the toolbar; hold-Esc returns home.
 122. Probe full fills the screen and `grep summary /tmp/app-contract-probe-full.txt` prints
      `summary=fullscreen 720x720 0,0,720,720 scale 1 square` and the density. The Probe min tile is shown.
-123. With `APPLAUNCH_OSK=force` in the launcher's environment (the Controller sets it), `grep vkb
-     /run/user/$(id -u)/applaunch/input.state` prints `vkb=force`.
+122b. Probe compat (a wrapped app) opens and fills the 640x340 window on the 16 KB-page kernel (the VFB2 64 KiB header fix); it did not before.
+123. The Settings > System > On-screen keyboard choice has Auto and Off only, so `grep vkb /run/user/$(id -u)/applaunch/input.state` prints `vkb=auto` (or `vkb=off`). `vkb=force` only exists with the environment variable `APPLAUNCH_OSK=force`: the Controller starts the test with `python tools/boards/board.py test-start hackberry --env APPLAUNCH_OSK=force`, and the grep then prints `vkb=force`.
 
 Report anything odd; the Controller can capture the screen over ssh during the test.
 
