@@ -125,10 +125,6 @@ RadioLib
 https://github.com/jgromes/RadioLib
 MIT
 
-tree.hh 3.20
-http://github.com/kpeeters/tree.hh
-GPL-3.0-only
-
 - Fonts:
 
 Montserrat

@@ -111,6 +111,7 @@ int main()
     for (const auto &line : credit.lines) {
         assert(line.find("CardputerZero is built with") == std::string::npos); // upstream's product sentence
         assert(line.find("Proxmark") == std::string::npos);                    // upstream OS image's list
+        assert(line.find("tree.hh") == std::string::npos);                     // replaced by cp0_tree.hpp (MIT)
     }
     assert(credit.lines.back() == "CC0-1.0");
 }

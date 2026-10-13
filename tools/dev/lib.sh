@@ -64,7 +64,7 @@ take_build_lock() {
 # sync_tree SRC DST: make DST (the WSL build tree) a copy of the checkout SRC.
 #   - build products are never copied nor deleted: build/, dist/, .git, the render harness out/, the Pi bundle dir and
 #     tarball, __pycache__;
-#   - projects/APPLaunch/ and ext_components/ are synced with --delete, so a file removed or never present on this
+#   - projects/APPLaunch/, ext_components/ and LICENSES/ are synced with --delete, so a file removed or never present on this
 #     branch (another branch's new page, for example) cannot end up in the build (scons globs ui/settings/*);
 #   - SDK/ (2+ GB of downloaded LVGL and libraries; empty in a fresh git worktree) is copied once from $DEV_SEED when
 #     DST has none, so a new worktree builds without a network download. Never shared: each tree has its own copy.
@@ -83,7 +83,7 @@ sync_tree() {
         rsync -a "$DEV_SEED/SDK/" "$dst/SDK/"
     fi
     rsync -a "${excludes[@]}" "$src/" "$dst/"
-    for d in projects/APPLaunch ext_components; do
+    for d in projects/APPLaunch ext_components LICENSES; do
         rsync -a --delete "${excludes[@]}" "$src/$d/" "$dst/$d/"
     done
 }

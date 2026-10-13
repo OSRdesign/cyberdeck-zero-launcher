@@ -130,8 +130,6 @@ their own licences ([`LICENSES/`](LICENSES/), [`docs/OPEN_SOURCE_COMPONENTS.md`]
 CyberdeckZero Launcher is not affiliated with or endorsed by M5Stack, CardputerZero, Waveshare or the Raspberry Pi
 Foundation.
 
-The launcher program also contains `tree.hh` by Kasper Peeters (the Settings menu tree), which is distributed under the
-GNU GPL version 3 ([`LICENSES/tree.hh-GPL-3.0-only.txt`](LICENSES/tree.hh-GPL-3.0-only.txt)). The source files of this
-repository stay under their own licences, but the compiled launcher program as a whole is therefore covered by GPL-3, and
-its complete source is in this repository. Replacing `tree.hh` with our own code is planned (see `docs/dev/ROADMAP.md`).
+The compiled launcher program is MIT as well: the Settings menu tree, which used the GPL-3 `tree.hh` until 2026-10-13,
+is now our own code (`ext_components/cp0_lvgl/include/cp0_tree.hpp`), so the GPL no longer applies to the program.
 <!-- branding-allow-end -->

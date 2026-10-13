@@ -16,7 +16,6 @@ selection inventory is in [OPEN_SOURCE_COMPONENTS.md](../docs/OPEN_SOURCE_COMPON
 | cpp-httplib-MIT.txt | SDK/github_source/cpp-httplib/LICENSE |
 | tinyalsa-BSD-3-Clause.txt | SDK/github_source/tinyalsa/NOTICE; its LICENSE file refers to NOTICE |
 | SimpleBLE-BUSL-1.1.md | SDK/github_source/SimpleBLE/LICENSE.md; cached source, not established as linked |
-| tree.hh-GPL-3.0-only.txt | Standard GPL v3 text from /usr/share/common-licenses/GPL-3; version and Kasper Peeters attribution from ext_components/cp0_lvgl/include/tree.hh |
 | nlohmann-json-MIT.txt | Standard MIT text with 2013–2023 Niels Lohmann attribution from the emulator's vendor/nlohmann/json.hpp |
 | libv4l-host-copyright.txt | /usr/share/doc/libv4l-0t64/copyright on the audit host; reference only, not claimed to match CameraApp's target package version |
 | libv4l-1.32.0-copyright.txt | usr/share/doc/libv4l-0t64/copyright from Ubuntu libv4l-0t64_1.32.0-2ubuntu1_arm64.deb, matching CameraApp's libv4l-dev package version |
