@@ -5,7 +5,7 @@
 2. `apps/<id>/app.json` complete: `share_code`, `package`, `version` (raised for every release), `title`, `summary`,
    `description`, `categories`, `author`, `license`, `source_repo`, `depends` (Debian packages the app needs),
    `permissions`.
-3. `apps/<id>/root/` laid out as it must land: `usr/share/APPLaunch/bin/M5CardputerZero-<id>`,
+3. `apps/<id>/root/` laid out as it must land: `usr/share/APPLaunch/bin/<id>` (the binary is named after the app id),
    `usr/share/APPLaunch/applications/<share_code>.desktop` (absolute `Exec`, `Icon=share/images/<id>.png`; add
    `X-Fullscreen=true` only for a full-screen app; a new native (LVGL) app declares `X-MinSize=640x480` by default,
    decision of 2026-10-13; any other app adds `X-MinSize=WxH` only when it cannot work on a smaller screen, and

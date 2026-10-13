@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: MIT
 """Deploy and test the launcher on the boards of boards.json over ssh (paramiko), from the Windows dev machine.
 
-    python board.py [--dry-run] upload     BOARD BUNDLE   upload pizero2w-bundle.tar.gz, unpack it, stage the test launcher
+    python board.py [--dry-run] upload     BOARD BUNDLE   upload the bundle tarball (cyberdeckzero-launcher-<version>-arm64
+                                                          .tar.gz, or its copy pizero2w-bundle.tar.gz), unpack it, stage
+                                                          the test launcher
     python board.py [--dry-run] install    BOARD [--check] [--install-arg ARG ...] [--force]
                                                           run the bundle's install.sh (sudo) for the board's user
                                                           (--force is passed to install.sh: unknown board, edited profile)
@@ -17,20 +19,23 @@ a file, never put on a command line (sudo reads it on stdin: sudo -S) and never 
 and no network: it prints every command it would run.
 
 Board kinds (boards.json):
-  service  the launcher runs as the user service APPLaunch.service (the deck, the Pi 3A+). test-start stops the service
-           and runs the staged launcher from ~/applaunch-test (cwd there; the installed /usr/share/APPLaunch stays as it
-           is); test-stop kills it, removes the test files and restarts the service detached
-           (setsid nohup systemctl --user restart ... &), so the ssh call returns at once.
+  service  the launcher runs as the user service cyberdeckzero.service (the deck, the Pi 3A+). test-start stops the
+           service (and APPLaunch.service, its name up to v0.6.0, on a board not migrated yet) and runs the staged
+           launcher from ~/applaunch-test (cwd there; the installed /usr/share/APPLaunch stays as it is); test-stop kills
+           it, removes the test files and restarts the installed service detached (cyberdeckzero.service, else
+           APPLaunch.service; setsid nohup systemctl --user restart ... &), so the ssh call returns at once.
   desktop  Raspberry Pi OS desktop (lightdm + labwc owns the screen: Pi 5, HackBerry). install.sh installs the desktop
-           variant there (applaunch-desktop.service, started from the applications menu, gives the desktop back on
-           exit). test-start stops that unit if it runs, stops lightdm, links /usr/share/APPLaunch -> ~/applaunch-test
-           (only when nothing real is there) and runs the staged launcher; test-stop removes the link (only ours),
-           starts lightdm again and removes the test files.
+           variant there (cyberdeckzero-desktop.service, started from the applications menu, gives the desktop back on
+           exit). test-start stops that unit (and applaunch-desktop.service, its name up to v0.6.0) if it runs, stops
+           lightdm, links /usr/share/APPLaunch -> ~/applaunch-test (only when nothing real is there) and runs the
+           staged launcher; test-stop removes the link (only ours), starts lightdm again and removes the test files.
 
 Quirks encoded here:
   - Pi 3A+ (quirk no_environ): an ssh command string containing the word "environ" drops the connection. board.py
     refuses to send one to such a board (dry run included). Note EnvironmentFile= in a unit file and /proc/PID/environ.
-  - never `pkill -f` over ssh (it kills the ssh shell itself): `pkill -x M5CardputerZero` (the 15-character comm name).
+  - never `pkill -f` over ssh (it kills the ssh shell itself): `pkill -x cyberdeckzero` (the comm name: 13 characters,
+    the whole binary name), and the earlier binary's 15-character comm name (OLD_LAUNCHER_COMM) for a board still on
+    v0.6.0 or a launcher started through the earlier name's link.
   - a backgrounded remote process has stdin, stdout and stderr redirected, else the ssh call never returns.
   - `~` inside `sudo sh -c` is root's home: absolute /home/<user>/... paths are used.
 
@@ -45,13 +50,20 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-LAUNCHER_COMM = "M5CardputerZero"            # /proc comm of M5CardputerZero-APPLaunch (15 characters)
-BINARY = "M5CardputerZero-APPLaunch"
+BINARY = "cyberdeckzero"                       # /usr/share/APPLaunch/bin/cyberdeckzero, bundle payload/bin/cyberdeckzero
+LAUNCHER_COMM = BINARY                         # its /proc comm: the whole name (13 characters, under the 15 limit)
 REMOTE_TAR = "/tmp/applaunch-upload.tar.gz"
 REMOTE_BUNDLE = "/tmp/applaunch-bundle"       # the tarball unpacks to REMOTE_BUNDLE/bundle/...
-SERVICE = "APPLaunch.service"
-DESKTOP_UNIT = "applaunch-desktop.service"     # desktop boards: the launcher started from the applications menu
-CONSOLE_UNIT = "applaunch-console.service"     # service boards: the panel leaves the text console after boot
+SERVICE = "cyberdeckzero.service"              # service boards: the launcher as a user service
+DESKTOP_UNIT = "cyberdeckzero-desktop.service" # desktop boards: the launcher started from the applications menu
+CONSOLE_UNIT = "cyberdeckzero-console.service" # service boards: the panel leaves the text console after boot
+# The names up to v0.6.0 (install.sh migrates them; a board not migrated yet still has them)
+# branding-allow-begin: the comm name of the launcher binary up to v0.6.0 (15 characters of its name)
+OLD_LAUNCHER_COMM = "M5CardputerZero"
+# branding-allow-end
+OLD_SERVICE = "APPLaunch.service"
+OLD_DESKTOP_UNIT = "applaunch-desktop.service"
+OLD_CONSOLE_UNIT = "applaunch-console.service"
 
 
 class BoardError(Exception):
@@ -199,12 +211,16 @@ def install_options(board, args):
 
 def do_install(remote, board, args):
     # Desktop boards are supported: install.sh sees their display manager and installs the desktop variant
-    # (applaunch-desktop.service + menu entry; nothing starts now, nothing at boot).
+    # (cyberdeckzero-desktop.service + menu entry; nothing starts now, nothing at boot). Over v0.6.0 or before it
+    # migrates the earlier unit names first (their units stopped, disabled and removed).
     options = install_options(board, args)
     log = "/tmp/applaunch-install.log"
-    # service boards: install.sh restarts the user service itself (runuser ... systemctl --user restart APPLaunch.service)
-    return remote.run("cd {b}/bundle && sh ./install.sh {o} > {log} 2>&1; rc=$?; tail -n 60 {log}; exit $rc".format(
-        b=REMOTE_BUNDLE, o=" ".join(shlex.quote(x) for x in options), log=log), sudo=True, timeout=900)
+    # service boards: install.sh restarts the user service itself (runuser ... systemctl --user restart
+    # cyberdeckzero.service). --check shows the whole plan (the migration steps, the desktop unit text), an install
+    # its last lines.
+    lines = 400 if args.check else 60
+    return remote.run("cd {b}/bundle && sh ./install.sh {o} > {log} 2>&1; rc=$?; tail -n {n} {log}; exit $rc".format(
+        b=REMOTE_BUNDLE, o=" ".join(shlex.quote(x) for x in options), log=log, n=lines), sudo=True, timeout=900)
 
 
 def launch_command(board, env):
@@ -232,16 +248,21 @@ def do_test_start(remote, board, args):
     launch = launch_command(board, env)
     remote._check(launch)                                        # refuse before anything on the board is stopped
     if board.kind == "service":
-        remote.run("systemctl --user stop %s; pkill -x %s; sleep 1; systemctl --user is-active %s || true"
-                   % (SERVICE, LAUNCHER_COMM, SERVICE))
+        # the installed service by its name, and by its name up to v0.6.0 when the board still has that unit
+        remote.run("systemctl --user stop {svc}; "
+                   "if systemctl --user cat {old} > /dev/null 2>&1; then systemctl --user stop {old}; fi; "
+                   "pkill -x {comm}; pkill -x {old_comm}; sleep 1; "
+                   "systemctl --user is-active {svc} {old} || true".format(
+                       svc=SERVICE, old=OLD_SERVICE, comm=LAUNCHER_COMM, old_comm=OLD_LAUNCHER_COMM))
     else:
         # an installed launcher started from the menu goes first (its stop brings lightdm back, stopped just after)
         remote.run(
-            "systemctl stop {unit} 2>/dev/null; "
-            "pkill -x {comm}; systemctl stop lightdm; sleep 3; systemctl is-active lightdm; "
+            "systemctl stop {unit} 2>/dev/null; systemctl stop {old_unit} 2>/dev/null; "
+            "pkill -x {comm}; pkill -x {old_comm}; systemctl stop lightdm; sleep 3; systemctl is-active lightdm; "
             "if [ -L /usr/share/APPLaunch ] || [ ! -e /usr/share/APPLaunch ]; then ln -sfn {t} /usr/share/APPLaunch; "
             "else echo '/usr/share/APPLaunch is a real directory: left alone'; fi; ls -ld /usr/share/APPLaunch".format(
-                unit=DESKTOP_UNIT, comm=LAUNCHER_COMM, t=board.test_dir), sudo=True)
+                unit=DESKTOP_UNIT, old_unit=OLD_DESKTOP_UNIT, comm=LAUNCHER_COMM, old_comm=OLD_LAUNCHER_COMM,
+                t=board.test_dir), sudo=True)
     return remote.run(launch)
 
 
@@ -250,10 +271,14 @@ def do_test_stop(remote, board, args):
         t=board.test_dir, b=REMOTE_BUNDLE, tar=REMOTE_TAR)
     if board.kind == "service":
         remote.run("pkill -x %s; sleep 1; %s" % (LAUNCHER_COMM, cleanup))
-        # detached restart (Pi 3A+: a plain restart over ssh can hang the session)
-        remote.run("setsid nohup systemctl --user restart %s > /dev/null 2>&1 < /dev/null &" % SERVICE)
-        return remote.run("sleep 4; systemctl --user is-active %s; pgrep -x %s || echo launcher-not-running"
-                          % (SERVICE, LAUNCHER_COMM))
+        # detached restart (Pi 3A+: a plain restart over ssh can hang the session) of the installed service: its
+        # name, or its name up to v0.6.0 on a board not migrated yet
+        remote.run("u={svc}; systemctl --user cat {svc} > /dev/null 2>&1 || u={old}; "
+                   "setsid nohup systemctl --user restart $u > /dev/null 2>&1 < /dev/null &".format(
+                       svc=SERVICE, old=OLD_SERVICE))
+        return remote.run("sleep 4; systemctl --user is-active {svc} {old}; pgrep -x {comm} || pgrep -x {old_comm} "
+                          "|| echo launcher-not-running".format(svc=SERVICE, old=OLD_SERVICE, comm=LAUNCHER_COMM,
+                                                                old_comm=OLD_LAUNCHER_COMM))
     status = remote.run(
         "pkill -x {comm}; sleep 1; if [ -L /usr/share/APPLaunch ] && [ \"$(readlink /usr/share/APPLaunch)\" = {t} ]; "
         "then rm /usr/share/APPLaunch && echo link removed; fi; systemctl start lightdm; sleep 2; "
@@ -296,18 +321,27 @@ def do_grab(remote, board, args):
 
 def do_status(remote, board, args):
     t = board.test_dir
-    common = ("uname -n; uptime; pgrep -ax {comm} || echo launcher-not-running; ls -ld /usr/share/APPLaunch {t} 2>&1; "
-              "cat /etc/applaunch/board.conf 2>/dev/null | grep -v '^#' | head -20").format(comm=LAUNCHER_COMM, t=t)
+    # the launcher by its name; a launcher by the earlier binary name (v0.6.0, or started through the earlier name's
+    # link) is reported apart. Apps still named with the earlier prefix share that comm name: only the command lines
+    # with "-APPLaunch" (the launcher's earlier name) count.
+    common = ("uname -n; uptime; pgrep -ax {comm} || echo launcher-not-running; "
+              "pgrep -ax {old_comm} | grep -e -APPLaunch && echo earlier-binary-name-running; "
+              "ls -ld /usr/share/APPLaunch {t} 2>&1; "
+              "cat /etc/applaunch/board.conf 2>/dev/null | grep -v '^#' | head -20").format(
+                  comm=LAUNCHER_COMM, old_comm=OLD_LAUNCHER_COMM, t=t)
     # the framebuffer console: bound = the kernel console may repaint over the launcher (no "environ" in here: Pi 3A+)
     console = ("for d in /sys/class/vtconsole/vtcon*; do grep -q 'frame buffer' $d/name 2>/dev/null && "
                "echo text-console: $(basename $d) bind=$(cat $d/bind); done")
     if board.kind == "service":
         extra = ("echo service: $(systemctl --user is-active {svc}); echo console-unit: $(systemctl is-active {con}); "
-                 "{console}").format(svc=SERVICE, con=CONSOLE_UNIT, console=console)
+                 "echo old-service {old_svc}: $(systemctl --user is-active {old_svc}); "
+                 "echo old-console-unit {old_con}: $(systemctl is-active {old_con}); {console}").format(
+                     svc=SERVICE, con=CONSOLE_UNIT, old_svc=OLD_SERVICE, old_con=OLD_CONSOLE_UNIT, console=console)
     else:
         extra = ("echo lightdm: $(systemctl is-active lightdm); echo {unit}: $(systemctl is-active {unit}); "
+                 "echo old {old_unit}: $(systemctl is-active {old_unit}); "
                  "pgrep -x labwc > /dev/null && echo labwc-running || echo labwc-not-running; {console}").format(
-                     unit=DESKTOP_UNIT, console=console)
+                     unit=DESKTOP_UNIT, old_unit=OLD_DESKTOP_UNIT, console=console)
     return remote.run(common + "; " + extra)
 
 
@@ -330,7 +364,8 @@ def build_parser(board_names):
 
     p = sub.add_parser("upload", help="upload and unpack a bundle, stage the test launcher in ~/applaunch-test")
     board_arg(p)
-    p.add_argument("bundle", help="local pizero2w-bundle.tar.gz (C:/ style path on Windows)")
+    p.add_argument("bundle", help="local bundle tarball, cyberdeckzero-launcher-<version>-arm64.tar.gz or "
+                   "pizero2w-bundle.tar.gz (C:/ style path on Windows)")
     p = sub.add_parser("install", help="run the uploaded bundle's install.sh with sudo")
     board_arg(p)
     p.add_argument("--check", action="store_true", help="install.sh --dry-run: print what it would do")

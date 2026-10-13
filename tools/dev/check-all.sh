@@ -14,6 +14,7 @@
 #     twice           run.sh twice     (everything rendered twice, PNGs byte-identical)
 #     header          run.sh header    (page headers against the home grid)
 #     contract        run.sh contract  (app contract: the host app-contract-probe against the metrics scene)
+#     branding        sh tools/dev/check-branding.sh on the checkout itself (brand words outside the allow-list, see its -h)
 #   and prints "PASS|FAIL <step> (<seconds>s)" per step; for a failing step also the last 40 lines of its output.
 #   Every step runs even after a failure. Exit status 1 when any step failed.
 #
@@ -84,5 +85,6 @@ step compare bash "$render" compare
 step twice bash "$render" twice
 step header bash "$render" header
 step contract bash "$render" contract
+step branding sh "$src/tools/dev/check-branding.sh" "$src"   # needs git: runs on the checkout, not the build tree
 echo "logs: $logs/"
 exit "$failed"

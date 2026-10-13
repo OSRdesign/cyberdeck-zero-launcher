@@ -288,22 +288,24 @@ Deck and Pi 3A+ (needs network for the sync; check item 124 first with `ssh <boa
 128. Switch a source off (Enter on it), open the Store, come back: it is still off.
 129. Seeded source survives opening the Store first: on a board where `install.sh` seeded the source (or after `registries.json` has the source and `apps_default_source` is not yet set), restart the launcher, wait 10 seconds, open the Store before Settings > Apps, close it: `grep -c url ~/.local/share/cardputerzero-appstore/registries.json` still shows the source, and Settings > Apps > Sources lists it.
 
-## N. Text console and desktop boards (`applaunch-console`, `applaunch-desktop.service`; task 012 F2)
+## N. Text console and desktop boards (`cyberdeckzero-console`, `cyberdeckzero-desktop.service`; task 012 F2)
 
 Background: `projects/APPLaunch/pizero2w/README.md`, sections "Text console" and "Desktop boards". The Controller
 installs the bundle with `python tools/boards/board.py install <board>` (deck, Pi 3A+, HackBerry) and keeps an ssh
-session open for the checks in backquotes. Answer PASS / FAIL (+ what you saw) per line.
+session open for the checks in backquotes. Answer PASS / FAIL (+ what you saw) per line. The unit, helper and binary
+names below are those of v0.7.0 (up to v0.6.0: `applaunch-console`, `applaunch-desktop.service`, `APPLaunch.service`;
+the rename itself is checked in section O).
 
 Appliance boards (the deck and the Pi 3A+), after the install and one reboot:
 130. During the boot the usual boot lines scroll on the panel as before; the launcher then starts on a clean screen.
-131. `systemctl is-active applaunch-console.service` prints `active`; `python tools/boards/board.py status <board>`
+131. `systemctl is-active cyberdeckzero-console.service` prints `active`; `python tools/boards/board.py status <board>`
      shows `console-unit: active` and `text-console: vtcon1 bind=0` (the vtcon number may differ).
 132. On the board (ssh): `sudo chvt 2; sudo chvt 1`. The launcher stays intact: no boot lines, no login prompt, no
      text drawn over it, also after you tap around the home grid and Settings.
 133. While the launcher runs, `sudo apt-get install --reinstall -y <a few packages>` (or a real install of about 100
      packages): nothing is drawn over the launcher during or after it.
 134. `sudo reboot` from ssh, then Settings > System > Reboot: each time the boot lines show during the boot and the
-     launcher comes up clean (the unit is enabled: `systemctl is-enabled applaunch-console.service` prints `enabled`).
+     launcher comes up clean (the unit is enabled: `systemctl is-enabled cyberdeckzero-console.service` prints `enabled`).
 135. Settings > System > Shutdown: the board powers off as before. Settings > System has no "Quit to desktop" entry.
 136. Hold Esc for 4 s in Settings: the hold-Esc ribbon returns to the home grid at 3 s as before; the launcher keeps
      running (the exit-75 recovery only fires when the page is stuck; it then restarts the user service as before).
@@ -311,30 +313,30 @@ Appliance boards (the deck and the Pi 3A+), after the install and one reboot:
 HackBerry CM5 (Raspberry Pi OS desktop), after the install (`board.py install hackberry`; `--check` first shows
 `session: desktop (display manager lightdm.service enabled; ...)` and the unit text):
 137. The install printed "not started now" and the desktop is still there. `systemctl is-enabled
-     applaunch-desktop.service` prints `static` (cannot be enabled); `systemctl --user is-enabled APPLaunch.service`
+     cyberdeckzero-desktop.service` prints `static` (cannot be enabled); `systemctl --user is-enabled cyberdeckzero.service`
      says it does not exist; `systemctl is-enabled getty@tty1.service` is unchanged (`enabled`).
 138. Reboot: the board boots to its normal desktop; the launcher does not start by itself.
-139. Applications menu (Accessories): "CardputerZero Launcher" is listed (no icon of its own yet). Open it: no password is asked, the
+139. Applications menu (Accessories): "CyberdeckZero Launcher" is listed (no icon of its own yet). Open it: no password is asked, the
      desktop goes away within a few seconds and the launcher fills the screen (home grid, touch and keyboard work).
-     `board.py status hackberry` shows `lightdm: inactive`, `applaunch-desktop.service: active`, `text-console: ...
+     `board.py status hackberry` shows `lightdm: inactive`, `cyberdeckzero-desktop.service: active`, `text-console: ...
      bind=0`.
 140. Keys typed in the launcher (a Wi-Fi password field, the terminal) go nowhere else: `fgconsole` (sudo) prints `7`,
      and `journalctl -b -u getty@tty1 --since -5min` shows no login attempt.
 141. Settings > System lists "Quit to desktop" (above Reboot and Shutdown). Open it, answer No: nothing happens. Open it
      again, answer Yes: the launcher closes and the desktop comes back within a few seconds (as after a boot: the
-     login screen, or the desktop when lightdm logs the user in by itself). `journalctl -b -u applaunch-desktop.service | tail` shows
+     login screen, or the desktop when lightdm logs the user in by itself). `journalctl -b -u cyberdeckzero-desktop.service | tail` shows
      `[SESSION] quit requested`, the unit stopping with status 0 and `desktop: lightdm.service started again`.
 142. Start the launcher again from the menu, then Settings > System > Shutdown > Yes: the board powers off WITHOUT the
      desktop appearing in between (watch the screen until it is dark). After the next boot:
-     `journalctl -b -1 -u applaunch-desktop.service | tail` shows `the system is shutting down: lightdm.service is not
+     `journalctl -b -1 -u cyberdeckzero-desktop.service | tail` shows `the system is shutting down: lightdm.service is not
      started again`.
 143. Same with Settings > System > Reboot: the board reboots straight to the desktop (no desktop flash before the
      reboot), the launcher does not start by itself.
-144. Start the launcher, then from ssh `sudo pkill -9 -x M5CardputerZero` (a crash): the desktop comes back within a
+144. Start the launcher, then from ssh `sudo pkill -9 -x cyberdeckzero` (a crash): the desktop comes back within a
      few seconds; starting the launcher from the menu works again right away.
 145. Hold Esc for 4 s in Settings: the hold-Esc ribbon returns to the home grid at 3 s; the launcher keeps running and
      the desktop does not come back (the ribbon is not a quit). The exit-75 recovery (a stuck page) cannot be caused
-     on purpose; it ends like item 144: `systemctl show -p Restart applaunch-desktop.service` prints `Restart=no`, so
+     on purpose; it ends like item 144: `systemctl show -p Restart cyberdeckzero-desktop.service` prints `Restart=no`, so
      any exit gives the desktop back and nothing restarts the launcher in a loop.
 146. Start the launcher, then from ssh `sudo chvt 2; sudo chvt 7`: nothing is drawn over the launcher. Quit to desktop,
      then switch to a text console (Ctrl+Alt+F2 on the built-in keyboard, or `sudo chvt 2`): the text console shows
@@ -343,9 +345,96 @@ HackBerry CM5 (Raspberry Pi OS desktop), after the install (`board.py install ha
      the launcher.
 148. The launcher's state files exist while it runs, also with no ssh session open during the start:
      `ls /run/user/$(id -u)/applaunch/` lists `screen.state` and `input.state`; sounds (if the board has audio) play.
-149. From ssh, `systemctl start applaunch-desktop.service` as the user (no sudo) works without a password;
-     `systemctl stop applaunch-desktop.service` (no sudo) brings the desktop back. `systemctl restart lightdm` without
+149. From ssh, `systemctl start cyberdeckzero-desktop.service` as the user (no sudo) works without a password;
+     `systemctl stop cyberdeckzero-desktop.service` (no sudo) brings the desktop back. `systemctl restart lightdm` without
      sudo still asks for a password (nothing else was opened up; answer Ctrl+C).
-150. `./uninstall.sh --dry-run` from the bundle lists the desktop unit, the menu entry and `52-applaunch-desktop.rules`;
+150. `./uninstall.sh --dry-run` from the bundle lists the desktop unit, the menu entry and `52-cyberdeckzero-desktop.rules`;
      after a real `./uninstall.sh` (from ssh) the menu entry is gone, the desktop is running and
      `cat /sys/class/vtconsole/vtcon1/bind` prints `1`.
+
+## O. The rename to CyberdeckZero Launcher: install over v0.6.0 (report 025 section 5; v0.7.0)
+
+Background: `docs/dev/reports/025-rebranding-plan.md` sections 2 and 5. The binary is now
+`/usr/share/APPLaunch/bin/cyberdeckzero`, the units `cyberdeckzero.service` (user service, appliance boards),
+`cyberdeckzero-console.service` and `cyberdeckzero-desktop.service`, the polkit rule `52-cyberdeckzero-desktop.rules`,
+the menu entry `cyberdeckzero.desktop`; the earlier binary and helper names stay as links for one release. Paths,
+`/etc/applaunch/board.conf`, the `APPLAUNCH_*` variables and the Store are unchanged. Deck, Pi 3A+ and HackBerry, each
+running v0.6.0 before. Answer PASS / FAIL (+ what you saw) per line.
+
+Before the install (Controller, on each board; the backup is the rollback's material):
+151. Backup: `sudo tar czf ~/pre-v0.7.0.tgz /usr/share/APPLaunch/bin /etc/systemd/system/applaunch-*.service
+     /etc/polkit-1/rules.d /usr/share/applications /etc/applaunch ~/.config/systemd/user` (a "No such file" line for
+     a path a board does not have is fine), and `sha256sum /etc/applaunch/board.conf` (deck: no such file; note it).
+152. `python tools/boards/board.py upload <board> <bundle>` then `board.py install <board> --check`: the plan has a
+     "migration from the names of v0.6.0 and before" block. Deck and Pi 3A+: `user service APPLaunch.service of
+     <user>: found`, `applaunch-console.service: found`, `applaunch-desktop.service: not found`; HackBerry:
+     `applaunch-desktop.service: found`, the rule and `applaunch.desktop: found`, `APPLaunch.service ...: not found`.
+     All boards: the earlier binary `found: replaced by a link to cyberdeckzero` and `logo_lcd.png` listed among the
+     files of earlier bundles (and `adb/cardputer-adb*`). Nothing changed yet (`board.py status <board>` as before).
+152b. Pi 3A+ with the Waveshare 4.3" DSI panel (`board.py` entry `pi3a-dsi`). Before testing, the board must boot with
+     the panel's own overlay: `grep -E '^dtoverlay=vc4-kms-(v3d|dsi)' /boot/firmware/config.txt` prints
+     `dtoverlay=vc4-kms-v3d` and `dtoverlay=vc4-kms-dsi-waveshare-800x480`, and not the generic
+     `dtoverlay=vc4-kms-dsi-7inch` (with it the picture flickers and shakes); install.sh does not edit config.txt on this
+     board, so this is set by hand (Pi README, "Boards"). Then the plan says `board: pi3a-wsdsi43`,
+     `profile: pi3a-wsdsi43: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)` (the
+     owner's hand-written profile) and `boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay
+     is not for this board)`. After the install: `sha256sum /boot/firmware/config.txt` is unchanged, there is no
+     `config.txt.bak-applaunch` from this install, and `grep -o 'fbcon=[^ ]*' /boot/firmware/cmdline.txt` prints
+     nothing.
+
+Install and checks (deck and Pi 3A+: install, then one reboot; HackBerry: install with the launcher running, then
+one reboot):
+153. `board.py install <board>`: the output has `== Migrating an earlier install`; deck and Pi 3A+: `user service
+     APPLaunch.service of <user>: stopped, disabled and removed` and `applaunch-console.service disabled and removed`,
+     then the launcher comes back on the panel within a few seconds; HackBerry: `the earlier launcher
+     (applaunch-desktop.service) was running: stopped, the desktop comes back` and the desktop is there again. At no
+     time are two launchers on the screen.
+154. Deck and Pi 3A+: `systemctl --user is-active cyberdeckzero.service` prints `active`, `systemctl --user cat
+     APPLaunch.service` finds no file, `ls ~/.config/systemd/user ~/.config/systemd/user/default.target.wants` lists
+     `cyberdeckzero.service` only; `systemctl is-enabled cyberdeckzero-console.service` prints `enabled` and
+     `systemctl is-enabled applaunch-console.service` says it does not exist; `board.py status <board>` shows
+     `service: active`, `console-unit: active`, `old-service APPLaunch.service: inactive`, `text-console: ... bind=0`.
+155. The process: `pgrep -ax cyberdeckzero` shows `/usr/share/APPLaunch/bin/cyberdeckzero` and `top` shows
+     `cyberdeckzero`.
+     <!-- branding-allow-begin: the earlier binary name, checked to be gone -->
+     With no app open, `pgrep -ax M5CardputerZero` prints nothing (apps still named with the earlier prefix share that
+     process name while they run). `readlink /usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch` prints `cyberdeckzero`.
+     <!-- branding-allow-end -->
+     `readlink /usr/share/APPLaunch/bin/applaunch-console` prints `cyberdeckzero-console`.
+156. `/etc/applaunch/board.conf` is unchanged (`sha256sum` as in item 151; no new `board.conf.bak`).
+157. `ls /usr/share/APPLaunch/share/images/logo_lcd.png /usr/share/APPLaunch/adb` says no such file for both;
+     `ls -R /usr/share/doc/cyberdeckzero-launcher/` lists `LICENSE`, `LICENSES/` (with the texts), `components/`
+     (`cp0_lvgl-LICENSE`, `LVGL-LICENSE.txt`, `freetype-LICENSE.txt`, ...), `fonts/JetBrainsMono-OFL.txt` and
+     `OPEN_SOURCE_COMPONENTS.md`.
+158. Reboot: the launcher comes up by itself (deck, Pi 3A+) as in items 130 and 131; HackBerry: the board boots to its
+     desktop and nothing starts by itself.
+159. HackBerry: the applications menu (Accessories) shows "CyberdeckZero Launcher" once (no second, older entry);
+     `ls /usr/share/applications | grep -e applaunch -e cyberdeckzero` prints `cyberdeckzero.desktop` only and
+     `ls /etc/polkit-1/rules.d | grep desktop` prints `52-cyberdeckzero-desktop.rules` only. Open it: no password,
+     the launcher takes the screen; `board.py status hackberry` shows `cyberdeckzero-desktop.service: active` and
+     `old applaunch-desktop.service: inactive`. Settings > System > Quit to desktop: the desktop comes back.
+160. Settings > System > About and Licenses read correctly (the product name, the credit and disclaimer of report
+     025); Settings > Bluetooth: the board's name is unchanged, or "CyberdeckZero" where it had none.
+161. The Store syncs, installs LanScan and removes it again; Settings > Apps > Sources keeps its sources (section M,
+     item 124). LanScan, viz1090, Wi-Fi Survey, Mesh Hop and the probe start from the home grid and hold-Esc returns
+     home.
+162. `board.py install <board>` a second time: `nothing to migrate (no unit, rule or menu entry of the earlier
+     names)`, no file of earlier bundles removed, the launcher restarts (deck, Pi 3A+) and items 154 to 157 still hold.
+163. `./uninstall.sh --dry-run` from the bundle (in `/tmp/applaunch-bundle/bundle`) lists both generations: `user
+     service cyberdeckzero.service / APPLaunch.service`, `cyberdeckzero-console.service / applaunch-console.service`,
+     `cyberdeckzero-desktop.service / applaunch-desktop.service`, the menu entry and `52-cyberdeckzero-desktop,
+     52-applaunch-desktop`, and `/usr/share/doc/cyberdeckzero-launcher`; it changes nothing.
+
+Rollback to v0.6.0 (only if a check fails; then report which):
+- Deck, Pi 3A+: `systemctl --user disable --now cyberdeckzero.service`, then `sudo systemctl disable --now
+  cyberdeckzero-console.service`, `rm ~/.config/systemd/user/cyberdeckzero.service`, `sudo rm
+  /etc/systemd/system/cyberdeckzero-console.service`, `sudo systemctl daemon-reload; systemctl --user daemon-reload`,
+  then `sudo ./install.sh` from the v0.6.0 bundle (it puts back its binary and helper as files over the links, its
+  units, and starts its `APPLaunch.service`).
+- HackBerry: quit the launcher if it runs (or `sudo systemctl stop cyberdeckzero-desktop.service`), then `sudo rm
+  /etc/systemd/system/cyberdeckzero-desktop.service /etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules
+  /usr/share/applications/cyberdeckzero.desktop; sudo systemctl daemon-reload`, then `sudo ./install.sh` from the
+  v0.6.0 bundle.
+- Optional afterwards (v0.6.0 does not use them): `sudo rm /usr/share/APPLaunch/bin/cyberdeckzero
+  /usr/share/APPLaunch/bin/cyberdeckzero-console; sudo rm -rf /usr/share/doc/cyberdeckzero-launcher`. The removed
+  `logo_lcd.png` comes back with the v0.6.0 bundle; `board.conf` was never touched.

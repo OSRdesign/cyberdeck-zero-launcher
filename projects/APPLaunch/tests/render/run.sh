@@ -108,7 +108,7 @@ header() {
         size=$(basename "$(dirname "$dir")")
         ref="$dir/home"
         if [[ ! -f $ref.png || ! -f $ref.txt ]]; then
-            echo "MISSING $size/header/home (the scene must take 'header home ZERO' first)"
+            echo "MISSING $size/header/home (the scene must take 'header home' first)"
             bad=$((bad + 1))
             continue
         fi

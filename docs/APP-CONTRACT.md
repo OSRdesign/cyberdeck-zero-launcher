@@ -1,6 +1,6 @@
 # App contract (version 1)
 
-What an app started by the CyberDeck Zero launcher (APPLaunch) can learn about the screen, the window it gets and
+What an app started by CyberdeckZero Launcher (project and install folder `APPLaunch`) can learn about the screen, the window it gets and
 the keyboards, so it does not have to hard-code 320x170 or 640x480. This page is the normative reference; the C
 header `ext_components/cp0_lvgl/include/cp0_app_contract.h` says the same in short. Background and decisions:
 `docs/dev/reports/023-p5-app-contract-plan.md`, task 014 P5.

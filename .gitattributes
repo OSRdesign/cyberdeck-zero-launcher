@@ -4,4 +4,4 @@
 *.service text eol=lf
 *.desktop text eol=lf
 # shell scripts without the .sh extension
-projects/APPLaunch/pizero2w/applaunch-console text eol=lf
+projects/APPLaunch/pizero2w/cyberdeckzero-console text eol=lf

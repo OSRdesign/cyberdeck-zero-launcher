@@ -1,0 +1,15 @@
+/* Desktop boards only (install.sh writes this file with the launcher's user filled in below). The menu entry
+ * "CyberdeckZero Launcher" runs `systemctl --no-block start cyberdeckzero-desktop.service` as that user, and systemd
+ * asks polkit (org.freedesktop.systemd1.manage-units), which wants an administrator password by default. Allow that
+ * user, and only that user, to start, stop or restart that one unit. The unit stops and starts the desktop itself, as
+ * root (Conflicts=, ExecStopPost=): nothing is opened up for the display manager. It replaces 52-applaunch-desktop.rules
+ * of v0.6.0 and earlier (install.sh removes that one). */
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("unit") == "cyberdeckzero-desktop.service" &&
+        subject.user == "@USER@") {
+        var verb = action.lookup("verb");
+        if (verb == "start" || verb == "stop" || verb == "restart")
+            return polkit.Result.YES;
+    }
+});

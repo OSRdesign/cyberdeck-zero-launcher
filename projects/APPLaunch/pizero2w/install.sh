@@ -1,19 +1,21 @@
 #!/bin/sh
-# Install the launcher port on a Raspberry Pi Zero 2W with the Waveshare 2.8" DPI LCD (the deck), or on another
+# Install CyberdeckZero Launcher on a Raspberry Pi Zero 2W with the Waveshare 2.8" DPI LCD (the deck), or on another
 # known board (see README.md, "Boards"): the board is detected and its profile written to /etc/applaunch/board.conf.
 # A board that boots to a desktop (a display manager such as lightdm is enabled or running) gets the desktop
 # variant: the launcher is started from the applications menu and gives the desktop back when it exits (README.md,
-# "Desktop boards"); the others run it at boot as the user service APPLaunch.service.
+# "Desktop boards"); the others run it at boot as the user service cyberdeckzero.service.
 #
 # Run on the Pi, from the unpacked bundle (see build.sh):   sudo ./install.sh [options]
-# It is idempotent: running it again updates the files and leaves everything else as it is.
+# It is idempotent: running it again updates the files and leaves everything else as it is. Over an earlier install
+# (v0.6.0 and before: APPLaunch.service, applaunch-console.service, applaunch-desktop.service) it migrates to the
+# new names first: the old units are stopped, disabled and removed before the new ones are enabled (--dry-run lists it).
 #
 # Options:
 #   --keyboard-name NAME   Bluetooth keyboard name as shown in `bluetoothctl devices` (default: "M4 Keyboard")
 #   --user NAME            user that runs the launcher (default: the user who ran sudo)
 #   --no-boot-config       do not touch /boot/firmware/config.txt and cmdline.txt (no PWM backlight)
 #   --board NAME           use this board profile instead of detecting it (zero2w, pi3a-luckfox35,
-#                          pi5-hyperpixel4, hackberry-cm5)
+#                          pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
 #   --dry-run              print the detected board, the session and what would be done, change nothing
 #   --force                continue on an unknown board (no profile is written); replace a hand-edited
@@ -38,7 +40,7 @@ BOARD_ARG=""
 DEFAULT_SOURCE=1
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
         --dry-run) DRY=1 ;;
     esac
 done
@@ -52,7 +54,7 @@ while [ $# -gt 0 ]; do
         --keyboard-name) [ $# -ge 2 ] || { echo "--keyboard-name needs a name" >&2; exit 2; }; KEYBOARD_NAME="$2"; shift 2 ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
-        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
+        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --force) FORCE=1; shift ;;
@@ -63,14 +65,55 @@ done
 
 # SYSROOT is a test hook: board and desktop detection read $SYSROOT/proc, $SYSROOT/sys and $SYSROOT/etc, and the
 # profile and the backlight udev rule are written under $SYSROOT/etc. Leave it unset on a real board.
+# INSTALL_FAKE_SYSTEM=1 (test hook, with SYSROOT) allows a whole install into $SYSROOT: every system path and the
+# user's home are taken under it, and the test puts stand-ins for systemctl, runuser, loginctl, udevadm, usermod,
+# dpkg, chown and uname first on PATH (tests/test-install-board.sh). Never set it on a real board.
 # INSTALL_GLIBC_VERSION is a test hook too: it replaces the glibc version read from the system.
 SYSROOT=${SYSROOT:-}
-if [ -n "$SYSROOT" ] && [ "$DRY" = 0 ] && [ "$BOARD_ONLY" = 0 ]; then
+if [ -n "$SYSROOT" ] && [ "$DRY" = 0 ] && [ "$BOARD_ONLY" = 0 ] && [ "${INSTALL_FAKE_SYSTEM:-0}" != 1 ]; then
     echo "SYSROOT is a test hook: use it only with --dry-run or --board-only" >&2; exit 2
 fi
 PROFILE_DIR="$SYSROOT/etc/applaunch"
 PROFILE="$PROFILE_DIR/board.conf"
 GPIO_BL_RULE="92-applaunch-backlight-gpio.rules"
+
+# ---------------------------------------------------------------------------------------------------------
+# Names (report 025). Since v0.7.0 the launcher's binary, units, polkit rule and menu entry carry the product name;
+# the paths (/usr/share/APPLaunch, /etc/applaunch), the APPLAUNCH_* variables, the other rules and the Store keep
+# their technical names (NAMING.md). The names of v0.6.0 and before are known here for the migration.
+# ---------------------------------------------------------------------------------------------------------
+LAUNCHER_BIN=cyberdeckzero                       # /usr/share/APPLaunch/bin/cyberdeckzero
+CONSOLE_HELPER=cyberdeckzero-console             # /usr/share/APPLaunch/bin/cyberdeckzero-console
+USER_UNIT=cyberdeckzero.service                  # appliance boards: systemd user service
+CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the panel from the text console
+DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
+DESKTOP_RULES=52-cyberdeckzero-desktop.rules     # desktop boards: the user may start and stop DESKTOP_UNIT
+DESKTOP_ENTRY_NAME=cyberdeckzero.desktop         # desktop boards: "CyberdeckZero Launcher" in the menu
+DOC_NAME=cyberdeckzero-launcher                  # /usr/share/doc/cyberdeckzero-launcher: licences and notices
+# branding-allow-begin: the binary name of v0.6.0 and before (kept as a link for one release, then removed)
+OLD_LAUNCHER_BIN=M5CardputerZero-APPLaunch
+# branding-allow-end
+OLD_CONSOLE_HELPER=applaunch-console             # kept as a link to CONSOLE_HELPER for one release
+OLD_USER_UNIT=APPLaunch.service
+OLD_CONSOLE_UNIT=applaunch-console.service
+OLD_DESKTOP_UNIT=applaunch-desktop.service
+OLD_DESKTOP_RULES=52-applaunch-desktop.rules
+OLD_DESKTOP_ENTRY_NAME=applaunch.desktop
+# Files that earlier bundles put in /usr/share/APPLaunch and this one no longer ships (install.sh copies the bundle
+# over the folder and never deletes by wildcard: installed apps live there too): the stock start-up logo, two unused
+# images, the stock USB ADB gadget helpers.
+RETIRED_FILES="share/images/logo_lcd.png share/images/launcher_brand_logo.png share/images/carousel_zero_wordmark.png
+adb/cardputer-adb adb/cardputer-adb-gadget"
+RETIRED_DIRS="adb"                               # removed when empty afterwards
+
+# System paths ($SYSROOT is empty on a real board)
+APP_ROOT="$SYSROOT/usr/share/APPLaunch"
+SYSTEMD_DIR="$SYSROOT/etc/systemd/system"
+POLKIT_DIR="$SYSROOT/etc/polkit-1/rules.d"
+UDEV_DIR="$SYSROOT/etc/udev/rules.d"
+MENU_DIR="$SYSROOT/usr/share/applications"
+DESKTOP_ENTRY="$MENU_DIR/$DESKTOP_ENTRY_NAME"
+DOC_DIR="$SYSROOT/usr/share/doc/$DOC_NAME"
 
 # ---------------------------------------------------------------------------------------------------------
 # glibc floor: the launcher and every app package are built against Debian 13 (they need GLIBC_2.38).
@@ -140,16 +183,24 @@ print_facts() {
     echo "  backlight:${bl:- none}"
 }
 
-# BOARD: zero2w | pi3a-luckfox35 | pi5-hyperpixel4 | hackberry-cm5 | "" (unknown).
+# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi5-hyperpixel4 | hackberry-cm5 | "" (unknown).
 # PANEL_FB: the panel's framebuffer of a board with a profile (not the deck).
+# BOARD_NOTE: why a known model was left unknown (two panels at once), printed with the facts.
 BOARD=""
 PANEL_FB=""
+BOARD_NOTE=""
+KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5"
 # The panel of each profiled board: fbdev name prefix, buffer size (virtual_size), DRM connector and its mode.
 # The RP1 DPI fbdev ("drm-rp1-dpidrmf") is the panel's native buffer: portrait 480x800 for the HyperPixel 4 (the
 # launcher pre-rotates its 800x480 canvas 90 degrees), square 720x720 for the HackBerry (report 021, addenda 3, 4, 7).
+# The Pi 3A+ takes one of two panels: the Luckfox 3.5" SPI panel (its own panel-mipi-dbi fbdev, portrait 320x480) or
+# the Waveshare 4.3" DSI panel (the KMS fbdev "vc4drmfb", 800x480 landscape). The detection reads only the model, the
+# DRM connector and the framebuffer, never config.txt: it does not depend on the overlay's name (the panel wants
+# dtoverlay=vc4-kms-dsi-waveshare-800x480; the generic vc4-kms-dsi-7inch also drives it, but it flickers).
 panel_spec() {
     case "$1" in
         pi3a-luckfox35) echo "panel-mipi-dbi 320,480 SPI-* 320x480" ;;
+        pi3a-wsdsi43) echo "vc4drmfb 800,480 DSI-* 800x480" ;;
         pi5-hyperpixel4) echo "drm-rp1-dpi 480,800 DPI-* 480x800" ;;
         hackberry-cm5) echo "drm-rp1-dpi 720,720 DPI-* 720x720" ;;
     esac
@@ -167,7 +218,7 @@ detect_panel() {
 if [ -n "$BOARD_ARG" ]; then
     case "$BOARD_ARG" in
         zero2w) BOARD=zero2w ;;
-        pi3a-luckfox35|pi5-hyperpixel4|hackberry-cm5)
+        pi3a-luckfox35|pi3a-wsdsi43|pi5-hyperpixel4|hackberry-cm5)
             BOARD=$BOARD_ARG
             detect_panel "$BOARD" || true
             if [ -z "$PANEL_FB" ]; then
@@ -178,14 +229,36 @@ if [ -n "$BOARD_ARG" ]; then
                 echo "Nothing was changed." >&2
                 exit 1
             fi ;;
-        *) echo "unknown board \"$BOARD_ARG\" (known: zero2w, pi3a-luckfox35, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2 ;;
+        *) echo "unknown board \"$BOARD_ARG\" (known: $KNOWN_BOARDS)" >&2; exit 2 ;;
     esac
 else
     case "$MODEL" in
         *"Zero 2"*) BOARD=zero2w ;;
-        *"Raspberry Pi 3 Model A Plus"*) detect_panel pi3a-luckfox35 && BOARD=pi3a-luckfox35 ;;
+        *"Raspberry Pi 3 Model A Plus"*)
+            # one panel or the other; both connected at once is not guessed
+            SPI_FB=""; DSI_FB=""
+            if detect_panel pi3a-luckfox35; then SPI_FB=$PANEL_FB; fi
+            if detect_panel pi3a-wsdsi43; then DSI_FB=$PANEL_FB; fi
+            if [ -n "$SPI_FB" ] && [ -n "$DSI_FB" ]; then
+                PANEL_FB=""
+                BOARD_NOTE="Pi 3A+ with two panels connected (SPI $SPI_FB: pi3a-luckfox35, DSI $DSI_FB: pi3a-wsdsi43): choose one with --board."
+            elif [ -n "$SPI_FB" ]; then BOARD=pi3a-luckfox35; PANEL_FB=$SPI_FB
+            elif [ -n "$DSI_FB" ]; then BOARD=pi3a-wsdsi43; PANEL_FB=$DSI_FB
+            fi ;;
         *"Raspberry Pi 5"*) detect_panel pi5-hyperpixel4 && BOARD=pi5-hyperpixel4 ;;
         *"Compute Module 5"*) detect_panel hackberry-cm5 && BOARD=hackberry-cm5 ;;
+    esac
+fi
+# The deck's PWM backlight overlay goes into config.txt on the deck and, as before, on an unknown board installed with
+# --force, except when the model is one of the other boards' (Pi 3A+, Pi 5, CM5) and only its panel was not
+# recognised: those panels bring their own backlight (and overlay), so config.txt stays as it is there.
+DECK_BOOT=0
+if [ "$BOARD" = zero2w ]; then
+    DECK_BOOT=1
+elif [ -z "$BOARD" ]; then
+    case "$MODEL" in
+        *"Raspberry Pi 3 Model A Plus"*|*"Raspberry Pi 5"*|*"Compute Module 5"*) ;;
+        *) DECK_BOOT=1 ;;
     esac
 fi
 
@@ -225,13 +298,16 @@ if [ -n "$DM_UNIT" ] || [ -n "$DESK_PROCS" ] || [ -e "$DM_LINK" ]; then
     if [ -z "$DM_UNIT" ]; then DM_UNIT=lightdm.service; SESSION_WHY="no display manager unit found: $DM_UNIT assumed"; fi
     [ -z "$DESK_PROCS" ] || SESSION_WHY="${SESSION_WHY:+$SESSION_WHY; }running: $DESK_PROCS"
 fi
-# the deck's environment lives in APPLaunch.service (it has no profile): no desktop variant for it
+# the deck's environment lives in its user service (it has no profile): no desktop variant for it
 DESKTOP_REFUSED=0
 if [ "$SESSION" = desktop ] && [ "$BOARD" = zero2w ]; then DESKTOP_REFUSED=1; fi
 
 # The profile for the board ("" = no profile file: the deck keeps the service's own environment).
-# It is a systemd EnvironmentFile: its values override the Environment= lines of APPLaunch.service,
+# It is a systemd EnvironmentFile: its values override the Environment= lines of cyberdeckzero.service,
 # so the deck's legacy touch axes and fb0 are neutralised here instead of being removed from the service.
+# The body below is checksummed into the file (profile_state): changing its text, comments included, rewrites the
+# profile of every board at the next install (the old one kept as board.conf.bak). Its comments still name the user
+# service of v0.6.0 for that reason.
 profile_body() {
     case "$BOARD" in
         pi3a-luckfox35) cat <<EOF
@@ -248,6 +324,31 @@ APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio
 # same device for the code that still reads the LVGL name (the service sets it to /dev/fb0)
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 # the deck's legacy touch axes (set in APPLaunch.service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+        ;;
+        # Pi 3A+ with the Waveshare 4.3" DSI panel: the values of the hand-written profile that works on the board
+        # (2026-10-13). The KMS framebuffer is already landscape 800x480: no rotation; touch (ft5x06) by capability,
+        # in buffer orientation. The backlight is the overlay's i2c regulator (sysfs brightness 0..255).
+        pi3a-wsdsi43)
+            bl=$(dsi_backlight)
+            cat <<EOF
+APPLAUNCH_BOARD=pi3a-wsdsi43
+APPLAUNCH_FB=$PANEL_FB
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+# landscape visible area in mm (800x480 at 0.117 mm pitch; to be confirmed with a ruler): the layout's density
+APPLAUNCH_PANEL_MM=94x56
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+EOF
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            cat <<EOF
+LV_LINUX_FBDEV_DEVICE=$PANEL_FB
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
 APPLAUNCH_TOUCH_SWAP_XY=0
 APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0
@@ -278,12 +379,24 @@ EOF
         ;;
     esac
 }
+# The DSI panel's backlight device: the DSI overlay's regulator at i2c 10-0045 (seen on the Pi 3A+ with both
+# vc4-kms-dsi-waveshare-800x480 and vc4-kms-dsi-7inch), else
+# the only backlight device there is; none or several: nothing (no APPLAUNCH_BACKLIGHT line, the launcher's default)
+dsi_backlight() {
+    if [ -d "$SYSROOT/sys/class/backlight/10-0045" ]; then echo 10-0045; return 0; fi
+    n=0; one=""
+    for d in "$SYSROOT"/sys/class/backlight/*; do
+        [ -e "$d" ] || continue
+        n=$((n + 1)); one=${d##*/}
+    done
+    if [ "$n" = 1 ]; then echo "$one"; fi
+}
 body_sum() { cksum | cut -d' ' -f1-2; }
 # The first lines say who wrote the file and a checksum of the rest, so a hand edit can be told apart.
 profile_content() {
     body=$(profile_body)
     printf '# Board profile for the launcher, written by install.sh (board: %s).\n' "$BOARD"
-    printf '# Loaded by APPLaunch.service (EnvironmentFile). Edit freely: install.sh then leaves it alone unless --force.\n'
+    printf '# Loaded by the launcher unit (EnvironmentFile). Edit freely: install.sh then leaves it alone unless --force.\n'
     printf '# applaunch-profile-sum: %s\n' "$(printf '%s\n' "$body" | body_sum)"
     printf '%s\n' "$body"
 }
@@ -310,6 +423,9 @@ plan_profile() {
     else
         if [ "$st" = none ]; then PROFILE_ACTION=write; PROFILE_MSG="$BOARD: write $PROFILE"
         elif [ "$(profile_content)" = "$(cat "$PROFILE")" ]; then PROFILE_ACTION=keep; PROFILE_MSG="$BOARD: $PROFILE already up to date"
+        # generated, unedited, same values: an earlier install's wording of the header lines is no reason to rewrite it
+        elif [ "$st" = ours ] && [ "$(sed '1,3d' "$PROFILE")" = "$(profile_body)" ]; then
+            PROFILE_ACTION=keep; PROFILE_MSG="$BOARD: $PROFILE already up to date"
         elif [ "$st" = ours ]; then PROFILE_ACTION=replace; PROFILE_MSG="$BOARD: update $PROFILE (old one kept as board.conf.bak)"
         elif [ "$FORCE" = 1 ]; then PROFILE_ACTION=replace; PROFILE_MSG="$BOARD: replace hand-edited $PROFILE (--force; old one kept as board.conf.bak)"
         else PROFILE_ACTION=keep; PROFILE_MSG="$BOARD: $PROFILE was edited by hand: kept (use --force to replace it)"; fi
@@ -340,9 +456,6 @@ EOF
 # @USER@ (the launcher's user) and @DM@ (the display manager's unit) filled in.
 # ---------------------------------------------------------------------------------------------------------
 HERE=$(cd "$(dirname "$0")" && pwd)
-DESKTOP_UNIT=applaunch-desktop.service
-DESKTOP_RULES=52-applaunch-desktop.rules
-DESKTOP_ENTRY=/usr/share/applications/applaunch.desktop
 bundle_file() {
     if [ -f "$HERE/payload/etc/$1" ]; then echo "$HERE/payload/etc/$1"; else echo "$HERE/$1"; fi
 }
@@ -356,6 +469,60 @@ check_user_name() {
     esac
 }
 
+# ---------------------------------------------------------------------------------------------------------
+# Migration from the names of v0.6.0 and before (see "Names" above). What is there is looked up under $SYSROOT.
+# ---------------------------------------------------------------------------------------------------------
+present() { [ -e "$1" ] || [ -L "$1" ]; }
+# the earlier user service of the user whose home is $1 ($SYSROOT included): its unit file or its enablement link
+old_user_unit_present() {
+    present "$1/.config/systemd/user/$OLD_USER_UNIT" || present "$1/.config/systemd/user/default.target.wants/$OLD_USER_UNIT"
+}
+# the retired files still in /usr/share/APPLaunch, one relative path per line
+retired_present() {
+    for f in $RETIRED_FILES; do
+        if present "$APP_ROOT/$f"; then echo "$f"; fi
+    done
+}
+# The dry run's account of the migration: every item, found or not, and what the install does with it.
+# $1: the user, $2: the user's home ($SYSROOT included).
+print_migration() {
+    echo "migration from the names of v0.6.0 and before (done before the new units are enabled, so two launchers never"
+    echo "share the screen; /etc/applaunch/board.conf, the user's settings, app sources and installed apps are kept):"
+    if old_user_unit_present "$2"; then
+        echo "  - user service $OLD_USER_UNIT of $1: found: stopped, disabled and removed (systemctl --user as $1)"
+    else
+        echo "  - user service $OLD_USER_UNIT of $1: not found"
+    fi
+    if present "$SYSTEMD_DIR/$OLD_CONSOLE_UNIT"; then
+        echo "  - $OLD_CONSOLE_UNIT: found: disabled and stopped (the text console is bound again until $CONSOLE_UNIT"
+        echo "    frees the panel), removed"
+    else
+        echo "  - $OLD_CONSOLE_UNIT: not found"
+    fi
+    if present "$SYSTEMD_DIR/$OLD_DESKTOP_UNIT"; then
+        echo "  - $OLD_DESKTOP_UNIT: found: stopped if it runs (the earlier launcher quits, the desktop comes back), removed"
+    else
+        echo "  - $OLD_DESKTOP_UNIT: not found"
+    fi
+    for f in "$POLKIT_DIR/$OLD_DESKTOP_RULES" "$MENU_DIR/$OLD_DESKTOP_ENTRY_NAME"; do
+        if present "$f"; then echo "  - ${f#"$SYSROOT"}: found: removed"; else echo "  - ${f#"$SYSROOT"}: not found"; fi
+    done
+    for pair in "$OLD_LAUNCHER_BIN:$LAUNCHER_BIN" "$OLD_CONSOLE_HELPER:$CONSOLE_HELPER"; do
+        old=${pair%%:*}; new=${pair#*:}
+        if [ -L "$APP_ROOT/bin/$old" ]; then state="already a link to $new"
+        elif present "$APP_ROOT/bin/$old"; then state="found: replaced by a link to $new"
+        else state="not found: created as a link to $new"; fi
+        echo "  - ${APP_ROOT#"$SYSROOT"}/bin/$old: $state (the earlier name keeps working for one release)"
+    done
+    gone=$(retired_present)
+    if [ -n "$gone" ]; then
+        echo "  - files of earlier bundles that this one does not ship: found: removed:"
+        printf '%s\n' "$gone" | sed "s|^|      ${APP_ROOT#"$SYSROOT"}/|"
+    else
+        echo "  - files of earlier bundles that this one does not ship (logo_lcd.png, two unused images, adb/): none found"
+    fi
+}
+
 plan_profile
 if [ "$DRY" = 1 ]; then
     echo "DRY RUN: nothing will be changed."
@@ -364,7 +531,7 @@ if [ "$DRY" = 1 ]; then
     print_facts
     echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
     if [ -z "$BOARD" ]; then
-        echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."
+        if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
         [ "$FORCE" = 1 ] || echo "install.sh would stop here (--force installs without a profile)."
     fi
     if [ "$SESSION" = desktop ]; then
@@ -378,18 +545,24 @@ if [ "$DRY" = 1 ]; then
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
     if [ "$SESSION" = desktop ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
-    elif [ "$BOARD" = zero2w ] || [ -z "$BOARD" ]; then
+    elif [ "$DECK_BOOT" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
     else
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)" || echo "boot config: skipped (--no-boot-config)"
     fi
-    if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
+    if [ "$BOARD_ONLY" = 0 ]; then
         TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
+        DRY_HOME=$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6 || true)
+        print_migration "$TARGET_USER" "$SYSROOT${DRY_HOME:-/home/$TARGET_USER}"
+        echo "launcher files: /usr/share/APPLaunch/bin/$LAUNCHER_BIN and $CONSOLE_HELPER, the libraries and assets of the"
+        echo "  bundle; licences and notices in /usr/share/doc/$DOC_NAME (replaced as a whole)"
+    fi
+    if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
         echo "then: packages, launcher files, udev and polkit rules, Network Time service, as for the deck; the desktop variant:"
         echo "  - no user service, no lingering, getty@tty1 left as it is, no boot configuration change"
         echo "  - /etc/systemd/system/$DESKTOP_UNIT for $TARGET_USER, not enabled (nothing starts at boot): starting it stops"
         echo "    $DM_UNIT; when the launcher exits the desktop comes back, except during a poweroff or reboot"
-        echo "  - $DESKTOP_ENTRY: \"CardputerZero Launcher\" in the applications menu"
+        echo "  - /usr/share/applications/$DESKTOP_ENTRY_NAME: \"CyberdeckZero Launcher\" in the applications menu"
         echo "  - /etc/polkit-1/rules.d/$DESKTOP_RULES: $TARGET_USER may start and stop $DESKTOP_UNIT without a password"
         echo "  - the launcher is not started now (it would stop the desktop): start it from the menu"
         echo "--- /etc/systemd/system/$DESKTOP_UNIT"
@@ -397,8 +570,9 @@ if [ "$DRY" = 1 ]; then
         echo "--- /etc/polkit-1/rules.d/$DESKTOP_RULES"
         render "$DESKTOP_RULES"
     elif [ "$BOARD_ONLY" = 0 ]; then
-        echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck)"
-        echo "console: applaunch-console.service frees the panel from the text console once the boot is done (the boot lines still show)"
+        echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck): $USER_UNIT"
+        echo "  for $TARGET_USER (lingering on), enabled and started"
+        echo "console: $CONSOLE_UNIT frees the panel from the text console once the boot is done (the boot lines still show)"
     fi
     if [ "$BOARD_ONLY" = 0 ]; then
         if [ "$DEFAULT_SOURCE" = 1 ]; then
@@ -414,36 +588,98 @@ if [ "$BOARD_ONLY" = 1 ]; then
     echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
     if [ -z "$BOARD" ]; then
         echo "detected:"; print_facts
-        echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."
+        if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
     fi
     apply_profile
     if [ "$GPIO_BL" = 1 ]; then
-        mkdir -p "$SYSROOT/etc/udev/rules.d"
-        gpio_bl_rule > "$SYSROOT/etc/udev/rules.d/$GPIO_BL_RULE"
-        echo "installed $SYSROOT/etc/udev/rules.d/$GPIO_BL_RULE"
+        mkdir -p "$UDEV_DIR"
+        gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
+        echo "installed $UDEV_DIR/$GPIO_BL_RULE"
         [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
     fi
     exit 0
 fi
 
 PAYLOAD="$HERE/payload"
-APP_ROOT=/usr/share/APPLaunch
-BOOT=/boot/firmware
-[ -d "$BOOT" ] || BOOT=/boot
+BOOT="$SYSROOT/boot/firmware"
+[ -d "$BOOT" ] || BOOT="$SYSROOT/boot"
 
 [ -d "$PAYLOAD" ] || { echo "payload/ not found next to install.sh (unpack the whole bundle)" >&2; exit 1; }
 TARGET_USER=${TARGET_USER:-${SUDO_USER:-}}
 [ -n "$TARGET_USER" ] && id "$TARGET_USER" >/dev/null 2>&1 || { echo "cannot determine the user: pass --user NAME" >&2; exit 1; }
 TARGET_UID=$(id -u "$TARGET_USER")
 TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+[ -n "$TARGET_HOME" ] || { echo "cannot find the home directory of $TARGET_USER" >&2; exit 1; }
+TARGET_HOME="$SYSROOT$TARGET_HOME"
+UNIT_DIR="$TARGET_HOME/.config/systemd/user"
+# a command in the user's systemd (the user service lives on the user bus, reachable through the runtime dir)
+as_user() { runuser -u "$TARGET_USER" -- env XDG_RUNTIME_DIR="/run/user/$TARGET_UID" "$@"; }
 
 say() { printf '\n== %s\n' "$*"; }
+
+# The migration itself (see print_migration): before the new units are installed and enabled, so the earlier
+# launcher is stopped first and two launchers never share the screen. Idempotent: nothing to do the second time.
+OLD_STILL_ACTIVE=0
+migrate_old() {
+    found=0
+    if old_user_unit_present "$TARGET_HOME"; then
+        found=1
+        # through the user's systemd (lingering keeps it running at boot); without a reachable user manager the
+        # service cannot be running, and its files go anyway
+        as_user systemctl --user disable --now "$OLD_USER_UNIT" \
+            || echo "(the user's systemd did not answer: $OLD_USER_UNIT is not running; its files are removed)"
+        rm -f "$UNIT_DIR/$OLD_USER_UNIT" "$UNIT_DIR/default.target.wants/$OLD_USER_UNIT"
+        as_user systemctl --user daemon-reload 2>/dev/null || true
+        as_user systemctl --user reset-failed "$OLD_USER_UNIT" 2>/dev/null || true
+        echo "user service $OLD_USER_UNIT of $TARGET_USER: stopped, disabled and removed"
+        if as_user systemctl --user is-active --quiet "$OLD_USER_UNIT" 2>/dev/null; then
+            OLD_STILL_ACTIVE=1
+            echo "WARNING: $OLD_USER_UNIT is still running: the new launcher is not started now (reboot when done)" >&2
+        fi
+    fi
+    if present "$SYSTEMD_DIR/$OLD_DESKTOP_UNIT"; then
+        found=1
+        if systemctl is-active --quiet "$OLD_DESKTOP_UNIT"; then
+            # its ExecStopPost= gives the desktop back (its helper's earlier name is a link to the new helper)
+            systemctl stop "$OLD_DESKTOP_UNIT" || true
+            echo "the earlier launcher ($OLD_DESKTOP_UNIT) was running: stopped, the desktop comes back"
+        fi
+        rm -f "$SYSTEMD_DIR/$OLD_DESKTOP_UNIT"
+        echo "$OLD_DESKTOP_UNIT removed"
+    fi
+    if present "$SYSTEMD_DIR/$OLD_CONSOLE_UNIT"; then
+        found=1
+        # its ExecStop= binds the text console again; $CONSOLE_UNIT frees the panel again right after
+        systemctl disable --now "$OLD_CONSOLE_UNIT" || true
+        rm -f "$SYSTEMD_DIR/$OLD_CONSOLE_UNIT" "$SYSTEMD_DIR/multi-user.target.wants/$OLD_CONSOLE_UNIT"
+        echo "$OLD_CONSOLE_UNIT disabled and removed"
+    fi
+    for f in "$POLKIT_DIR/$OLD_DESKTOP_RULES" "$MENU_DIR/$OLD_DESKTOP_ENTRY_NAME"; do
+        if present "$f"; then found=1; rm -f "$f"; echo "removed ${f#"$SYSROOT"}"; fi
+    done
+    if [ "$found" = 1 ]; then
+        systemctl daemon-reload
+        systemctl reset-failed "$OLD_DESKTOP_UNIT" "$OLD_CONSOLE_UNIT" 2>/dev/null || true
+    else
+        echo "nothing to migrate (no unit, rule or menu entry of the earlier names)"
+    fi
+}
+# Files earlier bundles installed and this one does not ship (RETIRED_FILES), then their folders when empty
+remove_retired() {
+    for f in $(retired_present); do
+        rm -f "$APP_ROOT/$f"
+        echo "removed ${APP_ROOT#"$SYSROOT"}/$f (no longer in the bundle)"
+    done
+    for d in $RETIRED_DIRS; do
+        if [ -d "$APP_ROOT/$d" ] && [ -z "$(ls -A "$APP_ROOT/$d" 2>/dev/null)" ]; then rmdir "$APP_ROOT/$d"; fi
+    done
+}
 
 say "Checking the board"
 echo "board: ${MODEL:-unknown} -> profile ${BOARD:-none (unknown board)}   user: $TARGET_USER   glibc: $GLIBC"
 if [ -z "$BOARD" ]; then
     echo "detected:"; print_facts
-    echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."
+    if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
     [ "$FORCE" = 1 ] || { echo "stopping here (use --force to install anyway, without a board profile)" >&2; exit 1; }
 fi
 if [ "$SESSION" = desktop ]; then
@@ -455,6 +691,13 @@ if [ "$SESSION" = desktop ]; then
     check_user_name "$TARGET_USER"
 fi
 [ "$(uname -m)" = aarch64 ] || { echo "a 64-bit (aarch64) OS is required" >&2; exit 1; }
+# The migration stops the earlier launcher's unit: run from a terminal inside it (the launcher's own terminal app),
+# that stop would end this script half way, the old unit gone and the new one not yet there.
+if [ -z "$SYSROOT" ] && grep -q -e "$OLD_USER_UNIT" -e "$OLD_DESKTOP_UNIT" /proc/self/cgroup 2>/dev/null; then
+    echo "this shell runs inside the earlier launcher's service ($OLD_USER_UNIT or $OLD_DESKTOP_UNIT): the migration" >&2
+    echo "stops it, which would end the install half way. Run it from an ssh session or a text console. Nothing was changed." >&2
+    exit 1
+fi
 
 say "Installing packages"
 PKGS="libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler"
@@ -470,29 +713,48 @@ else
     echo "all packages already present"
 fi
 
-say "Installing the launcher into $APP_ROOT"
+say "Installing the launcher into ${APP_ROOT#"$SYSROOT"}"
 mkdir -p "$APP_ROOT/bin" "$APP_ROOT/lib" "$APP_ROOT/applications"
 cp -a "$PAYLOAD/share/." "$APP_ROOT/"                       # images, fonts, audio, ... (does not delete installed apps)
-install -m 755 "$PAYLOAD/bin/M5CardputerZero-APPLaunch" "$APP_ROOT/bin/M5CardputerZero-APPLaunch"
+install -m 755 "$PAYLOAD/bin/$LAUNCHER_BIN" "$APP_ROOT/bin/$LAUNCHER_BIN"
 if [ -f "$PAYLOAD/bin/M5CardputerZero-AppStore" ]; then
     install -m 755 "$PAYLOAD/bin/M5CardputerZero-AppStore" "$APP_ROOT/bin/M5CardputerZero-AppStore"
 fi
 install -m 644 "$PAYLOAD/lib/libapplaunch_vfb.so" "$APP_ROOT/lib/libapplaunch_vfb.so"
-# the text console helper of applaunch-console.service (appliance) and applaunch-desktop.service (desktop)
-install -m 755 "$PAYLOAD/bin/applaunch-console" "$APP_ROOT/bin/applaunch-console"
+# the text console helper of the console unit (appliance boards) and the desktop unit (desktop boards)
+install -m 755 "$PAYLOAD/bin/$CONSOLE_HELPER" "$APP_ROOT/bin/$CONSOLE_HELPER"
+# The earlier names stay for one release, as links: a unit of an earlier install that is still loaded (its ExecStop=,
+# ExecStopPost=), or a script that starts the launcher by its old path, gets the new files.
+ln -sfn "$LAUNCHER_BIN" "$APP_ROOT/bin/$OLD_LAUNCHER_BIN"
+ln -sfn "$CONSOLE_HELPER" "$APP_ROOT/bin/$OLD_CONSOLE_HELPER"
+echo "$LAUNCHER_BIN and $CONSOLE_HELPER installed; the earlier names $OLD_LAUNCHER_BIN and $OLD_CONSOLE_HELPER link to them"
+remove_retired
 chown -R "$TARGET_USER:$TARGET_USER" "$APP_ROOT/applications"
 chmod -R a+rX "$APP_ROOT"
 
+say "Installing the licences and notices into ${DOC_DIR#"$SYSROOT"}"
+if [ -d "$PAYLOAD/doc" ]; then
+    # the folder is this launcher's alone: replaced as a whole, so a licence file dropped from the bundle goes too
+    rm -rf "$DOC_DIR"
+    mkdir -p "$DOC_DIR"
+    cp -R "$PAYLOAD/doc/." "$DOC_DIR/"
+    chmod -R u=rwX,go=rX "$DOC_DIR"
+    echo "$(find "$DOC_DIR" -type f | wc -l | tr -d ' ') files (LICENSE, LICENSES/, the components' and fonts' licences)"
+else
+    echo "this bundle has no payload/doc: skipped"
+fi
+
 say "Installing udev rules (keyboard: \"$KEYBOARD_NAME\")"
-install -m 644 "$PAYLOAD/etc/90-backlight-unblank.rules" /etc/udev/rules.d/90-backlight-unblank.rules
-install -m 644 "$PAYLOAD/etc/91-applaunch-vkbd.rules" /etc/udev/rules.d/91-applaunch-vkbd.rules
-install -m 644 "$PAYLOAD/etc/93-applaunch-rfkill.rules" /etc/udev/rules.d/93-applaunch-rfkill.rules
-cat > /etc/udev/rules.d/99-bt-keyboard.rules <<EOF
+mkdir -p "$UDEV_DIR"
+install -m 644 "$PAYLOAD/etc/90-backlight-unblank.rules" "$UDEV_DIR/90-backlight-unblank.rules"
+install -m 644 "$PAYLOAD/etc/91-applaunch-vkbd.rules" "$UDEV_DIR/91-applaunch-vkbd.rules"
+install -m 644 "$PAYLOAD/etc/93-applaunch-rfkill.rules" "$UDEV_DIR/93-applaunch-rfkill.rules"
+cat > "$UDEV_DIR/99-bt-keyboard.rules" <<EOF
 # Stable name for the Bluetooth keyboard (it gets a new event node each time it reconnects).
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="$KEYBOARD_NAME", SYMLINK+="input/bt-keyboard"
 EOF
 if [ "$GPIO_BL" = 1 ]; then
-    gpio_bl_rule > "/etc/udev/rules.d/$GPIO_BL_RULE"
+    gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
     echo "on/off GPIO backlight: /etc/udev/rules.d/$GPIO_BL_RULE"
 fi
 udevadm control --reload
@@ -500,36 +762,40 @@ udevadm trigger --subsystem-match=input --subsystem-match=misc --subsystem-match
 usermod -aG input,video,netdev "$TARGET_USER"
 
 say "Installing PolicyKit rules (Wi-Fi, time settings, reboot/shutdown from the launcher)"
-mkdir -p /etc/polkit-1/rules.d
-install -m 644 "$PAYLOAD/etc/50-networkmanager-netdev.rules" /etc/polkit-1/rules.d/50-networkmanager-netdev.rules
-install -m 644 "$PAYLOAD/etc/51-launcher-time-power.rules" /etc/polkit-1/rules.d/51-launcher-time-power.rules
+mkdir -p "$POLKIT_DIR"
+install -m 644 "$PAYLOAD/etc/50-networkmanager-netdev.rules" "$POLKIT_DIR/50-networkmanager-netdev.rules"
+install -m 644 "$PAYLOAD/etc/51-launcher-time-power.rules" "$POLKIT_DIR/51-launcher-time-power.rules"
 if [ "$SESSION" = desktop ]; then
     # the menu entry starts the launcher's unit as the user, without a password
-    render "$DESKTOP_RULES" > "/etc/polkit-1/rules.d/$DESKTOP_RULES.tmp"
-    chmod 644 "/etc/polkit-1/rules.d/$DESKTOP_RULES.tmp"
-    mv "/etc/polkit-1/rules.d/$DESKTOP_RULES.tmp" "/etc/polkit-1/rules.d/$DESKTOP_RULES"
+    render "$DESKTOP_RULES" > "$POLKIT_DIR/$DESKTOP_RULES.tmp"
+    chmod 644 "$POLKIT_DIR/$DESKTOP_RULES.tmp"
+    mv "$POLKIT_DIR/$DESKTOP_RULES.tmp" "$POLKIT_DIR/$DESKTOP_RULES"
     echo "desktop: /etc/polkit-1/rules.d/$DESKTOP_RULES ($TARGET_USER may start and stop $DESKTOP_UNIT)"
 fi
 
+# Before any new unit is installed or enabled: the earlier launcher is stopped first.
+say "Migrating an earlier install (the names of v0.6.0 and before)"
+migrate_old
+
 say "Installing services"
-install -m 644 "$PAYLOAD/etc/launcher-ntp-default.service" /etc/systemd/system/launcher-ntp-default.service
-UNIT_DIR="$TARGET_HOME/.config/systemd/user"
-as_user() { runuser -u "$TARGET_USER" -- env XDG_RUNTIME_DIR="/run/user/$TARGET_UID" "$@"; }
+mkdir -p "$SYSTEMD_DIR"
+install -m 644 "$PAYLOAD/etc/launcher-ntp-default.service" "$SYSTEMD_DIR/launcher-ntp-default.service"
 if [ "$SESSION" = desktop ]; then
     # Desktop variant: no user service, no lingering, getty@tty1 as it is (the desktop owns its own VT). The system
     # unit runs the launcher as the user when started; it is never enabled (no [Install] section).
-    render "$DESKTOP_UNIT" > "/etc/systemd/system/$DESKTOP_UNIT.tmp"
-    chmod 644 "/etc/systemd/system/$DESKTOP_UNIT.tmp"
-    mv "/etc/systemd/system/$DESKTOP_UNIT.tmp" "/etc/systemd/system/$DESKTOP_UNIT"
+    render "$DESKTOP_UNIT" > "$SYSTEMD_DIR/$DESKTOP_UNIT.tmp"
+    chmod 644 "$SYSTEMD_DIR/$DESKTOP_UNIT.tmp"
+    mv "$SYSTEMD_DIR/$DESKTOP_UNIT.tmp" "$SYSTEMD_DIR/$DESKTOP_UNIT"
     systemctl daemon-reload
     systemctl enable launcher-ntp-default.service
-    mkdir -p "${DESKTOP_ENTRY%/*}"
-    install -m 644 "$PAYLOAD/etc/applaunch.desktop" "$DESKTOP_ENTRY"
-    echo "desktop: /etc/systemd/system/$DESKTOP_UNIT (stops $DM_UNIT while the launcher runs) and $DESKTOP_ENTRY"
-    # an earlier appliance install must not start a second launcher at boot under the desktop
-    if [ -f "$UNIT_DIR/APPLaunch.service" ]; then
-        as_user systemctl --user disable --now APPLaunch.service 2>/dev/null || true
-        echo "the user service APPLaunch.service of an earlier install is disabled (the menu entry starts the launcher now)"
+    mkdir -p "$MENU_DIR"
+    install -m 644 "$PAYLOAD/etc/$DESKTOP_ENTRY_NAME" "$DESKTOP_ENTRY"
+    echo "desktop: /etc/systemd/system/$DESKTOP_UNIT (stops $DM_UNIT while the launcher runs) and ${DESKTOP_ENTRY#"$SYSROOT"}"
+    # an appliance install of this release must not start a second launcher at boot under the desktop (the earlier
+    # names' user service is gone already: migrate_old)
+    if [ -f "$UNIT_DIR/$USER_UNIT" ]; then
+        as_user systemctl --user disable --now "$USER_UNIT" 2>/dev/null || true
+        echo "the user service $USER_UNIT of an earlier install is disabled (the menu entry starts the launcher now)"
     fi
 else
     systemctl daemon-reload
@@ -538,12 +804,12 @@ else
     systemctl disable --now getty@tty1.service 2>/dev/null || true
     systemctl mask getty@tty1.service 2>/dev/null || true
     # nor repaint over it: the panel leaves the text console once the boot is done (the boot lines still show)
-    install -m 644 "$PAYLOAD/etc/applaunch-console.service" /etc/systemd/system/applaunch-console.service
+    install -m 644 "$PAYLOAD/etc/$CONSOLE_UNIT" "$SYSTEMD_DIR/$CONSOLE_UNIT"
     systemctl daemon-reload
-    systemctl enable --now applaunch-console.service || echo "(applaunch-console.service did not start now; it runs at the next boot)"
+    systemctl enable --now "$CONSOLE_UNIT" || echo "($CONSOLE_UNIT did not start now; it runs at the next boot)"
 
     mkdir -p "$UNIT_DIR"
-    cp "$PAYLOAD/etc/APPLaunch.service" "$UNIT_DIR/APPLaunch.service"
+    cp "$PAYLOAD/etc/$USER_UNIT" "$UNIT_DIR/$USER_UNIT"
     chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config"
     loginctl enable-linger "$TARGET_USER"
 fi
@@ -551,11 +817,9 @@ fi
 say "Board profile"
 apply_profile
 
-# The PWM backlight overlay is for the deck's Waveshare panel (the deck, or an unknown board with --force as
-# before); a board with its own profile keeps its boot configuration and only gets the cmdline arguments.
+# The PWM backlight overlay is for the deck's Waveshare panel (DECK_BOOT, see the board detection); a board with its
+# own profile keeps its config.txt and only gets the cmdline arguments (never an fbcon= argument).
 # A desktop board keeps its boot configuration as it is (its desktop owns the console settings).
-DECK_BOOT=0
-if [ "$BOARD" = zero2w ] || [ -z "$BOARD" ]; then DECK_BOOT=1; fi
 if [ "$SESSION" = desktop ]; then
     say "Boot configuration"
     echo "desktop board: config.txt and cmdline.txt left as they are"
@@ -581,7 +845,7 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
             REBOOT=1
         fi
     else
-        echo "$BOARD: config.txt left as it is (the PWM backlight overlay is for the deck's Waveshare panel)"
+        echo "${BOARD:-this board}: config.txt left as it is (the PWM backlight overlay is for the deck's Waveshare panel)"
     fi
     for arg in vt.global_cursor_default=0 consoleblank=0; do
         if ! grep -q "$arg" "$CMDLINE"; then
@@ -614,13 +878,17 @@ if [ "$SESSION" = desktop ]; then
 else
     say "Starting the launcher"
     as_user systemctl --user daemon-reload
-    as_user systemctl --user enable APPLaunch.service
-    as_user systemctl --user restart APPLaunch.service || echo "(could not start it now; it starts at the next boot)"
+    as_user systemctl --user enable "$USER_UNIT"
+    if [ "$OLD_STILL_ACTIVE" = 1 ]; then
+        echo "not started now: $OLD_USER_UNIT still runs (see the warning above); $USER_UNIT starts at the next boot"
+    else
+        as_user systemctl --user restart "$USER_UNIT" || echo "(could not start it now; it starts at the next boot)"
+    fi
 fi
 
 say "Done"
 if [ "$SESSION" = desktop ]; then
-    echo "Start the launcher from the desktop: applications menu > CardputerZero Launcher (or: systemctl start $DESKTOP_UNIT)."
+    echo "Start the launcher from the desktop: applications menu > CyberdeckZero Launcher (or: systemctl start $DESKTOP_UNIT)."
     echo "The desktop stops while it runs; Settings > System > Quit to desktop brings it back."
 fi
 echo "Next: pair the keyboard if you have not yet (bluetoothctl: scan on / pair / trust / connect)."

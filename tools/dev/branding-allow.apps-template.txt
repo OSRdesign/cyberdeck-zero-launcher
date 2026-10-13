@@ -1,0 +1,16 @@
+# Allow-list template for the apps repo (cyberdeck-zero-apps).
+# Copy tools/dev/check-branding.sh of the launcher repo to tools/branding/check-branding.sh in the apps repo and this
+# file to tools/branding/branding-allow.txt next to it, then run: sh tools/branding/check-branding.sh
+# Format: one git pathspec glob per line ("**" crosses directories); "#" starts a comment (the reason).
+# Credits and derivation statements in READMEs use <!-- branding-allow-begin --> / <!-- branding-allow-end -->.
+
+# --- Licence notices ---
+apps/*/root/usr/share/doc/*/copyright        # Debian copyright files: MIT notices and derived-from statements
+
+# --- TEMP until each app's next version (report 025 decision 7, task T4): binary M5CardputerZero-<app> -> <id> ---
+apps/*/build/build.sh                        # TEMP T4: builds dist/M5CardputerZero-<app>
+apps/*/src/SConstruct                        # TEMP T4: target name M5CardputerZero-<app>
+apps/*/root/usr/share/APPLaunch/applications/*.desktop   # TEMP T4: Exec=/usr/share/APPLaunch/bin/M5CardputerZero-<app>
+tools/build_deb.py                           # TEMP T4: binary name prefix
+tools/make_registry.py                       # TEMP T4: "device_targets": ["CardputerZero"]
+registry.json                                # TEMP T4: generated from make_registry.py

@@ -1,6 +1,6 @@
 # Hosting your own apps for the deck
 
-The deck can install apps from **any public GitHub repository** that follows a simple layout. On the deck, open
+CyberdeckZero Launcher can install apps from **any public GitHub repository** that follows a simple layout. On the deck, open
 **Settings > Apps > Sources > + Add a GitHub source**, type `owner/repo`, and the apps of that repository appear
 under **Settings > Apps > Available**, where each one installs with Enter or a tap; installed apps are listed under
 **Settings > Apps > Installed**, where each one can be updated or removed.
@@ -30,7 +30,7 @@ The complete, step by step guide, the build tools and a working example live in 
 3. Describe it in `apps/<id>/app.json` (name, version, description) and lay its files out in
    `apps/<id>/root/` exactly as they must be on the device:
    ```
-   usr/share/APPLaunch/bin/M5CardputerZero-<id>            the executable
+   usr/share/APPLaunch/bin/<id>                            the executable (named after the app id)
    usr/share/APPLaunch/applications/<id>.desktop           the launcher entry
    usr/share/APPLaunch/share/images/<id>.png               the tile icon
    ```
@@ -44,7 +44,7 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 
 ## Format and behaviour
 
-* The registry format is the CardputerZero Store registry (schema 2), so the same repository also works as a
+* The registry format is the one of M5Stack's CardputerZero Store (schema 2), so the same repository also works as a
   registry in the Store app. The deck downloads `registry.json`, checks the MD5 of each `.deb` and installs it
   with `dpkg`.
 * Installing needs the deck user's **sudo password** (typed with the keyboard) because the package is installed
@@ -169,4 +169,4 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | Default source at install (the Store's `registries.json`, once per user) | `projects/APPLaunch/pizero2w/default-sources.sh`, run by `install.sh` |
 | The Store's shared source list (mirror) and the default source | `settings_apps_registry_mirror.{hpp,cpp}` (pure), `settings_apps_jobs.cpp` (adapter), test `tests/test_settings_apps_registry_mirror.cpp` |
 | Example app | `apps/lanscan/` in the apps repo |
-| Switch (off on the original CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |
+| Switch (off on the stock CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |

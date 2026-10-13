@@ -336,6 +336,9 @@ bool populate_launcher_children(Tree &tree, const NodeIter &parent)
         tree.append_child(
             parent,
             SettingEntry{descriptor.label, make_launcher_toggle_api(descriptor), true});
+        // a plain entry (nothing to open): the native host shows it as a read-only Info row
+        if (launcher::store_credit_follows(descriptor.config_key))
+            tree.append_child(parent, SettingEntry{launcher::kStoreCredit});
     }
     return true;
 #else

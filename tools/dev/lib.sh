@@ -74,7 +74,8 @@ sync_tree() {
     local excludes=(--exclude build/ --exclude dist/ --exclude .git --exclude __pycache__/
         --exclude /projects/APPLaunch/tests/render/out/ --exclude /tests/render/out/
         --exclude /projects/APPLaunch/pizero2w/bundle/ --exclude /pizero2w/bundle/
-        --exclude /projects/APPLaunch/pizero2w/pizero2w-bundle.tar.gz --exclude /pizero2w/pizero2w-bundle.tar.gz)
+        --exclude /projects/APPLaunch/pizero2w/pizero2w-bundle.tar.gz --exclude /pizero2w/pizero2w-bundle.tar.gz
+        --exclude '/projects/APPLaunch/pizero2w/cyberdeckzero-launcher-*.tar.gz' --exclude '/pizero2w/cyberdeckzero-launcher-*.tar.gz')
     mkdir -p "$dst"
     if [[ ! -d $dst/SDK/github_source && -d $DEV_SEED/SDK/github_source && $dst != "$DEV_SEED" ]]; then
         echo "seeding $dst/SDK from $DEV_SEED/SDK (one time, about 2 GB)"

@@ -20,7 +20,7 @@ constexpr uint32_t kBackgroundColor = 0x1F3A5F;
 constexpr uint32_t kTextColor = 0xFFFFFF;
 
 // The size comes from cp0_ui_overlay.h (task 014 P4): a display at most 320 px wide (the compat window, stock
-// CardputerZero, SDL) keeps today's 280x22 / 38 toast; the native display gets the pinned DECK / COMPACT table (the
+// stock, SDL) keeps today's 280x22 / 38 toast; the native display gets the pinned DECK / COMPACT table (the
 // old width / 320 scaling, byte-identical there) or a size from the tokens.
 cp0_ui_toast_t spec_for(const lv_obj_t *object, int lines, bool *native)
 {

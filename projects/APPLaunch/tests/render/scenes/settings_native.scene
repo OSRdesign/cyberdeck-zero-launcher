@@ -13,7 +13,7 @@ wifi 70
 bt on
 config dark_time 60
 home
-header home ZERO
+header home
 launch Settings
 shot settings_native_root
 header settings_native_root Settings

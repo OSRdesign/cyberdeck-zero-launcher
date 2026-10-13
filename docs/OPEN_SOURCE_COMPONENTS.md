@@ -30,6 +30,27 @@ Paths in the evidence column are relative to the repository root.
 | Noto Sans SC generated fonts | Keyboard Guide `src/assets/res_c/font_noto_sans_sc_*.c`; conversion command names input font | [OFL-1.1](../projects/LaunchWizard/main_Keyboard_Guide/src/assets/fonts/NotoSans/OFL.txt) |
 | JetBrains Mono | `projects/APPLaunch/APPLaunch/share/font` | [OFL-1.1](../projects/APPLaunch/APPLaunch/share/font/JetBrainsMono-OFL.txt) |
 
+## Fonts, images and sounds of the launcher (`projects/APPLaunch/APPLaunch/share`)
+
+Installed under `/usr/share/APPLaunch/share/`. Only JetBrains Mono has its licence text in the repository; the
+licences below are the ones these font families are published under, to be checked against the exact files (version,
+vendor) before they are relied on. "To verify" means the source or the licence of the file is not recorded.
+
+| File(s) | Asset | Licence | Status |
+| --- | --- | --- | --- |
+| `font/JetBrainsMono-Regular.ttf`, `JetBrainsMono-Bold.ttf` | JetBrains Mono | SIL OFL 1.1, [text shipped](../projects/APPLaunch/APPLaunch/share/font/JetBrainsMono-OFL.txt) | recorded |
+| `font/DejaVuSans.ttf`, `DejaVuSansMono.ttf`, `DejaVuSerif.ttf` | DejaVu fonts (<https://dejavu-fonts.github.io/>) | Bitstream Vera Fonts licence (DejaVu changes in the public domain), plus the Arev licence for some glyphs | licence text not in the repo; to add |
+| `font/LiberationMono-Regular.ttf` | Liberation Mono | SIL OFL 1.1 for Liberation 2.x; GPL-2.0 with a font exception for 1.x | version to verify; licence text not in the repo |
+| `font/Montserrat-Medium.ttf`, `Montserrat-Bold.ttf` | Montserrat (<https://github.com/JulietaUla/Montserrat>) | SIL OFL 1.1 | licence text not in the repo; to add |
+| `font/NotoSansCJK-Regular.ttc`, `NotoSerifCJK-Regular.ttc` | Noto Sans / Serif CJK (<https://github.com/notofonts/noto-cjk>) | SIL OFL 1.1 | licence text not in the repo; to add |
+| `font/AlibabaPuHuiTi-3-35-Thin.ttf`, `AlibabaPuHuiTi-3-55-Regular.ttf` | Alibaba PuHuiTi 3.0 | Alibaba's own free-use licence (not an open-source licence) | terms and redistribution to verify |
+| `font/FontAwesome5-Solid+Brands+Regular.woff` | Font Awesome 5 Free (<https://fontawesome.com/>) | font files SIL OFL 1.1, icons CC BY 4.0 (brand icons are trademarks of their owners) | licence text not in the repo; to add |
+| `font/svgfont.ttf` | unknown icon font | unknown | source and licence to verify |
+| `images/lockscreen.png` | lock-screen wallpaper | unknown | source and licence to verify |
+| `images/logo_lcd.png` | upstream start-up logo (M5Stack logo, a trademark of its owner) | not ours to use as a brand | to be dropped from the Pi bundle (report 025) |
+| other `images/*.png` (app icons, carousel parts) | upstream launcher assets | presumably the root MIT licence of the upstream launcher | source to verify |
+| `audio/Ding2.wav`, `enter.wav`, `key_back.wav`, `key_enter.wav`, `shutdown.wav`, `switch.wav`, `blocked.mp3`, `lock.mp3`, `select.mp3`, `startup.mp3`, `unlock.mp3` | system sounds | unknown | source and licence to verify |
+
 LVGL embeds separately licensed codecs, renderers and fonts. Preserve its `src/libs/*/LICENSE*`, `src/stdlib/builtin/LICENSE*` and `scripts/built_in_font/font_license/` records when distributing those features. Generated font arrays retain the input font's license. Audio notices remain beside assets, including FactoryTest and ZClaw `LICENSE-UI-SFX.txt` and Keyboard Guide `LICENSE-AUDIO`.
 
 ## Additional SDK downloads

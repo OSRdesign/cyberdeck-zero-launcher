@@ -14,7 +14,7 @@ clock 20:30
 wifi 70
 bt on
 home
-header home ZERO
+header home
 launch Settings
 # System: Up from Screen wraps to the last section
 key UP

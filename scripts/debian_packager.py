@@ -6,6 +6,12 @@
 
 APPLaunch remains the default target, while CLI options allow other projects in
 this repository to reuse the same cross-platform package builder.
+
+Inherited from the upstream launcher: CyberdeckZero Launcher releases do not use
+it (they ship the tarball built by projects/APPLaunch/pizero2w/build.sh). It is
+called by the inherited scripts/build_cardputerzero_release_local.sh and
+.github/workflows/launcher-build.yml (which does not run on this repository), and
+by the packaging tests. The Maintainer and Homepage fields are neutral values.
 """
 
 from __future__ import annotations
@@ -60,11 +66,11 @@ class PackageConfig:
     package_name: str = PACKAGE_NAME
     app_name: str = APP_NAME
     bin_name: str = BIN_NAME
-    maintainer: str = "dianjixz <dianjixz@m5stack.com>"
-    original_maintainer: str = "m5stack <m5stack@m5stack.com>"
+    maintainer: str = "CyberdeckZero Launcher <noreply@invalid.invalid>"
+    original_maintainer: str = ""
     section: str = APP_NAME
     priority: str = "optional"
-    homepage: str = "https://www.m5stack.com"
+    homepage: str = "https://github.com/OSRdesign/cyberdeck-zero-launcher"
     description: str = "M5CardputerZero APPLaunch"
     service_scope: str = "user"
     service_restart: str = "always"

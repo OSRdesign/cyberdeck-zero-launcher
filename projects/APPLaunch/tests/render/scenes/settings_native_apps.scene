@@ -22,7 +22,7 @@ clock 20:30
 wifi 70
 bt on
 home
-header home ZERO
+header home
 launch Settings
 # root: Screen, Wi-Fi, Bluetooth, Launcher, Touch, Apps, User, Date & Time, System
 key UP
