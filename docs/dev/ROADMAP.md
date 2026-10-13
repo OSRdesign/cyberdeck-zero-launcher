@@ -19,6 +19,7 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 
 | Task | Owner | Notes |
 | --- | --- | --- |
+| Replace `tree.hh` (GPL-3.0-only, in the launcher binary through the Settings tree) with our own small tree class so the binary is MIT again | launcher-dev | idea (owner agreed 2026-10-13: README states the GPL for now) | `docs/dev/reports/025-rebranding-plan.md`, `NAMING.md` |
 | Follow-up of 002: remove `projects/LanScan` and its references (`.gitignore`, `docs/HOSTING-APPS.md`, `docs/dev/DEV-GUIDE.md`, `projects/APPLaunch/pizero2w/README.md`, `projects/APPLaunch/pizero2w/bundle/README.md`), then confirm the launcher still builds | launcher-dev | **done 2026-10-04** (task 004, `reports/004-handoff.md`): `projects/LanScan` removed, references cleaned, launcher builds; merged in pull request #4 |
 | LoRa messaging (Meshtastic / MeshCore over a USB board) | apps-dev | MeshCore chosen: **Mesh Hop** (apps repo, `mesh-hop` 0.2.2 published; **0.3.0 (in test)**: LOG_DATA parser, "heard back by N repeaters", D8 packet log, Position box; deck test `tests/mesh-hop-0.3.0-deck-tests.md`, report `reports/019-mesh-hop-0.3.0.md`), see "Done (recent)" and `tasks/010`, `tasks/011`; rest of phase 3 (C5, C6/C7, R1, P1/P2, M2, BLE spike) and phase 4 not started |
 | Packet capture viewer | apps-dev | PacketScope from the Store covers part of it |
