@@ -15,7 +15,7 @@
 #   --user NAME            user that runs the launcher (default: the user who ran sudo)
 #   --no-boot-config       do not touch /boot/firmware/config.txt and cmdline.txt (no PWM backlight)
 #   --board NAME           use this board profile instead of detecting it (zero2w, pi3a-luckfox35,
-#                          pi5-hyperpixel4, hackberry-cm5)
+#                          pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
 #   --dry-run              print the detected board, the session and what would be done, change nothing
 #   --force                continue on an unknown board (no profile is written); replace a hand-edited
@@ -54,7 +54,7 @@ while [ $# -gt 0 ]; do
         --keyboard-name) [ $# -ge 2 ] || { echo "--keyboard-name needs a name" >&2; exit 2; }; KEYBOARD_NAME="$2"; shift 2 ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
-        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
+        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --force) FORCE=1; shift ;;
@@ -183,16 +183,24 @@ print_facts() {
     echo "  backlight:${bl:- none}"
 }
 
-# BOARD: zero2w | pi3a-luckfox35 | pi5-hyperpixel4 | hackberry-cm5 | "" (unknown).
+# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi5-hyperpixel4 | hackberry-cm5 | "" (unknown).
 # PANEL_FB: the panel's framebuffer of a board with a profile (not the deck).
+# BOARD_NOTE: why a known model was left unknown (two panels at once), printed with the facts.
 BOARD=""
 PANEL_FB=""
+BOARD_NOTE=""
+KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5"
 # The panel of each profiled board: fbdev name prefix, buffer size (virtual_size), DRM connector and its mode.
 # The RP1 DPI fbdev ("drm-rp1-dpidrmf") is the panel's native buffer: portrait 480x800 for the HyperPixel 4 (the
 # launcher pre-rotates its 800x480 canvas 90 degrees), square 720x720 for the HackBerry (report 021, addenda 3, 4, 7).
+# The Pi 3A+ takes one of two panels: the Luckfox 3.5" SPI panel (its own panel-mipi-dbi fbdev, portrait 320x480) or
+# the Waveshare 4.3" DSI panel (the KMS fbdev "vc4drmfb", 800x480 landscape). The detection reads only the model, the
+# DRM connector and the framebuffer, never config.txt: it does not depend on the overlay's name (the panel wants
+# dtoverlay=vc4-kms-dsi-waveshare-800x480; the generic vc4-kms-dsi-7inch also drives it, but it flickers).
 panel_spec() {
     case "$1" in
         pi3a-luckfox35) echo "panel-mipi-dbi 320,480 SPI-* 320x480" ;;
+        pi3a-wsdsi43) echo "vc4drmfb 800,480 DSI-* 800x480" ;;
         pi5-hyperpixel4) echo "drm-rp1-dpi 480,800 DPI-* 480x800" ;;
         hackberry-cm5) echo "drm-rp1-dpi 720,720 DPI-* 720x720" ;;
     esac
@@ -210,7 +218,7 @@ detect_panel() {
 if [ -n "$BOARD_ARG" ]; then
     case "$BOARD_ARG" in
         zero2w) BOARD=zero2w ;;
-        pi3a-luckfox35|pi5-hyperpixel4|hackberry-cm5)
+        pi3a-luckfox35|pi3a-wsdsi43|pi5-hyperpixel4|hackberry-cm5)
             BOARD=$BOARD_ARG
             detect_panel "$BOARD" || true
             if [ -z "$PANEL_FB" ]; then
@@ -221,14 +229,36 @@ if [ -n "$BOARD_ARG" ]; then
                 echo "Nothing was changed." >&2
                 exit 1
             fi ;;
-        *) echo "unknown board \"$BOARD_ARG\" (known: zero2w, pi3a-luckfox35, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2 ;;
+        *) echo "unknown board \"$BOARD_ARG\" (known: $KNOWN_BOARDS)" >&2; exit 2 ;;
     esac
 else
     case "$MODEL" in
         *"Zero 2"*) BOARD=zero2w ;;
-        *"Raspberry Pi 3 Model A Plus"*) detect_panel pi3a-luckfox35 && BOARD=pi3a-luckfox35 ;;
+        *"Raspberry Pi 3 Model A Plus"*)
+            # one panel or the other; both connected at once is not guessed
+            SPI_FB=""; DSI_FB=""
+            if detect_panel pi3a-luckfox35; then SPI_FB=$PANEL_FB; fi
+            if detect_panel pi3a-wsdsi43; then DSI_FB=$PANEL_FB; fi
+            if [ -n "$SPI_FB" ] && [ -n "$DSI_FB" ]; then
+                PANEL_FB=""
+                BOARD_NOTE="Pi 3A+ with two panels connected (SPI $SPI_FB: pi3a-luckfox35, DSI $DSI_FB: pi3a-wsdsi43): choose one with --board."
+            elif [ -n "$SPI_FB" ]; then BOARD=pi3a-luckfox35; PANEL_FB=$SPI_FB
+            elif [ -n "$DSI_FB" ]; then BOARD=pi3a-wsdsi43; PANEL_FB=$DSI_FB
+            fi ;;
         *"Raspberry Pi 5"*) detect_panel pi5-hyperpixel4 && BOARD=pi5-hyperpixel4 ;;
         *"Compute Module 5"*) detect_panel hackberry-cm5 && BOARD=hackberry-cm5 ;;
+    esac
+fi
+# The deck's PWM backlight overlay goes into config.txt on the deck and, as before, on an unknown board installed with
+# --force, except when the model is one of the other boards' (Pi 3A+, Pi 5, CM5) and only its panel was not
+# recognised: those panels bring their own backlight (and overlay), so config.txt stays as it is there.
+DECK_BOOT=0
+if [ "$BOARD" = zero2w ]; then
+    DECK_BOOT=1
+elif [ -z "$BOARD" ]; then
+    case "$MODEL" in
+        *"Raspberry Pi 3 Model A Plus"*|*"Raspberry Pi 5"*|*"Compute Module 5"*) ;;
+        *) DECK_BOOT=1 ;;
     esac
 fi
 
@@ -299,6 +329,31 @@ APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0
 EOF
         ;;
+        # Pi 3A+ with the Waveshare 4.3" DSI panel: the values of the hand-written profile that works on the board
+        # (2026-10-13). The KMS framebuffer is already landscape 800x480: no rotation; touch (ft5x06) by capability,
+        # in buffer orientation. The backlight is the overlay's i2c regulator (sysfs brightness 0..255).
+        pi3a-wsdsi43)
+            bl=$(dsi_backlight)
+            cat <<EOF
+APPLAUNCH_BOARD=pi3a-wsdsi43
+APPLAUNCH_FB=$PANEL_FB
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+# landscape visible area in mm (800x480 at 0.117 mm pitch; to be confirmed with a ruler): the layout's density
+APPLAUNCH_PANEL_MM=94x56
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+EOF
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            cat <<EOF
+LV_LINUX_FBDEV_DEVICE=$PANEL_FB
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+        ;;
         # The two desktop boards: the values board.py's test-start used on them (tools/boards/boards.json, test_env).
         # Touch is already in buffer orientation (report 021, addendum 8). No APPLAUNCH_PANEL_MM yet: the panels'
         # size in mm is still to be measured (task 014), the layout service uses its default density meanwhile.
@@ -323,6 +378,18 @@ LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 EOF
         ;;
     esac
+}
+# The DSI panel's backlight device: the DSI overlay's regulator at i2c 10-0045 (seen on the Pi 3A+ with both
+# vc4-kms-dsi-waveshare-800x480 and vc4-kms-dsi-7inch), else
+# the only backlight device there is; none or several: nothing (no APPLAUNCH_BACKLIGHT line, the launcher's default)
+dsi_backlight() {
+    if [ -d "$SYSROOT/sys/class/backlight/10-0045" ]; then echo 10-0045; return 0; fi
+    n=0; one=""
+    for d in "$SYSROOT"/sys/class/backlight/*; do
+        [ -e "$d" ] || continue
+        n=$((n + 1)); one=${d##*/}
+    done
+    if [ "$n" = 1 ]; then echo "$one"; fi
 }
 body_sum() { cksum | cut -d' ' -f1-2; }
 # The first lines say who wrote the file and a checksum of the rest, so a hand edit can be told apart.
@@ -464,7 +531,7 @@ if [ "$DRY" = 1 ]; then
     print_facts
     echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
     if [ -z "$BOARD" ]; then
-        echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."
+        if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
         [ "$FORCE" = 1 ] || echo "install.sh would stop here (--force installs without a profile)."
     fi
     if [ "$SESSION" = desktop ]; then
@@ -478,7 +545,7 @@ if [ "$DRY" = 1 ]; then
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
     if [ "$SESSION" = desktop ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
-    elif [ "$BOARD" = zero2w ] || [ -z "$BOARD" ]; then
+    elif [ "$DECK_BOOT" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
     else
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)" || echo "boot config: skipped (--no-boot-config)"
@@ -521,7 +588,7 @@ if [ "$BOARD_ONLY" = 1 ]; then
     echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
     if [ -z "$BOARD" ]; then
         echo "detected:"; print_facts
-        echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."
+        if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
     fi
     apply_profile
     if [ "$GPIO_BL" = 1 ]; then
@@ -612,7 +679,7 @@ say "Checking the board"
 echo "board: ${MODEL:-unknown} -> profile ${BOARD:-none (unknown board)}   user: $TARGET_USER   glibc: $GLIBC"
 if [ -z "$BOARD" ]; then
     echo "detected:"; print_facts
-    echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."
+    if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
     [ "$FORCE" = 1 ] || { echo "stopping here (use --force to install anyway, without a board profile)" >&2; exit 1; }
 fi
 if [ "$SESSION" = desktop ]; then
@@ -750,11 +817,9 @@ fi
 say "Board profile"
 apply_profile
 
-# The PWM backlight overlay is for the deck's Waveshare panel (the deck, or an unknown board with --force as
-# before); a board with its own profile keeps its boot configuration and only gets the cmdline arguments.
+# The PWM backlight overlay is for the deck's Waveshare panel (DECK_BOOT, see the board detection); a board with its
+# own profile keeps its config.txt and only gets the cmdline arguments (never an fbcon= argument).
 # A desktop board keeps its boot configuration as it is (its desktop owns the console settings).
-DECK_BOOT=0
-if [ "$BOARD" = zero2w ] || [ -z "$BOARD" ]; then DECK_BOOT=1; fi
 if [ "$SESSION" = desktop ]; then
     say "Boot configuration"
     echo "desktop board: config.txt and cmdline.txt left as they are"
@@ -780,7 +845,7 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
             REBOOT=1
         fi
     else
-        echo "$BOARD: config.txt left as it is (the PWM backlight overlay is for the deck's Waveshare panel)"
+        echo "${BOARD:-this board}: config.txt left as it is (the PWM backlight overlay is for the deck's Waveshare panel)"
     fi
     for arg in vt.global_cursor_default=0 consoleblank=0; do
         if ! grep -q "$arg" "$CMDLINE"; then

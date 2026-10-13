@@ -371,6 +371,16 @@ Before the install (Controller, on each board; the backup is the rollback's mate
      `applaunch-desktop.service: found`, the rule and `applaunch.desktop: found`, `APPLaunch.service ...: not found`.
      All boards: the earlier binary `found: replaced by a link to cyberdeckzero` and `logo_lcd.png` listed among the
      files of earlier bundles (and `adb/cardputer-adb*`). Nothing changed yet (`board.py status <board>` as before).
+152b. Pi 3A+ with the Waveshare 4.3" DSI panel (`board.py` entry `pi3a-dsi`). Before testing, the board must boot with
+     the panel's own overlay: `grep -E '^dtoverlay=vc4-kms-(v3d|dsi)' /boot/firmware/config.txt` prints
+     `dtoverlay=vc4-kms-v3d` and `dtoverlay=vc4-kms-dsi-waveshare-800x480`, and not the generic
+     `dtoverlay=vc4-kms-dsi-7inch` (with it the picture flickers and shakes); install.sh does not edit config.txt on this
+     board, so this is set by hand (Pi README, "Boards"). Then the plan says `board: pi3a-wsdsi43`,
+     `profile: pi3a-wsdsi43: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)` (the
+     owner's hand-written profile) and `boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay
+     is not for this board)`. After the install: `sha256sum /boot/firmware/config.txt` is unchanged, there is no
+     `config.txt.bak-applaunch` from this install, and `grep -o 'fbcon=[^ ]*' /boot/firmware/cmdline.txt` prints
+     nothing.
 
 Install and checks (deck and Pi 3A+: install, then one reboot; HackBerry: install with the launcher running, then
 one reboot):

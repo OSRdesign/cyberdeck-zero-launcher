@@ -85,9 +85,23 @@ the framebuffers (`/sys/class/graphics`):
 | --- | --- | --- |
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
+| `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator; the only backlight device if that one is absent, none if there is none); config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
 | `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer` |
 | `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
-| anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report |
+| anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report. A Pi 3A+ with both its panels connected is not guessed: choose with `--board`. With `--force`, the deck's PWM backlight overlay is added only on a model that is not one of the boards above (a Pi 3A+, Pi 5 or CM5 whose panel was not recognised keeps its config.txt) |
+
+**Waveshare 4.3" DSI panel (`pi3a-wsdsi43`):** set up `/boot/firmware/config.txt` yourself before the install;
+install.sh does not edit config.txt on this board. The panel needs the KMS driver and its own overlay:
+
+```
+dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-dsi-waveshare-800x480
+```
+
+Do not use the generic `dtoverlay=vc4-kms-dsi-7inch`: it also lights this 4.3" panel, but the picture flickers and
+shakes (from the boot on; a known kernel/firmware issue with this panel). Remove leftover lines of an earlier panel as
+well, such as the SPI panel's overlay or an `fbcon=map:...,rotate:...` argument in cmdline.txt (install.sh never adds
+an `fbcon=` argument). The detection does not depend on the overlay: it reads the DSI connector and the framebuffer.
 
 The Pi 5 and HackBerry values are the ones `tools/boards/board.py test-start` used on those boards. Their panels' size
 in mm is not measured yet (task 014), so their profiles have no `APPLAUNCH_PANEL_MM` and the layout uses its default
@@ -109,11 +123,11 @@ APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuff
 APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> brightness | pwm
 ```
 
-The `pi3a-luckfox35` profile also sets `LV_LINUX_FBDEV_DEVICE` to the same framebuffer and
+The `pi3a-luckfox35` and `pi3a-wsdsi43` profiles also set `LV_LINUX_FBDEV_DEVICE` to the same framebuffer and
 `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y=0`, so the deck's touch axes from the service do not apply.
 
-- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `pi5-hyperpixel4`, `hackberry-cm5`; the panel's
-  framebuffer must be there), or `--board zero2w` for no profile.
+- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `pi3a-wsdsi43`, `pi5-hyperpixel4`,
+  `hackberry-cm5`; the panel's framebuffer must be there), or `--board zero2w` for no profile.
   `sudo ./install.sh --board-only` only (re)writes the profile and the backlight rule.
 - **Hand edits** are kept: a re-run leaves an edited `board.conf` alone; `--force` replaces it and keeps the old one
   as `board.conf.bak`. Restart the launcher after an edit: `systemctl --user restart cyberdeckzero.service` (desktop

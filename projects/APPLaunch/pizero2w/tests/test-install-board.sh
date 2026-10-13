@@ -94,6 +94,113 @@ echo disconnected > "$R/sys/class/drm/card0-SPI-1/status"
 run --dry-run
 check "pi3a without connected panel: unknown" 'has "board: unknown" && has "probe-board.sh"'
 
+# --- Pi 3A+ with the Waveshare 4.3" DSI panel (dtoverlay=vc4-kms-dsi-waveshare-800x480): KMS framebuffer vc4drmfb
+# 800x480 on fb0
+R=$(root pi3a-wsdsi43)
+run --dry-run
+# the detection does not depend on the overlay's name: the same plan with either overlay in config.txt
+mkdir -p "$R/boot/firmware"
+DRY0=$OUT
+printf 'dtoverlay=vc4-kms-v3d\ndtoverlay=vc4-kms-dsi-waveshare-800x480\n' > "$R/boot/firmware/config.txt"
+run --dry-run; DRY1=$OUT
+printf 'dtoverlay=vc4-kms-v3d\ndtoverlay=vc4-kms-dsi-7inch\n' > "$R/boot/firmware/config.txt"
+run --dry-run; DRY2=$OUT
+rm -rf "$R/boot"
+check "wsdsi43 dry-run: the same plan whatever the DSI overlay in config.txt" '[ "$DRY0" = "$DRY1" ] && [ "$DRY1" = "$DRY2" ]'
+OUT=$DRY0
+check "wsdsi43 dry-run: exit 0, board pi3a-wsdsi43" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "board: pi3a-luckfox35"'
+check "wsdsi43 dry-run: fb0 and the DSI connector seen" 'has "drm card0-DSI-1: connected, first mode 800x480" && has "/dev/fb0: name \"vc4drmfb\", size 800,480, 16 bpp" && has "backlight: 10-0045"'
+check "wsdsi43 dry-run: profile planned, backlight of the DSI regulator" 'has "pi3a-wsdsi43: write" && has "APPLAUNCH_FB=/dev/fb0" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045"'
+check "wsdsi43 dry-run: config.txt left alone, cmdline arguments only, no gpio rule" 'has "boot config: cmdline cursor/consoleblank only" && ! has "PWM backlight overlay +" && ! has "92-applaunch-backlight-gpio"'
+check "wsdsi43 dry-run: nothing written" '[ ! -e "$R/etc" ]'
+run --board-only
+P="$R/etc/applaunch/board.conf"
+check "wsdsi43 board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev" ]'
+EXPECT='APPLAUNCH_BOARD=pi3a-wsdsi43
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+APPLAUNCH_PANEL_MM=94x56
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(grep -v '^#' "$P")
+if [ "$GOT" = "$EXPECT" ]; then ok "wsdsi43 profile: exact keys and values (the board's working profile)"; else ko "wsdsi43 profile: exact keys and values (the board's working profile)" "$GOT"; fi
+# shellcheck disable=SC1090
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_FB $APPLAUNCH_LOGICAL $APPLAUNCH_ROTATE $APPLAUNCH_COMPAT_SCALE $APPLAUNCH_BACKLIGHT" ) )
+check "wsdsi43 profile: valid sh syntax" '[ "$GOT" = "/dev/fb0 800x480 0 2 sysfs:/sys/class/backlight/10-0045" ]'
+check "wsdsi43 profile: only KEY=VALUE or comment lines, no fbcon" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && ! grep -qi fbcon "$P"'
+SUM1=$(cksum < "$P")
+run --board-only
+check "wsdsi43 second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && [ ! -e "$P.bak" ]'
+# the owner's hand-written profile (first line a comment, no install.sh checksum): kept, and the dry run says so
+R=$(root pi3a-wsdsi43); P="$R/etc/applaunch/board.conf"; mkdir -p "$R/etc/applaunch"
+cat > "$P" <<'EOF'
+# written by hand for the Waveshare 4.3" DSI panel
+APPLAUNCH_BOARD=pi3a-wsdsi43
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+APPLAUNCH_PANEL_MM=94x56
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+HAND=$(cksum < "$P")
+run --dry-run
+check "wsdsi43 hand-written profile: dry run says kept" '[ $RC = 0 ] && has "profile: pi3a-wsdsi43: $P was edited by hand: kept (use --force to replace it)" && ! has "--- $P"'
+run --board-only
+check "wsdsi43 hand-written profile: kept byte for byte, no .bak" 'has "edited by hand: kept" && [ "$(cksum < "$P")" = "$HAND" ] && [ ! -e "$P.bak" ]'
+# the backlight device: the regulator 10-0045, else the only one there, else none (no line)
+R=$(root pi3a-wsdsi43); mv "$R/sys/class/backlight/10-0045" "$R/sys/class/backlight/rpi_backlight"
+run --dry-run
+check "wsdsi43 with another single backlight device: that one" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/rpi_backlight"'
+rm -rf "$R/sys/class/backlight"
+run --dry-run
+check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT="'
+# unambiguous against the SPI profile and against other DSI or HDMI set-ups
+R=$(root pi3a-wsdsi43); echo disconnected > "$R/sys/class/drm/card0-DSI-1/status"
+run --dry-run
+check "wsdsi43 with the DSI connector disconnected: unknown, config.txt still left alone" 'has "board: unknown" && has "probe-board.sh" && has "boot config: cmdline cursor/consoleblank only"'
+R=$(root pi3a-wsdsi43); echo 1024x600 > "$R/sys/class/drm/card0-DSI-1/modes"; echo 1024,600 > "$R/sys/class/graphics/fb0/virtual_size"
+run --dry-run
+check "wsdsi43 with a 1024x600 DSI panel: unknown" 'has "board: unknown"'
+R=$(root pi3a-wsdsi43); echo 640,480 > "$R/sys/class/graphics/fb0/virtual_size"
+run --dry-run
+check "wsdsi43 with an 800x480 mode but another framebuffer size: unknown" 'has "board: unknown"'
+R=$(root pi3a-wsdsi43); printf 'Raspberry Pi 4 Model B Rev 1.5\n' > "$R/proc/device-tree/model"
+run --dry-run
+check "the DSI panel on another model (Pi 4): unknown, the deck's boot config as before for an unknown model" 'has "board: unknown" && has "boot config: PWM backlight overlay"'
+# both panels at once on a 3A+: not guessed, the reason given; --board chooses
+R=$(root pi3a-wsdsi43)
+cp -R "$FIX/pi3a-luckfox35/sys/class/drm/card0-SPI-1" "$R/sys/class/drm/card1-SPI-1"
+cp -R "$FIX/pi3a-luckfox35/sys/class/graphics/fb1" "$R/sys/class/graphics/fb1"
+run --dry-run
+check "3A+ with both panels: unknown, both named, install would stop, no PWM overlay" '[ $RC = 0 ] && has "board: unknown" && has "two panels connected (SPI /dev/fb1: pi3a-luckfox35, DSI /dev/fb0: pi3a-wsdsi43): choose one with --board" && has "would stop here" && has "boot config: cmdline cursor/consoleblank only"'
+run --dry-run --board pi3a-wsdsi43
+check "3A+ with both panels, --board pi3a-wsdsi43: fb0" '[ $RC = 0 ] && has "board: pi3a-wsdsi43 (forced" && has "APPLAUNCH_FB=/dev/fb0"'
+run --dry-run --board pi3a-luckfox35
+check "3A+ with both panels, --board pi3a-luckfox35: fb1" '[ $RC = 0 ] && has "board: pi3a-luckfox35 (forced" && has "APPLAUNCH_FB=/dev/fb1"'
+# each forced profile needs its own panel
+R=$(root pi3a-wsdsi43)
+run --dry-run --board pi3a-luckfox35
+check "--board pi3a-luckfox35 on the DSI board: refused, exit 1" '[ $RC = 1 ] && has "no 320x480 \"panel-mipi-dbi\""'
+R=$(root pi3a-luckfox35)
+run --dry-run --board pi3a-wsdsi43
+check "--board pi3a-wsdsi43 on the SPI board: refused, exit 1" '[ $RC = 1 ] && has "no 800x480 \"vc4drmfb\""'
+check "the SPI board is still pi3a-luckfox35" 'run --dry-run; has "board: pi3a-luckfox35" && ! has "pi3a-wsdsi43"'
+check "install.sh writes no fbcon= argument anywhere" '! grep -n "fbcon=" "$INSTALL" | grep -v "^[0-9]*:[[:space:]]*#" | grep -q .'
+
 # --- unknown board (a CM5 uConsole: DSI panel, no profile): facts printed, nothing written, install stops
 R=$(root unknown-cm5-uconsole)
 run --dry-run
@@ -556,6 +663,26 @@ check "fake uninstall: both user services stopped and removed" 'called "systemct
 check "fake uninstall: both console units, rules and menu entries removed" '[ -z "$(ls "$R/etc/systemd/system" | grep -e cyberdeckzero -e applaunch)" ] && [ ! -e "$R/etc/systemd/system/multi-user.target.wants/applaunch-console.service" ] && [ -z "$(ls "$R/etc/polkit-1/rules.d")" ] && [ -z "$(ls "$R/usr/share/applications" 2>/dev/null)" ]'
 check "fake uninstall: binaries, helpers (both names), retired files and licences gone" '[ ! -e "$A/bin/cyberdeckzero" ] && [ ! -e "$A/bin/$OLDBIN" ] && [ ! -e "$A/bin/cyberdeckzero-console" ] && [ ! -e "$A/bin/applaunch-console" ] && [ ! -e "$A/share/images/logo_lcd.png" ] && [ ! -e "$A/adb" ] && [ ! -e "$R/usr/share/doc/cyberdeckzero-launcher" ]'
 check "fake uninstall: the installed app and the user data stay, the profile goes" '[ -f "$A/applications/some-app.desktop" ] && [ ! -e "$R/etc/applaunch/board.conf" ]'
+
+# the DSI Pi 3A+ installed with v0.6.0, its owner's hand-written profile, a real boot configuration: config.txt is not
+# touched, cmdline.txt gets the two console arguments only (no fbcon=), the profile is kept
+R=$(root pi3a-wsdsi43)
+mkdir -p "$R/boot/firmware/overlays" "$R/etc/applaunch"
+printf '[all]\ndtoverlay=vc4-kms-v3d\ndtoverlay=vc4-kms-dsi-waveshare-800x480\n' > "$R/boot/firmware/config.txt"
+CMD0='console=serial0,115200 console=tty1 root=PARTUUID=1234-02 rootfstype=ext4 fsck.repair=yes rootwait'
+printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+printf '# written by hand\nAPPLAUNCH_BOARD=pi3a-wsdsi43\nAPPLAUNCH_FB=/dev/fb0\nAPPLAUNCH_LOGICAL=800x480\n' > "$R/etc/applaunch/board.conf"
+CFG_SUM=$(cksum < "$R/boot/firmware/config.txt"); HAND=$(cksum < "$R/etc/applaunch/board.conf")
+old_install "$R" appliance "$UHOME"
+fullboot() { : > "$CALLS"; OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \
+    sh "$BUN/install.sh" --user "$U" --no-default-source 2>&1); RC=$?; }
+fullboot
+check "fake DSI install: exit 0, board pi3a-wsdsi43, migrated" '[ $RC = 0 ] && has "profile pi3a-wsdsi43" && has "user service APPLaunch.service of $U: stopped, disabled and removed"'
+check "fake DSI install: config.txt untouched (no backup, no overlay, no dtc)" '[ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && [ ! -e "$R/boot/firmware/config.txt.bak-applaunch" ] && [ ! -e "$R/boot/firmware/overlays/waveshare-pwm-backlight.dtbo" ] && ! called "dtc " && has "pi3a-wsdsi43: config.txt left as it is"'
+check "fake DSI install: cmdline.txt gets the two console arguments only, backup first" '[ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && [ "$(cat "$R/boot/firmware/cmdline.txt.bak-applaunch")" = "$CMD0" ] && ! grep -q fbcon "$R/boot/firmware/cmdline.txt"'
+check "fake DSI install: the hand-written profile kept, no gpio rule, reboot for the console settings only" '[ "$(cksum < "$R/etc/applaunch/board.conf")" = "$HAND" ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && has "edited by hand: kept" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ] && has "reboot now so the console settings apply" && ! has "PWM backlight and"'
+fullboot
+check "fake DSI install, second run: boot files unchanged, nothing to migrate" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && [ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && has "nothing to migrate" && ! has "reboot now"'
 
 # --- default app source: install.sh's plan and option
 R=$(root zero2w)

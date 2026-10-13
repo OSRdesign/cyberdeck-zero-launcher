@@ -17,7 +17,8 @@ python board.py status     deck
 | Board | Host | Kind | Framebuffer | Turn for the screenshot |
 | --- | --- | --- | --- | --- |
 | deck | zero7.local | service | /dev/fb0 640x480 32 bpp | none |
-| pi3a | 192.168.68.170 | service | /dev/fb1 320x480 RGB565 | 90 deg CCW |
+| pi3a | 192.168.68.170 | service | /dev/fb1 320x480 RGB565 (Luckfox 3.5" SPI) | 90 deg CCW |
+| pi3a-dsi | 192.168.68.170 | service | /dev/fb0 800x480 RGB565 (Waveshare 4.3" DSI) | none |
 | pi5 | 192.168.68.175 | desktop | /dev/fb0 480x800 32 bpp | 90 deg CCW |
 | hackberry | 192.168.68.214 | desktop | /dev/fb0 720x720 32 bpp | none |
 
@@ -38,7 +39,9 @@ python board.py status     deck
 - `install --force` passes `--force` to install.sh (an unknown board without a profile, or replacing a hand-edited
   `/etc/applaunch/board.conf`). Other install.sh options: `--install-arg=--no-default-source` (with `=`).
 - **Pi 3A+:** a command string containing `environ` drops the ssh connection; `board.py` refuses to send one (quirk
-  `no_environ` in `boards.json`), before anything on the board is stopped.
+  `no_environ` in `boards.json`), before anything on the board is stopped. `pi3a` and `pi3a-dsi` are the same board
+  with its SPI panel or its DSI panel (install.sh profiles `pi3a-luckfox35` and `pi3a-wsdsi43`): use the entry of the
+  panel that is mounted (the DSI panel since 2026-10-13).
 - **Pi 3A+ `/tmp` is a 208 MB tmpfs.** The bundle is about 54 MB and `upload` unpacks it there, so an earlier bundle or `/tmp/applaunch-bundle` left behind makes `upload` fail with "No space left on device" (or paramiko `OSError: Failure`). Remove the old files (`rm -rf /tmp/applaunch-bundle /tmp/applaunch-upload.tar.gz /tmp/b05 /tmp/bundle*.tar.gz`) and upload again.
 - Never `pkill -f` over ssh (kills the ssh shell); `board.py` uses `pkill -x cyberdeckzero` (the whole binary name is
   the process name: 13 characters), and the earlier binary's process name for a board not migrated yet.
