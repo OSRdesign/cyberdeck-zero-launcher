@@ -109,13 +109,13 @@ public:
 SettingsNativeHost::SettingsNativeHost(AppPageRoot &page, lv_obj_t *parent, Tree &tree, std::function<void()> go_home)
     : page_root_(page), tree_(tree), go_home_(std::move(go_home))
 {
-    cp0_ui_roller_page(cp0_ui_metrics_get(), native_ui::status_strip_left(), &layout_);
+    cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout_);
     // The page's screen is in its input group (ui_app_page.cpp): a tap where no widget is (the margins beside the
     // roller, the header) would focus it and leave the keys with nothing to drive. Touch never focuses it here.
     if (lv_obj_t *screen = page.screen()) lv_obj_remove_flag(screen, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     if (parent) lv_obj_remove_flag(parent, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     page_ = std::make_unique<cp0::ui::Page>(
-        parent, layout_, [](lv_obj_t *header, const char *text) { return native_ui::add_title(header, text); },
+        parent, layout_, [](lv_obj_t *header, const char *text) { return cp0::ui::add_title(header, text); },
         [this] { back(); });
     binding_host_ = settings_binding_host_create(page_->root());
 
@@ -153,7 +153,7 @@ void SettingsNativeHost::screen_loaded_cb(lv_event_t *event)
     auto *self = static_cast<SettingsNativeHost *>(lv_event_get_user_data(event));
     if (!self || self->strip_added_ || !self->page_) return;
     self->strip_added_ = true;
-    native_ui::add_status_icons(self->page_->header());
+    cp0::ui::StatusStrip::add(self->page_->header(), native_ui::fill_status);
 }
 
 void SettingsNativeHost::post(std::function<void()> callback)

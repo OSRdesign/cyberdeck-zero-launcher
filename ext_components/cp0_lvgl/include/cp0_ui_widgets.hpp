@@ -54,11 +54,17 @@
  *                      and the status strip are never covered. A backdrop under it takes the taps meant for the page.
  *                      A notice (one button, task 014 P3c): Enter and Esc both press it.
  *
+ *   StatusStrip        (task L1) the clock pill, Wi-Fi bars and Bluetooth glyph at the top right, exactly as on the
+ *                      launcher's home grid (the cp0_statusbar renderer, placed and scaled by the layout service). Apps
+ *                      use it as it is: never draw your own clock or icons, never copy it. add_title() is the home
+ *                      grid's title label (what Page's TitleFactory makes).
+ *
  * LVGL thread only. The objects are children of the parent given to the constructor; the destructor deletes them
  * (unless the parent went first).
  */
 #pragma once
 
+#include "cp0_statusbar.h"
 #include "cp0_ui_dialog.h"
 #include "cp0_ui_info.h"
 #include "cp0_ui_osk.h"
@@ -164,12 +170,70 @@ private:
     bool rebuilding_ = false; /* set_rows() is replacing the rows: scroll events are ignored */
 };
 
+/* ------------------------------------------------------------------ status strip and title (task L1) */
+
+/* Fills the Wi-Fi and Bluetooth fields of the strip's state (wifi_up, wifi_pct, bt_on, bt_connected; the strip sets
+ * the clock itself). Called on the LVGL thread when the strip is added, then every 2 s while the strip's screen is the
+ * active one, and by StatusStrip::refresh(). Must return quickly: start slow queries elsewhere and report the last
+ * known values. cp0_ui_status_set_wifi() (cp0_ui_status_strip.h) applies the bars' rule. */
+using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
+
+/* The default source: sysfs / procfs (cp0_statusbar_read_state: wlan0 operstate and /proc/net/wireless, the hci
+ * devices and rfkill). Needs no cp0_lvgl service, works in any process. */
+StatusSource default_status_source();
+
+class StatusStrip {
+public:
+    /* Adds the strip at the top right of parent: a full-width screen or page header at y 0 (Page::header()). The strip
+     * belongs to parent: it stops its timers and frees itself when parent is deleted (never delete it yourself). source
+     * empty = default_status_source(). Returns NULL under the SDL simulator (no renderer there) or when parent is NULL.
+     * Fonts: share/font/Montserrat-Medium.ttf and FontAwesome5-Solid+Brands+Regular.woff from cp0_file_path_c, else
+     * /usr/share/APPLaunch/share/font (the launcher's copy; apps bundle none). */
+    static StatusStrip *add(lv_obj_t *parent, StatusSource source = StatusSource());
+
+    /* Reads the source and redraws now (when the strip's screen is the active one): call it right after loading the
+     * screen so the icons are current at once. */
+    void refresh();
+    lv_obj_t *canvas() const { return canvas_; }
+
+    StatusStrip(const StatusStrip &) = delete;
+    StatusStrip &operator=(const StatusStrip &) = delete;
+
+private:
+    StatusStrip(lv_obj_t *parent, StatusSource source);
+    static void parent_delete_cb(lv_event_t *event);
+    static void clock_timer_cb(lv_timer_t *timer);
+    static void status_timer_cb(lv_timer_t *timer);
+    void clock_tick();
+    bool screen_active() const;
+    void redraw();
+
+    lv_obj_t *parent_ = nullptr;
+    lv_obj_t *canvas_ = nullptr;
+    StatusSource source_;
+    std::vector<uint32_t> pixels_; /* ARGB8888, status_w x max(bar_h, CP0_STATUSBAR_HEIGHT) */
+    int width_ = 0, top_ = 0, pct_ = 100;
+    cp0_statusbar_state_t state_{};
+    cp0_statusbar_state_t shown_{};
+    bool drawn_ = false;
+    lv_timer_t *clock_timer_ = nullptr;
+    lv_timer_t *status_timer_ = nullptr;
+};
+
+/* x of the strip's leftmost drawn pixel on the native display (its fullest state: Bluetooth glyph, all bars, a clock):
+ * what a page header keeps free, the strip_left argument of cp0_ui_roller_page(). 0 under the SDL simulator. */
+int status_strip_left();
+
+/* The home grid's title: a label at the shell's title_x / title_y, title_px, gold (#F0B400). Use it as Page's
+ * TitleFactory, or alone on a screen of your own. */
+lv_obj_t *add_title(lv_obj_t *parent, const char *text);
+
 /* The status line's colour: green, amber (partly failed, task 014 P3d), red. */
 enum class CaptionTone { Normal, Warn, Error };
 
 class Page {
 public:
-    /* make_title: creates the title label at the home grid's place (native_ui::add_title in the launcher); NULL
+    /* make_title: creates the title label at the home grid's place (cp0::ui::add_title); NULL
      * draws a plain label from the same metrics. on_back: the Esc button. */
     using TitleFactory = std::function<lv_obj_t *(lv_obj_t *parent, const char *text)>;
     Page(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TitleFactory make_title, std::function<void()> on_back);

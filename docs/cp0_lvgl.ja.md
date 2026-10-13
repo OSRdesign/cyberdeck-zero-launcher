@@ -45,6 +45,29 @@ runner は 1 プロセスにつき成功する実行を 1 回だけ許可しま�
 
 `AppPageRoot` は LVGL screen と input group を所有します。`AppPage` は `ui_APP_Container` と top bar を追加し、`AppPageWithBottomBarLayout` は `ui_BOTTOM_Container` を追加します。既存ページには `cp0_lvgl_start_app_page(AppPageRoot&)`、構築とロードには `cp0_lvgl_start_app<PageT>(args...)` を使います。ページの生成と破棄は LVGL スレッドで行い、root screen を手動で削除しないでください。標準 top bar の高さは 20 px です。
 
+### ステータスストリップとタイトル（`include/cp0_ui_widgets.hpp`、`include/cp0_ui_status_strip.h`）
+
+ランチャー右上のステータスストリップ（時計ピル、Wi-Fi バー、Bluetooth グリフ）とホームグリッドのタイトルは `cp0::ui` ウィジェットセットの一部です。ネイティブアプリはそのまま使います。独自の時計やアイコンを描かず、コードをコピーしないでください。
+
+```cpp
+using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
+StatusSource default_status_source();          // sysfs / procfs、サービス不要
+class StatusStrip {
+public:
+    static StatusStrip *add(lv_obj_t *parent, StatusSource source = StatusSource());
+    void refresh();
+    lv_obj_t *canvas() const;
+};
+int status_strip_left();                       // ストリップの最も左に描かれるピクセルの x
+lv_obj_t *add_title(lv_obj_t *parent, const char *text);
+```
+
+- `StatusStrip::add(parent)` は `parent`（全幅の screen または `Page::header()`、y 0）の右上にストリップを描きます。位置と縮尺はレイアウトサービス（shell の `bar_h`、`status_w`、`status_top`、`status_pct`）から決まります。ストリップは `parent` に属し、`parent` が削除されると 1 秒の時計タイマーと 2 秒の状態タイマーを止めて自分を解放します。自分で delete しないでください。SDL シミュレーターでは NULL を返します（FreeType レンダラー `cp0_statusbar.c` はデバイス向けビルドにのみ含まれます）。
+- source は `wifi_up`、`wifi_pct`、`bt_on`、`bt_connected` を埋めます。時計はストリップ自身が設定します。source は LVGL スレッドで、追加時、ストリップの screen がアクティブな間は 2 秒ごと、そして `refresh()` で呼ばれ、すぐに戻る必要があります。source がなければ sysfs と procfs を読みます（`cp0_statusbar_read_state`）。ランチャーは自分の source（`native_ui::fill_status`：Wi-Fi と Bluetooth のサービス）を渡します。`cp0_ui_status_set_wifi()` がバーの規則を適用します（接続中は最低 1 本）。
+- screen をロードした直後に `refresh()` を呼ぶと、アイコンがすぐに最新になります。
+- フォント：`share/font/Montserrat-Medium.ttf` と `FontAwesome5-Solid+Brands+Regular.woff` を `cp0_file_path_c` で探し、なければ `/usr/share/APPLaunch/share/font` を使います。アプリはフォントを同梱しません。
+- `status_strip_left()` は `cp0_ui_roller_page()` の `strip_left` 引数です。ヘッダーは自分のコントロールをその左に置きます。`add_title()` は `Page` の `TitleFactory` が作るラベルです（shell の `title_x`、`title_y`、`title_px`、金色 `#F0B400`）。
+
 ## 公開 C ABI
 
 宣言は `include/cp0_lvgl_app.h` と `include/hal_lvgl_bsp.h` にあります。特記がない限り 0 は成功、負値は失敗です。

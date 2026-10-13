@@ -209,7 +209,7 @@ void UICalculatorPage::screen_loaded_cb(lv_event_t *event)
     auto *self = static_cast<UICalculatorPage *>(lv_event_get_user_data(event));
     if (!self || self->strip_added_ || !self->header_) return;
     self->strip_added_ = true;
-    native_ui::add_status_icons(self->header_->header());
+    cp0::ui::StatusStrip::add(self->header_->header(), native_ui::fill_status);
 }
 
 void UICalculatorPage::build_ui(int width, int height)
@@ -232,9 +232,9 @@ void UICalculatorPage::build_ui(int width, int height)
     if (lay.header_page) {
         // the Settings header: the home grid's title place, the Esc button, the status strip
         cp0_ui_roller_page_t rp{};
-        if (cp0_ui_roller_page(metrics, native_ui::status_strip_left(), &rp) == 0) {
+        if (cp0_ui_roller_page(metrics, cp0::ui::status_strip_left(), &rp) == 0) {
             header_ = std::make_unique<cp0::ui::Page>(
-                parent, rp, [](lv_obj_t *bar, const char *text) { return native_ui::add_title(bar, text); },
+                parent, rp, [](lv_obj_t *bar, const char *text) { return cp0::ui::add_title(bar, text); },
                 [] {
                     // a tap on Esc is a short press of the real Esc key: it leaves the Calculator like the keyboard's
                     cp0_keyboard_inject(KEY_ESC, KBD_KEY_PRESSED, 0);
@@ -255,7 +255,7 @@ void UICalculatorPage::build_ui(int width, int height)
             title, cp0_ui_font_px(lay.header_page ? metrics->text_px[CP0_TEXT_TITLE] : lay.title_px), 0);
         lv_obj_set_style_text_color(title, lv_color_hex(0xF0B400), 0);
         lv_obj_set_pos(title, lay.title_x, lay.title_y);
-        native_ui::add_status_icons(parent);
+        cp0::ui::StatusStrip::add(parent, native_ui::fill_status);
     }
 
     // display: small source line above the big result line

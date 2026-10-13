@@ -17,6 +17,8 @@
 
 #include "cp0_display.h"
 #include "cp0_statusbar.h"
+#include "cp0_ui_status_strip.h"
+#include "cp0_ui_widgets.hpp"
 #include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_overlay.h"
 #include "hal_lvgl_bsp.h"
@@ -51,8 +53,6 @@ constexpr uint32_t kBg = 0x000000;
 constexpr uint32_t kTileBg = 0x1E1E1E;
 constexpr uint32_t kTileBorder = 0x3A3A3A;
 constexpr uint32_t kAccent = 0x2D9CDB;
-constexpr uint32_t kGold = 0xF0B400;
-constexpr uint32_t kClockBg = 0x8A5A2B;
 
 Launch *s_launch = nullptr;
 std::string s_launching_app; // display name of the app being launched
@@ -77,11 +77,6 @@ struct Layout {
     int pad;             // grid padding and gap
     int tile_w, tile_h;  // two rows fit exactly under the status bar (computed sizes: see cp0_ui_metrics.c)
     int top_extra;       // extra space above the first row (grid centred vertically; 0 on the pinned presets)
-    int status_pct;      // scale of the clock / Wi-Fi / Bluetooth strip
-    int status_top;      // y of the clock pill inside the bar
-    int status_w;        // width of the strip canvas
-    int title_x, title_y;
-    const lv_font_t *title_font;
     int tile_radius, tile_border, tile_border_sel;
     int icon, icon_top;
     const lv_font_t *label_font;
@@ -107,12 +102,6 @@ const Layout &layout()
         v.tile_w = s.tile_w;
         v.tile_h = s.tile_h;
         v.top_extra = s.top_extra;
-        v.status_pct = s.status_pct;
-        v.status_top = s.status_top;
-        v.status_w = s.status_w;
-        v.title_x = s.title_x;
-        v.title_y = s.title_y;
-        v.title_font = cp0_ui_font_px(s.title_px);
         v.tile_radius = s.tile_radius;
         v.tile_border = s.tile_border;
         v.tile_border_sel = s.tile_border_sel;
@@ -221,148 +210,14 @@ void home_key_cb(lv_event_t *event)
     }
 }
 
-constexpr uint32_t kBarOff = 0x4D4D4D;
-constexpr uint32_t kBarOn = 0x33CC33;
-constexpr uint32_t kBtConnected = 0x3B9DFF;
-constexpr uint32_t kBtIdle = 0x5A5A5A;
-
-// The backend reports either a 0..100 strength or an RSSI in dBm.
-int signal_percent(int signal)
-{
-    if (signal > 0) return std::min(signal, 100);
-    if (signal == 0) return 0;
-    return std::clamp(2 * (signal + 100), 0, 100); // -100 dBm -> 0, -50 dBm -> 100
-}
-
-// Clock, Wi-Fi bars and Bluetooth icon in the top-right corner of a native screen. They are drawn by the
-// shared renderer (cp0_statusbar.c, the same code the display bridge of full-screen apps uses) into a
-// transparent canvas (320 px wide at the deck size, scaled down on small panels), so every screen and every full-screen app shows exactly the same bar.
-// One instance per screen: it owns its timers and frees itself when the parent is deleted.
-struct StatusIcons {
-    lv_obj_t *parent = nullptr;
-    lv_obj_t *canvas = nullptr;
-    std::vector<uint32_t> pixels;            // ARGB8888, status_w x CP0_STATUSBAR_HEIGHT
-    cp0_statusbar_state_t state{};
-    cp0_statusbar_state_t shown{};
-    bool drawn = false;
-    lv_timer_t *clock_timer = nullptr;
-    lv_timer_t *status_timer = nullptr;
-};
-
-cp0_statusbar_t *shared_status_bar()
-{
-    static cp0_statusbar_t *bar = cp0_statusbar_create(cp0_file_path_c("share/font/Montserrat-Medium.ttf"),
-                                                       cp0_file_path_c("share/font/FontAwesome5-Solid+Brands+Regular.woff"));
-    return bar;
-}
-
-void redraw_status(StatusIcons *icons)
-{
-    cp0_statusbar_t *bar = shared_status_bar();
-    if (!bar || !icons->canvas) return;
-    if (icons->drawn && std::memcmp(&icons->state, &icons->shown, sizeof(icons->state)) == 0) return;
-    std::fill(icons->pixels.begin(), icons->pixels.end(), 0u);
-    const Layout &l = layout();
-    cp0_statusbar_render_scaled(bar, icons->pixels.data(), l.status_w, l.status_w, 0, l.status_top, 0, &icons->state,
-                                l.status_pct);
-    icons->shown = icons->state;
-    icons->drawn = true;
-    lv_obj_invalidate(icons->canvas);
-}
-
-bool status_screen_active(const StatusIcons *icons)
-{
-    lv_obj_t *screen = lv_obj_get_screen(icons->parent);
-    lv_display_t *display = screen ? lv_obj_get_display(screen) : nullptr;
-    return display && lv_display_get_screen_active(display) == screen;
-}
-
-void update_clock(lv_timer_t *timer)
-{
-    auto *icons = static_cast<StatusIcons *>(lv_timer_get_user_data(timer));
-    if (!icons) return;
-    const std::time_t now = std::time(nullptr);
-    std::tm local{};
-    localtime_r(&now, &local);
-    std::strftime(icons->state.clock, sizeof(icons->state.clock), "%H:%M", &local);
-    redraw_status(icons);
-}
-
-void update_status(lv_timer_t *timer)
-{
-    auto *icons = static_cast<StatusIcons *>(lv_timer_get_user_data(timer));
-    // Nothing to do (and no work to pay for) while another screen owns the display.
-    if (!icons || !status_screen_active(icons)) return;
-
-    int percent = 0;
-    cp0_wifi_status_t wifi{};
-    if (cp0_wifi_status_read(&wifi) == 0 && wifi.connected) percent = std::max(1, signal_percent(wifi.signal));
-    icons->state.wifi_up = percent > 0;
-    icons->state.wifi_pct = percent;
-
-    // The callbacks may complete on another thread, so they only touch process-wide atomics.
-    static std::atomic<bool> bt_powered{false};
-    static std::atomic<bool> bt_connected{false};
-    cp0_signal_bt_api({"BtStatus"}, [](int code, std::string data) {
-        bt_powered = code == 0 && !data.empty() && data[0] == '1';
-    });
-    cp0_signal_bt_api({"BtConnectedList"}, [](int code, std::string data) {
-        // List commands report the device count as their code (negative on error).
-        bt_connected = code >= 0 && data.find(':') != std::string::npos; // any listed device
-    });
-    icons->state.bt_on = bt_powered.load();
-    icons->state.bt_connected = bt_connected.load();
-    redraw_status(icons);
-}
-
-void status_icons_delete_cb(lv_event_t *event)
-{
-    auto *icons = static_cast<StatusIcons *>(lv_event_get_user_data(event));
-    if (!icons) return;
-    if (icons->clock_timer) lv_timer_delete(icons->clock_timer);
-    if (icons->status_timer) lv_timer_delete(icons->status_timer);
-    delete icons;
-}
-
-StatusIcons *build_status_icons(lv_obj_t *parent)
-{
-    auto *icons = new StatusIcons();
-    icons->parent = parent;
-    const Layout &l = layout();
-    icons->pixels.assign(static_cast<size_t>(l.status_w) * std::max(l.bar_h, CP0_STATUSBAR_HEIGHT), 0u);
-    lv_obj_add_event_cb(parent, status_icons_delete_cb, LV_EVENT_DELETE, icons);
-
-    lv_display_t *display = lv_obj_get_display(parent);
-    const int screen_w = display ? static_cast<int>(lv_display_get_horizontal_resolution(display)) : l.screen_w;
-    icons->canvas = lv_canvas_create(parent);
-    lv_canvas_set_buffer(icons->canvas, icons->pixels.data(), l.status_w, l.bar_h, LV_COLOR_FORMAT_ARGB8888);
-    lv_obj_set_pos(icons->canvas, screen_w - l.status_w, 0);
-    lv_obj_remove_flag(icons->canvas, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(icons->canvas, LV_OBJ_FLAG_SCROLLABLE);
-
-    icons->clock_timer = lv_timer_create(update_clock, 1000, icons);
-    icons->status_timer = lv_timer_create(update_status, 2000, icons);
-    update_clock(icons->clock_timer);
-    update_status(icons->status_timer);
-    return icons;
-}
-
-StatusIcons *s_home_icons = nullptr;
-
-lv_obj_t *build_title(lv_obj_t *parent, const char *text)
-{
-    lv_obj_t *title = lv_label_create(parent);
-    lv_label_set_text(title, text);
-    lv_obj_set_style_text_font(title, layout().title_font, 0);
-    lv_obj_set_style_text_color(title, lv_color_hex(kGold), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, layout().title_x, layout().title_y);
-    return title;
-}
+// The home grid's status strip: the shared cp0::ui::StatusStrip (cp0_lvgl) fed by the launcher's own services
+// (native_ui::fill_status); refreshed when the home grid is shown.
+cp0::ui::StatusStrip *s_home_strip = nullptr;
 
 void build_status_bar(lv_obj_t *parent)
 {
-    build_title(parent, "ZERO");
-    s_home_icons = build_status_icons(parent);
+    cp0::ui::add_title(parent, "ZERO");
+    s_home_strip = cp0::ui::StatusStrip::add(parent, native_ui::fill_status);
 }
 
 void ensure_home()
@@ -738,38 +593,24 @@ bool run_external(const std::string &command, bool keep_root, std::function<void
     return true;
 }
 
-void add_status_icons(lv_obj_t *parent) { build_status_icons(parent); }
-
-lv_obj_t *add_title(lv_obj_t *parent, const char *text) { return build_title(parent, text ? text : ""); }
-
-int status_strip_left()
+void fill_status(cp0_statusbar_state_t &state)
 {
-    static int left = -1;
-    if (left >= 0) return left;
-    const Layout &l = layout();
-    const int canvas_x = l.screen_w - l.status_w;
-    cp0_statusbar_t *bar = shared_status_bar();
-    if (!bar || l.status_w <= 0) return canvas_x; /* not kept: measured when the renderer is there */
-    // draw the strip in its fullest state (Bluetooth glyph shown, all bars, a clock) into a scratch canvas and take
-    // its first column that has a pixel: the strip's own geometry, not a copy of it
-    const int rows = std::max(l.bar_h, CP0_STATUSBAR_HEIGHT) + 16;
-    std::vector<uint32_t> pixels(static_cast<size_t>(l.status_w) * rows, 0u);
-    cp0_statusbar_state_t full{};
-    full.wifi_up = 1;
-    full.wifi_pct = 100;
-    full.bt_on = 1;
-    full.bt_connected = 1;
-    std::snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
-    cp0_statusbar_render_scaled(bar, pixels.data(), l.status_w, l.status_w, 0, l.status_top, 0, &full, l.status_pct);
-    int first = l.status_w;
-    for (int y = 0; y < rows; ++y)
-        for (int x = 0; x < first; ++x)
-            if (pixels[static_cast<size_t>(y) * l.status_w + x] >> 24) {
-                first = x;
-                break;
-            }
-    left = canvas_x + (first < l.status_w ? first : 0);
-    return left;
+    cp0_wifi_status_t wifi{};
+    const bool connected = cp0_wifi_status_read(&wifi) == 0 && wifi.connected;
+    cp0_ui_status_set_wifi(&state, connected ? 1 : 0, connected ? wifi.signal : 0);
+
+    // The callbacks may complete on another thread, so they only touch process-wide atomics.
+    static std::atomic<bool> bt_powered{false};
+    static std::atomic<bool> bt_connected{false};
+    cp0_signal_bt_api({"BtStatus"}, [](int code, std::string data) {
+        bt_powered = code == 0 && !data.empty() && data[0] == '1';
+    });
+    cp0_signal_bt_api({"BtConnectedList"}, [](int code, std::string data) {
+        // List commands report the device count as their code (negative on error).
+        bt_connected = code >= 0 && data.find(':') != std::string::npos; // any listed device
+    });
+    state.bt_on = bt_powered.load();
+    state.bt_connected = bt_connected.load();
 }
 
 bool enabled()
@@ -825,7 +666,7 @@ void show_home()
     cp0_display_set_mode(CP0_DISPLAY_MODE_NATIVE);
     lv_screen_load(s_home);
     lv_obj_invalidate(s_home);
-    if (s_home_icons) update_status(s_home_icons->status_timer); // icons are current as soon as the grid is visible
+    if (s_home_strip) s_home_strip->refresh(); // icons are current as soon as the grid is visible
 }
 
 void begin_page(bool native_layout, bool touch_list, bool touch_swipe, unsigned short swipe_tap_key)
@@ -875,9 +716,7 @@ void enter_compat()
 namespace native_ui {
 
 bool enabled() { return false; }
-void add_status_icons(lv_obj_t *) {}
-lv_obj_t *add_title(lv_obj_t *, const char *) { return nullptr; }
-int status_strip_left() { return 0; }
+void fill_status(cp0_statusbar_state_t &) {}
 void attach(Launch *) {}
 void set_launching_app(const std::string &) {}
 void show_home() {}

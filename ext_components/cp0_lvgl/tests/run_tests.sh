@@ -562,6 +562,14 @@ TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_de
     "$root/tests/test_ui_roller.c" -o "$binary"
 "$binary"
 
+# Task L1: the shared status strip's place from the shell tokens, the Wi-Fi signal rule, the leftmost drawn column
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_ui_status_strip.c" \
+    "$root/tests/test_ui_status_strip.c" -o "$binary"
+"$binary"
+
 # Task 014 P2b: on-screen keyboard core (layout from the tokens, pages, Shift / Ctrl state machine, key event
 # sequences, presence policy gate, dialog placement) and its injection path (press + release with text through the
 # real queue, Ctrl+C, the Esc state and the release owed when the keyboard goes away mid-press, the text hint)

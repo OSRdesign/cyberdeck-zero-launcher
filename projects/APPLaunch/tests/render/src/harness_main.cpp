@@ -37,6 +37,7 @@
 #include "ui_loading.h"
 #include "native_screensaver.hpp"
 #include "native_ui.hpp"
+#include "cp0_ui_widgets.hpp"
 
 #include <algorithm>
 #include <cerrno>
@@ -1138,7 +1139,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         if (!m) return fail(scene, line, "the display manager published no metrics");
         settle(500);
         lv_refr_now(nullptr);
-        const int strip_x = std::clamp(native_ui::status_strip_left(), 0, run.size.w - 1);
+        const int strip_x = std::clamp(cp0::ui::status_strip_left(), 0, run.size.w - 1);
         const int strip_h = m->shell.bar_h;
         const std::string dir = run.out_dir + "/" + run.size.name() + "/header/";
         if (!save_png(dir + w[1] + ".png", crop_image(grab(run), strip_x, 0, run.size.w - strip_x, strip_h)))
