@@ -11,7 +11,6 @@ the MIT license used for M5Stack-authored wrapper code.
 | `Sigslot` | `https://github.com/palacaze/sigslot` | Fetched at the commit pinned by `Sigslot/SConstruct`; retain the upstream MIT notice. |
 | `SmoothUI` | `https://github.com/Forairaaaaa/smooth_ui_toolkit` | MIT text in `SmoothUI/LICENSE`; commit pinned by SConstruct. |
 | `Spdlog` | `https://github.com/gabime/spdlog` | Fetched at the commit pinned by `Spdlog/SConstruct`; retain the upstream MIT notice. |
-| `tree.hh` | Kasper Peeters tree container | GPL-3.0-only attribution in `cp0_lvgl/include/tree.hh`; full text in `../LICENSES/tree.hh-GPL-3.0-only.txt`. |
 
 Full notices are also retained in `Miniaudio/LICENSE`, `Sigslot/LICENSE`
 and `Spdlog/LICENSE`. SDK dependencies used by these components include

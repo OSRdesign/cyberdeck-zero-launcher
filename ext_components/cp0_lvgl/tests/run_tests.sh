@@ -102,6 +102,11 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
     "$root/tests/test_bounded_task_registry.cpp" -o "$binary"
 "$binary"
 
+# The Settings menu tree (cp0_tree.hpp): child walks, handles stable across appends, erase_children, destruction
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/include" "$root/tests/test_cp0_tree.cpp" -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$root/src" "$root/tests/test_runner_contract.cpp" -o "$binary"
 "$binary"

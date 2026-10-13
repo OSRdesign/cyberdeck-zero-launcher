@@ -15,7 +15,6 @@ Paths in the evidence column are relative to the repository root.
 | M5Stack Linux Libs SDK | `SDK`, pinned gitlink; SCons/Kconfig framework | [MIT, 2024 M5Stack](../LICENSES/M5Stack-SDK-MIT.txt) |
 | LVGL 9.5 | SDK LVGL component, emulator `lib/lvgl`, APPLaunch `lv_freetype*` and `lv_sdl_keyboard.c` overrides | [MIT](../LICENSES/LVGL-MIT.txt); bundled sublibraries retain their own notices |
 | FreeType | APPLaunch `main/lvgl/ftmodule.h` and `main/SConstruct` | FTL or GPL-2.0; [FTL text](../projects/APPLaunch/main/lvgl/freetype-LICENSE.txt) |
-| tree.hh 3.20 | `ext_components/cp0_lvgl/include/tree.hh`, Kasper Peeters 2001–2024 | [GPL-3.0-only](../LICENSES/tree.hh-GPL-3.0-only.txt): header specifies version 3 without an “or later” grant |
 | miniaudio 0.11.25 | `ext_components/Miniaudio/include/miniaudio.h`; audio service | [Unlicense OR MIT-0](../ext_components/Miniaudio/LICENSE), David Reid |
 | RadioLib | `ext_components/RadioLib/SConstruct`, SX126x sources; URL fetched without a pinned commit | [MIT](../ext_components/RadioLib/LICENSE), Jan Gromeš |
 | sigslot | `ext_components/Sigslot/SConstruct`, pinned commit `b588b791b9cf7eb17ff0a74d8aebd4a61166c2e1` | [MIT](../ext_components/Sigslot/LICENSE) |
@@ -84,4 +83,4 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | FreeType; Montserrat Medium, Font Awesome 5 Free (fonts) | Status bar of the Pi port (cp0_statusbar), shared with full-screen apps | FreeType FTL/GPL-2.0; fonts SIL OFL 1.1; Font Awesome icons CC BY 4.0 |
 | libcrypt, libc, libstdc++ | Account setup and runtime | Package-specific LGPL/GPL with runtime exceptions |
 
-Packaging must preserve notices for the selected configuration, including static libraries, fonts and audio. tree.hh GPL terms, SimpleBLE restrictions and the selection of libv4l objects must be checked against the shipped artifact; this source inventory does not resolve those release-specific questions.
+Packaging must preserve notices for the selected configuration, including static libraries, fonts and audio. SimpleBLE restrictions and the selection of libv4l objects must be checked against the shipped artifact; this source inventory does not resolve those release-specific questions. The Settings menu tree used the GPL-3.0-only `tree.hh` (Kasper Peeters) until 2026-10-13; it is now the project's own MIT `ext_components/cp0_lvgl/include/cp0_tree.hpp`.

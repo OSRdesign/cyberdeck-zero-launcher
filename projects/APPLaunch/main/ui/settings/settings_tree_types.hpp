@@ -16,8 +16,8 @@
 #include <utility>
 
 #include "eventpp/callbacklist.h"
+#include "cp0_tree.hpp"
 #include "settings_async_dispatch.hpp"
-#include "tree.hh"
 
 struct _lv_obj_t;
 
@@ -146,7 +146,7 @@ private:
 };
 
 struct SettingEntry;
-using Tree     = tree<SettingEntry>;
+using Tree     = cp0::Tree<SettingEntry>;
 using NodeIter = Tree::iterator;
 
 using SettingPageFactory =
