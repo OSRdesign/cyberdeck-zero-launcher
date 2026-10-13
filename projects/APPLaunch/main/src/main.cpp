@@ -8,6 +8,7 @@
 #include "sample_log.h"
 #include "ui/input_presence.hpp"
 #include "ui/launcher_media_controls.h"
+#include "ui/settings/settings_session_model.hpp"
 #include "ui/ui.h"
 #include "ui/ui_screensaver.h"
 
@@ -49,6 +50,10 @@ int main(void)
         return true;
     };
     options.teardown = []() { launcher_ui::deinit(); };
+    // Settings > System > Quit to desktop (desktop boards) ends the main loop: teardown, then exit status 0, and
+    // applaunch-desktop.service gives the screen back to the desktop (settings_session_model.hpp).
+    launcher_session::set_wake(&cp0_lvgl_wake);
+    options.should_quit = []() { return launcher_session::quit_requested(); };
     // Every keyboard (USB, Bluetooth) types in the launcher; its presence is published for apps. Before
     // cp0_lvgl_run(): the keyboard thread starts inside it.
     input_presence::configure();

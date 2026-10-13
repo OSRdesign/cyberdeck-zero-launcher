@@ -59,6 +59,7 @@ BOOT="$ROOT/boot/firmware"
 UDEV_DIR="$ROOT/etc/udev/rules.d"
 POLKIT_DIR="$ROOT/etc/polkit-1/rules.d"
 SYSTEMD_DIR="$ROOT/etc/systemd/system"
+DESKTOP_ENTRY="$ROOT/usr/share/applications/applaunch.desktop"
 PROFILE_DIR="$ROOT/etc/applaunch"
 PROFILE="$PROFILE_DIR/board.conf"
 
@@ -235,8 +236,8 @@ GETTY_STATE=$(systemctl is-enabled getty@tty1.service 2>/dev/null || true)
 # ---------------------------------------------------------------------------------------------------------
 # Plan and confirmation
 # ---------------------------------------------------------------------------------------------------------
-if grep -q 'APPLaunch.service' /proc/self/cgroup 2>/dev/null && [ "$DRY" = 0 ]; then
-    echo "this shell runs inside APPLaunch.service (the launcher's terminal): stopping the service would kill the" >&2
+if grep -q -e 'APPLaunch.service' -e 'applaunch-desktop.service' /proc/self/cgroup 2>/dev/null && [ "$DRY" = 0 ]; then
+    echo "this shell runs inside the launcher's service (the launcher's terminal): stopping the service would kill the" >&2
     echo "uninstall half way. Run it from an ssh session or a text console instead." >&2
     exit 1
 fi
@@ -245,15 +246,18 @@ say "Uninstall plan (user: $TARGET_USER, home: $TARGET_HOME)"
 [ "$DRY" = 1 ] && echo "DRY RUN: nothing will be changed."
 echo "Will remove:"
 echo "  - user service APPLaunch.service (stop, disable, delete, reset-failed)"
+echo "  - system service applaunch-console.service (appliance boards: the panel goes back to the text console)"
+echo "  - system service applaunch-desktop.service (desktop boards: stopped first if it runs, so the desktop comes"
+echo "    back) and the menu entry ${DESKTOP_ENTRY#"$ROOT"}"
 echo "  - system service launcher-ntp-default.service"
-echo "  - $APP_ROOT/bin/M5CardputerZero-APPLaunch, M5CardputerZero-AppStore, lib/libapplaunch_vfb.so"
+echo "  - $APP_ROOT/bin/M5CardputerZero-APPLaunch, M5CardputerZero-AppStore, applaunch-console, lib/libapplaunch_vfb.so"
 case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
 esac
 echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 93-applaunch-rfkill, 99-bt-keyboard"
 echo "  - board profile $PROFILE (and $PROFILE_DIR if it is then empty)"
-echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power"
+echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, 52-applaunch-desktop"
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
         echo "  - $CONFIG restored from $CONFIG.bak-before-pwm (a timestamped backup of the current file is made first)"
@@ -316,6 +320,34 @@ for d in "$UNIT_DIR/default.target.wants" "$UNIT_DIR"; do
 done
 
 # ---------------------------------------------------------------------------------------------------------
+# The text console and the desktop variant, before the launcher files (their units run bin/applaunch-console).
+say "Removing the text console and desktop units"
+UNITS_CHANGED=0
+if exists "$SYSTEMD_DIR/applaunch-desktop.service"; then
+    # stopping it runs its ExecStopPost=: the text console and the desktop come back
+    act_try $SUDO systemctl stop applaunch-desktop.service
+    rm_sys "$SYSTEMD_DIR/applaunch-desktop.service"
+    UNITS_CHANGED=1
+else
+    note "already gone: applaunch-desktop.service"
+fi
+if exists "$SYSTEMD_DIR/applaunch-console.service"; then
+    # stopping it runs its ExecStop=: the panel goes back to the text console
+    act_try $SUDO systemctl disable --now applaunch-console.service
+    rm_sys "$SYSTEMD_DIR/applaunch-console.service"
+    UNITS_CHANGED=1
+else
+    note "already gone: applaunch-console.service"
+fi
+if [ "$UNITS_CHANGED" = 1 ]; then
+    act_try $SUDO systemctl daemon-reload
+    act_try $SUDO systemctl reset-failed applaunch-desktop.service applaunch-console.service
+fi
+# whatever the units did: the framebuffer console bound again (idempotent, nothing to do when it is)
+if exists "$APP_ROOT/bin/applaunch-console"; then act_try $SUDO "$APP_ROOT/bin/applaunch-console" bind; fi
+rm_sys "$DESKTOP_ENTRY"
+
+# ---------------------------------------------------------------------------------------------------------
 if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then
     say "Removing app packages installed from the launcher"
     # shellcheck disable=SC2046
@@ -343,14 +375,14 @@ for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlig
     rm_sys "$UDEV_DIR/$f"
 done
 [ "$UDEV_CHANGED" = 1 ] && act_try $SUDO udevadm control --reload
-for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules; do rm_sys "$POLKIT_DIR/$f"; done
+for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules 52-applaunch-desktop.rules; do rm_sys "$POLKIT_DIR/$f"; done
 
 say "Removing the board profile"
 rm_sys "$PROFILE"
 if [ -d "$PROFILE_DIR" ] && [ -z "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$PROFILE_DIR"; fi
 
 say "Removing the launcher files in $APP_ROOT"
-for f in bin/M5CardputerZero-APPLaunch bin/M5CardputerZero-AppStore lib/libapplaunch_vfb.so; do rm_sys "$APP_ROOT/$f"; done
+for f in bin/M5CardputerZero-APPLaunch bin/M5CardputerZero-AppStore bin/applaunch-console lib/libapplaunch_vfb.so; do rm_sys "$APP_ROOT/$f"; done
 if [ -s "$ASSETS_TMP" ]; then
     # one sudo call for the whole list instead of one per file
     LIST_TMP=$(mktemp)

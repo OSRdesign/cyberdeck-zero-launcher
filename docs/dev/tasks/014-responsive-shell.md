@@ -38,7 +38,17 @@ Controller owns: all visual design (Settings on wide/large classes, keyboard loo
 - (done) T1-T4 + phase 0 merged (PR #23, released as v0.5.0); the responsive shell (P1 to P3d, PRs #24 to #32) and the dev tooling (PR #30) are on `main`, not released yet.
 - Deck capture of `/proc/bus/input/devices` with the RTL-SDR dongle (IR node), still wanted before the keyboard phase.
 - Hold-Esc exit with a USB-only keyboard (small follow-up of phase 0: `cp0_external_app_runner` watches only the old device).
-- Exact panel mm for HyperPixel 4", HackBerry 720x720, uConsole 5" (ruler measurement).
+- Exact panel mm for HyperPixel 4", HackBerry 720x720, uConsole 5" (ruler measurement). The install.sh profiles
+  `pi5-hyperpixel4` and `hackberry-cm5` (desktop-session branch) have no `APPLAUNCH_PANEL_MM` until then.
+
+## Platform note: text console and desktop boards (2026-10-12, task 012 F2)
+- The kernel framebuffer console repaints over the launcher on any VT switch or burst of console output (seen on the
+  Pi 3A+). Appliance boards: `applaunch-console.service` unbinds it after `multi-user.target`; desktop boards: the
+  desktop unit does it around the launcher. `pizero2w/README.md`, "Text console".
+- Desktop boards (HackBerry, Pi 5) run the launcher from the applications menu in `applaunch-desktop.service`
+  (`APPLAUNCH_SESSION=desktop`), which stops lightdm and gives it back on exit. Settings > System > Quit to desktop
+  exists only there (`settings_session.*`, runtime check, compile gate `APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP`).
+  `pizero2w/README.md`, "Desktop boards"; tests: `tests/launcher-0.5.0-keyboard-tests.md` section N.
 
 ## Home grid design rule (user feedback 2026-10-10, from the HackBerry 720x720 run)
 Tiles must stay close to SQUARE (aspect about 1:1 to 1.2:1) on every screen; the grid dimensions (columns x rows) follow from the available area, they are not fixed at 3x2. Today's 640x480 grid stretched onto 720x720 gives tall 216x305 tiles with dead space: wrong. Rule for P1c (Controller design, to be confirmed on harness mockups):

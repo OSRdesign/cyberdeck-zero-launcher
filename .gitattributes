@@ -3,3 +3,5 @@
 *.rules text eol=lf
 *.service text eol=lf
 *.desktop text eol=lf
+# shell scripts without the .sh extension
+projects/APPLaunch/pizero2w/applaunch-console text eol=lf

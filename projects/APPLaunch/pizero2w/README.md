@@ -36,8 +36,10 @@ behaviour is unchanged when neither is set.
 
 `install.sh` is idempotent. It installs the launcher and assets under `/usr/share/APPLaunch`, the udev
 and PolicyKit rules, the user service (with lingering, so it starts at boot), the boot-time Network Time
-service, masks the text console on tty1 and adds the PWM backlight overlay (original files are kept as
-`*.bak-applaunch`). To take it all off again, see [Uninstall](#uninstall).
+service, masks the text console on tty1, frees the panel from the kernel text console once the boot is done
+(`applaunch-console.service`, see [Text console](#text-console)) and adds the PWM backlight overlay (original files are
+kept as `*.bak-applaunch`). On a board that boots to a desktop it installs the desktop variant instead (see
+[Desktop boards](#desktop-boards)). To take it all off again, see [Uninstall](#uninstall).
 
 It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
 for Debian 13 trixie. `sudo ./install.sh --dry-run` prints the detected board and what would be done.
@@ -61,7 +63,14 @@ the framebuffers (`/sys/class/graphics`):
 | --- | --- | --- |
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `APPLaunch.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
+| `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer` |
+| `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
 | anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report |
+
+The Pi 5 and HackBerry values are the ones `tools/boards/board.py test-start` used on those boards. Their panels' size
+in mm is not measured yet (task 014), so their profiles have no `APPLAUNCH_PANEL_MM` and the layout uses its default
+density. These two boards normally run the Raspberry Pi OS desktop: they then get the desktop variant
+([Desktop boards](#desktop-boards)); on a Lite image they are installed like the deck.
 
 The profile is a systemd `EnvironmentFile` (`EnvironmentFile=-/etc/applaunch/board.conf` in `APPLaunch.service`,
 `-` = optional). systemd lets its values override the service's `Environment=` lines, so the deck's values
@@ -81,13 +90,73 @@ APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/o
 The `pi3a-luckfox35` profile also sets `LV_LINUX_FBDEV_DEVICE` to the same framebuffer and
 `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y=0`, so the deck's touch axes from the service do not apply.
 
-- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `--board zero2w` for no profile).
+- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `pi5-hyperpixel4`, `hackberry-cm5`; the panel's
+  framebuffer must be there), or `--board zero2w` for no profile.
   `sudo ./install.sh --board-only` only (re)writes the profile and the backlight rule.
 - **Hand edits** are kept: a re-run leaves an edited `board.conf` alone; `--force` replaces it and keeps the old one
-  as `board.conf.bak`. Restart the launcher after an edit: `systemctl --user restart APPLaunch.service`.
+  as `board.conf.bak`. Restart the launcher after an edit: `systemctl --user restart APPLaunch.service` (desktop
+  boards: quit it and open it again from the menu).
 - **Add a board:** probe it with `tools/board-probe/probe-board.sh`, then in `install.sh` add its detection to the
-  `case "$MODEL"` block, its values to `profile_body()` and its name to `--board`; add a fixture under `tests/fixtures/`
-  (fake `proc/` and `sys/` trees) and cases to `tests/test-install-board.sh` (run it with `sh`, no Pi needed).
+  `case "$MODEL"` block, its panel to `panel_spec()`, its values to `profile_body()` and its name to `--board`; add a
+  fixture under `tests/fixtures/` (fake `proc/` and `sys/` trees) and cases to `tests/test-install-board.sh` (run it
+  with `sh`, no Pi needed; on Windows, run it in WSL on a copy whose fixtures have LF line endings, as git stores them).
+
+## Text console
+
+The kernel's framebuffer console (fbcon) is bound to the panel's framebuffer at boot, so the boot lines show there. The
+launcher draws on the same framebuffer and only redraws what changes: any console repaint afterwards (a VT switch,
+kernel messages, a long `apt install`) would draw the old boot lines over it. `applaunch-console.service` (appliance
+boards) runs `/usr/share/APPLaunch/bin/applaunch-console unbind` once `multi-user.target` is reached: it finds the
+vtconsole named "frame buffer device" and sets its `bind` to 0 (nothing to do without one). The boot lines still show
+during the boot; the unit is part of the boot transaction and the launcher's user service starts only once systemd
+reports the system running, so after it. At shutdown the unit binds the console again (the shutdown lines show as
+before). `applaunch-console status` prints the state; `sudo /usr/share/APPLaunch/bin/applaunch-console bind` gives the
+panel back to the console by hand.
+
+## Desktop boards
+
+A board that boots to the Raspberry Pi OS desktop (the HackBerry CM5, the Pi 5: lightdm with labwc) keeps its desktop.
+`install.sh` sees it (a display manager enabled for boot: `/etc/systemd/system/display-manager.service`, or one of the
+desktop processes `tools/board-probe/probe-board.sh` looks for) and installs the desktop variant
+(`--dry-run` prints `session: desktop (...)` and the unit it would write):
+
+- no user service, no lingering, `getty@tty1` left as it is, no change to `config.txt` or `cmdline.txt`; the board
+  profile, udev and PolicyKit rules, Network Time service and default app source as on the other boards;
+- `/etc/systemd/system/applaunch-desktop.service`, written for the launcher's user and the display manager found
+  (`lightdm.service`). It has no `[Install]` section: it cannot be enabled, the launcher never starts at boot;
+- `/usr/share/applications/applaunch.desktop`: "CardputerZero Launcher" in the applications menu (Accessories), which
+  runs `systemctl --no-block start applaunch-desktop.service`;
+- `/etc/polkit-1/rules.d/52-applaunch-desktop.rules`: that user, and only that user, may start, stop or restart that
+  one unit without a password. Nothing is opened up for lightdm: the unit stops and starts it as root.
+
+**Start:** applications menu > CardputerZero Launcher (or `systemctl start applaunch-desktop.service` from a shell,
+no sudo). The unit has `Conflicts=lightdm.service` and `After=lightdm.service`: systemd stops the desktop first, then
+runs, as root, `applaunch-console unbind` (no console repaint over the launcher) and `chvt 7` (a VT without a login
+prompt: the keys typed in the launcher also reach the active VT), then the launcher as the user, with
+`APPLAUNCH_DISPLAY=dpi-scaled`, `APPLAUNCH_STD_KEYBOARD=1`, the board profile
+(`EnvironmentFile=-/etc/applaunch/board.conf`) and `APPLAUNCH_SESSION=desktop`. `PAMName=login` gives it a login
+session, so `/run/user/<uid>` (the launcher's state files) and the user's own services (sound) stay up after the desktop
+session has ended.
+
+**Quit:** Settings > System > **Quit to desktop** > Yes. The entry exists only in a launcher started by this unit
+(`APPLAUNCH_SESSION=desktop`); never on the deck or the Pi 3A+, whose user service would leave a dark panel. The
+launcher ends its main loop, tears down and exits with status 0 (if the teardown takes more than 5 s it exits with 0
+anyway). The unit then runs, as root, `applaunch-console restore-desktop lightdm.service`: the text console is bound
+again and lightdm is started (`--no-block`, since that start waits for the unit's own stop to end).
+
+**Any other end gives the desktop back too:** a crash, a kill, or the hold-Esc recovery of a stuck page (exit status
+75, which restarts the user service on the appliance boards). `Restart=no`: the unit is never restarted, so there is
+no restart loop and never a board without a screen; open the launcher from the menu again.
+
+**Shutdown and reboot** from Settings > System (or anywhere else): the unit is stopped in the poweroff or reboot
+transaction itself. `restore-desktop` sees it (`systemctl is-system-running` answers `stopping` as soon as
+`shutdown.target` has a start job, which every poweroff, reboot, halt and kexec queues before the units stop; a queued
+job for one of those targets counts too) and does not start lightdm: the board powers off or reboots without the
+desktop coming back in between.
+
+**Uninstall:** `./uninstall.sh` (from ssh) stops the unit if it runs (the desktop comes back), removes it, the menu
+entry and the PolicyKit rule (see [Uninstall](#uninstall)). The deck profile (`zero2w`) has no desktop variant: on a
+deck image with a desktop, `install.sh` stops and changes nothing.
 
 ## Uninstall
 
@@ -100,7 +169,10 @@ ssh, not from the launcher's own terminal; it asks for `sudo` only for the syste
 ./uninstall.sh --yes --purge-config # no prompt; also delete the user's launcher data
 ```
 
-It stops, disables and deletes `APPLaunch.service` (through systemd, no `pkill`) and `launcher-ntp-default.service`,
+It stops, disables and deletes `APPLaunch.service` (through systemd, no `pkill`), `applaunch-console.service` (the
+panel goes back to the text console; `applaunch-console bind` is run as well), `applaunch-desktop.service` (stopped
+first if it runs: the desktop comes back) with the menu entry `/usr/share/applications/applaunch.desktop`, and
+`launcher-ntp-default.service`,
 removes the binaries, the framebuffer shim, the launcher assets under `/usr/share/APPLaunch` (only the files of the
 bundle, listed in `payload/share.manifest`), the udev rules (then `udevadm control --reload`) and the PolicyKit rules,
 the board profile `/etc/applaunch/board.conf` (and the directory if empty; a `board.conf.bak` is kept),
@@ -133,6 +205,8 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host) / install it (Pi) / remove it again (Pi). |
 | `default-sources.sh` | Adds the apps repo to Settings > Apps once for a user with no source yet (run by `install.sh` as that user; see "Default app source"). |
 | `APPLaunch.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
+| `applaunch-console`, `applaunch-console.service` | The text console helper (installed in `/usr/share/APPLaunch/bin`: `unbind`, `bind`, `status`, `restore-desktop UNIT`) and the appliance boards' boot-time unit that frees the panel from the console ([Text console](#text-console)). |
+| `applaunch-desktop.service`, `applaunch.desktop`, `52-applaunch-desktop.rules` | Desktop boards: the system unit that runs the launcher in place of the desktop, the applications menu entry, and the PolicyKit rule that lets the launcher's user start and stop that unit; install.sh fills in the user and the display manager ([Desktop boards](#desktop-boards)). |
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
 | `90-backlight-unblank.rules` | The PWM backlight starts powered down: unblank it when it appears. |
@@ -141,7 +215,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `50-networkmanager-netdev.rules`, `51-launcher-time-power.rules` | PolicyKit: Wi-Fi scan/connect, Network Time / clock, reboot / shutdown from a background session. |
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |
-| `tests/` | `test-install-board.sh`: board detection, profile and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). |
+| `tests/` | `test-install-board.sh`: board and desktop detection, profile, desktop unit and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board, desktop markers added by the test), `applaunch-console` against a fake `/sys/class/vtconsole` and a fake `systemctl` (the shutdown guard), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). |
 
 ## Settings and environment
 

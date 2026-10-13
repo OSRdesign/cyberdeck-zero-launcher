@@ -5,11 +5,12 @@
     python board.py [--dry-run] upload     BOARD BUNDLE   upload pizero2w-bundle.tar.gz, unpack it, stage the test launcher
     python board.py [--dry-run] install    BOARD [--check] [--install-arg ARG ...] [--force]
                                                           run the bundle's install.sh (sudo) for the board's user
+                                                          (--force is passed to install.sh: unknown board, edited profile)
     python board.py [--dry-run] test-start BOARD [--env K=V ...]
                                                           run the staged test launcher (desktop boards: stop lightdm first)
     python board.py [--dry-run] test-stop  BOARD          stop it, restore the desktop / the installed launcher, remove test files
     python board.py [--dry-run] grab       BOARD OUT.png  framebuffer screenshot, turned the way the user sees the panel
-    python board.py [--dry-run] status     BOARD          launcher, service / desktop, test files, board profile
+    python board.py [--dry-run] status     BOARD          launcher, services / desktop, text console, test files, board profile
 
 Password: the PW environment variable (PIPW, as docs/dev/deck/deck.py uses, is accepted too). It is never written to
 a file, never put on a command line (sudo reads it on stdin: sudo -S) and never printed. --dry-run needs no password
@@ -20,9 +21,11 @@ Board kinds (boards.json):
            and runs the staged launcher from ~/applaunch-test (cwd there; the installed /usr/share/APPLaunch stays as it
            is); test-stop kills it, removes the test files and restarts the service detached
            (setsid nohup systemctl --user restart ... &), so the ssh call returns at once.
-  desktop  Raspberry Pi OS desktop (lightdm + labwc owns the screen: Pi 5, HackBerry). test-start stops lightdm, links
-           /usr/share/APPLaunch -> ~/applaunch-test (only when nothing real is there) and runs the staged launcher;
-           test-stop removes the link (only ours), starts lightdm again and removes the test files.
+  desktop  Raspberry Pi OS desktop (lightdm + labwc owns the screen: Pi 5, HackBerry). install.sh installs the desktop
+           variant there (applaunch-desktop.service, started from the applications menu, gives the desktop back on
+           exit). test-start stops that unit if it runs, stops lightdm, links /usr/share/APPLaunch -> ~/applaunch-test
+           (only when nothing real is there) and runs the staged launcher; test-stop removes the link (only ours),
+           starts lightdm again and removes the test files.
 
 Quirks encoded here:
   - Pi 3A+ (quirk no_environ): an ssh command string containing the word "environ" drops the connection. board.py
@@ -47,6 +50,8 @@ BINARY = "M5CardputerZero-APPLaunch"
 REMOTE_TAR = "/tmp/applaunch-upload.tar.gz"
 REMOTE_BUNDLE = "/tmp/applaunch-bundle"       # the tarball unpacks to REMOTE_BUNDLE/bundle/...
 SERVICE = "APPLaunch.service"
+DESKTOP_UNIT = "applaunch-desktop.service"     # desktop boards: the launcher started from the applications menu
+CONSOLE_UNIT = "applaunch-console.service"     # service boards: the panel leaves the text console after boot
 
 
 class BoardError(Exception):
@@ -186,13 +191,18 @@ def do_upload(remote, board, args):
         check=True)
 
 
+def install_options(board, args):
+    """install.sh's options: the board's user, --dry-run for --check, --force passed on, then --install-arg ones."""
+    options = ["--user", board.user] + (["--dry-run"] if args.check else []) + (["--force"] if args.force else [])
+    return options + [x for x in (args.install_arg or []) if not (x == "--force" and args.force)]
+
+
 def do_install(remote, board, args):
-    if board.kind == "desktop" and not args.force:
-        raise BoardError("%s is a desktop board: install.sh knows the deck (zero2w) and the Pi 3A+ (pi3a-luckfox35) "
-                         "only; test it with test-start, or pass --force" % board.name)
-    options = ["--user", board.user] + (["--dry-run"] if args.check else []) + list(args.install_arg or [])
+    # Desktop boards are supported: install.sh sees their display manager and installs the desktop variant
+    # (applaunch-desktop.service + menu entry; nothing starts now, nothing at boot).
+    options = install_options(board, args)
     log = "/tmp/applaunch-install.log"
-    # install.sh restarts the user service itself (runuser ... systemctl --user restart APPLaunch.service)
+    # service boards: install.sh restarts the user service itself (runuser ... systemctl --user restart APPLaunch.service)
     return remote.run("cd {b}/bundle && sh ./install.sh {o} > {log} 2>&1; rc=$?; tail -n 60 {log}; exit $rc".format(
         b=REMOTE_BUNDLE, o=" ".join(shlex.quote(x) for x in options), log=log), sudo=True, timeout=900)
 
@@ -225,11 +235,13 @@ def do_test_start(remote, board, args):
         remote.run("systemctl --user stop %s; pkill -x %s; sleep 1; systemctl --user is-active %s || true"
                    % (SERVICE, LAUNCHER_COMM, SERVICE))
     else:
+        # an installed launcher started from the menu goes first (its stop brings lightdm back, stopped just after)
         remote.run(
+            "systemctl stop {unit} 2>/dev/null; "
             "pkill -x {comm}; systemctl stop lightdm; sleep 3; systemctl is-active lightdm; "
             "if [ -L /usr/share/APPLaunch ] || [ ! -e /usr/share/APPLaunch ]; then ln -sfn {t} /usr/share/APPLaunch; "
             "else echo '/usr/share/APPLaunch is a real directory: left alone'; fi; ls -ld /usr/share/APPLaunch".format(
-                comm=LAUNCHER_COMM, t=board.test_dir), sudo=True)
+                unit=DESKTOP_UNIT, comm=LAUNCHER_COMM, t=board.test_dir), sudo=True)
     return remote.run(launch)
 
 
@@ -286,11 +298,16 @@ def do_status(remote, board, args):
     t = board.test_dir
     common = ("uname -n; uptime; pgrep -ax {comm} || echo launcher-not-running; ls -ld /usr/share/APPLaunch {t} 2>&1; "
               "cat /etc/applaunch/board.conf 2>/dev/null | grep -v '^#' | head -20").format(comm=LAUNCHER_COMM, t=t)
+    # the framebuffer console: bound = the kernel console may repaint over the launcher (no "environ" in here: Pi 3A+)
+    console = ("for d in /sys/class/vtconsole/vtcon*; do grep -q 'frame buffer' $d/name 2>/dev/null && "
+               "echo text-console: $(basename $d) bind=$(cat $d/bind); done")
     if board.kind == "service":
-        extra = "echo service: $(systemctl --user is-active %s)" % SERVICE
+        extra = ("echo service: $(systemctl --user is-active {svc}); echo console-unit: $(systemctl is-active {con}); "
+                 "{console}").format(svc=SERVICE, con=CONSOLE_UNIT, console=console)
     else:
-        extra = ("echo lightdm: $(systemctl is-active lightdm); "
-                 "pgrep -x labwc > /dev/null && echo labwc-running || echo labwc-not-running")
+        extra = ("echo lightdm: $(systemctl is-active lightdm); echo {unit}: $(systemctl is-active {unit}); "
+                 "pgrep -x labwc > /dev/null && echo labwc-running || echo labwc-not-running; {console}").format(
+                     unit=DESKTOP_UNIT, console=console)
     return remote.run(common + "; " + extra)
 
 
@@ -318,7 +335,8 @@ def build_parser(board_names):
     board_arg(p)
     p.add_argument("--check", action="store_true", help="install.sh --dry-run: print what it would do")
     p.add_argument("--install-arg", action="append", metavar="ARG", help="extra install.sh option (repeatable)")
-    p.add_argument("--force", action="store_true", help="allow a desktop board")
+    p.add_argument("--force", action="store_true", help="install.sh --force (unknown board without a profile, "
+                   "replace a hand-edited board.conf); desktop boards need no --force")
     p = sub.add_parser("test-start", help="run the staged test launcher (desktop boards: stop lightdm first)")
     board_arg(p)
     p.add_argument("--env", action="append", metavar="K=V", help="extra launcher environment (repeatable), e.g. "

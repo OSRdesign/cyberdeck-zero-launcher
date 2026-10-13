@@ -7,7 +7,7 @@ accepted too); it is never stored, never on a command line (sudo reads it on std
 
 ```
 python board.py upload     pi3a C:/path/pizero2w-bundle.tar.gz   # upload, unpack to /tmp/applaunch-bundle, stage ~/applaunch-test
-python board.py install    pi3a [--check]                        # sudo install.sh --user <user> (--check = install.sh --dry-run)
+python board.py install    pi3a [--check] [--force]              # sudo install.sh --user <user> (--check = install.sh --dry-run)
 python board.py test-start pi5 --env APPLAUNCH_OSK=force
 python board.py grab       pi5 C:/tmp/pi5.png [--raw]            # framebuffer, turned the way the user sees it
 python board.py test-stop  pi5                                   # restore desktop / service, remove test files
@@ -23,11 +23,17 @@ python board.py status     deck
 
 - **service** boards run the installed launcher as the user service `APPLaunch.service`. `test-start` stops it and
   runs the staged launcher from `~/applaunch-test` with the board's `test_env`; `test-stop` kills it, removes the test
-  files and restarts the service detached (`setsid nohup systemctl --user restart ... &`).
-- **desktop** boards (Raspberry Pi OS desktop: lightdm + labwc own the screen) have no installed launcher.
-  `test-start` stops lightdm, links `/usr/share/APPLaunch` to `~/applaunch-test` (only when nothing real is there)
-  and runs the staged launcher; `test-stop` removes that link, starts lightdm again and removes the test files.
-  `install` refuses them unless `--force` (install.sh knows the deck and the Pi 3A+ only).
+  files and restarts the service detached (`setsid nohup systemctl --user restart ... &`). `status` also shows
+  `applaunch-console.service` and whether the framebuffer text console is bound (`bind=1`) or not (`bind=0`).
+- **desktop** boards (Raspberry Pi OS desktop: lightdm + labwc own the screen). `install` puts the desktop variant
+  there (install.sh detects the display manager: `applaunch-desktop.service`, the menu entry "CardputerZero Launcher",
+  nothing starts at boot; see `projects/APPLaunch/pizero2w/README.md`, "Desktop boards"); no `--force` needed.
+  `test-start` stops `applaunch-desktop.service` if it runs, stops lightdm, links `/usr/share/APPLaunch` to
+  `~/applaunch-test` (only when nothing real is there, so not after an install) and runs the staged launcher;
+  `test-stop` removes that link, starts lightdm again and removes the test files. `status` shows lightdm, the unit and
+  the text console.
+- `install --force` passes `--force` to install.sh (an unknown board without a profile, or replacing a hand-edited
+  `/etc/applaunch/board.conf`). Other install.sh options: `--install-arg=--no-default-source` (with `=`).
 - **Pi 3A+:** a command string containing `environ` drops the ssh connection; `board.py` refuses to send one (quirk
   `no_environ` in `boards.json`), before anything on the board is stopped.
 - **Pi 3A+ `/tmp` is a 208 MB tmpfs.** The bundle is about 54 MB and `upload` unpacks it there, so an earlier bundle or `/tmp/applaunch-bundle` left behind makes `upload` fail with "No space left on device" (or paramiko `OSError: Failure`). Remove the old files (`rm -rf /tmp/applaunch-bundle /tmp/applaunch-upload.tar.gz /tmp/b05 /tmp/bundle*.tar.gz`) and upload again.
