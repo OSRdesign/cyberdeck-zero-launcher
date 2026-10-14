@@ -65,6 +65,10 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_app_display_order"
 "$build_dir/test_app_display_order"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_icon_file_signature.cpp" \
+    -o "$build_dir/test_icon_file_signature"
+"$build_dir/test_icon_file_signature"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_snake_game_model.cpp" \
     "$test_root/../main/ui/model/snake_game_model.cpp" \
     -o "$build_dir/test_snake_game_model"

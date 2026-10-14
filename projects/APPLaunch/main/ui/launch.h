@@ -12,6 +12,7 @@
 #include "ui_loading.h"
 #include "native_ui.hpp"
 #include "esc_ui_watchdog.h"
+#include "model/icon_file_signature.hpp"
 #include "model/launcher_navigation_model.hpp"
 #include "terminal_help_factory.hpp"
 
@@ -167,10 +168,13 @@ private:
     static void lv_go_back_home(void *arg) noexcept;
     static void esc_force_home_cb(void *user_data) noexcept;
     static void app_registry_changed_cb(void *user_data) noexcept;
+    static void icon_poll_cb(lv_timer_t *timer) noexcept;
 
     std::weak_ptr<UILaunchPage> launch_page_;
     int current_app = 2;
     AppDirectoryWatcher app_directory_watcher_;
+    IconSignatureSet icon_signatures_;   /* icon files as the tiles were built: a replaced icon file rebuilds them */
+    lv_timer_t *icon_poll_timer_ = nullptr;
     EscUiWatchdog esc_ui_watchdog_;
     LauncherPageLifecycleModel page_lifecycle_;
     int fixed_count = 0;

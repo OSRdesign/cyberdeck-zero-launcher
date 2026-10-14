@@ -7,6 +7,7 @@
 #pragma once
 
 #include "lvgl/lvgl.h"
+#include "model/icon_file_signature.hpp"
 
 #include <cstddef>
 #include <memory>
@@ -42,4 +43,6 @@ private:
 
     std::unordered_map<std::string, DrawBufferPtr> icons_;
     std::unordered_map<std::string, DrawBufferPtr> resized_icons_;
+    /* file identity (mtime + size) each icon was decoded from; part of the resized-buffer key */
+    std::unordered_map<std::string, IconFileSignature> signatures_;
 };
