@@ -206,6 +206,7 @@ void Roller::build_row(int index)
 
     row.label = lv_label_create(row.obj);
     lv_label_set_long_mode(row.label, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_remove_flag(row.label, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (Page's caption, cp0_ui_page.cpp) */
     lv_obj_set_style_text_color(row.label, lv_color_hex(kText), 0);
 
     switch (row.spec.kind) {
@@ -245,6 +246,7 @@ void Roller::build_row(int index)
         lv_obj_set_style_text_color(row.value, lv_color_hex(kValue), 0);
         lv_obj_set_style_text_align(row.value, LV_TEXT_ALIGN_RIGHT, 0);
         lv_label_set_long_mode(row.value, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_remove_flag(row.value, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see row.label) */
         break;
     case RowKind::Network: {
         const NetworkGlyphs g = network_glyphs(layout_);

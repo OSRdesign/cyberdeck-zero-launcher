@@ -63,6 +63,11 @@ Page::Page(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TitleFactory ma
     // the status line lies over the top left of the body, on black, above whatever the page draws there
     caption_ = lv_label_create(root_);
     lv_label_set_long_mode(caption_, LV_LABEL_LONG_MODE_DOTS);
+    /* A label with dots is not scrollable (none of the shell's is). LVGL 9.5 draws a label straight from its text
+     * buffer on the draw thread, while the scrollbar of a scrollable label (LV_EVENT_DRAW_POST, right after the text
+     * is queued) measures the text (after a change of text, size or font) by taking the dots out of that buffer and
+     * putting them back: the draw thread could catch it half way ("Renamed to Studio" for "Renamed to Studio he..."). */
+    lv_obj_remove_flag(caption_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_pos(caption_, layout_.caption_x, layout_.caption_y);
     lv_obj_set_style_text_font(caption_, cp0_ui_font_px(layout_.caption_px), 0);
     lv_obj_set_style_bg_color(caption_, lv_color_hex(0x000000), 0);
@@ -197,6 +202,7 @@ void Page::apply_title(const std::vector<std::string> &path)
         }
     }
     lv_label_set_long_mode(title_, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_remove_flag(title_, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see caption_ in the constructor) */
     lv_obj_set_width(title_, layout_.title_max_w);
     if (font) lv_obj_set_height(title_, lv_font_get_line_height(font)); /* one line: dots need a fixed height */
     lv_label_set_text(title_, path.back().c_str());

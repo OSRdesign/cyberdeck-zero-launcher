@@ -487,11 +487,18 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
     "$root/tests/test_process_runner.cpp" -o "$binary"
 "$binary"
 
-"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
-    -I"$root/include" -I"$root/src/cp0" \
-    "$root/src/cp0/cp0_keyboard_keymap.c" \
-    "$root/tests/test_keyboard_keymap.c" -lxkbcommon -o "$binary"
-"$binary"
+# The keymap test links libxkbcommon (apt: libxkbcommon-dev). Without it: SKIP with a clear message, unless CI=1 or
+# REQUIRE_XKBCOMMON=1, where a missing library stays a hard failure (the compile below fails as before).
+if printf '#include <xkbcommon/xkbcommon.h>\n' | "${CC:-cc}" -E -x c - >/dev/null 2>&1 \
+    || [ "${CI:-}" = 1 ] || [ "${REQUIRE_XKBCOMMON:-}" = 1 ]; then
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+        -I"$root/include" -I"$root/src/cp0" \
+        "$root/src/cp0/cp0_keyboard_keymap.c" \
+        "$root/tests/test_keyboard_keymap.c" -lxkbcommon -o "$binary"
+    "$binary"
+else
+    echo "SKIP test_keyboard_keymap (libxkbcommon-dev missing: sudo apt install libxkbcommon-dev)"
+fi
 
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread \
     -I"$root/include" -I"$root/src" \

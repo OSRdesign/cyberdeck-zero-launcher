@@ -617,13 +617,18 @@ bool sudo_prompt_open()
 }
 
 /* Advance the fake clock in 5 ms steps, running LVGL timers (refresh, indev reads, animations).
- * Worker threads some pages start get a little real time between steps to report back. */
-void settle(uint32_t ms)
+ * Worker threads some pages start get a little real time between steps to report back: the fake clock runs far faster
+ * than the threads, so what a scene shows would depend on their scheduling (the Bluetooth pages' status and device list
+ * replies: a switch still off, a name cut with dots at an earlier width). `wait` is where a scene says "async work is
+ * in flight": it gives the threads kWaitRealUs per 50 ms of fake time, the other settling a few hundred microseconds. */
+constexpr useconds_t kSettleRealUs = 300;
+constexpr useconds_t kWaitRealUs = 2000;
+void settle(uint32_t ms, useconds_t real_us = kSettleRealUs)
 {
     for (uint32_t t = 0; t < ms; t += 5) {
         g_tick += 5;
         lv_timer_handler();
-        if (t % 50 == 0) usleep(300);
+        if (t % 50 == 0) usleep(real_us);
     }
 }
 
@@ -1214,7 +1219,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("%s\n", path.c_str());
     } else if (cmd == "wait") {
         if (w.size() != 2) return fail(scene, line, "usage: wait MS");
-        settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))));
+        settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))), kWaitRealUs);
     } else if (cmd == "shot") {
         if (w.size() != 2) return fail(scene, line, "usage: shot NAME");
         settle(500);
