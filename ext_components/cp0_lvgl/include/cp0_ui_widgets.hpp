@@ -46,6 +46,13 @@
  *                      moves (Up / Down, drag, tap) so a long table scrolls; Esc / Left go back.
  *   TextBlock          (task 014 P3a) a long text (Licenses, guides) in a scrolling column, roller wide: drag, Up / Down
  *                      (a row token per press), Page Up / Down, Home / End; Esc / Left go back.
+ *   CompactList        the apps' list (cp0_ui_list.h): top-aligned rows (row 0 under the area's top edge, the highlight
+ *                      moves down, the list scrolls only to keep the highlight and one row of context in view, never
+ *                      centred), no chevrons, a thin scrollbar at the right edge while scrolling. Two densities:
+ *                      Compact (dense data, 5 mm rows, about 7 on the deck) and Comfortable (the roller's row height, a few
+ *                      touch-friendly rows). Rows: item (label cut with dots, value right never cut, value tone) and
+ *                      section header. Live refresh in place (no flicker, no scroll jump, selection kept), read-only
+ *                      mode, an empty-state line. Keys, tap and tap-again-to-activate as the Roller.
  *   Dialog             (task 014 P3b) a title, a body (text, TextFields) and 1-3 buttons: the primary one is Enter, the
  *                      cancel one Esc (also the keyboard's Enter / Esc while a field edits). Width DIALOG_MAX_W,
  *                      centred in the room between the page header and the on-screen keyboard and following the
@@ -67,12 +74,14 @@
 #include "cp0_statusbar.h"
 #include "cp0_ui_dialog.h"
 #include "cp0_ui_info.h"
+#include "cp0_ui_list.h"
 #include "cp0_ui_osk.h"
 #include "cp0_ui_roller.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -335,6 +344,136 @@ private:
     std::function<void()> back_;
     lv_obj_t *box_ = nullptr; /* scrolls; in the page's input group */
     lv_obj_t *label_ = nullptr;
+};
+
+/* ------------------------------------------------------------------ CompactList (the apps' list) */
+
+enum class ListDensity { Compact, Comfortable };
+enum class ListRowKind { Item, Section };
+enum class ValueTone { Normal, Ok, Warn, Bad }; /* value colour: green (the roller's), light green, amber, red */
+
+struct ListRow {
+    ListRowKind kind = ListRowKind::Item;
+    std::string label;                 /* left, one line, cut with dots; a Section's title (drawn upper case, grey) */
+    std::string value;                 /* right, never cut; empty: none (the label takes the whole row) */
+    ValueTone tone = ValueTone::Normal;
+    std::intptr_t id = 0;              /* the app's own identifier, given back to activate */
+
+    static ListRow item(std::string label, std::string value = std::string(), ValueTone tone = ValueTone::Normal,
+                        std::intptr_t id = 0)
+    {
+        ListRow row;
+        row.label = std::move(label);
+        row.value = std::move(value);
+        row.tone = tone;
+        row.id = id;
+        return row;
+    }
+    static ListRow section(std::string title)
+    {
+        ListRow row;
+        row.kind = ListRowKind::Section;
+        row.label = std::move(title);
+        return row;
+    }
+};
+
+struct CompactListEvents {
+    std::function<void(int index, std::intptr_t id)> activate; /* Enter, Right, a tap on the selected item. May replace
+                                                                  the rows; delete the list later, not in it */
+    std::function<void(int index)> selected;                    /* optional: the highlight moved (keys, tap, select()) */
+    std::function<void()> back;                                 /* Esc, Left */
+};
+
+struct CompactListOptions {
+    bool read_only = false;  /* no highlight, no activation: a pure scrolling list (logs, info) */
+    bool wrap = false;       /* Up on the first item goes to the last, Down on the last to the first */
+    std::string empty_text;  /* the grey line shown while the list has no row ("" = none) */
+};
+
+class CompactList {
+public:
+    /* layout: cp0_ui_list_page_layout() for a Page's body (the roller's column, under the header), or
+     * cp0_ui_list_layout() for any area; set layout.separator_px = 1 first for a hairline between items. */
+    CompactList(lv_obj_t *parent, const cp0_ui_list_layout_t &layout, CompactListEvents events,
+                CompactListOptions options = CompactListOptions());
+    ~CompactList();
+    CompactList(const CompactList &) = delete;
+    CompactList &operator=(const CompactList &) = delete;
+
+    /* Live data (call it every second if you like): the rows replace the old ones in place. Only the texts and
+     * colours that changed are touched; the scroll offset and the selected index stay (clamped when rows went away;
+     * a selection that lands on a section moves to the next item). No flicker, no scroll jump, no focus loss. The
+     * selection follows the index, not the row's identity: select() it again if your rows re-sort. */
+    void set_rows(const std::vector<ListRow> &rows);
+    /* New content (another page of the app): the rows, scrolled to the top, `selected` highlighted (clamped; the next
+     * item when it is a section) and in view. The scrollbar shows for a second when the rows do not all fit. */
+    void reset_rows(const std::vector<ListRow> &rows, int selected = 0);
+    /* One row in place (same kind: only its texts / colour; another kind: the rows below move, nothing scrolls). */
+    void update_row(int index, const ListRow &row);
+    void set_value(int index, const std::string &value, ValueTone tone = ValueTone::Normal);
+
+    /* Highlight an item and scroll just enough to show it with one row of context. Read-only: scroll it into view. */
+    void select(int index, bool animated = true);
+    int selected() const { return selected_; } /* -1: none (read-only, or no item) */
+    int count() const { return static_cast<int>(rows_.size()); }
+    const ListRow &row(int index) const;       /* an empty row when index is out of range */
+
+    /* The empty state: a grey line at the top of the area while the list has no row; empty_area() is the box it
+     * lives in (the whole list area, shown only while there is no row): add a card of your own to it. */
+    void set_empty_text(const std::string &text);
+    lv_obj_t *empty_area() const { return empty_; }
+
+    void set_hidden(bool hidden);
+    /* The object to add to the page's input group and focus: it receives the keys (LV_EVENT_KEY). */
+    lv_obj_t *focus_object() const { return list_; }
+    const cp0_ui_list_layout_t &layout() const { return layout_; }
+
+private:
+    struct Row {
+        ListRow spec;
+        lv_obj_t *obj = nullptr;
+        lv_obj_t *label = nullptr;
+        lv_obj_t *value = nullptr;
+        bool styled_selected = false;
+    };
+
+    static void list_event_cb(lv_event_t *event);
+    static void row_event_cb(lv_event_t *event);
+    static void list_delete_cb(lv_event_t *event);
+    static void hide_timer_cb(lv_timer_t *timer);
+
+    void build_row(int index);
+    void style_kind(Row &row);
+    void fill_row(Row &row, const ListRow *previous);
+    void style_selected(int index);
+    const lv_font_t *label_font(const Row &row) const;
+    void relayout();
+    void apply(const cp0_ui_list_result_t &result, bool animated, bool notify);
+    void set_selected(int index, bool notify);
+    void scroll_to(int y, bool animated);
+    int scroll_base() const;
+    cp0_ui_list_state_t state() const;
+    void show_scrollbar();
+    void update_empty();
+    void on_key(uint32_t key);
+    void on_row_clicked(int index);
+
+    cp0_ui_list_layout_t layout_;
+    CompactListEvents events_;
+    CompactListOptions options_;
+    lv_obj_t *list_ = nullptr;   /* scrolls; holds the rows and the empty area */
+    lv_obj_t *empty_ = nullptr;
+    lv_obj_t *empty_label_ = nullptr;
+    lv_timer_t *hide_timer_ = nullptr;
+    std::vector<Row> rows_;
+    std::vector<cp0_ui_list_kind_t> kinds_;
+    std::vector<int> tops_;       /* count + 1 */
+    int selected_ = -1;
+    bool busy_ = false;           /* a keyboard scroll animation is running */
+    int busy_target_ = 0;         /* ... towards this offset */
+    bool bar_shown_ = false;
+    bool rebuilding_ = false;     /* set_rows() at work: its scroll events are not the user's */
 };
 
 /* ------------------------------------------------------------------ text fields and the on-screen keyboard */

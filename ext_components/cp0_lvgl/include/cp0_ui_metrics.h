@@ -38,6 +38,8 @@ extern "C" {
 #define CP0_UI_TARGET_MM_X10 90        /* ... primary buttons and toolbar keys 9 mm ... */
 #define CP0_UI_ROW_FLOOR_PX 40         /* ... never smaller than 40 / 48 px on low-density panels */
 #define CP0_UI_TARGET_FLOOR_PX 48
+#define CP0_UI_LIST_ROW_MM_X10 50      /* CompactList's compact rows (dense data): 5.0 mm, under D5's 7 mm ... */
+#define CP0_UI_LIST_ROW_FLOOR_PX 24    /* ... never smaller than 24 px (a mis-tap there only moves the highlight) */
 #define CP0_UI_COMPAT_W 320            /* the stock apps' canvas */
 #define CP0_UI_COMPAT_H 170
 #define CP0_UI_FONT_MIN_PX 8           /* builtin Montserrat: every even size 8..48 (lv_conf, all boards) */
@@ -87,6 +89,7 @@ typedef enum {
     CP0_TOK_TOOLBAR_H,   /* stock-app toolbar: TARGET keys + the shell's padding (pinned: 140 deck, 100 Pi 3A+) */
     CP0_TOK_TILE_ICON,   /* home tile icon */
     CP0_TOK_DIALOG_MAX_W,
+    CP0_TOK_LIST_ROW_H,  /* CompactList compact row (cp0_ui_list.h): 5.0 mm, at least 24 px. Not in screen.state */
     CP0_TOK__COUNT
 } cp0_ui_token_t;
 

@@ -27,6 +27,7 @@
 #include "cp0_sudo_prompt_ui.hpp"
 #include "cp0_sudo_prompt_key_policy.hpp"
 #include "cp0_ui_metrics.h"
+#include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_overlay.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
@@ -616,6 +617,129 @@ bool sudo_prompt_open()
     return true;
 }
 
+/* listdemo: a cp0::ui::CompactList on a page of its own (the Page scaffold, the shared status strip, an input group on
+ * the keypad), as an app builds it. The rows are fixed demo data: Compact = a system monitor (sections, value tones,
+ * long labels, 40 rows cycled to the count asked), Comfortable = serial ports (3 rows or fewer) or a terminal app's
+ * settings menu. An activation writes "Activated <label>" into the title. "listdemo update" refreshes the values in
+ * place (set_rows with the same rows, other values), as a live list does every second. */
+struct ListDemo {
+    lv_obj_t *screen = nullptr;
+    std::unique_ptr<cp0::ui::Page> page;
+    std::unique_ptr<cp0::ui::CompactList> list;
+    lv_group_t *group = nullptr;
+    std::vector<cp0::ui::ListRow> rows;
+};
+ListDemo g_list_demo;
+
+std::vector<cp0::ui::ListRow> list_demo_rows(bool comfortable, int count, int generation)
+{
+    using cp0::ui::ListRow;
+    using cp0::ui::ValueTone;
+    auto item = [](const std::string &label, const std::string &value, ValueTone tone = ValueTone::Normal) {
+        return ListRow::item(label, value, tone);
+    };
+    auto section = [](const std::string &title) { return ListRow::section(title); };
+    std::vector<ListRow> base;
+    if (comfortable && count <= 3) {
+        base = {item("/dev/ttyUSB0", "USB serial"), item("/dev/ttyACM0", "Modem"), item("/dev/ttyAMA0", "GPIO UART")};
+    } else if (comfortable) {
+        base = {item("Port", "/dev/ttyUSB0"), item("Baud rate", "115200"), item("Data bits", "8"),
+                item("Parity", "None"),       item("Stop bits", "1"),       item("Flow control", "Off"),
+                item("Local echo", "On", ValueTone::Ok), item("Line ending", "CR LF"), item("Timestamps", "Off"),
+                item("Log to file", "Failed", ValueTone::Bad), item("Hex view", "Off"), item("About", "")};
+    } else {
+        const bool hot = generation % 2 == 1;
+        base = {section("System"),
+                item("CPU total", hot ? "64.0 %" : "12.5 %", hot ? ValueTone::Warn : ValueTone::Normal),
+                item("CPU temperature", hot ? "81.3 \xC2\xB0" "C" : "71.2 \xC2\xB0" "C", hot ? ValueTone::Bad : ValueTone::Warn),
+                item("Memory used", hot ? "348 MB of 512 MB" : "312 MB of 512 MB"),
+                item("Under-voltage", "Now", ValueTone::Bad),
+                item("Throttling", "None", ValueTone::Ok),
+                item("Uptime", hot ? "3 d 4 h 1 min" : "3 d 4 h"),
+                item("Load average", "0.42 0.38 0.31"),
+                item("Root file system", "71 % used"),
+                section("Top processes by CPU")};
+        static const char *const names[] = {
+            "python3 /opt/sensors/bin/environment-logger --interval 1 --output /var/log/env.csv",
+            "kworker/u8:2-events_unbound",
+            "systemd-journald",
+            "a-process-with-a-very-long-name-that-never-fits-in-the-row",
+            "sshd: user@pts/0",
+            "rtl_433 -F json -M time:utc",
+            "dbus-daemon --system",
+            "bluetoothd",
+            "wpa_supplicant -i wlan0",
+            "cron",
+        };
+        for (int i = 0; static_cast<int>(base.size()) < std::max(count, 10); ++i) {
+            const int tenths = ((i * 37 + generation * 11) % 97) * 7 % 700; /* 0.0 .. 69.9 % */
+            char value[32];
+            std::snprintf(value, sizeof(value), "%d.%d %%", tenths / 10, tenths % 10);
+            const ValueTone tone = tenths >= 500 ? ValueTone::Bad : tenths >= 250 ? ValueTone::Warn : ValueTone::Normal;
+            base.push_back(item(std::string(names[i % 10]) + (i >= 10 ? " #" + std::to_string(i / 10 + 1) : ""),
+                                value, tone));
+        }
+    }
+    std::vector<ListRow> rows;
+    for (int i = 0; i < count; ++i) rows.push_back(base[static_cast<size_t>(i) % base.size()]);
+    return rows;
+}
+
+void list_demo_destroy(ListDemo &d)
+{
+    d.list.reset();
+    d.page.reset();
+    if (d.group) lv_group_delete(d.group);
+    d.group = nullptr;
+    if (d.screen) lv_obj_delete(d.screen);
+    d.screen = nullptr;
+    d.rows.clear();
+}
+
+void list_demo_open(bool comfortable, int count, bool read_only, bool separators, bool wrap, const std::string &empty)
+{
+    ListDemo old = std::move(g_list_demo);
+    g_list_demo = ListDemo{};
+    ListDemo &d = g_list_demo;
+    native_ui::begin_page(true, false);
+    d.screen = lv_obj_create(nullptr);
+    lv_obj_remove_style_all(d.screen);
+    lv_obj_set_style_bg_color(d.screen, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_bg_opa(d.screen, LV_OPA_COVER, 0);
+    cp0_ui_roller_page_t page_layout{};
+    cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &page_layout);
+    d.page = std::make_unique<cp0::ui::Page>(
+        d.screen, page_layout, [](lv_obj_t *header, const char *text) { return cp0::ui::add_title(header, text); },
+        [] {});
+    d.page->set_title({"List demo"});
+
+    cp0_ui_list_layout_t layout{};
+    cp0_ui_list_page_layout(cp0_ui_metrics_get(), &page_layout,
+                            comfortable ? CP0_UI_LIST_COMFORTABLE : CP0_UI_LIST_COMPACT, &layout);
+    if (separators) layout.separator_px = 1;
+    cp0::ui::CompactListEvents events;
+    events.activate = [](int index, std::intptr_t) {
+        ListDemo &demo = g_list_demo;
+        if (demo.page && demo.list) demo.page->set_title({"List demo", "Activated " + demo.list->row(index).label});
+    };
+    cp0::ui::CompactListOptions options;
+    options.read_only = read_only;
+    options.wrap = wrap;
+    options.empty_text = empty;
+    d.list = std::make_unique<cp0::ui::CompactList>(d.page->root(), layout, std::move(events), options);
+    d.rows = list_demo_rows(comfortable, count, 0);
+    d.list->reset_rows(d.rows, 0);
+
+    d.group = lv_group_create();
+    lv_group_add_obj(d.group, d.list->focus_object());
+    lv_group_focus_obj(d.list->focus_object());
+    for (lv_indev_t *indev = lv_indev_get_next(nullptr); indev; indev = lv_indev_get_next(indev))
+        if (lv_indev_get_type(indev) == LV_INDEV_TYPE_KEYPAD) lv_indev_set_group(indev, d.group);
+    lv_screen_load(d.screen);
+    cp0::ui::StatusStrip::add(d.page->header(), native_ui::fill_status);
+    list_demo_destroy(old);
+}
+
 /* Advance the fake clock in 5 ms steps, running LVGL timers (refresh, indev reads, animations).
  * Worker threads some pages start get a little real time between steps to report back. */
 void settle(uint32_t ms)
@@ -715,7 +839,7 @@ uint32_t key_code(const std::string &name)
         {"4", KEY_4},         {"5", KEY_5},         {"6", KEY_6},                 {"7", KEY_7},
         {"8", KEY_8},         {"9", KEY_9},         {"MINUS", KEY_MINUS},         {"EQUAL", KEY_EQUAL},
         {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH}, {"DELETE", KEY_DELETE},
-        {"F1", KEY_F1},
+        {"F1", KEY_F1},       {"HOME", KEY_HOME},   {"END", KEY_END},
     };
     const auto found = keys.find(name);
     return found == keys.end() ? 0 : found->second;
@@ -1066,6 +1190,34 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             return fail(scene, line, "usage: sudoprompt open|busy|wrong|close (open first)");
         }
         settle(400);
+    } else if (cmd == "listdemo") {
+        /* listdemo compact|comfortable ROWS [readonly] [separators] [wrap] [empty TEXT...]: a CompactList page;
+         * listdemo update: refresh the values in place (a live list's set_rows) */
+        if (w.size() == 2 && w[1] == "update") {
+            if (!g_list_demo.list) return fail(scene, line, "listdemo update needs a list (listdemo compact N first)");
+            static int generation = 0;
+            const bool comfortable = g_list_demo.list->layout().density == CP0_UI_LIST_COMFORTABLE;
+            g_list_demo.rows = list_demo_rows(comfortable, g_list_demo.list->count(), ++generation);
+            g_list_demo.list->set_rows(g_list_demo.rows);
+            settle(200);
+            return true;
+        }
+        if (w.size() < 3 || (w[1] != "compact" && w[1] != "comfortable"))
+            return fail(scene, line, "usage: listdemo compact|comfortable ROWS [readonly] [separators] [wrap] "
+                                     "[empty TEXT...] | listdemo update");
+        bool read_only = false, separators = false, wrap = false;
+        std::string empty;
+        for (std::size_t i = 3; i < w.size(); ++i) {
+            if (w[i] == "readonly") read_only = true;
+            else if (w[i] == "separators") separators = true;
+            else if (w[i] == "wrap") wrap = true;
+            else if (w[i] == "empty") {
+                for (std::size_t j = i + 1; j < w.size(); ++j) empty += (j > i + 1 ? " " : "") + w[j];
+                break;
+            } else return fail(scene, line, "listdemo: unknown option " + w[i]);
+        }
+        list_demo_open(w[1] == "comfortable", std::max(0, to_int(w[2])), read_only, separators, wrap, empty);
+        settle(200);
     } else if (cmd == "toast") {
         std::string text;
         for (std::size_t i = 1; i < w.size(); ++i) text += (i > 1 ? " " : "") + w[i];

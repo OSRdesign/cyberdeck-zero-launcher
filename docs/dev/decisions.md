@@ -2,6 +2,17 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-10-14: apps get a second list, `cp0::ui::CompactList`; the Roller stays the Settings menu look.** Owner
+  feedback on System Monitor (deck): the roller shows 2-3 big rows, centres the first item and its orange chevrons
+  overlap content and read as page jumps. CompactList is top-aligned (scrolls only to keep the highlight and one row of
+  context in view), has no chevrons, a thin auto-hiding scrollbar, two densities (Compact: 5.0 mm `LIST_ROW` token,
+  about 7.5 rows on the deck; Comfortable: the roller's 7 mm row), sections, value tones, in-place live refresh, a
+  read-only mode and an empty state. Roller for few big items (menus, Settings), CompactList for data and app lists
+  (8+ rows). Compact rows are 5.0 mm, below D5's 7 mm list-row rule on purpose: they are for dense data lists, where a
+  tap on an unselected row only moves the highlight, so a mis-tap never activates anything; anything whose rows
+  trigger an action uses Comfortable (7 mm, roller-sized). No edge fade; Page Up / Down are LVGL focus keys and do not
+  reach the list.
+
 - **2026-10-13: the minimum resolution for new work is 640x480 (the deck); app guidelines come first.**
   - 480x320 (the Pi 3A+) is too small for the apps the project wants to build. New apps and new launcher screens
     are designed for 640x480 and up. The launcher keeps working at 480x320 as it does today (nothing is removed, no
