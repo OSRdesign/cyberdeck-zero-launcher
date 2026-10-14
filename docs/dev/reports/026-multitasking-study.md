@@ -684,6 +684,28 @@ Both run as small standalone programs on the deck, without touching the launcher
     *Recommendation: defer.*
 15. **D15 First-run hint** toast for G1/G2. *Recommendation: yes, shown once.*
 
+### Owner decisions (2026-10-14)
+
+Taken as recommended except where marked. Status: **parked** after the decisions; nothing is built. Restart with P-a.
+
+| D | Decision |
+|---|---|
+| D1 | Hybrid opt-in lifecycle (`X-Background=run\|freeze`), legacy apps unchanged |
+| D2 | **Changed:** touch gesture = 3-finger hold **1 s** (not 700 ms); still to confirm with P-a data |
+| D3 | Long-press on the status strip, 500 ms |
+| D4 | Alt+Tab (release Alt to switch) and Super = Home when present |
+| D5 | **Changed:** short Esc at an app's root keeps **quitting** (no minimise); hold Esc 3 s force-closes |
+| D6 | 4 resident apps, MemAvailable floors 64 / 32 MB, LRU auto-close with a toast |
+| D7 | 2x2 card grid (list at 480x320) |
+| D8 | **Changed:** a dot under the tile label only; no `[n]` in the status strip |
+| D9 | **Changed:** X on each card and a Close all button; no flick-up |
+| D10 | `SIGSTOP` on the process group |
+| D11 | Terminal sessions kept alive (P-f), after P-e |
+| D12 | Wrapped VFB apps: no multitasking; legacy Close/Keep sheet |
+| D13 | Additive extension of contract 1, no version bump |
+| D14 | **Changed:** bottom-edge swipe dropped |
+| D15 | First-run hint toast, shown once |
+
 ## 9. Not verified
 
 - **Not probed:** multitouch on the HackBerry and the Pi 5 (offline) and the Pi 3A+ SPI panel (not mounted): their
