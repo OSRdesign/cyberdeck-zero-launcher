@@ -69,6 +69,8 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_text_field.cpp \
     $(CP0)/src/cp0_ui_info.c \
     $(CP0)/src/cp0_ui_info_widget.cpp \
+    $(CP0)/src/cp0_ui_list.c \
+    $(CP0)/src/cp0_ui_list_widget.cpp \
     $(CP0)/src/cp0_ui_dialog.c \
     $(CP0)/src/cp0_ui_dialog_widget.cpp \
     $(CP0)/src/cp0_sudo_prompt_ui.cpp \

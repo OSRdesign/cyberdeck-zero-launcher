@@ -68,6 +68,54 @@ lv_obj_t *add_title(lv_obj_t *parent, const char *text);
 - Fonts: `share/font/Montserrat-Medium.ttf` and `FontAwesome5-Solid+Brands+Regular.woff` through `cp0_file_path_c`, else `/usr/share/APPLaunch/share/font`. Apps do not bundle them.
 - `status_strip_left()` is the `strip_left` argument of `cp0_ui_roller_page()`: a header keeps its own controls left of it. `add_title()` is the label `Page`'s `TitleFactory` makes (shell `title_x`, `title_y`, `title_px`, gold `#F0B400`).
 
+### Lists: Roller or CompactList (`include/cp0_ui_widgets.hpp`, `include/cp0_ui_list.h`)
+
+Two list widgets share the page scaffold, the keys (Up / Down, Enter and Right activate, Esc and Left go back, through
+`LV_EVENT_KEY` on the page's input group, so the navigation aliases of `cp0_keyboard_navigation_contract.h` work) and
+the touch rule (a tap selects a row, a tap on the selected row activates it).
+
+| Use | When |
+| --- | --- |
+| `Roller` | Few big items you pick from: menus, Settings, choice lists, toggles and sliders. The selected row is centred under a fixed bar, the rows around it shrink and fade, orange chevrons show that more rows exist. |
+| `CompactList` | Data and app lists, especially 8 rows or more: process tables, logs, sensor readings, serial ports, a menu inside an app. Top-aligned (row 0 under the header, the highlight moves down; the list scrolls only to keep the highlight and one row of context in view), no chevrons, a thin scrollbar at the right edge while scrolling (gone 1 s later, none when every row fits). |
+
+`CompactList` has two densities from the layout tokens: `ListDensity::Compact` (rows of the `CP0_TOK_LIST_ROW_H` token,
+5.0 mm, at least 24 px: 57 px and about 7.5 rows under the header on the 640x480 deck; for dense data, below the 7 mm
+list-row rule on purpose because a mis-tap only moves the highlight) and `ListDensity::Comfortable` (the roller's 7 mm
+`CP0_TOK_ROW_H` row, for 3-6 touch-friendly rows and any list whose rows trigger an action). Rows are items (label left, cut with dots; value right,
+never cut, coloured by `ValueTone::Normal / Ok / Warn / Bad`) or section headers (grey, upper case, never selected).
+`set_rows()` is the live refresh: only changed texts and colours are touched, the scroll offset and the selected index
+stay (no flicker, no jump). `reset_rows()` is new content (top, highlight on `selected`). `read_only` makes a plain
+scrolling list without highlight; `empty_text` (or your own card in `empty_area()`) shows while there is no row;
+`layout.separator_px = 1` draws hairlines between items.
+
+```cpp
+cp0_ui_roller_page_t page_layout;
+cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &page_layout);
+cp0::ui::Page page(screen, page_layout, cp0::ui::add_title, [] { /* back */ });
+
+cp0_ui_list_layout_t layout;
+cp0_ui_list_page_layout(cp0_ui_metrics_get(), &page_layout, CP0_UI_LIST_COMPACT, &layout);
+cp0::ui::CompactListEvents events;
+events.activate = [](int index, std::intptr_t id) { open_process(static_cast<int>(id)); };
+events.back = [] { /* the page's back */ };
+cp0::ui::CompactListOptions options;
+options.empty_text = "No process";
+cp0::ui::CompactList list(page.root(), layout, std::move(events), options);
+lv_group_add_obj(group, list.focus_object());
+lv_group_focus_obj(list.focus_object());
+
+std::vector<cp0::ui::ListRow> rows;
+rows.push_back(cp0::ui::ListRow::section("Top processes by CPU"));
+rows.push_back(cp0::ui::ListRow::item("python3 logger.py", "23.4 %", cp0::ui::ValueTone::Warn, 1234 /* id */));
+list.reset_rows(rows);   // first time / new page: top, first item highlighted
+list.set_rows(rows);     // every second afterwards: values in place, scroll and selection kept
+```
+
+The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule) are pure C in `cp0_ui_list.c`, unit-tested
+by `tests/test_ui_list.c`; the render harness scene `compact_list` shows both densities at 640x480, 800x480, 720x720
+and 480x320.
+
 ## Public C ABI
 
 Declarations are in `include/cp0_lvgl_app.h` and `include/hal_lvgl_bsp.h`. Unless noted otherwise, 0 means success and a negative value means failure.

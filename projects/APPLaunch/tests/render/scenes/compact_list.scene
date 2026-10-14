@@ -1,0 +1,72 @@
+# CompactList, the apps' list (cp0_ui_list.h, cp0_ui_widgets.hpp), on a page of its own (listdemo: the Page scaffold,
+# the shared status strip, the list in the roller's column under the header, an input group on the keypad).
+# Top-aligned: row 0 right under the header, the highlight starts there and walks down; the list scrolls only to keep
+# the highlight and one row of context in view (never centred); no chevrons; a thin scrollbar at the right edge while
+# scrolling, gone 1 s later, none when every row fits.
+#   Compact, 40 rows (a system monitor: two section headers, value tones, long labels cut with dots, values never
+#   cut): at the top with the scrollbar flashed, the highlight moved down 10 items, a live refresh (same rows, new
+#   values and tones: highlight and scroll unchanged), End, idle (scrollbar gone), a finger drag down (the list
+#   scrolls back with momentum, the highlight stays on the last item, now out of view).
+#   Comfortable, 3 rows (all fit: top-aligned, no scrollbar): a tap selects row 2, a second tap activates it (title).
+#   Comfortable, 12 rows: at the top, 6 items down (scrolled), End.
+#   Compact read-only with separators: no highlight, Down scrolls by a row. Compact, 0 rows: the empty-state line.
+title compact list
+sizes 640x480 800x480 720x720 480x320
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home
+listdemo compact 40
+shot list_compact_top
+header list_compact "List demo"
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+shot list_compact_middle
+listdemo update
+shot list_compact_refreshed
+key END
+shot list_compact_end
+wait 1500
+shot list_compact_idle
+drag 240 140 240 300
+shot list_compact_dragged
+listdemo comfortable 3
+shot list_comfortable_3
+@640x480 tap 320 175
+@800x480 tap 400 150
+@720x720 tap 360 170
+@480x320 tap 240 106
+shot list_comfortable_3_selected
+@640x480 tap 320 175
+@800x480 tap 400 150
+@720x720 tap 360 170
+@480x320 tap 240 106
+shot list_comfortable_3_activated
+listdemo comfortable 12
+shot list_comfortable_12
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+shot list_comfortable_12_scrolled
+key END
+shot list_comfortable_12_end
+listdemo compact 40 readonly separators
+key DOWN
+key DOWN
+key DOWN
+shot list_readonly_separators
+listdemo compact 0 empty "No serial ports found"
+shot list_empty

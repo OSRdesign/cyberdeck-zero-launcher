@@ -368,6 +368,7 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
     m.tok[CP0_TOK_STATUS_PCT] = k->status_pct;
     m.tok[CP0_TOK_ROW_H] = cp0_ui_mm_px(m.ppmm_x100, CP0_UI_ROW_MM_X10, CP0_UI_ROW_FLOOR_PX);
     m.tok[CP0_TOK_TARGET] = cp0_ui_mm_px(m.ppmm_x100, CP0_UI_TARGET_MM_X10, CP0_UI_TARGET_FLOOR_PX);
+    m.tok[CP0_TOK_LIST_ROW_H] = cp0_ui_mm_px(m.ppmm_x100, CP0_UI_LIST_ROW_MM_X10, CP0_UI_LIST_ROW_FLOOR_PX);
     m.tok[CP0_TOK_TILE_ICON] = k->tile_icon;
     m.tok[CP0_TOK_DIALOG_MAX_W] = imax(0, imin(k->dialog_max_w, w - 2 * k->space[1]));
 
