@@ -37,6 +37,7 @@ STATIC_CPP = (ROOT / "main/ui/settings/settings_static_info_page.cpp").read_text
     encoding="utf-8"
 )
 PAGE_CPP = (ROOT / "main/ui/settings/settings_page.cpp").read_text(encoding="utf-8")
+HW_PROFILE_HPP = (ROOT / "main/ui/settings/settings_hw_profile.hpp").read_text(encoding="utf-8")
 TREE_HPP = (ROOT / "main/ui/settings/settings_tree_types.hpp").read_text(
     encoding="utf-8"
 )
@@ -135,8 +136,14 @@ def test_nested_roller_page_rests_in_the_right_hand_column():
 def test_confirm_page_title_fits_the_title_box():
     title_box_width = metric(COMPONENTS_HPP, "TitleBoxW")
     # Only the short label is used; the long one was clipped to "Write hardv".
-    assert 'SettingEntry{"Write RTC?", settings_rtc_confirm_page_factory}' in PAGE_CPP
+    # The label is the per-board wording macro (settings_hw_profile.hpp): stock "Write RTC?", boards without
+    # a hardware RTC "Save?".  Every variant must fit the title box.
+    assert "SettingEntry{APPLAUNCH_TXT_RTC_WRITE_PROMPT, settings_rtc_confirm_page_factory}" in PAGE_CPP
     assert "Write hardware RTC?" not in PAGE_CPP
+    assert "Write hardware RTC?" not in HW_PROFILE_HPP
+    prompts = re.findall(r'#define APPLAUNCH_TXT_RTC_WRITE_PROMPT "([^"]+)"', HW_PROFILE_HPP)
+    assert "Write RTC?" in prompts
+    assert all(len(prompt) * 8 <= title_box_width for prompt in prompts)
     # 16px CJK text: "Write RTC?" measures ~80px, leaving headroom in the box.
     assert len("Write RTC?") * 8 <= title_box_width
 

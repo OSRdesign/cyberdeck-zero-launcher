@@ -117,6 +117,7 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
     if (beside) {
         lv_obj_set_width(label_, spec_.label_w);
         lv_label_set_long_mode(label_, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_remove_flag(label_, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (Page's caption, cp0_ui_page.cpp) */
     }
 
     box_ = lv_obj_create(row_);

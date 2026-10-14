@@ -26,6 +26,8 @@ EXPECTED_ROOT_ORDER = [
     "ExtPort",
     "Battery",
     "Launcher",
+    "Touch",
+    "Apps",
     "Developer",
     "User",
     "Date & Time",

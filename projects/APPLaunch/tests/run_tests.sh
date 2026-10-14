@@ -84,6 +84,7 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_ip_panel_model"
 "$build_dir/test_ip_panel_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../main/ui" \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_ip_panel_shortcut_action.cpp" \
     -o "$build_dir/test_ip_panel_shortcut_action"
@@ -346,34 +347,39 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 "$build_dir/test_terminal_unicode"
 
 # Exercise the real Bluetooth page and LVGL event dispatch on the host.
-repo_root=$(CDPATH= cd -- "$test_root/../../.." && pwd)
-lvgl_root="$repo_root/SDK/github_source/lvgl/lvgl_9_5/lvgl"
-bluetooth_build_dir="$build_dir/bluetooth_ui"
-mkdir -p "$bluetooth_build_dir"
-sdl_cflags=$(pkg-config --cflags sdl2)
-sdl_libs=$(pkg-config --libs sdl2)
-find "$lvgl_root/src" -type f -name '*.c' -print > "$bluetooth_build_dir/lvgl_sources"
-set --
-while IFS= read -r source; do
-    object="$bluetooth_build_dir/${source#"$lvgl_root/"}.o"
-    mkdir -p "$(dirname "$object")"
-    ${CC:-gcc} -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
+# Needs libsdl2-dev (pkg-config sdl2). Without it: SKIP with a clear message, unless CI=1 or REQUIRE_SDL2=1.
+if pkg-config --exists sdl2 || [ "${CI:-}" = 1 ] || [ "${REQUIRE_SDL2:-}" = 1 ]; then
+    repo_root=$(CDPATH= cd -- "$test_root/../../.." && pwd)
+    lvgl_root="$repo_root/SDK/github_source/lvgl/lvgl_9_5/lvgl"
+    bluetooth_build_dir="$build_dir/bluetooth_ui"
+    mkdir -p "$bluetooth_build_dir"
+    sdl_cflags=$(pkg-config --cflags sdl2)
+    sdl_libs=$(pkg-config --libs sdl2)
+    find "$lvgl_root/src" -type f -name '*.c' -print > "$bluetooth_build_dir/lvgl_sources"
+    set --
+    while IFS= read -r source; do
+        object="$bluetooth_build_dir/${source#"$lvgl_root/"}.o"
+        mkdir -p "$(dirname "$object")"
+        ${CC:-gcc} -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
+            -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
+            $sdl_cflags -c "$source" -o "$object"
+        set -- "$@" "$object"
+    done < "$bluetooth_build_dir/lvgl_sources"
+    ${CXX:-g++} -std=c++17 -fno-access-control -pthread \
+        -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
         -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
-        $sdl_cflags -c "$source" -o "$object"
-    set -- "$@" "$object"
-done < "$bluetooth_build_dir/lvgl_sources"
-${CXX:-g++} -std=c++17 -fno-access-control -pthread \
-    -DLV_CONF_INCLUDE_SIMPLE -DLV_KCONFIG_IGNORE \
-    -I"$test_root/low_battery_ui" -I"$lvgl_root/.." -I"$lvgl_root" \
-    -I"$repo_root/ext_components/cp0_lvgl/include" \
-    -I"$test_root/../main/include" -I"$test_root/../main/ui" \
-    -I"$repo_root/SDK/github_source/eventpp/include" \
-    -I"$repo_root/SDK/components/utilities/include" \
-    $sdl_cflags \
-    "$repo_root/ext_components/cp0_lvgl/src/cp0_font_service.cpp" \
-    "$test_root/../main/ui/keyboard_text_input.cpp" \
-    "$settings_ui_root/settings_bluetooth_page.cpp" \
-    "$settings_ui_root/settings_bluetooth_model.cpp" \
-    "$test_root/bluetooth_ui/test_bluetooth_ui.cpp" \
-    "$@" -lm $sdl_libs -o "$bluetooth_build_dir/test_bluetooth_ui"
-"$bluetooth_build_dir/test_bluetooth_ui"
+        -I"$repo_root/ext_components/cp0_lvgl/include" \
+        -I"$test_root/../main/include" -I"$test_root/../main/ui" \
+        -I"$repo_root/SDK/github_source/eventpp/include" \
+        -I"$repo_root/SDK/components/utilities/include" \
+        $sdl_cflags \
+        "$repo_root/ext_components/cp0_lvgl/src/cp0_font_service.cpp" \
+        "$test_root/../main/ui/keyboard_text_input.cpp" \
+        "$settings_ui_root/settings_bluetooth_page.cpp" \
+        "$settings_ui_root/settings_bluetooth_model.cpp" \
+        "$test_root/bluetooth_ui/test_bluetooth_ui.cpp" \
+        "$@" -lm $sdl_libs -o "$bluetooth_build_dir/test_bluetooth_ui"
+    "$bluetooth_build_dir/test_bluetooth_ui"
+else
+    echo "SKIP test_bluetooth_ui (libsdl2-dev missing: sudo apt install libsdl2-dev)"
+fi

@@ -68,6 +68,7 @@ take_build_lock() {
 #     branch (another branch's new page, for example) cannot end up in the build (scons globs ui/settings/*);
 #   - SDK/ (2+ GB of downloaded LVGL and libraries; empty in a fresh git worktree) is copied once from $DEV_SEED when
 #     DST has none, so a new worktree builds without a network download. Never shared: each tree has its own copy.
+#     projects/AppStore (submodule, empty in a fresh worktree) is seeded the same way from $DEV_SEED.
 # Call it with the build lock held.
 sync_tree() {
     local src=$1 dst=$2 d
@@ -81,6 +82,13 @@ sync_tree() {
         echo "seeding $dst/SDK from $DEV_SEED/SDK (one time, about 2 GB)"
         mkdir -p "$dst/SDK"
         rsync -a "$DEV_SEED/SDK/" "$dst/SDK/"
+    fi
+    # projects/AppStore is a submodule (empty in a fresh worktree); the app-unit registry-mirror test and the --with-store
+    # build need its sources: copy them once from $DEV_SEED when neither the checkout nor DST has them.
+    if [[ ! -d $src/projects/AppStore/main && ! -d $dst/projects/AppStore/main && -d $DEV_SEED/projects/AppStore/main         && $dst != "$DEV_SEED" ]]; then
+        echo "seeding $dst/projects/AppStore from $DEV_SEED"
+        mkdir -p "$dst/projects/AppStore"
+        rsync -a --exclude .git --exclude build/ "$DEV_SEED/projects/AppStore/" "$dst/projects/AppStore/"
     fi
     rsync -a "${excludes[@]}" "$src/" "$dst/"
     for d in projects/APPLaunch ext_components LICENSES; do

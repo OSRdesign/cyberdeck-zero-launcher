@@ -106,6 +106,7 @@ Dialog::Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec 
 
     title_ = lv_label_create(box_);
     lv_label_set_long_mode(title_, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_remove_flag(title_, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (Page's caption, cp0_ui_page.cpp) */
     lv_obj_set_style_text_font(title_, text_font(geometry_.title_px, true), 0);
     lv_obj_set_style_text_color(title_, lv_color_hex(kTitle), 0);
     lv_label_set_text(title_, spec_.title.c_str());
@@ -130,6 +131,7 @@ Dialog::Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec 
     if (spec_.message_line) {
         message_ = lv_label_create(content_);
         lv_label_set_long_mode(message_, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_remove_flag(message_, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see title_) */
         const lv_font_t *font = text_font(geometry_.text_px, false);
         lv_obj_set_style_text_font(message_, font, 0);
         lv_obj_set_width(message_, geometry_.content_w);

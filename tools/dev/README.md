@@ -32,6 +32,10 @@ CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk`, everything under `f
 WSL Ubuntu with `rsync`, `flock`, `gcc`/`g++`, `gcc-aarch64-linux-gnu g++-aarch64-linux-gnu`, `pkg-config`,
 FreeType and libpng headers (render harness), `python3`; the venv `~/zero7/venv` with SCons (`build.sh` reuses it
 through `VENV`); `~/zero7/launcher/SDK` populated by one earlier build.
+`libxkbcommon-dev` (`sudo apt install libxkbcommon-dev`) for the `cp0-unit` keymap test: without it that one test prints
+`SKIP test_keyboard_keymap (libxkbcommon-dev missing...)` and the step goes on; with `CI=1` or `REQUIRE_XKBCOMMON=1` the
+missing library is a hard failure. `~/zero7/launcher/projects/AppStore` (the Store submodule, needed by the `app-unit`
+registry-mirror test) is copied into a new tree on its first sync, like `SDK/`.
 
 ## Facts that cost time
 

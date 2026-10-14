@@ -263,6 +263,7 @@ void UICalculatorPage::build_ui(int width, int height)
     lv_obj_set_width(source_label_, lay.text_w);
     lv_obj_set_pos(source_label_, lay.text_x, lay.src_y);
     lv_label_set_long_mode(source_label_, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_remove_flag(source_label_, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see cp0_ui_page.cpp) */
     lv_obj_set_style_text_align(source_label_, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_font(source_label_, face(lay.src_px), 0);
     if (lay.computed) lv_obj_set_height(source_label_, static_cast<int>(lv_font_get_line_height(face(lay.src_px))));
@@ -273,6 +274,7 @@ void UICalculatorPage::build_ui(int width, int height)
     lv_obj_set_width(main_label_, lay.text_w);
     lv_obj_set_pos(main_label_, lay.text_x, lay.main_y);
     lv_label_set_long_mode(main_label_, LV_LABEL_LONG_MODE_DOTS);
+    lv_obj_remove_flag(main_label_, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see cp0_ui_page.cpp) */
     lv_obj_set_style_text_align(main_label_, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_style_text_font(main_label_, face(lay.main_px[0]), 0);
     lv_obj_set_style_text_color(main_label_, lv_color_hex(0xFFFFFF), 0);
