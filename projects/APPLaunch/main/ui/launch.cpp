@@ -31,6 +31,9 @@
 namespace {
 constexpr size_t kHomeCarouselSlotCount = 5;
 constexpr int kHomeCarouselCenterSlot = 2;
+/* The directory watcher only sees the applications dir; an icon file replaced elsewhere (app upgrade, manual copy)
+ * is noticed by comparing mtime + size of the listed icons on this period. */
+constexpr uint32_t kIconPollPeriodMs = 3000;
 }
 
 // ============================================================
@@ -50,6 +53,7 @@ void Launch::bind_ui()
     reload_home_icons();
 
     app_directory_watcher_.start([this] { applications_reload(); });
+    if (!icon_poll_timer_) icon_poll_timer_ = lv_timer_create(icon_poll_cb, kIconPollPeriodMs, this);
     esc_ui_watchdog_.start();
     esc_hold_hint_controller().set_force_home_callback(esc_force_home_cb, this);
 }
@@ -282,6 +286,8 @@ void Launch::reload_home_icons()
     icon_paths.reserve(app_list.size());
     for (const app &item : app_list)
         icon_paths.push_back(item.Icon);
+    /* taken before the decode: a file replaced in between only costs one extra reload on the next poll */
+    icon_signatures_.capture(icon_paths);
     if (auto page = launch_page_.lock()) page->reload_home_icons(icon_paths);
     native_ui::refresh_apps();
 }
@@ -324,8 +330,25 @@ void Launch::esc_force_home_cb(void *user_data) noexcept
 }
 
 
+void Launch::icon_poll_cb(lv_timer_t *timer) noexcept
+{
+    auto *self = static_cast<Launch *>(lv_timer_get_user_data(timer));
+    if (!self || self->app_Page) return;
+    try {
+        if (self->icon_signatures_.changed()) {
+            SLOGI("[HOME] an icon file changed, reloading the home icons");
+            self->reload_home_icons();
+        }
+    } catch (...) {
+    }
+}
+
 Launch::~Launch()
 {
+    if (icon_poll_timer_) {
+        lv_timer_delete(icon_poll_timer_);
+        icon_poll_timer_ = nullptr;
+    }
     launcher_app_registry_clear_changed_callback(app_registry_changed_cb, this);
     esc_hold_hint_controller().set_force_home_callback(nullptr, nullptr);
     esc_hold_hint_controller().set_return_home_enabled(false);

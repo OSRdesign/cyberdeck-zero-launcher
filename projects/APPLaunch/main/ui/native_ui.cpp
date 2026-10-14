@@ -26,6 +26,7 @@
 #include "input_keys.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
+#include "lvgl/src/draw/lv_image_decoder_private.h"   // lv_image_cache_drop
 #include "sample_log.h"
 
 #include <algorithm>
@@ -274,6 +275,9 @@ void build_tile(int index, const app &item)
     lv_obj_remove_flag(icon, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(icon, l.icon, l.icon);
     lv_image_set_inner_align(icon, LV_IMAGE_ALIGN_STRETCH);
+    // lv_image keeps the file's width/height from set_src and derives the STRETCH scale from them; a replaced
+    // file must not be matched with a cached header or stale geometry, so drop LVGL's entries for the path first
+    lv_image_cache_drop(item.Icon.c_str());
     lv_image_set_src(icon, item.Icon.c_str());
     lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, l.icon_top);
 

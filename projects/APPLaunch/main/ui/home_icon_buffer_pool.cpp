@@ -81,16 +81,21 @@ void HomeIconBufferPool::rebuild(const std::vector<std::string> &icon_paths)
 {
     icons_.clear();
     resized_icons_.clear();
+    signatures_.clear();
     icons_.reserve(icon_paths.size());
 
     for (const std::string &path : icon_paths) {
         if (path.empty() || icons_.find(path) != icons_.end()) continue;
+        /* a replaced icon file may still sit in LVGL's image caches under this path: decode it afresh */
+        lv_image_cache_drop(path.c_str());
+        const IconFileSignature signature = icon_file_signature(path);
         DrawBufferPtr icon = decode_and_prepare(path, kIconSize);
         if (!icon) {
             SLOGW("[HOME] failed to preload icon: %s", path.c_str());
             continue;
         }
         icons_.emplace(path, std::move(icon));
+        signatures_[path] = signature;
     }
     SLOGI("[HOME] preloaded %zu/%zu unique icons", icons_.size(), icon_paths.size());
 }
@@ -127,6 +132,7 @@ void HomeIconBufferPool::swap(HomeIconBufferPool &other) noexcept
 {
     icons_.swap(other.icons_);
     resized_icons_.swap(other.resized_icons_);
+    signatures_.swap(other.signatures_);
 }
 
 HomeIconBufferPool::DrawBufferPtr
