@@ -9,7 +9,7 @@ Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZer
 **Store** app and is not shown there.
 
 **The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (LAN Scan,
-viz1090, Wi-Fi Survey, Mesh Hop, ...) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
+Mesh Hop, Net Toolbox, Serial Console, System Monitor, viz1090, Wi-Fi Survey) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
 Available lists its apps without typing anything. It is an ordinary source: switch it off or remove it in Sources, and
 the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
 shows after a sync (Sources > Sync my sources). Details: `projects/APPLaunch/pizero2w/README.md`, "Default app source".
@@ -24,9 +24,10 @@ The complete, step by step guide, the build tools and a working example live in 
 ## In short
 
 1. Create a **public** GitHub repository (default branch `main`) from the template.
-2. Build your app as an **aarch64 Linux executable** drawing a 320x170 picture (copy the
-   `apps/lanscan/src` project of the apps repo as a starting point; the launcher shows it scaled 2x), or any
-   program that runs on the Pi.
+2. Build your app as an **aarch64 Linux executable**. A new app is a native full-screen app built from
+   `apps/cyberdeck-app-template` of the apps repo on `cp0_lvgl`, for 640x480 and up (`X-MinSize=640x480`); its
+   `docs/APP-GUIDELINES.md` gives the rules. Any other program that runs on the Pi works too; the older apps draw a
+   320x170 picture that the launcher scales into its window.
 3. Describe it in `apps/<id>/app.json` (name, version, description) and lay its files out in
    `apps/<id>/root/` exactly as they must be on the device:
    ```
@@ -137,12 +138,13 @@ with the launcher's title: `cp0::ui::StatusStrip::add(header)` and `cp0::ui::add
 API in `docs/cp0_lvgl.en.md`); it keeps no copy. The viz1090 package in the apps repository is a complete example
 of a non-LVGL app (SDL2 programs run through a small display and input bridge; it also draws a close button).
 
-The panel is not always 640x480 (the Pi 3A+ is 480x320 rotated at 16 bpp, the HackBerry 720x720): a full-screen app
+The panel is not always 640x480 (the Pi 3A+ is 800x480 with its DSI panel or 480x320 rotated at 16 bpp with its
+SPI panel, the HackBerry 720x720): a full-screen app
 should take its size, rotation, depth and framebuffer from the app contract (next section) instead of hard-coding
 them. If it really needs a minimum size, add `X-MinSize=WxH` (logical pixels, for example `X-MinSize=640x480`): on a
 smaller screen the launcher hides its tile (and it does not appear in Settings > Apps either). An older launcher
 ignores the key, so the app must still start there and say that the screen is too small. New native (LVGL) apps
-declare `X-MinSize=640x480` by default (decision of 2026-10-13): they are hidden on the 480x320 Pi 3A+, while
+declare `X-MinSize=640x480` by default (decision of 2026-10-13): they are hidden on the Pi 3A+ with its 480x320 SPI panel, while
 text-mode apps (`Terminal=true`) may still run there.
 
 ## Responsive apps (the app contract)
@@ -168,5 +170,5 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | Backend access (sources, catalogue, install flow) | `projects/APPLaunch/main/ui/settings/apps_backend.{hpp,cpp}` |
 | Default source at install (the Store's `registries.json`, once per user) | `projects/APPLaunch/pizero2w/default-sources.sh`, run by `install.sh` |
 | The Store's shared source list (mirror) and the default source | `settings_apps_registry_mirror.{hpp,cpp}` (pure), `settings_apps_jobs.cpp` (adapter), test `tests/test_settings_apps_registry_mirror.cpp` |
-| Example app | `apps/lanscan/` in the apps repo |
+| Example app | `apps/cyberdeck-app-template/` in the apps repo (native); `apps/lanscan/` (320x170 compat) |
 | Switch (off on the stock CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |
