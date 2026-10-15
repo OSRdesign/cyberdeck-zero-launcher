@@ -198,12 +198,13 @@ static void check_page(const expected_page_t *e)
     CHECK(p.text_px * 100 >= p.row_h * 42 && p.text_px * 100 <= p.row_h * 47);
     CHECK_EQ(p.inset, m.tok[CP0_TOK_SPACE_L]);
     CHECK_EQ(p.gap, m.tok[CP0_TOK_SPACE_M]);
-    /* status line over the top left of the body, clear of the centred chevron */
+    /* status line over the top left of the body, the full content width (margin title_x each side; it sits above the
+     * highlight bar, below: the 3 lines check) */
     CHECK_EQ(p.caption_x, p.title_x);
     CHECK_EQ(p.caption_y, p.body_y + m.tok[CP0_TOK_SPACE_S]);
     CHECK_EQ(p.caption_px, m.text_px[CP0_TEXT_CAPTION]);
     CHECK_EQ(p.caption_w, e->caption_w);
-    CHECK(p.caption_x + p.caption_w < e->w / 2 - p.chevron_px / 2);
+    CHECK_EQ(p.caption_w, e->w - 2 * p.caption_x);
     /* a wrapping status line (task 014 P3d): 3 lines of its own size fit above the highlight bar at every size */
     const int line_h = p.caption_px + p.caption_px / 4;
     CHECK_EQ(cp0_ui_roller_caption_lines(&p, line_h), CP0_UI_ROLLER_CAPTION_MAX_LINES);
@@ -215,11 +216,11 @@ static void test_page_layout(void)
     /* strip_left: the strip canvas' left + where its Bluetooth icon starts (about 104 px at 100 %, 75 px at 72 %) */
     static const expected_page_t pages[] = {
         /* w    h   ppmm  left   hdr tmax escx escy esch body  rx   rw  row  pad txt val chev capw */
-        {640, 480, 1130, 424, 56, 270, 306, 8, 40, 424, 40, 560, 79, 172, 34, 32, 43, 241},
-        {480, 320, 630, 325, 40, 234, 258, 5, 30, 280, 10, 460, 44, 118, 20, 18, 24, 192},
-        {800, 480, 920, 584, 56, 453, 487, 8, 40, 424, 120, 560, 64, 180, 28, 26, 35, 331},
-        {720, 720, 1000, 504, 64, 362, 398, 12, 40, 656, 80, 560, 70, 293, 30, 28, 39, 285},
-        {1280, 720, 1160, 1064, 64, 908, 944, 12, 40, 656, 320, 640, 81, 287, 36, 32, 45, 559},
+        {640, 480, 1130, 424, 56, 270, 306, 8, 40, 424, 40, 560, 79, 172, 34, 32, 43, 600},
+        {480, 320, 630, 325, 40, 234, 258, 5, 30, 280, 10, 460, 44, 118, 20, 18, 24, 452},
+        {800, 480, 920, 584, 56, 453, 487, 8, 40, 424, 120, 560, 64, 180, 28, 26, 35, 760},
+        {720, 720, 1000, 504, 64, 362, 398, 12, 40, 656, 80, 560, 70, 293, 30, 28, 39, 680},
+        {1280, 720, 1160, 1064, 64, 908, 944, 12, 40, 656, 320, 640, 81, 287, 36, 32, 45, 1240},
     };
     for (size_t i = 0; i < sizeof(pages) / sizeof(pages[0]); ++i) check_page(&pages[i]);
 

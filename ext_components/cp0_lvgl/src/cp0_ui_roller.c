@@ -133,11 +133,13 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
     p.gap = space_m;
     p.chevron_px = pct_of(p.row_h, CP0_UI_ROLLER_CHEVRON_PCT);
 
-    /* status line: over the top left of the body, clear of the centred chevron */
+    /* status line: over the top left of the body, the full content width (a margin of title_x on each side). It sits
+     * above the highlight bar (cp0_ui_roller_caption_lines), so it is clear of the centred chevron: a line half as
+     * wide cut "FantaCitron  192.168.68...." at 640x480 (the address is what the line is for). */
     p.caption_px = m->text_px[CP0_TEXT_CAPTION];
     p.caption_x = p.title_x;
     p.caption_y = p.body_y + m->tok[CP0_TOK_SPACE_S];
-    p.caption_w = imax(0, m->w / 2 - p.chevron_px - space_m - p.caption_x);
+    p.caption_w = imax(0, m->w - 2 * p.caption_x);
     *out = p;
     return 0;
 }

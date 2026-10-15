@@ -257,7 +257,8 @@ public:
      * the latest owner's text shows instead of the path; text NULL removes the owner's (the path comes back when none
      * is left). */
     void set_title_override(const void *owner, const char *text);
-    /* One status line under the title (empty hides it); error draws it red. */
+    /* One status line under the title, the full content width (empty hides it); error draws it red. Too long on one
+     * line: "NAME  VALUE" (two spaces) keeps VALUE whole and shortens NAME with dots, any other text ends with dots. */
     void set_caption(const std::string &text, bool error);
     void set_caption(const std::string &text, CaptionTone tone);
     /* A status line too long for its room wraps onto the lines that fit above the centre row (at most
