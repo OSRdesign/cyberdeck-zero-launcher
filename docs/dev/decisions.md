@@ -2,6 +2,39 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-10-15: Net Toolbox, scope and phases as in report 027** (`reports/027-net-toolbox.md`). One native app,
+  package `net-toolbox`, name **Net Toolbox**, `X-MinSize=640x480`; it does not repeat LanScan or Wi-Fi Survey. Phases:
+  0.1 Home, Interfaces, Diagnosis, Ping, DNS lookup, Port check; 0.2 Traceroute, HTTP check, Public IP, Whois; 0.3 speed
+  test, Wake-on-LAN, BLE radar; 0.4 Wi-Fi walk test, DNS race, bandwidth meters. Report first, then tasks.
+  - D1 accepted with the start of 0.3: if the BLE spike shows it is needed, the shared `_common/scons/main.SConstruct`
+    takes an optional per-app library list so the app can link libsystemd; otherwise the BLE radar uses a tool that
+    needs no change there.
+  - D2 accepted: `bluez` stays an optional dependency; without it the BLE tool says Bluetooth is not available.
+  - D3 accepted: the speed test and the captive-portal check use third-party endpoints (Cloudflare, a generate_204
+    URL), both documented in the README and off until the user starts them.
+  - No BLE scans on the deck: its Bluetooth keyboard is paired, and Wi-Fi and Bluetooth share one radio chip.
+
+- **2026-10-14: multitasking decisions D1-D15, then parked** (`reports/026-multitasking-study.md`, section 8).
+  Nothing is built; restart with the spike P-a (measure first). Taken as recommended except where marked changed.
+
+  | D | Decision |
+  | --- | --- |
+  | D1 | Hybrid opt-in lifecycle (`X-Background=run\|freeze`), legacy apps unchanged |
+  | D2 | **Changed:** touch gesture = 3-finger hold **1 s** (not 700 ms); still to confirm with P-a data |
+  | D3 | Long-press on the status strip, 500 ms |
+  | D4 | Alt+Tab (release Alt to switch) and Super = Home when present |
+  | D5 | **Changed:** short Esc at an app's root keeps **quitting** (no minimise); hold Esc 3 s force-closes |
+  | D6 | 4 resident apps, MemAvailable floors 64 / 32 MB, LRU auto-close with a toast |
+  | D7 | 2x2 card grid (list at 480x320) |
+  | D8 | **Changed:** a dot under the tile label only; no `[n]` in the status strip |
+  | D9 | **Changed:** X on each card and a Close all button; no flick-up |
+  | D10 | `SIGSTOP` on the process group |
+  | D11 | Terminal sessions kept alive (P-f), after P-e |
+  | D12 | Wrapped VFB apps: no multitasking; legacy Close/Keep sheet |
+  | D13 | Additive extension of contract 1, no version bump |
+  | D14 | **Changed:** bottom-edge swipe dropped |
+  | D15 | First-run hint toast, shown once |
+
 - **2026-10-14: apps get a second list, `cp0::ui::CompactList`; the Roller stays the Settings menu look.** Owner
   feedback on System Monitor (deck): the roller shows 2-3 big rows, centres the first item and its orange chevrons
   overlap content and read as page jumps. CompactList is top-aligned (scrolls only to keep the highlight and one row of

@@ -9,7 +9,7 @@ header `ext_components/cp0_lvgl/include/cp0_app_contract.h` says the same in sho
 
 The launcher runs on panels from 480x320 to 1280x720, rotated or not, at 16 or 32 bpp. An app needs to know which
 mode it runs in, how many pixels it draws, how dense they are (a 9 mm button is 102 px on the deck at 2x and 57 px
-on the Pi 3A+), and whether it should show its own on-screen keyboard.
+on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen keyboard.
 
 | Layer | What | Promise |
 |---|---|---|
@@ -42,7 +42,7 @@ exits).
 |---|---|---|
 | `APPLAUNCH_CONTRACT` | `1` | `1` |
 | `APPLAUNCH_APP_MODE` | `compat` | `fullscreen` |
-| `APPLAUNCH_WINDOW=x,y,w,h` | where the scaled picture sits on the screen, e.g. deck `0,0,640,340`, Pi 3A+ `80,25,320,170` | `0,0,W,H` |
+| `APPLAUNCH_WINDOW=x,y,w,h` | where the scaled picture sits on the screen, e.g. deck `0,0,640,340`, Pi 3A+ SPI `80,25,320,170` | `0,0,W,H` |
 | `APPLAUNCH_CANVAS=WxH` | `320x170` (the pixels the app draws) | the logical screen, e.g. `640x480` |
 | `APPLAUNCH_CANVAS_SCALE` | screen pixels per canvas pixel: `2` or `1` | `1` |
 | `APPLAUNCH_STATE_DIR` | the state directory (absent without `XDG_RUNTIME_DIR`) | same |

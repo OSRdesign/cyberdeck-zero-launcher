@@ -39,11 +39,15 @@ wsl -e sh -c 'cd /mnt/c/CLAUDE/zero7/launcher/projects/APPLaunch && export PATH=
   APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk && scons -j$(nproc)'
 ```
 The binary is `dist/cyberdeckzero`. An LVGL app project builds the same way and produces `dist/<Name>`; app sources
-live in the apps repo (`apps/<id>/src`, built by `apps/<id>/build/build.sh` in a scratch project under `projects/`). The full bundle is `projects/APPLaunch/pizero2w/build.sh --with-store`.
+live in the apps repo (`apps/<id>/src`, built in a scratch project under `projects/`: native apps by `apps/<id>/build.sh`
+through `apps/_common/build_app.sh` (`host`, `cross`, `all`, `--strict`, `--sync`; pinned to the launcher commit in
+`apps/_common/LAUNCHER_REF`), the older apps by `apps/<id>/build/build.sh`). The full bundle is `projects/APPLaunch/pizero2w/build.sh --with-store`.
 
 Packages: write `apps/<id>/app.json`, put the files in `apps/<id>/root/` exactly as they must land on the device,
 then `python tools/make_registry.py --owner OSRdesign --repo cyberdeck-zero-apps` (builds every `.deb` and
-`registry.json`). Check a package with `dpkg-deb -I` and `dpkg-deb -c` in WSL.
+`registry.json`). A local `.deb` of one app (a draft too), without touching `packages/` or `registry.json`:
+`--only <id> --out <folder>`. Publishing puts the tested `.deb` in `packages/` and writes the registry with
+`--no-build`, so only that app's entry changes. Check a package with `dpkg-deb -I` and `dpkg-deb -c` in WSL.
 
 ## Build, test, deploy (launcher)
 

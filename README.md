@@ -10,8 +10,8 @@
 
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
 machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
-Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a 3.5" SPI panel and a HackBerry
-CM5 (720x720). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings, a PWM
+Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
+(800x480) or a 3.5" SPI panel (480x320) and a HackBerry CM5 (720x720). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings, a PWM
 backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
@@ -88,9 +88,9 @@ and tinker with things like this.
 ## Your own apps
 
 **Settings > Apps** installs and removes apps from any public GitHub repository you add as a source
-(`owner/repo`), so you can sideload your own. The first apps (LAN Scan, ...) are in
-[cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps), which is also the template to host
-your own: see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
+(`owner/repo`), so you can sideload your own. Our apps (LAN Scan, Mesh Hop, Net Toolbox, Serial Console, System
+Monitor, viz1090, Wi-Fi Survey) are in [cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps),
+which is also the template to host your own: see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
 Settings > Apps shows the installed and the available version of each app (an update is marked in yellow, for
 example `0.1.2>0.1.3`), with **Update** for one app and **Update all** when several have one. An upgraded app
