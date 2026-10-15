@@ -34,14 +34,29 @@ upscaled window for the stock 320x170 apps, and has since grown into the launche
 
 ## Screenshots
 
-Captured from the deck's own framebuffer (640x480). Network names are pixelated.
+Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2W, 640x480) on the left and the
+Raspberry Pi 3A+ with the Waveshare 4.3" DSI panel (800x480) on the right: one code base, two screens. Network names
+are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed.
 
-| Home grid | Settings |
+| Deck, 640x480 | Raspberry Pi 3A+, 800x480 |
 | --- | --- |
-| ![Home grid](docs/screenshots/home.png) | ![Settings](docs/screenshots/settings.png) |
-| **Settings > Wi-Fi** | **Settings > Bluetooth** |
-| ![Wi-Fi settings](docs/screenshots/settings-wifi.png) | ![Bluetooth settings](docs/screenshots/settings-bluetooth.png) |
+| ![Home grid, deck](docs/screenshots/home-deck.png) | ![Home grid, Pi 3A+](docs/screenshots/home-pi3a.png) |
+| **Home grid** | **Home grid** |
+| ![Settings, deck](docs/screenshots/settings-deck.png) | ![Settings, Pi 3A+](docs/screenshots/settings-pi3a.png) |
+| **Settings** | **Settings** |
+| ![Wi-Fi, deck](docs/screenshots/wifi-deck.png) | ![Wi-Fi, Pi 3A+](docs/screenshots/wifi-pi3a.png) |
+| **Settings > Wi-Fi** | **Settings > Wi-Fi** |
+| ![Bluetooth, deck](docs/screenshots/bluetooth-deck.png) | ![Bluetooth, Pi 3A+](docs/screenshots/bluetooth-pi3a.png) |
+| **Settings > Bluetooth** | **Settings > Bluetooth** |
+| ![Installed apps, deck](docs/screenshots/apps-installed-deck.png) | ![Installed apps, Pi 3A+](docs/screenshots/apps-installed-pi3a.png) |
+| **Settings > Apps > Installed** (versions) | **Settings > Apps > Installed** (versions) |
+| ![Available apps, deck](docs/screenshots/apps-available-deck.png) | ![Available apps, Pi 3A+](docs/screenshots/apps-available-pi3a.png) |
+| **Settings > Apps > Available** | **Settings > Apps > Available** |
+
+Calculator and the SSH form (deck, 640x480):
+
 | **Calculator** | **SSH** |
+| --- | --- |
 | ![Calculator](docs/screenshots/calculator.png) | ![SSH form](docs/screenshots/ssh.png) |
 
 The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog:
