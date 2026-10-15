@@ -905,6 +905,25 @@ lv_obj_t *find_label(lv_obj_t *obj, const std::vector<std::string> &texts)
     return nullptr;
 }
 
+/* The first visible label under obj (depth first) whose text is `text` (suffix: ends with it), for expect_text. */
+lv_obj_t *find_label_text(lv_obj_t *obj, const std::string &text, bool suffix)
+{
+    if (!obj || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return nullptr;
+    if (lv_obj_check_type(obj, &lv_label_class)) {
+        const char *t = lv_label_get_text(obj);
+        if (t) {
+            const std::string s(t);
+            const bool hit = suffix ? (s.size() >= text.size() && s.compare(s.size() - text.size(), text.size(), text) == 0)
+                                    : s == text;
+            if (hit) return obj;
+        }
+    }
+    const uint32_t count = lv_obj_get_child_count(obj);
+    for (uint32_t i = 0; i < count; ++i)
+        if (lv_obj_t *found = find_label_text(lv_obj_get_child(obj, static_cast<int32_t>(i)), text, suffix)) return found;
+    return nullptr;
+}
+
 /* The first visible label under obj (depth first) with a text whose screen origin is (x, y). */
 lv_obj_t *find_label_at(lv_obj_t *obj, int x, int y)
 {
@@ -981,6 +1000,39 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         if (w.size() != 2) return fail(scene, line, "usage: wifi off|PERCENT");
         fx.wifi_connected = w[1] != "off";
         fx.wifi_signal = fx.wifi_connected ? to_int(w[1], 70) : 0;
+        return true;
+    }
+    if (cmd == "wifinet") {
+        if (w.size() != 3) return fail(scene, line, "usage: wifinet SSID IP");
+        fx.wifi_ssid = w[1];
+        fx.wifi_ip = w[2];
+        if (!fx.wifi_networks.empty()) fx.wifi_networks[0].ssid = w[1]; /* the connected network of the scan */
+        return true;
+    }
+    if (cmd == "expect_text") {
+        /* expect_text [end] TEXT: a visible label of the native screen shows TEXT whole (with `end`: a label whose text
+         * ENDS with TEXT), and its box is wide enough for its text: not cut with dots, not past the screen. A scene
+         * fails otherwise. */
+        const bool suffix = w.size() == 3 && w[1] == "end";
+        if (w.size() != 2 && !suffix) return fail(scene, line, "usage: expect_text [end] TEXT");
+        const std::string &text = w.back();
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), text, suffix);
+        if (!label)
+            return fail(scene, line, "expect_text: no visible label " + std::string(suffix ? "ending with " : "") + text);
+        lv_area_t area;
+        lv_obj_get_coords(label, &area);
+        const lv_font_t *font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+        lv_point_t size{};
+        lv_text_get_size(&size, lv_label_get_text(label), font,
+                         lv_obj_get_style_text_letter_space(label, LV_PART_MAIN), 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        const int pad = lv_obj_get_style_pad_left(label, LV_PART_MAIN) + lv_obj_get_style_pad_right(label, LV_PART_MAIN);
+        const int box = area.x2 - area.x1 + 1;
+        if (box < size.x + pad || area.x2 >= run.size.w)
+            return fail(scene, line, "expect_text: the label is cut (box " + std::to_string(box) + " px, text " +
+                                         std::to_string(size.x + pad) + " px): " + lv_label_get_text(label));
+        std::printf("expect_text ok: %s\n", lv_label_get_text(label));
         return true;
     }
     if (cmd == "bt") {

@@ -31,6 +31,27 @@ int text_width(const char *text, const lv_font_t *font)
     return size.x;
 }
 
+/* A one-line status line that is too wide: "NAME  VALUE" (two spaces, the form of the Wi-Fi line "FantaCitron
+ * 192.168.68.101") keeps its end whole, the value after the last double space, and shortens the head with dots
+ * ("Fanta...  192.168.68.101"). The cut falls on a UTF-8 character. Returns the text that fits in max_w, or an empty
+ * string when the text has no such separator or even the end alone does not fit (the label's own dots then apply). */
+std::string keep_tail(const std::string &text, const lv_font_t *font, int max_w)
+{
+    const size_t sep = text.rfind("  ");
+    if (sep == std::string::npos || sep == 0 || sep + 2 >= text.size()) return std::string();
+    const std::string tail = text.substr(sep); /* "  VALUE" */
+    if (text_width(("..." + tail).c_str(), font) > max_w) return std::string();
+    std::string head = text.substr(0, sep);
+    while (!head.empty()) {
+        std::string candidate = head + "..." + tail;
+        if (text_width(candidate.c_str(), font) <= max_w) return candidate;
+        size_t cut = head.size() - 1; /* drop the last character, whole */
+        while (cut > 0 && (static_cast<unsigned char>(head[cut]) & 0xC0) == 0x80) --cut;
+        head.erase(cut);
+    }
+    return "..." + tail;
+}
+
 } // namespace
 
 Page::Page(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TitleFactory make_title, std::function<void()> on_back)
@@ -219,8 +240,17 @@ void Page::set_caption(const std::string &text, CaptionTone tone)
     lv_label_set_text(caption_, text.c_str());
     // one line: its own width, or the room it has with dots (wrapping: the lines that fit above the centre row)
     const lv_font_t *font = lv_obj_get_style_text_font(caption_, LV_PART_MAIN);
-    const int padded = text_width(text.c_str(), font) + 2 * lv_obj_get_style_pad_left(caption_, LV_PART_MAIN);
-    const bool fits = padded <= layout_.caption_w;
+    const int pad2 = 2 * lv_obj_get_style_pad_left(caption_, LV_PART_MAIN);
+    const int padded = text_width(text.c_str(), font) + pad2;
+    bool fits = padded <= layout_.caption_w;
+    if (!fits && !caption_wrap_) {
+        /* "NAME  VALUE": the end (the address) stays whole, the name is shortened with dots */
+        const std::string kept = keep_tail(text, font, layout_.caption_w - pad2);
+        if (!kept.empty()) {
+            lv_label_set_text(caption_, kept.c_str());
+            fits = true;
+        }
+    }
     lv_obj_set_width(caption_, fits ? LV_SIZE_CONTENT : layout_.caption_w);
     if (font) {
         const int line_h = lv_font_get_line_height(font);

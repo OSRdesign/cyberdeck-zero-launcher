@@ -1,0 +1,31 @@
+title settings native wifi status line
+# The Wi-Fi page's status line (the network and its IP) must use the room it has: the address (the end) is never cut.
+# A short SSID shows whole on every size; a long one is shortened with dots and the IP stays whole. Review only.
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+wifinet FantaCitron 192.168.68.101
+home
+launch Settings
+key DOWN
+key ENTER
+wait 1500
+shot wifi_status_short
+expect_text "FantaCitron  192.168.68.101"
+# back to the root, a long network name, back in
+key ESC
+wifinet Workshop-Guest-Network-5GHz 192.168.68.101
+key ENTER
+wait 1500
+shot wifi_status_long
+expect_text end "  192.168.68.101"
+key ESC
+wifinet Neighbourhood-Community-Hall-Guest-5G-Extended 192.168.168.168
+key ENTER
+wait 1500
+shot wifi_status_longest
+expect_text end "  192.168.168.168"
