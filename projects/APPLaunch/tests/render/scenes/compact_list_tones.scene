@@ -1,0 +1,28 @@
+# CompactList value tones changed in place (review-only, no goldens): set_value and update_row repaint a value whose
+# only change is its tone, Normal -> Muted (the label grey, for an absent / unset thing) and back, on a plain row and
+# on the selected row (the #2B2B2B bar). expect_color checks the style and the drawn pixels; the scene fails otherwise.
+title compact list value tones
+review
+sizes 640x480 800x480 480x320
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+listdemo comfortable 12
+expect_color 115200 00CC66
+expect_color /dev/ttyUSB0 00CC66
+listdemo value 1 muted 115200
+expect_color 115200 9A9A9A
+listdemo row 3 muted "Not set"
+expect_color "Not set" 9A9A9A
+listdemo value 0 muted /dev/ttyUSB0
+expect_color /dev/ttyUSB0 9A9A9A
+shot list_tones_muted
+listdemo row 0 normal /dev/ttyUSB0
+expect_color /dev/ttyUSB0 00CC66
+listdemo value 2 bad Failed
+expect_color Failed FF6666
+listdemo value 2 muted Failed
+expect_color Failed 9A9A9A
+shot list_tones_back

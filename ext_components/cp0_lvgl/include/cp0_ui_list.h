@@ -57,6 +57,7 @@ extern "C" {
 #define CP0_UI_LIST_OK_RGB 0x66CC88               /* OK: the status line's green */
 #define CP0_UI_LIST_WARN_RGB 0xF0B400             /* WARN: the status line's amber */
 #define CP0_UI_LIST_BAD_RGB 0xFF6666              /* BAD: the status line's red */
+#define CP0_UI_LIST_MUTED_RGB CP0_UI_LIST_SECTION_RGB /* MUTED: an absent / unset thing (the label grey) */
 
 typedef enum {
     CP0_UI_LIST_COMPACT = 0, /* dense data: LIST_ROW token rows */
@@ -73,6 +74,7 @@ typedef enum {
     CP0_UI_LIST_TONE_OK,
     CP0_UI_LIST_TONE_WARN,
     CP0_UI_LIST_TONE_BAD,
+    CP0_UI_LIST_TONE_MUTED, /* grey: an absent / unset thing; never the only signal of status */
 } cp0_ui_list_tone_t;
 
 typedef struct {

@@ -274,6 +274,8 @@ static void test_step(void)
     CHECK_EQ(cp0_ui_list_tone_rgb(CP0_UI_LIST_TONE_OK), 0x66CC88);
     CHECK_EQ(cp0_ui_list_tone_rgb(CP0_UI_LIST_TONE_WARN), 0xF0B400);
     CHECK_EQ(cp0_ui_list_tone_rgb(CP0_UI_LIST_TONE_BAD), 0xFF6666);
+    CHECK_EQ(cp0_ui_list_tone_rgb(CP0_UI_LIST_TONE_MUTED), 0x9A9A9A); /* the label grey */
+    CHECK_EQ(CP0_UI_LIST_MUTED_RGB, CP0_UI_LIST_SECTION_RGB);
 }
 
 /* row i and its neighbours (when they exist) whole in the view */

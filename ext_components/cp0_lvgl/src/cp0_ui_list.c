@@ -193,6 +193,7 @@ unsigned cp0_ui_list_tone_rgb(cp0_ui_list_tone_t tone)
     case CP0_UI_LIST_TONE_OK: return CP0_UI_LIST_OK_RGB;
     case CP0_UI_LIST_TONE_WARN: return CP0_UI_LIST_WARN_RGB;
     case CP0_UI_LIST_TONE_BAD: return CP0_UI_LIST_BAD_RGB;
+    case CP0_UI_LIST_TONE_MUTED: return CP0_UI_LIST_MUTED_RGB;
     default: return CP0_UI_LIST_VALUE_RGB;
     }
 }

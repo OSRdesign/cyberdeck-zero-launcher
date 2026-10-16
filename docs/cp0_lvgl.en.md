@@ -83,7 +83,7 @@ the touch rule (a tap selects a row, a tap on the selected row activates it).
 5.0 mm, at least 24 px: 57 px and about 7.5 rows under the header on the 640x480 deck; for dense data, below the 7 mm
 list-row rule on purpose because a mis-tap only moves the highlight) and `ListDensity::Comfortable` (the roller's 7 mm
 `CP0_TOK_ROW_H` row, for 3-6 touch-friendly rows and any list whose rows trigger an action). Rows are items (label left, cut with dots; value right,
-never cut, coloured by `ValueTone::Normal / Ok / Warn / Bad`) or section headers (grey, upper case, never selected).
+never cut, coloured by `ValueTone::Normal / Ok / Warn / Bad / Muted`; Muted is the label grey for an absent / unset thing, never the only signal of status) or section headers (grey, upper case, never selected).
 `set_rows()` is the live refresh: only changed texts and colours are touched, the scroll offset and the selected index
 stay (no flicker, no jump). `reset_rows()` is new content (top, highlight on `selected`). `read_only` makes a plain
 scrolling list without highlight; `empty_text` (or your own card in `empty_area()`) shows while there is no row;
