@@ -8,8 +8,8 @@
  * Roller or CompactList: the Roller (cp0_ui_roller.h) centres the selected row under a fixed bar, shows two or three big
  * rows each side and orange chevrons; it is the Settings menu look. CompactList is a plain list for apps: top-aligned
  * (row 0 directly under the list area's top edge, the highlight starts on row 0 and moves down; the list scrolls only
- * when the highlight would leave the view, keeping one row of context, never centring), no chevrons, a thin scrollbar
- * at the right edge that shows while scrolling and hides 1 s after (none when every row fits).
+ * when the highlight would leave the view, keeping one row of context, never centring), no scroll chevrons, a thin
+ * scrollbar at the right edge that shows while scrolling and hides 1 s after (none when every row fits).
  *
  * Two densities, from the layout service's tokens (cp0_ui_metrics.h):
  *   COMPACT      dense data (process lists, logs, sensor tables): rows are the LIST_ROW token (5.0 mm, at least
@@ -24,6 +24,13 @@
  * Rows: item (label left, cut with dots; optional value right, never cut, coloured by a tone) or section header.
  * Row tops come from cp0_ui_list_tops(); every other function works on that array (count + 1 entries, the last one
  * the content height), so a list of any length costs one pass to lay out and a binary search to hit-test.
+ *
+ * Row affordances (opt-in per item, cp0_ui_list_affordance_t): what activating the row does, shown by its look, so
+ * actionable rows read apart from static information. UNSPECIFIED (the default) draws the row exactly as before
+ * affordances existed. INFO: no chevron, a NORMAL value drawn grey (MUTED; any other tone as given). OPEN (opens a
+ * page) and EDIT (changes a value): a grey chevron at the right edge, in a reserved box the label and the value never
+ * reach. ACTION (performs something): the label in the accent blue, no chevron. Purely visual: keys and taps are the
+ * same for every affordance. The functions below are the mapping any list (CompactList, an app's own list) draws by.
  *
  * Keys and taps (cp0_ui_list_key, cp0_ui_list_tap): Up / Down move the highlight over the items (sections are skipped;
  * wrap optional, off by default), Home / End to the first / last item, Page Up / Down by a view of rows, Enter and Right
@@ -46,6 +53,11 @@ extern "C" {
 #define CP0_UI_LIST_VALUE_PCT CP0_UI_ROLLER_VALUE_PCT           /* value: 90 % of the label (the roller's) */
 #define CP0_UI_LIST_SECTION_PCT 75      /* section header: a band 75 % of the item row, text 75 % of the label */
 #define CP0_UI_LIST_SCROLLBAR_HIDE_MS 1000 /* the scrollbar hides this long after the last scroll movement */
+#define CP0_UI_LIST_CHEVRON_PCT 160  /* chevron text: 160 % of the label size (its ink 7/8 of the capitals' height) */
+#define CP0_UI_LIST_CHEVRON_W_PCT 32 /* chevron box: 32 % of its text size, rounded up (the glyph advances 31 %) */
+#define CP0_UI_LIST_CHEVRON_TEXT "\xE2\x80\xBA" /* the chevron: U+203A, single right-pointing angle quotation mark */
+#define CP0_UI_LIST_CHEVRON_CODEPOINT 0x203A
+#define CP0_UI_LIST_CHEVRON_FALLBACK ">" /* drawn instead when the font has no U+203A (the builtin Montserrat) */
 
 /* Colours: the shell's palette (dark theme only). */
 #define CP0_UI_LIST_BAR_RGB CP0_UI_ROLLER_BAR_RGB /* the selected row: the roller's highlight bar #2B2B2B */
@@ -58,6 +70,8 @@ extern "C" {
 #define CP0_UI_LIST_WARN_RGB 0xF0B400             /* WARN: the status line's amber */
 #define CP0_UI_LIST_BAD_RGB 0xFF6666              /* BAD: the status line's red */
 #define CP0_UI_LIST_MUTED_RGB CP0_UI_LIST_SECTION_RGB /* MUTED: an absent / unset thing (the label grey) */
+#define CP0_UI_LIST_ACCENT_RGB 0x5AAAFF           /* ACTION rows' label: the accent blue */
+#define CP0_UI_LIST_CHEVRON_RGB CP0_UI_LIST_SECTION_RGB /* OPEN / EDIT rows' chevron (the label grey) */
 
 typedef enum {
     CP0_UI_LIST_COMPACT = 0, /* dense data: LIST_ROW token rows */
@@ -76,6 +90,14 @@ typedef enum {
     CP0_UI_LIST_TONE_BAD,
     CP0_UI_LIST_TONE_MUTED, /* grey: an absent / unset thing; never the only signal of status */
 } cp0_ui_list_tone_t;
+
+typedef enum {
+    CP0_UI_LIST_AFFORDANCE_UNSPECIFIED = 0, /* the app did not say: drawn exactly as before affordances existed */
+    CP0_UI_LIST_AFFORDANCE_INFO,            /* read-only: no chevron; a NORMAL value grey (MUTED), other tones kept */
+    CP0_UI_LIST_AFFORDANCE_OPEN,            /* opens a page: a chevron at the right edge */
+    CP0_UI_LIST_AFFORDANCE_EDIT,            /* changes a value: the value in its tone, then the chevron */
+    CP0_UI_LIST_AFFORDANCE_ACTION,          /* performs something: the label in the accent blue, no chevron */
+} cp0_ui_list_affordance_t;
 
 typedef struct {
     int x, y, w, h;                /* the list area on its parent; row 0 starts at y */
@@ -140,6 +162,31 @@ int cp0_ui_list_label_w(int row_w, int inset, int gap, int value_w);
 
 /* The colour of a value of that tone (0xRRGGBB). */
 unsigned cp0_ui_list_tone_rgb(cp0_ui_list_tone_t tone);
+
+/* ---- row affordances (see the top of this file). An unknown value counts as UNSPECIFIED. */
+
+/* 1 for OPEN and EDIT (the row draws a chevron), else 0. */
+int cp0_ui_list_has_chevron(cp0_ui_list_affordance_t affordance);
+/* An item's label colour: ACCENT for ACTION, else the label white. */
+unsigned cp0_ui_list_label_rgb(cp0_ui_list_affordance_t affordance);
+/* An item's value colour: INFO draws a NORMAL value MUTED (the grey); every other case is cp0_ui_list_tone_rgb(tone),
+ * so an explicit Ok / Warn / Bad / Muted always wins. */
+unsigned cp0_ui_list_value_rgb(cp0_ui_list_tone_t tone, cp0_ui_list_affordance_t affordance);
+/* The chevron's text size: CHEVRON_PCT of l->text_px, rounded up to an even size, at least CP0_UI_FONT_MIN_PX (not
+ * capped at CP0_UI_FONT_MAX_PX: the glyph needs the TTF face anyway). 0 when l is NULL. */
+int cp0_ui_list_chevron_px(const cp0_ui_list_layout_t *l);
+/* The chevron's box width (CHEVRON_W_PCT of its text size, rounded up): the glyph is drawn right-aligned in it, the
+ * box's right edge l->inset from the row's right edge (where a value ends on an UNSPECIFIED row). 0 when l is NULL. */
+int cp0_ui_list_chevron_w(const cp0_ui_list_layout_t *l);
+/* What a row of that affordance keeps free at its right, inside the inset: the chevron's box and a gap (l->gap) before
+ * it for OPEN / EDIT, else 0. The value ends that much further left; the label's width is
+ * cp0_ui_list_label_w(row_w - trail_w, inset, gap, value_w), so neither ever reaches the chevron. 0 when l is NULL. */
+int cp0_ui_list_trail_w(const cp0_ui_list_layout_t *l, cp0_ui_list_affordance_t affordance);
+/* The y of the chevron's label in its row (relative to the row's top) that centres the glyph's ink vertically in a row
+ * row_h high, any height (a one-line row or a taller, two-line one). ink_top: the ink's top below the label's top (for
+ * an LVGL font: line_height - base_line - box_h - ofs_y); ink_h: the ink's height. May be negative (a label taller than
+ * the row; only its empty part is outside). */
+int cp0_ui_list_chevron_y(int row_h, int ink_top, int ink_h);
 
 /* ---- state machine (what the widget does with a key, a tap or new rows) */
 

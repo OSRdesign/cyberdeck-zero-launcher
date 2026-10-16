@@ -77,7 +77,7 @@ the touch rule (a tap selects a row, a tap on the selected row activates it).
 | Use | When |
 | --- | --- |
 | `Roller` | Few big items you pick from: menus, Settings, choice lists, toggles and sliders. The selected row is centred under a fixed bar, the rows around it shrink and fade, orange chevrons show that more rows exist. |
-| `CompactList` | Data and app lists, especially 8 rows or more: process tables, logs, sensor readings, serial ports, a menu inside an app. Top-aligned (row 0 under the header, the highlight moves down; the list scrolls only to keep the highlight and one row of context in view), no chevrons, a thin scrollbar at the right edge while scrolling (gone 1 s later, none when every row fits). |
+| `CompactList` | Data and app lists, especially 8 rows or more: process tables, logs, sensor readings, serial ports, a menu inside an app. Top-aligned (row 0 under the header, the highlight moves down; the list scrolls only to keep the highlight and one row of context in view), no scroll chevrons, a thin scrollbar at the right edge while scrolling (gone 1 s later, none when every row fits). |
 
 `CompactList` has two densities from the layout tokens: `ListDensity::Compact` (rows of the `CP0_TOK_LIST_ROW_H` token,
 5.0 mm, at least 24 px: 57 px and about 7.5 rows under the header on the 640x480 deck; for dense data, below the 7 mm
@@ -112,9 +112,44 @@ list.reset_rows(rows);   // first time / new page: top, first item highlighted
 list.set_rows(rows);     // every second afterwards: values in place, scroll and selection kept
 ```
 
-The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule) are pure C in `cp0_ui_list.c`, unit-tested
-by `tests/test_ui_list.c`; the render harness scene `compact_list` shows both densities at 640x480, 800x480, 720x720
-and 480x320.
+#### Row affordances: what a row does, at a glance
+
+An item can say what activating it does, so the user tells actionable rows from static information before touching
+one. It is an optional field of each row, `ListRow::affordance` (`cp0::ui::RowAffordance`, also the last argument of
+`ListRow::item()`), and it is purely visual: keys, taps, row heights and tap targets do not change.
+
+| Affordance | Use it when the row ... | Look |
+| --- | --- | --- |
+| `Open` | navigates: opens a page or a sub-list (a tool, a detail page) | a grey chevron `›` at the right edge |
+| `Edit` | changes a value, in place or through a picker ("Network: Automatic (wlan0)", a baud rate) | the value in its tone (green, ...), then the chevron |
+| `Action` | performs something at once (Save, Start, Send, Wake) | the label in the accent blue `#5AAAFF`, no chevron |
+| `Info` | is read-only information (an address, a vendor, a reading) | no chevron; a `Normal` value is drawn grey (`Muted`, `#9A9A9A`); an explicit `Ok` / `Warn` / `Bad` / `Muted` tone is kept |
+| `Unspecified` (default) | has not been tagged yet | exactly as before affordances existed |
+
+Apps adopt it **per row**: a row nobody tagged keeps today's look pixel for pixel, so an app opts in row by row, in its
+own change. On an `Info` row only an explicit tone (`Ok`, `Warn`, `Bad`) keeps a coloured value. The chevron (`CP0_UI_LIST_CHEVRON_TEXT`, U+203A of Montserrat Medium)
+is 160 % of the label size (its ink about 7/8 of the capitals' height), centred on the row's middle and drawn in its own box at
+the right inset; the label and the value end a gap before that box, the value is still never cut. Sections ignore the
+field.
+
+```cpp
+using cp0::ui::ListRow;
+using cp0::ui::RowAffordance;
+using cp0::ui::ValueTone;
+rows.push_back(ListRow::item("Network", "Automatic (wlan0)", ValueTone::Normal, kNetwork, RowAffordance::Edit));
+rows.push_back(ListRow::item("Diagnose my connection", "", ValueTone::Normal, kDiagnose, RowAffordance::Open));
+rows.push_back(ListRow::item("MAC address", mac, ValueTone::Normal, 0, RowAffordance::Info));
+rows.push_back(ListRow::item("Save for Wake-on-LAN", "", ValueTone::Normal, kSaveWol, RowAffordance::Action));
+```
+
+A list of your own draws the same mapping from `cp0_ui_list.h`: `cp0_ui_list_has_chevron()`,
+`cp0_ui_list_label_rgb()`, `cp0_ui_list_value_rgb()`, `cp0_ui_list_chevron_px()` / `_w()`, `cp0_ui_list_trail_w()`
+(what to keep free at the right) and `cp0_ui_list_chevron_y()` (the chevron centred in a row of any height, a two-line
+row too), with the palette constants `CP0_UI_LIST_ACCENT_RGB` and `CP0_UI_LIST_CHEVRON_RGB`.
+
+The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule, the affordance mapping) are pure C in
+`cp0_ui_list.c`, unit-tested by `tests/test_ui_list.c`; the render harness scene `compact_list` shows both densities at
+640x480, 800x480, 720x720 and 480x320, `compact_list_affordance` every affordance at the five sizes.
 
 ## Public C ABI
 

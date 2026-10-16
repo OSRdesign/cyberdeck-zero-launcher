@@ -198,6 +198,50 @@ unsigned cp0_ui_list_tone_rgb(cp0_ui_list_tone_t tone)
     }
 }
 
+/* ------------------------------------------------------------------ row affordances */
+
+int cp0_ui_list_has_chevron(cp0_ui_list_affordance_t affordance)
+{
+    return affordance == CP0_UI_LIST_AFFORDANCE_OPEN || affordance == CP0_UI_LIST_AFFORDANCE_EDIT;
+}
+
+unsigned cp0_ui_list_label_rgb(cp0_ui_list_affordance_t affordance)
+{
+    return affordance == CP0_UI_LIST_AFFORDANCE_ACTION ? CP0_UI_LIST_ACCENT_RGB : CP0_UI_LIST_TEXT_RGB;
+}
+
+unsigned cp0_ui_list_value_rgb(cp0_ui_list_tone_t tone, cp0_ui_list_affordance_t affordance)
+{
+    if (affordance == CP0_UI_LIST_AFFORDANCE_INFO && tone == CP0_UI_LIST_TONE_NORMAL) return CP0_UI_LIST_MUTED_RGB;
+    return cp0_ui_list_tone_rgb(tone);
+}
+
+int cp0_ui_list_chevron_px(const cp0_ui_list_layout_t *l)
+{
+    if (!l) return 0;
+    /* even, as the other sizes, but not capped at CP0_UI_FONT_MAX_PX: U+203A needs the TTF face anyway (the builtin
+     * Montserrat set lacks it), and the cap would shrink the deck's comfortable chevron below the others' ratio */
+    const int px = (pct_of(imax(0, l->text_px), CP0_UI_LIST_CHEVRON_PCT) + 1) & ~1;
+    return imax(CP0_UI_FONT_MIN_PX, px);
+}
+
+int cp0_ui_list_chevron_w(const cp0_ui_list_layout_t *l)
+{
+    if (!l) return 0;
+    return (cp0_ui_list_chevron_px(l) * CP0_UI_LIST_CHEVRON_W_PCT + 99) / 100;
+}
+
+int cp0_ui_list_trail_w(const cp0_ui_list_layout_t *l, cp0_ui_list_affordance_t affordance)
+{
+    if (!l || !cp0_ui_list_has_chevron(affordance)) return 0;
+    return cp0_ui_list_chevron_w(l) + imax(0, l->gap);
+}
+
+int cp0_ui_list_chevron_y(int row_h, int ink_top, int ink_h)
+{
+    return (row_h - ink_h) / 2 - ink_top;
+}
+
 /* ------------------------------------------------------------------ state machine */
 
 static int content_h(const cp0_ui_list_state_t *s)
