@@ -5,10 +5,11 @@
  *
  * Objects: list (the area; scrolls, takes the keys, draws the scrollbar) > one row object per row at its top from
  * cp0_ui_list_tops() (absolute positions, no flex layout: a refresh moves nothing that did not change), each with a
- * label and a value (and, for an Open / Edit row, a chevron label made the first time it is needed: an Unspecified row
- * has exactly the objects and pixels it had before affordances existed); the empty area (the whole list area, shown
- * only with no row). The selected row draws the roller's highlight bar as its own background and its label in bold.
- * Row objects are reused across set_rows() calls: a live refresh only sets the texts and colours that changed.
+ * label and a value (and, for an Open / Edit row, a chevron label, for an Action / ActionRunning row a dot, each made
+ * the first time it is needed: an Unspecified row has exactly the objects and pixels it had before affordances
+ * existed); the empty area (the whole list area, shown only with no row). The selected row draws the roller's
+ * highlight bar as its own background and its label in bold. Row objects are reused across set_rows() calls: a live
+ * refresh only sets the texts and colours that changed (Action <-> ActionRunning: the dot's colour).
  */
 
 #include "cp0_ui_widgets.hpp"
@@ -70,6 +71,7 @@ cp0_ui_list_affordance_t affordance_of(const ListRow &row)
     case RowAffordance::Open: return CP0_UI_LIST_AFFORDANCE_OPEN;
     case RowAffordance::Edit: return CP0_UI_LIST_AFFORDANCE_EDIT;
     case RowAffordance::Action: return CP0_UI_LIST_AFFORDANCE_ACTION;
+    case RowAffordance::ActionRunning: return CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING;
     default: return CP0_UI_LIST_AFFORDANCE_UNSPECIFIED;
     }
 }
@@ -236,7 +238,10 @@ void CompactList::fill_row(Row &row, const ListRow *previous)
         if (!affordance_same)
             lv_obj_set_style_text_color(row.label, lv_color_hex(cp0_ui_list_label_rgb(affordance)), 0);
     }
-    if (!affordance_same) show_chevron(row, cp0_ui_list_has_chevron(affordance) != 0);
+    if (!affordance_same) {
+        show_chevron(row, cp0_ui_list_has_chevron(affordance) != 0);
+        show_dot(row, affordance);
+    }
     if (label_same && value_same && affordance_same) return;
 
     const int h = section ? layout_.section_h : layout_.row_h;
@@ -288,6 +293,30 @@ void CompactList::show_chevron(Row &row, bool shown)
                        cp0_ui_list_chevron_y(layout_.row_h, ink_top, ink_h));
     }
     lv_obj_remove_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
+}
+
+/* The Action dot: a filled circle centred in the chevron's slot and on the row's middle, white while the action is
+ * available, the accent blue while it runs; not clickable (a tap reaches the row as before). An affordance change
+ * between Action and ActionRunning only sets its colour. */
+void CompactList::show_dot(Row &row, cp0_ui_list_affordance_t affordance)
+{
+    if (!cp0_ui_list_has_dot(affordance)) {
+        if (row.dot) lv_obj_add_flag(row.dot, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    if (!row.dot) {
+        const int d = cp0_ui_list_dot_px(&layout_);
+        row.dot = lv_obj_create(row.obj);
+        lv_obj_remove_style_all(row.dot);
+        lv_obj_remove_flag(row.dot, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(row.dot, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(row.dot, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_opa(row.dot, LV_OPA_COVER, 0);
+        lv_obj_set_size(row.dot, d, d);
+        lv_obj_set_pos(row.dot, cp0_ui_list_dot_x(&layout_, layout_.w), cp0_ui_list_chevron_y(layout_.row_h, 0, d));
+    }
+    lv_obj_set_style_bg_color(row.dot, lv_color_hex(cp0_ui_list_dot_rgb(affordance)), 0);
+    lv_obj_remove_flag(row.dot, LV_OBJ_FLAG_HIDDEN);
 }
 
 /* The highlight bar and the bold label on the selected item; plain on the others. */

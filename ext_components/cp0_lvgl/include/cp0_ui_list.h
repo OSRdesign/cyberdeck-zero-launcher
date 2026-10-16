@@ -28,9 +28,11 @@
  * Row affordances (opt-in per item, cp0_ui_list_affordance_t): what activating the row does, shown by its look, so
  * actionable rows read apart from static information. UNSPECIFIED (the default) draws the row exactly as before
  * affordances existed. INFO: no chevron, a NORMAL value drawn grey (MUTED; any other tone as given). OPEN (opens a
- * page) and EDIT (changes a value): a grey chevron at the right edge, in a reserved box the label and the value never
- * reach. ACTION (performs something): the label in the accent blue, no chevron. Purely visual: keys and taps are the
- * same for every affordance. The functions below are the mapping any list (CompactList, an app's own list) draws by.
+ * page) and EDIT (changes a value): a grey chevron at the right edge, in a reserved box (the slot) the label and the
+ * value never reach. ACTION (performs something): a filled dot in that same slot, white while the action is available
+ * (ACTION, idle) and the accent blue while it runs (ACTION_RUNNING); the label stays white. Every row with a chevron or
+ * a dot keeps the same slot, so their values end in one column. Purely visual: keys and taps are the same for every
+ * affordance. The functions below are the mapping any list (CompactList, an app's own list) draws by.
  *
  * Keys and taps (cp0_ui_list_key, cp0_ui_list_tap): Up / Down move the highlight over the items (sections are skipped;
  * wrap optional, off by default), Home / End to the first / last item, Page Up / Down by a view of rows, Enter and Right
@@ -58,6 +60,8 @@ extern "C" {
 #define CP0_UI_LIST_CHEVRON_TEXT "\xE2\x80\xBA" /* the chevron: U+203A, single right-pointing angle quotation mark */
 #define CP0_UI_LIST_CHEVRON_CODEPOINT 0x203A
 #define CP0_UI_LIST_CHEVRON_FALLBACK ">" /* drawn instead when the font has no U+203A (the builtin Montserrat) */
+#define CP0_UI_LIST_DOT_PCT 60       /* the Action dot's diameter: 60 % of the label size (16 px at a 26 px label) */
+#define CP0_UI_LIST_DOT_MIN_PX 4     /* ... never smaller */
 
 /* Colours: the shell's palette (dark theme only). */
 #define CP0_UI_LIST_BAR_RGB CP0_UI_ROLLER_BAR_RGB /* the selected row: the roller's highlight bar #2B2B2B */
@@ -70,8 +74,10 @@ extern "C" {
 #define CP0_UI_LIST_WARN_RGB 0xF0B400             /* WARN: the status line's amber */
 #define CP0_UI_LIST_BAD_RGB 0xFF6666              /* BAD: the status line's red */
 #define CP0_UI_LIST_MUTED_RGB CP0_UI_LIST_SECTION_RGB /* MUTED: an absent / unset thing (the label grey) */
-#define CP0_UI_LIST_ACCENT_RGB 0x5AAAFF           /* ACTION rows' label: the accent blue */
+#define CP0_UI_LIST_ACCENT_RGB 0x5AAAFF           /* the accent blue: an action that is running (its dot) */
 #define CP0_UI_LIST_CHEVRON_RGB CP0_UI_LIST_SECTION_RGB /* OPEN / EDIT rows' chevron (the label grey) */
+#define CP0_UI_LIST_DOT_IDLE_RGB CP0_UI_LIST_TEXT_RGB /* ACTION's dot, idle: the label white (14:1 on the bar) */
+#define CP0_UI_LIST_DOT_RUNNING_RGB CP0_UI_LIST_ACCENT_RGB /* ACTION_RUNNING's dot: the accent blue */
 
 typedef enum {
     CP0_UI_LIST_COMPACT = 0, /* dense data: LIST_ROW token rows */
@@ -96,7 +102,8 @@ typedef enum {
     CP0_UI_LIST_AFFORDANCE_INFO,            /* read-only: no chevron; a NORMAL value grey (MUTED), other tones kept */
     CP0_UI_LIST_AFFORDANCE_OPEN,            /* opens a page: a chevron at the right edge */
     CP0_UI_LIST_AFFORDANCE_EDIT,            /* changes a value: the value in its tone, then the chevron */
-    CP0_UI_LIST_AFFORDANCE_ACTION,          /* performs something: the label in the accent blue, no chevron */
+    CP0_UI_LIST_AFFORDANCE_ACTION,          /* performs something, available (idle): a white dot in the slot */
+    CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING,  /* that action is in progress: the dot in the accent blue */
 } cp0_ui_list_affordance_t;
 
 typedef struct {
@@ -167,8 +174,13 @@ unsigned cp0_ui_list_tone_rgb(cp0_ui_list_tone_t tone);
 
 /* 1 for OPEN and EDIT (the row draws a chevron), else 0. */
 int cp0_ui_list_has_chevron(cp0_ui_list_affordance_t affordance);
-/* An item's label colour: ACCENT for ACTION, else the label white. */
+/* 1 for ACTION and ACTION_RUNNING (the row draws a dot in the chevron's slot), else 0. */
+int cp0_ui_list_has_dot(cp0_ui_list_affordance_t affordance);
+/* An item's label colour: the label white for every affordance (ACTION does not colour its label: its dot says it). */
 unsigned cp0_ui_list_label_rgb(cp0_ui_list_affordance_t affordance);
+/* The dot's colour: DOT_IDLE (white) for ACTION, DOT_RUNNING (the accent blue) for ACTION_RUNNING; 0 for a row without
+ * a dot. */
+unsigned cp0_ui_list_dot_rgb(cp0_ui_list_affordance_t affordance);
 /* An item's value colour: INFO draws a NORMAL value MUTED (the grey); every other case is cp0_ui_list_tone_rgb(tone),
  * so an explicit Ok / Warn / Bad / Muted always wins. */
 unsigned cp0_ui_list_value_rgb(cp0_ui_list_tone_t tone, cp0_ui_list_affordance_t affordance);
@@ -178,10 +190,17 @@ int cp0_ui_list_chevron_px(const cp0_ui_list_layout_t *l);
 /* The chevron's box width (CHEVRON_W_PCT of its text size, rounded up): the glyph is drawn right-aligned in it, the
  * box's right edge l->inset from the row's right edge (where a value ends on an UNSPECIFIED row). 0 when l is NULL. */
 int cp0_ui_list_chevron_w(const cp0_ui_list_layout_t *l);
-/* What a row of that affordance keeps free at its right, inside the inset: the chevron's box and a gap (l->gap) before
- * it for OPEN / EDIT, else 0. The value ends that much further left; the label's width is
- * cp0_ui_list_label_w(row_w - trail_w, inset, gap, value_w), so neither ever reaches the chevron. 0 when l is NULL. */
+/* What a row of that affordance keeps free at its right, inside the inset: the slot (the chevron's box) and a gap
+ * (l->gap) before it for OPEN / EDIT / ACTION / ACTION_RUNNING, else 0. The value ends that much further left (in the
+ * same column on a chevron row and a dot row); the label's width is cp0_ui_list_label_w(row_w - trail_w, inset, gap,
+ * value_w), so neither ever reaches the chevron or the dot. 0 when l is NULL. */
 int cp0_ui_list_trail_w(const cp0_ui_list_layout_t *l, cp0_ui_list_affordance_t affordance);
+/* The dot's diameter: DOT_PCT of l->text_px, rounded, at least DOT_MIN_PX. 0 when l is NULL. */
+int cp0_ui_list_dot_px(const cp0_ui_list_layout_t *l);
+/* x of the dot's left edge in a row row_w px wide: centred in the slot (the chevron's box, whose right edge is
+ * l->inset from the row's right edge), so a dot and a chevron share one column. Vertically it is centred on the row's
+ * middle: cp0_ui_list_chevron_y(row_h, 0, cp0_ui_list_dot_px(l)). 0 when l is NULL. */
+int cp0_ui_list_dot_x(const cp0_ui_list_layout_t *l, int row_w);
 /* The y of the chevron's label in its row (relative to the row's top) that centres the glyph's ink vertically in a row
  * row_h high, any height (a one-line row or a taller, two-line one). ink_top: the ink's top below the label's top (for
  * an LVGL font: line_height - base_line - box_h - ofs_y); ink_h: the ink's height. May be negative (a label taller than

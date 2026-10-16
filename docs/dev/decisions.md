@@ -92,7 +92,7 @@ Short, dated, never re-argued without the user. Newest first.
   gets generic capabilities only (full-screen flag, shared top bar).
 - **2026-10-04: normal boot lines stay visible.** No `quiet` / `fbcon=map` on the boot line. The launcher service
   waits for `systemctl is-system-running --wait` so nothing prints over the grid.
-- **2026-10-16: list rows get an optional affordance (`RowAffordance`), amending the 2026-10-14 "no chevrons" line for tagged rows only.** Owner feedback on Serial Console (Pi 3A+, touch only): nothing told actionable rows from static information. Info = grey Muted value, no chevron; Open = chevron; Edit = value kept plus chevron; Action = accent label (#5AAAFF). Untagged rows render exactly as before; apps tag rows per PR.
+- **2026-10-16: list rows get an optional affordance (`RowAffordance`), amending the 2026-10-14 "no chevrons" line for tagged rows only.** Owner feedback on Serial Console (Pi 3A+, touch only): nothing told actionable rows from static information. Info = grey Muted value, no chevron; Open = chevron; Edit = value kept plus chevron; Action = a filled dot in the chevron's slot, white while idle (`Action`), the accent blue #5AAAFF while it runs (`ActionRunning`); the Action label is not coloured any more (owner, same day, after the first accent-label version: the dot keeps values in one column and shows the running state). Untagged rows render exactly as before; apps tag rows per PR.
 - **2026-10-03: the built-in CardputerZero Hub stays in the Store**, not in Settings > Apps.
 - **2026-10-03: no root-free package installs.** Installing from Settings > Apps asks for the sudo password.
 - **Releases and pushes need the user's explicit go-ahead.**

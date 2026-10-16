@@ -122,15 +122,20 @@ one. It is an optional field of each row, `ListRow::affordance` (`cp0::ui::RowAf
 | --- | --- | --- |
 | `Open` | navigates: opens a page or a sub-list (a tool, a detail page) | a grey chevron `›` at the right edge |
 | `Edit` | changes a value, in place or through a picker ("Network: Automatic (wlan0)", a baud rate) | the value in its tone (green, ...), then the chevron |
-| `Action` | performs something at once (Save, Start, Send, Wake) | the label in the accent blue `#5AAAFF`, no chevron |
+| `Action` | performs something (Save, Start, Listen, Send, Wake) and can be started now | a filled white dot in the chevron's slot; the label stays white |
+| `ActionRunning` | is that action, in progress (listening, a speed test running) | the same dot in the accent blue `#5AAAFF` |
 | `Info` | is read-only information (an address, a vendor, a reading) | no chevron; a `Normal` value is drawn grey (`Muted`, `#9A9A9A`); an explicit `Ok` / `Warn` / `Bad` / `Muted` tone is kept |
 | `Unspecified` (default) | has not been tagged yet | exactly as before affordances existed |
 
 Apps adopt it **per row**: a row nobody tagged keeps today's look pixel for pixel, so an app opts in row by row, in its
 own change. On an `Info` row only an explicit tone (`Ok`, `Warn`, `Bad`) keeps a coloured value. The chevron (`CP0_UI_LIST_CHEVRON_TEXT`, U+203A of Montserrat Medium)
 is 160 % of the label size (its ink about 7/8 of the capitals' height), centred on the row's middle and drawn in its own box at
-the right inset; the label and the value end a gap before that box, the value is still never cut. Sections ignore the
-field.
+the right inset; the label and the value end a gap before that box, the value is still never cut. The Action dot
+(60 % of the label size, 20 px on the deck's comfortable rows) sits in that same box, centred in it and on the row's
+middle, so the values of chevron rows and dot rows end in one column. White is the idle dot on the black rows and on
+the selected bar (`#2B2B2B`, 14:1); blue says the action runs. Switch a row between `Action` and `ActionRunning` with
+the live refresh (`set_rows()`, or `update_row()` / `set_value()` keep the row's other fields): only the dot's colour
+changes, nothing is rebuilt, the selection and the scroll stay. Sections ignore the field.
 
 ```cpp
 using cp0::ui::ListRow;
@@ -140,12 +145,17 @@ rows.push_back(ListRow::item("Network", "Automatic (wlan0)", ValueTone::Normal, 
 rows.push_back(ListRow::item("Diagnose my connection", "", ValueTone::Normal, kDiagnose, RowAffordance::Open));
 rows.push_back(ListRow::item("MAC address", mac, ValueTone::Normal, 0, RowAffordance::Info));
 rows.push_back(ListRow::item("Save for Wake-on-LAN", "", ValueTone::Normal, kSaveWol, RowAffordance::Action));
+rows.push_back(ListRow::item("Listen", listening ? "listening" : "", ValueTone::Normal, kListen,
+                             listening ? RowAffordance::ActionRunning : RowAffordance::Action));
+list.set_rows(rows); // the listen state changed: only that dot turns blue (or white again)
 ```
 
-A list of your own draws the same mapping from `cp0_ui_list.h`: `cp0_ui_list_has_chevron()`,
-`cp0_ui_list_label_rgb()`, `cp0_ui_list_value_rgb()`, `cp0_ui_list_chevron_px()` / `_w()`, `cp0_ui_list_trail_w()`
-(what to keep free at the right) and `cp0_ui_list_chevron_y()` (the chevron centred in a row of any height, a two-line
-row too), with the palette constants `CP0_UI_LIST_ACCENT_RGB` and `CP0_UI_LIST_CHEVRON_RGB`.
+A list of your own draws the same mapping from `cp0_ui_list.h`: `cp0_ui_list_has_chevron()`, `cp0_ui_list_has_dot()`,
+`cp0_ui_list_label_rgb()`, `cp0_ui_list_value_rgb()`, `cp0_ui_list_dot_rgb()`, `cp0_ui_list_chevron_px()` / `_w()`,
+`cp0_ui_list_trail_w()` (what to keep free at the right, the same for a chevron and a dot), `cp0_ui_list_dot_px()` /
+`cp0_ui_list_dot_x()` and `cp0_ui_list_chevron_y()` (the chevron or the dot centred in a row of any height, a two-line
+row too), with the palette constants `CP0_UI_LIST_CHEVRON_RGB`, `CP0_UI_LIST_DOT_IDLE_RGB` and
+`CP0_UI_LIST_DOT_RUNNING_RGB` (= `CP0_UI_LIST_ACCENT_RGB`).
 
 The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule, the affordance mapping) are pure C in
 `cp0_ui_list.c`, unit-tested by `tests/test_ui_list.c`; the render harness scene `compact_list` shows both densities at
