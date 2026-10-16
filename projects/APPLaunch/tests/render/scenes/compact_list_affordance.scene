@@ -1,0 +1,115 @@
+# CompactList row affordances (review-only, no goldens): a device page whose rows carry each kind (Edit: value in its
+# tone then the chevron; Open: the chevron; Info: no chevron, a Normal value grey, an explicit Bad value still red;
+# Action: the label in the accent blue; one Unspecified row as today), in both densities, each kind on a plain row and
+# on the selected one (the #2B2B2B bar, bold label). expect_chevron checks the chevron (grey, drawn, right of the texts,
+# inside the row, centred on its middle, larger than the label, row height unchanged); expect_color the colours. Then
+# the legacy case: an untagged list tagged with four kinds and set back to Unspecified is pixel-identical to the shot
+# taken before (expect_same).
+title compact list row affordances
+review
+sizes 640x480 800x480 480x320 720x720 1280x720
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+# --- Comfortable: row 0 (Edit) selected
+listdemo comfortable 10 kinds
+expect_color "Automatic (wlan0)" 00CC66
+expect_chevron Network yes
+expect_chevron "Diagnose my connection" yes
+expect_color "Diagnose my connection" FFFFFF
+expect_color 02:00:00:00:00:01 9A9A9A
+expect_chevron "MAC address" no
+expect_color "MAC address" FFFFFF
+expect_color "2 ms" 9A9A9A
+expect_color Down FF6666
+shot aff_comfortable_top
+# Open selected, Edit plain
+key DOWN
+expect_chevron "Diagnose my connection" yes
+expect_chevron Network yes
+expect_color "Automatic (wlan0)" 00CC66
+# Info selected
+key DOWN
+expect_color 02:00:00:00:00:01 9A9A9A
+expect_chevron "MAC address" no
+# Info with an explicit Bad tone, selected: the tone wins
+key DOWN
+key DOWN
+expect_color Down FF6666
+expect_chevron Link no
+# Action selected, then plain
+key DOWN
+key DOWN
+expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_chevron "Save for Wake-on-LAN" no
+shot aff_comfortable_action
+key DOWN
+expect_color /dev/ttyUSB0 00CC66
+expect_chevron Port no
+expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_chevron "Ping this device" yes
+# the end: a long label cut before its chevron, a long value whole before its chevron (the label "Server" gives way:
+# cut with dots, so the row is found by its value)
+key END
+expect_chevron build-server.home.arpa yes
+expect_text build-server.home.arpa
+shot aff_comfortable_end
+# --- Compact (a section first): row 1 (Edit) selected
+listdemo compact 11 kinds
+expect_chevron Network yes
+expect_color "Automatic (wlan0)" 00CC66
+expect_chevron "Diagnose my connection" yes
+expect_color 02:00:00:00:00:01 9A9A9A
+expect_chevron "MAC address" no
+expect_color Down FF6666
+expect_chevron "Ping this device" yes
+expect_chevron "Save for Wake-on-LAN" no
+shot aff_compact_top
+# Action selected, then Open selected
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_chevron "Ping this device" yes
+shot aff_compact_action
+key UP
+expect_chevron "Ping this device" yes
+expect_color "Save for Wake-on-LAN" 5AAAFF
+key DOWN
+key DOWN
+expect_chevron Port no
+expect_color /dev/ttyUSB0 00CC66
+key END
+expect_chevron build-server.home.arpa yes
+expect_text build-server.home.arpa
+shot aff_compact_end
+# --- Legacy: the untagged 12-row menu, tagged, then back to Unspecified: pixel-identical
+listdemo comfortable 12
+wait 1500
+shot aff_legacy
+expect_chevron Port no
+expect_color /dev/ttyUSB0 00CC66
+listdemo kind 0 edit
+expect_chevron Port yes
+expect_color /dev/ttyUSB0 00CC66
+listdemo kind 1 action
+expect_color "Baud rate" 5AAAFF
+listdemo kind 2 info
+expect_color 8 9A9A9A
+listdemo kind 3 open
+expect_chevron Parity yes
+shot aff_legacy_tagged
+listdemo kind 0 unspecified
+listdemo kind 1 unspecified
+listdemo kind 2 unspecified
+listdemo kind 3 unspecified
+expect_chevron Port no
+expect_chevron Parity no
+expect_color "Baud rate" FFFFFF
+expect_color 8 00CC66
+expect_same aff_legacy

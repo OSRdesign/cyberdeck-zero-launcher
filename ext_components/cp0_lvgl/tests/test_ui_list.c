@@ -5,7 +5,8 @@
  * sizes, row tops with section headers, hit-test, scroll-to-visible (one row of context for keys, none for taps,
  * top-aligned, never centred), item stepping (sections skipped, wrap), the key machine (Up / Down / Home / End /
  * Page Up / Down / Enter / Right / Esc / Left, read-only scrolling), the tap rule (select, then activate; never while a
- * keyboard scroll runs) and the live refresh rule (selection and scroll kept, clamped, never reset).
+ * keyboard scroll runs), the live refresh rule (selection and scroll kept, clamped, never reset) and the row
+ * affordances (kind -> chevron, label and value colours, reserved width, the chevron's vertical centring).
  */
 #include "cp0_ui_list.h"
 
@@ -38,6 +39,7 @@ typedef struct {
     int w, h, ppmm, strip_left;
     cp0_ui_list_density_t density;
     int x, y, lw, lh, row_h, section_h, text_px, value_px, section_px, inset, gap, bar_w, bar_pad;
+    int chevron_px, chevron_w; /* the Open / Edit chevron's text size and box */
 } expected_layout_t;
 
 static void check_layout(const expected_layout_t *e)
@@ -75,21 +77,37 @@ static void check_layout(const expected_layout_t *e)
     /* text fits its row with room for the bar's padding: a Montserrat line is about 1.25 x its size */
     CHECK(l.text_px * 5 / 4 < l.row_h);
     CHECK(l.section_px * 5 / 4 < l.section_h);
+
+    /* the Open / Edit chevron: larger than the label (its ink about the label's height, not a tiny mark), an even
+     * size (not capped at the builtin set's 48: the glyph needs the TTF face), a box at least the glyph's advance
+     * (31.2 % of its size in Montserrat Medium), and what a chevron row keeps free leaves the label and the value most
+     * of the row */
+    CHECK_EQ(cp0_ui_list_chevron_px(&l), e->chevron_px);
+    CHECK_EQ(cp0_ui_list_chevron_w(&l), e->chevron_w);
+    CHECK(cp0_ui_list_chevron_px(&l) > l.text_px);
+    CHECK(cp0_ui_list_chevron_px(&l) % 2 == 0 && cp0_ui_list_chevron_px(&l) <= 2 * l.text_px);
+    CHECK(cp0_ui_list_chevron_w(&l) * 1000 >= cp0_ui_list_chevron_px(&l) * 312);
+    CHECK_EQ(cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_OPEN), e->chevron_w + e->gap);
+    CHECK_EQ(cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_EDIT), e->chevron_w + e->gap);
+    CHECK_EQ(cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_UNSPECIFIED), 0);
+    CHECK_EQ(cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_INFO), 0);
+    CHECK_EQ(cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_ACTION), 0);
+    CHECK(cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_OPEN) * 10 < l.w);
 }
 
 static void test_layout(void)
 {
     /* strip_left as in test_ui_roller.c (the strip's Bluetooth icon) */
     static const expected_layout_t layouts[] = {
-        /* w    h   ppmm  left  density              x    y   lw   lh  row sec txt val sxt ins gap bw bp */
-        {640, 480, 1130, 424, CP0_UI_LIST_COMPACT, 40, 56, 560, 424, 57, 43, 30, 28, 24, 20, 16, 5, 4},
-        {640, 480, 1130, 424, CP0_UI_LIST_COMFORTABLE, 40, 56, 560, 424, 79, 59, 34, 32, 26, 20, 16, 5, 4},
-        {480, 320, 630, 325, CP0_UI_LIST_COMPACT, 10, 40, 460, 280, 32, 24, 16, 14, 12, 14, 10, 3, 2},
-        {480, 320, 630, 325, CP0_UI_LIST_COMFORTABLE, 10, 40, 460, 280, 44, 33, 20, 18, 16, 14, 10, 3, 2},
-        {800, 480, 920, 584, CP0_UI_LIST_COMPACT, 120, 56, 560, 424, 46, 35, 24, 22, 18, 20, 14, 4, 4},
-        {800, 480, 920, 584, CP0_UI_LIST_COMFORTABLE, 120, 56, 560, 424, 64, 48, 28, 26, 22, 20, 14, 4, 4},
-        {720, 720, 1000, 504, CP0_UI_LIST_COMPACT, 80, 64, 560, 656, 50, 38, 26, 24, 20, 24, 16, 5, 4},
-        {720, 720, 1000, 504, CP0_UI_LIST_COMFORTABLE, 80, 64, 560, 656, 70, 53, 30, 28, 24, 24, 16, 5, 4},
+        /* w    h   ppmm  left  density              x    y   lw   lh  row sec txt val sxt ins gap bw bp chv chw */
+        {640, 480, 1130, 424, CP0_UI_LIST_COMPACT, 40, 56, 560, 424, 57, 43, 30, 28, 24, 20, 16, 5, 4, 48, 16},
+        {640, 480, 1130, 424, CP0_UI_LIST_COMFORTABLE, 40, 56, 560, 424, 79, 59, 34, 32, 26, 20, 16, 5, 4, 54, 18},
+        {480, 320, 630, 325, CP0_UI_LIST_COMPACT, 10, 40, 460, 280, 32, 24, 16, 14, 12, 14, 10, 3, 2, 26, 9},
+        {480, 320, 630, 325, CP0_UI_LIST_COMFORTABLE, 10, 40, 460, 280, 44, 33, 20, 18, 16, 14, 10, 3, 2, 32, 11},
+        {800, 480, 920, 584, CP0_UI_LIST_COMPACT, 120, 56, 560, 424, 46, 35, 24, 22, 18, 20, 14, 4, 4, 38, 13},
+        {800, 480, 920, 584, CP0_UI_LIST_COMFORTABLE, 120, 56, 560, 424, 64, 48, 28, 26, 22, 20, 14, 4, 4, 46, 15},
+        {720, 720, 1000, 504, CP0_UI_LIST_COMPACT, 80, 64, 560, 656, 50, 38, 26, 24, 20, 24, 16, 5, 4, 42, 14},
+        {720, 720, 1000, 504, CP0_UI_LIST_COMFORTABLE, 80, 64, 560, 656, 70, 53, 30, 28, 24, 24, 16, 5, 4, 48, 16},
     };
     for (size_t i = 0; i < sizeof(layouts) / sizeof(layouts[0]); ++i) check_layout(&layouts[i]);
 
@@ -276,6 +294,108 @@ static void test_step(void)
     CHECK_EQ(cp0_ui_list_tone_rgb(CP0_UI_LIST_TONE_BAD), 0xFF6666);
     CHECK_EQ(cp0_ui_list_tone_rgb(CP0_UI_LIST_TONE_MUTED), 0x9A9A9A); /* the label grey */
     CHECK_EQ(CP0_UI_LIST_MUTED_RGB, CP0_UI_LIST_SECTION_RGB);
+}
+
+/* ------------------------------------------------------------------ row affordances */
+
+static void test_affordance(void)
+{
+    static const cp0_ui_list_affordance_t affordances[] = {
+        CP0_UI_LIST_AFFORDANCE_UNSPECIFIED, CP0_UI_LIST_AFFORDANCE_INFO, CP0_UI_LIST_AFFORDANCE_OPEN,
+        CP0_UI_LIST_AFFORDANCE_EDIT, CP0_UI_LIST_AFFORDANCE_ACTION};
+    static const cp0_ui_list_tone_t tones[] = {CP0_UI_LIST_TONE_NORMAL, CP0_UI_LIST_TONE_OK, CP0_UI_LIST_TONE_WARN,
+                                               CP0_UI_LIST_TONE_BAD, CP0_UI_LIST_TONE_MUTED};
+    const cp0_ui_list_affordance_t unknown = (cp0_ui_list_affordance_t)99;
+
+    /* the default is the legacy look */
+    CHECK_EQ(CP0_UI_LIST_AFFORDANCE_UNSPECIFIED, 0);
+    /* the glyph and the palette */
+    CHECK(strcmp(CP0_UI_LIST_CHEVRON_TEXT, "\xE2\x80\xBA") == 0); /* U+203A in UTF-8 */
+    CHECK_EQ(CP0_UI_LIST_CHEVRON_CODEPOINT, 0x203A);
+    CHECK(strcmp(CP0_UI_LIST_CHEVRON_FALLBACK, ">") == 0);
+    CHECK_EQ(CP0_UI_LIST_ACCENT_RGB, 0x5AAAFF);
+    CHECK_EQ(CP0_UI_LIST_CHEVRON_RGB, 0x9A9A9A); /* the label grey */
+
+    /* kind -> chevron: Open and Edit only */
+    CHECK_EQ(cp0_ui_list_has_chevron(CP0_UI_LIST_AFFORDANCE_UNSPECIFIED), 0);
+    CHECK_EQ(cp0_ui_list_has_chevron(CP0_UI_LIST_AFFORDANCE_INFO), 0);
+    CHECK_EQ(cp0_ui_list_has_chevron(CP0_UI_LIST_AFFORDANCE_OPEN), 1);
+    CHECK_EQ(cp0_ui_list_has_chevron(CP0_UI_LIST_AFFORDANCE_EDIT), 1);
+    CHECK_EQ(cp0_ui_list_has_chevron(CP0_UI_LIST_AFFORDANCE_ACTION), 0);
+    CHECK_EQ(cp0_ui_list_has_chevron(unknown), 0);
+
+    /* kind -> label colour: the accent for Action only */
+    CHECK_EQ(cp0_ui_list_label_rgb(CP0_UI_LIST_AFFORDANCE_UNSPECIFIED), CP0_UI_LIST_TEXT_RGB);
+    CHECK_EQ(cp0_ui_list_label_rgb(CP0_UI_LIST_AFFORDANCE_INFO), 0xFFFFFF);
+    CHECK_EQ(cp0_ui_list_label_rgb(CP0_UI_LIST_AFFORDANCE_OPEN), 0xFFFFFF);
+    CHECK_EQ(cp0_ui_list_label_rgb(CP0_UI_LIST_AFFORDANCE_EDIT), 0xFFFFFF);
+    CHECK_EQ(cp0_ui_list_label_rgb(CP0_UI_LIST_AFFORDANCE_ACTION), 0x5AAAFF);
+    CHECK_EQ(cp0_ui_list_label_rgb(unknown), 0xFFFFFF);
+
+    /* kind -> value colour: the tone's everywhere (Unspecified = the legacy colours) except a Normal value on an Info
+     * row, which is grey; an explicit tone always wins */
+    for (size_t t = 0; t < sizeof(tones) / sizeof(tones[0]); ++t)
+        for (size_t a = 0; a < sizeof(affordances) / sizeof(affordances[0]); ++a) {
+            const unsigned expect = affordances[a] == CP0_UI_LIST_AFFORDANCE_INFO && tones[t] == CP0_UI_LIST_TONE_NORMAL
+                                        ? CP0_UI_LIST_MUTED_RGB
+                                        : cp0_ui_list_tone_rgb(tones[t]);
+            CHECK_EQ(cp0_ui_list_value_rgb(tones[t], affordances[a]), expect);
+        }
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_NORMAL, CP0_UI_LIST_AFFORDANCE_UNSPECIFIED), 0x00CC66);
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_NORMAL, CP0_UI_LIST_AFFORDANCE_INFO), 0x9A9A9A);
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_BAD, CP0_UI_LIST_AFFORDANCE_INFO), 0xFF6666);
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_WARN, CP0_UI_LIST_AFFORDANCE_INFO), 0xF0B400);
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_OK, CP0_UI_LIST_AFFORDANCE_INFO), 0x66CC88);
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_NORMAL, CP0_UI_LIST_AFFORDANCE_EDIT), 0x00CC66);
+    CHECK_EQ(cp0_ui_list_value_rgb(CP0_UI_LIST_TONE_NORMAL, unknown), 0x00CC66);
+
+    /* kind -> width: the deck's comfortable row (560 px, inset 20, gap 16, label 34 px): the chevron 54 px in an 18 px
+     * box, 34 px kept free; the label, the value and the chevron never overlap */
+    cp0_ui_metrics_t m;
+    cp0_ui_list_layout_t l;
+    CHECK_EQ(cp0_ui_metrics_compute(640, 480, 0, 1130, CP0_UI_DENSITY_PANEL_MM, 0, &m), 0);
+    CHECK_EQ(cp0_ui_list_layout(&m, CP0_UI_LIST_COMFORTABLE, 40, 56, 560, 424, &l), 0);
+    CHECK_EQ(cp0_ui_list_chevron_px(&l), 54);
+    CHECK_EQ(cp0_ui_list_chevron_w(&l), 18);
+    const int trail = cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_EDIT);
+    CHECK_EQ(trail, 34);
+    const int value_w = 100;
+    const int label_w = cp0_ui_list_label_w(l.w - trail, l.inset, l.gap, value_w);
+    CHECK_EQ(label_w, 370);
+    const int label_x2 = l.inset + label_w;            /* 390 */
+    const int value_x2 = l.w - l.inset - trail;        /* 506: where the value ends */
+    const int value_x1 = value_x2 - value_w;           /* 406 */
+    const int chevron_x1 = l.w - l.inset - cp0_ui_list_chevron_w(&l); /* 522 */
+    CHECK_EQ(value_x1 - label_x2, l.gap);
+    CHECK_EQ(chevron_x1 - value_x2, l.gap);
+    CHECK_EQ(l.w - l.inset, 540); /* the chevron box ends where an Unspecified row's value ends */
+    /* an Open row without a value: the label stops a gap before the chevron */
+    CHECK_EQ(l.inset + cp0_ui_list_label_w(l.w - trail, l.inset, l.gap, 0), chevron_x1 - l.gap);
+    /* a value too wide for the row is never cut and still never reaches the chevron: the label goes to 0 */
+    CHECK_EQ(cp0_ui_list_label_w(l.w - trail, l.inset, l.gap, 600), 0);
+    /* Unspecified / Info / Action: the row's widths are the legacy ones */
+    CHECK_EQ(cp0_ui_list_label_w(l.w - cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_INFO), l.inset, l.gap, value_w),
+             cp0_ui_list_label_w(l.w, l.inset, l.gap, value_w));
+    CHECK_EQ(cp0_ui_list_trail_w(&l, unknown), 0);
+    /* NULL */
+    CHECK_EQ(cp0_ui_list_chevron_px(NULL), 0);
+    CHECK_EQ(cp0_ui_list_chevron_w(NULL), 0);
+    CHECK_EQ(cp0_ui_list_trail_w(NULL, CP0_UI_LIST_AFFORDANCE_OPEN), 0);
+
+    /* vertical: the ink centred on the row's middle for any row height (a one-line row, a two-line one), within half
+     * a pixel (e.g. an ink 19 px high whose top is 25 px below the label's top) */
+    CHECK_EQ(cp0_ui_list_chevron_y(79, 25, 19), 5);  /* ink 30..48 in a 79 px row: centre 39 */
+    CHECK_EQ(cp0_ui_list_chevron_y(57, 25, 19), -6); /* the deck's compact row: the label pokes out, its ink does not */
+    CHECK_EQ(cp0_ui_list_chevron_y(158, 25, 19), 44); /* a two-line row */
+    for (int row_h = 20; row_h <= 200; row_h += 3)
+        for (int ink_h = 4; ink_h <= 40 && ink_h <= row_h; ink_h += 5)
+            for (int ink_top = 0; ink_top <= 30; ink_top += 7) {
+                const int y = cp0_ui_list_chevron_y(row_h, ink_top, ink_h);
+                const int ink_y1 = y + ink_top, ink_y2 = ink_y1 + ink_h; /* the ink's rows, y2 exclusive */
+                CHECK(ink_y1 >= 0 && ink_y2 <= row_h);
+                const int off = (ink_y1 + ink_y2) - row_h; /* twice the centre's offset */
+                CHECK(off >= -1 && off <= 1);
+            }
 }
 
 /* row i and its neighbours (when they exist) whole in the view */
@@ -541,6 +661,7 @@ int main(void)
     test_tops_and_hit();
     test_scroll_to_show();
     test_step();
+    test_affordance();
     test_keys();
     test_tap();
     test_keep();

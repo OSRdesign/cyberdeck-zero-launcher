@@ -5,9 +5,10 @@
  *
  * Objects: list (the area; scrolls, takes the keys, draws the scrollbar) > one row object per row at its top from
  * cp0_ui_list_tops() (absolute positions, no flex layout: a refresh moves nothing that did not change), each with a
- * label and a value; the empty area (the whole list area, shown only with no row). The selected row draws the
- * roller's highlight bar as its own background and its label in bold. Row objects are reused across set_rows() calls:
- * a live refresh only sets the texts and colours that changed.
+ * label and a value (and, for an Open / Edit row, a chevron label made the first time it is needed: an Unspecified row
+ * has exactly the objects and pixels it had before affordances existed); the empty area (the whole list area, shown
+ * only with no row). The selected row draws the roller's highlight bar as its own background and its label in bold.
+ * Row objects are reused across set_rows() calls: a live refresh only sets the texts and colours that changed.
  */
 
 #include "cp0_ui_widgets.hpp"
@@ -57,6 +58,19 @@ cp0_ui_list_tone_t tone_of(ValueTone tone)
     case ValueTone::Bad: return CP0_UI_LIST_TONE_BAD;
     case ValueTone::Muted: return CP0_UI_LIST_TONE_MUTED;
     default: return CP0_UI_LIST_TONE_NORMAL;
+    }
+}
+
+/* A row's affordance as the C mapping knows it; a section has none. */
+cp0_ui_list_affordance_t affordance_of(const ListRow &row)
+{
+    if (row.kind == ListRowKind::Section) return CP0_UI_LIST_AFFORDANCE_UNSPECIFIED;
+    switch (row.affordance) {
+    case RowAffordance::Info: return CP0_UI_LIST_AFFORDANCE_INFO;
+    case RowAffordance::Open: return CP0_UI_LIST_AFFORDANCE_OPEN;
+    case RowAffordance::Edit: return CP0_UI_LIST_AFFORDANCE_EDIT;
+    case RowAffordance::Action: return CP0_UI_LIST_AFFORDANCE_ACTION;
+    default: return CP0_UI_LIST_AFFORDANCE_UNSPECIFIED;
     }
 }
 
@@ -201,34 +215,79 @@ void CompactList::style_kind(Row &row)
     else lv_obj_remove_flag(row.value, LV_OBJ_FLAG_HIDDEN);
 }
 
-/* Texts, the value's colour and the label / value widths; previous (NULL: everything) skips what did not change. */
+/* Texts, the label's and the value's colours, the chevron and the label / value widths; previous (NULL: everything)
+ * skips what did not change. */
 void CompactList::fill_row(Row &row, const ListRow *previous)
 {
     const bool section = row.spec.kind == ListRowKind::Section;
     const bool kind_same = previous && previous->kind == row.spec.kind;
     const bool label_same = kind_same && previous->label == row.spec.label;
     const bool value_same = kind_same && previous->value == row.spec.value;
+    const bool affordance_same = kind_same && affordance_of(*previous) == affordance_of(row.spec);
+    const cp0_ui_list_affordance_t affordance = affordance_of(row.spec);
     if (!label_same) lv_label_set_text(row.label, section ? upper(row.spec.label).c_str() : row.spec.label.c_str());
     if (section) {
         if (!value_same) lv_label_set_text(row.value, "");
     } else {
         if (!value_same) lv_label_set_text(row.value, row.spec.value.c_str());
-        if (!kind_same || previous->tone != row.spec.tone)
-            lv_obj_set_style_text_color(row.value, lv_color_hex(cp0_ui_list_tone_rgb(tone_of(row.spec.tone))), 0);
+        if (!kind_same || previous->tone != row.spec.tone || !affordance_same)
+            lv_obj_set_style_text_color(row.value,
+                                        lv_color_hex(cp0_ui_list_value_rgb(tone_of(row.spec.tone), affordance)), 0);
+        if (!affordance_same)
+            lv_obj_set_style_text_color(row.label, lv_color_hex(cp0_ui_list_label_rgb(affordance)), 0);
     }
-    if (label_same && value_same) return;
+    if (!affordance_same) show_chevron(row, cp0_ui_list_has_chevron(affordance) != 0);
+    if (label_same && value_same && affordance_same) return;
 
     const int h = section ? layout_.section_h : layout_.row_h;
     const lv_font_t *font = lv_obj_get_style_text_font(row.label, LV_PART_MAIN);
     const int value_w = section ? 0 : text_width(row.spec.value, lv_obj_get_style_text_font(row.value, LV_PART_MAIN));
-    const int room = std::max(0, layout_.w - 2 * layout_.inset);
+    const int trail = cp0_ui_list_trail_w(&layout_, affordance); /* 0 unless a chevron: the row as before */
+    const int room = std::max(0, layout_.w - 2 * layout_.inset - trail);
     if (value_w > 0) {
         lv_obj_set_width(row.value, std::min(value_w, room) + 1); /* +1: a rounding pixel never brings the dots */
-        lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -layout_.inset, 0);
+        lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -(layout_.inset + trail), 0);
     }
-    lv_obj_set_width(row.label, cp0_ui_list_label_w(layout_.w, layout_.inset, layout_.gap, value_w));
+    lv_obj_set_width(row.label, cp0_ui_list_label_w(layout_.w - trail, layout_.inset, layout_.gap, value_w));
     lv_obj_set_height(row.label, font ? lv_font_get_line_height(font) : h); /* one line: dots, never a wrap */
     lv_obj_align(row.label, LV_ALIGN_LEFT_MID, layout_.inset, 0);
+}
+
+/* The Open / Edit chevron: the glyph right-aligned in its box at the value's right edge (the inset), its ink centred
+ * on the row's middle; the label is not clickable (a tap reaches the row as before) and the row keeps its height. */
+void CompactList::show_chevron(Row &row, bool shown)
+{
+    if (!shown) {
+        if (row.chevron) lv_obj_add_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    if (!row.chevron) {
+        const lv_font_t *font = list_font(cp0_ui_list_chevron_px(&layout_), false);
+        const int box_w = cp0_ui_list_chevron_w(&layout_);
+        const char *text = CP0_UI_LIST_CHEVRON_TEXT;
+        lv_font_glyph_dsc_t glyph{};
+        int line_h = layout_.row_h, ink_top = 0, ink_h = layout_.row_h;
+        if (font) {
+            if (!lv_font_get_glyph_dsc(font, &glyph, CP0_UI_LIST_CHEVRON_CODEPOINT, 0)) {
+                text = CP0_UI_LIST_CHEVRON_FALLBACK; /* a font without U+203A */
+                lv_font_get_glyph_dsc(font, &glyph, static_cast<uint32_t>(CP0_UI_LIST_CHEVRON_FALLBACK[0]), 0);
+            }
+            line_h = lv_font_get_line_height(font);
+            ink_top = (line_h - font->base_line) - glyph.box_h - glyph.ofs_y;
+            ink_h = glyph.box_h;
+        }
+        row.chevron = lv_label_create(row.obj);
+        lv_obj_remove_flag(row.chevron, LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_long_mode(row.chevron, LV_LABEL_LONG_MODE_CLIP);
+        lv_label_set_text(row.chevron, text);
+        if (font) lv_obj_set_style_text_font(row.chevron, font, 0);
+        lv_obj_set_style_text_color(row.chevron, lv_color_hex(CP0_UI_LIST_CHEVRON_RGB), 0);
+        lv_obj_set_style_text_align(row.chevron, LV_TEXT_ALIGN_RIGHT, 0);
+        lv_obj_set_size(row.chevron, box_w, line_h);
+        lv_obj_set_pos(row.chevron, layout_.w - layout_.inset - box_w,
+                       cp0_ui_list_chevron_y(layout_.row_h, ink_top, ink_h));
+    }
+    lv_obj_remove_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
 }
 
 /* The highlight bar and the bold label on the selected item; plain on the others. */

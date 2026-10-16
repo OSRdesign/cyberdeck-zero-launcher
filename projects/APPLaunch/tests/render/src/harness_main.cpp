@@ -621,26 +621,47 @@ bool sudo_prompt_open()
  * the keypad), as an app builds it. The rows are fixed demo data: Compact = a system monitor (sections, value tones,
  * long labels, 40 rows cycled to the count asked), Comfortable = serial ports (3 rows or fewer) or a terminal app's
  * settings menu. An activation writes "Activated <label>" into the title. "listdemo update" refreshes the values in
- * place (set_rows with the same rows, other values), as a live list does every second. */
+ * place (set_rows with the same rows, other values), as a live list does every second. With "kinds": a device page
+ * whose rows carry each row affordance (Edit, Open, Info with a Normal and a Bad value, Action, one Unspecified, a long
+ * label and a long value beside a chevron); Compact puts a section header first. */
 struct ListDemo {
     lv_obj_t *screen = nullptr;
     std::unique_ptr<cp0::ui::Page> page;
     std::unique_ptr<cp0::ui::CompactList> list;
     lv_group_t *group = nullptr;
     std::vector<cp0::ui::ListRow> rows;
+    bool kinds = false;
 };
 ListDemo g_list_demo;
 
-std::vector<cp0::ui::ListRow> list_demo_rows(bool comfortable, int count, int generation)
+std::vector<cp0::ui::ListRow> list_demo_rows(bool comfortable, int count, int generation, bool kinds)
 {
     using cp0::ui::ListRow;
+    using cp0::ui::RowAffordance;
     using cp0::ui::ValueTone;
     auto item = [](const std::string &label, const std::string &value, ValueTone tone = ValueTone::Normal) {
         return ListRow::item(label, value, tone);
     };
     auto section = [](const std::string &title) { return ListRow::section(title); };
+    auto tagged = [](const std::string &label, const std::string &value, RowAffordance affordance,
+                     ValueTone tone = ValueTone::Normal) { return ListRow::item(label, value, tone, 0, affordance); };
     std::vector<ListRow> base;
-    if (comfortable && count <= 3) {
+    if (kinds) {
+        if (!comfortable) base.push_back(section("Device"));
+        const std::vector<ListRow> rows = {
+            tagged("Network", "Automatic (wlan0)", RowAffordance::Edit),
+            tagged("Diagnose my connection", "", RowAffordance::Open),
+            tagged("MAC address", "02:00:00:00:00:01", RowAffordance::Info),
+            tagged("Round trip", "2 ms", RowAffordance::Info),
+            tagged("Link", "Down", RowAffordance::Info, ValueTone::Bad),
+            tagged("Ping this device", "", RowAffordance::Open),
+            tagged("Save for Wake-on-LAN", "", RowAffordance::Action),
+            item("Port", "/dev/ttyUSB0"),
+            tagged("Check a port on a host whose name is far too long for one row", "", RowAffordance::Open),
+            tagged("Server", "build-server.home.arpa", RowAffordance::Edit),
+        };
+        base.insert(base.end(), rows.begin(), rows.end());
+    } else if (comfortable && count <= 3) {
         base = {item("/dev/ttyUSB0", "USB serial"), item("/dev/ttyACM0", "Modem"), item("/dev/ttyAMA0", "GPIO UART")};
     } else if (comfortable) {
         base = {item("Port", "/dev/ttyUSB0"), item("Baud rate", "115200"), item("Data bits", "8"),
@@ -696,11 +717,13 @@ void list_demo_destroy(ListDemo &d)
     d.rows.clear();
 }
 
-void list_demo_open(bool comfortable, int count, bool read_only, bool separators, bool wrap, const std::string &empty)
+void list_demo_open(bool comfortable, int count, bool read_only, bool separators, bool wrap, bool kinds,
+                    const std::string &empty)
 {
     ListDemo old = std::move(g_list_demo);
     g_list_demo = ListDemo{};
     ListDemo &d = g_list_demo;
+    d.kinds = kinds;
     native_ui::begin_page(true, false);
     d.screen = lv_obj_create(nullptr);
     lv_obj_remove_style_all(d.screen);
@@ -727,7 +750,7 @@ void list_demo_open(bool comfortable, int count, bool read_only, bool separators
     options.wrap = wrap;
     options.empty_text = empty;
     d.list = std::make_unique<cp0::ui::CompactList>(d.page->root(), layout, std::move(events), options);
-    d.rows = list_demo_rows(comfortable, count, 0);
+    d.rows = list_demo_rows(comfortable, count, 0, kinds);
     d.list->reset_rows(d.rows, 0);
 
     d.group = lv_group_create();
@@ -1064,6 +1087,102 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_color ok: %s %s (%d px)\n", w[1].c_str(), w[2].c_str(), hits);
         return true;
     }
+    if (cmd == "expect_chevron") {
+        /* expect_chevron LABEL yes|no: the list row of the visible label LABEL shows a row-affordance chevron (yes) or
+         * none (no). yes: the chevron label is visible and grey (CP0_UI_LIST_CHEVRON_RGB) with pixels of that colour
+         * drawn; its box lies right of the row's other texts (no overlap) and inside the row; its drawn pixels are
+         * centred on the row's middle (within 1.5 px); its font is larger than the label's (not a tiny mark); the row
+         * keeps the list's item height. A scene fails otherwise. */
+        if (w.size() != 3 || (w[2] != "yes" && w[2] != "no"))
+            return fail(scene, line, "usage: expect_chevron LABEL yes|no");
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), w[1], false);
+        if (!label) return fail(scene, line, "expect_chevron: no visible label " + w[1]);
+        lv_obj_t *row = lv_obj_get_parent(label);
+        lv_obj_t *chevron = nullptr;
+        std::vector<lv_obj_t *> texts;
+        for (uint32_t i = 0; i < lv_obj_get_child_count(row); ++i) {
+            lv_obj_t *child = lv_obj_get_child(row, static_cast<int32_t>(i));
+            if (!lv_obj_check_type(child, &lv_label_class) || lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) continue;
+            const std::string text = lv_label_get_text(child) ? lv_label_get_text(child) : "";
+            if (text == CP0_UI_LIST_CHEVRON_TEXT || text == CP0_UI_LIST_CHEVRON_FALLBACK) chevron = child;
+            else if (!text.empty()) texts.push_back(child);
+        }
+        if (w[2] == "no") {
+            if (chevron) return fail(scene, line, "expect_chevron: the row of " + w[1] + " shows a chevron");
+            std::printf("expect_chevron ok: %s no\n", w[1].c_str());
+            return true;
+        }
+        if (!chevron) return fail(scene, line, "expect_chevron: the row of " + w[1] + " shows no chevron");
+        const int row_h = g_list_demo.list ? g_list_demo.list->layout().row_h : 0;
+        if (row_h && lv_obj_get_height(row) != row_h)
+            return fail(scene, line, "expect_chevron: the row of " + w[1] + " is " +
+                                         std::to_string(lv_obj_get_height(row)) + " px high, not " +
+                                         std::to_string(row_h));
+        const uint32_t want = CP0_UI_LIST_CHEVRON_RGB;
+        const uint32_t style = lv_color_to_u32(lv_obj_get_style_text_color(chevron, LV_PART_MAIN)) & 0xFFFFFF;
+        if (style != want) return fail(scene, line, "expect_chevron: the chevron's text colour is not the grey");
+        const lv_font_t *chevron_font = lv_obj_get_style_text_font(chevron, LV_PART_MAIN);
+        const lv_font_t *label_font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
+        if (!chevron_font || !label_font ||
+            lv_font_get_line_height(chevron_font) <= lv_font_get_line_height(label_font))
+            return fail(scene, line, "expect_chevron: the chevron's font is not larger than the label's");
+        lv_area_t c, r;
+        lv_obj_get_coords(chevron, &c);
+        lv_obj_get_coords(row, &r);
+        if (c.x2 > r.x2 || c.x1 < r.x1) return fail(scene, line, "expect_chevron: the chevron is outside its row");
+        for (lv_obj_t *text : texts) {
+            lv_area_t t;
+            lv_obj_get_coords(text, &t);
+            if (t.x2 >= c.x1)
+                return fail(scene, line, std::string("expect_chevron: \"") + lv_label_get_text(text) + "\" reaches x " +
+                                             std::to_string(t.x2) + ", the chevron starts at " + std::to_string(c.x1));
+        }
+        const Image image = grab(run);
+        int hits = 0, top = INT32_MAX, bottom = -1;
+        for (int y = std::max<int>({0, c.y1, r.y1}); y <= std::min<int>({run.size.h - 1, c.y2, r.y2}); ++y)
+            for (int x = std::max<int>(0, c.x1); x <= std::min<int>(run.size.w - 1, c.x2); ++x) {
+                const unsigned char *p = image.at(x, y);
+                const int dr = std::abs(p[0] - int((want >> 16) & 0xFF)), dg = std::abs(p[1] - int((want >> 8) & 0xFF)),
+                          db = std::abs(p[2] - int(want & 0xFF));
+                if (dr <= 8 && dg <= 4 && db <= 8) {
+                    ++hits;
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                }
+            }
+        if (hits == 0) return fail(scene, line, "expect_chevron: no grey chevron pixel drawn in the row of " + w[1]);
+        const int off2 = (top + bottom) - (r.y1 + r.y2); /* twice the drawn centre's offset from the row's middle */
+        if (off2 < -3 || off2 > 3)
+            return fail(scene, line, "expect_chevron: the chevron's pixels (y " + std::to_string(top) + ".." +
+                                         std::to_string(bottom) + ") are not centred in the row (y " +
+                                         std::to_string(r.y1) + ".." + std::to_string(r.y2) + ")");
+        std::printf("expect_chevron ok: %s yes (%d px, y %d..%d in row %d..%d, x %d..%d)\n", w[1].c_str(), hits, top,
+                    bottom, static_cast<int>(r.y1), static_cast<int>(r.y2), static_cast<int>(c.x1),
+                    static_cast<int>(c.x2));
+        return true;
+    }
+    if (cmd == "expect_same") {
+        /* expect_same SHOT: the screen as drawn now is pixel-identical to the shot SHOT taken earlier in this scene at
+         * this size (out/<WxH>/SHOT.png). A scene fails otherwise. */
+        if (w.size() != 2) return fail(scene, line, "usage: expect_same SHOT");
+        settle(500);
+        lv_refr_now(nullptr);
+        const std::string path = run.out_dir + "/" + run.size.name() + "/" + w[1] + ".png";
+        Image before;
+        if (!load_png(path, before)) return fail(scene, line, "expect_same: cannot read " + path);
+        const Image now = grab(run);
+        if (now.w != before.w || now.h != before.h) return fail(scene, line, "expect_same: the sizes differ");
+        int changed = 0;
+        for (int y = 0; y < now.h; ++y)
+            for (int x = 0; x < now.w; ++x)
+                if (std::memcmp(now.at(x, y), before.at(x, y), 3) != 0) ++changed;
+        if (changed)
+            return fail(scene, line, "expect_same: " + std::to_string(changed) + " pixels differ from " + w[1]);
+        std::printf("expect_same ok: %s\n", w[1].c_str());
+        return true;
+    }
     if (cmd == "bt") {
         if (w.size() != 2) return fail(scene, line, "usage: bt off|on|connected");
         fx.bt_powered = w[1] != "off";
@@ -1283,7 +1402,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             if (!g_list_demo.list) return fail(scene, line, "listdemo update needs a list (listdemo compact N first)");
             static int generation = 0;
             const bool comfortable = g_list_demo.list->layout().density == CP0_UI_LIST_COMFORTABLE;
-            g_list_demo.rows = list_demo_rows(comfortable, g_list_demo.list->count(), ++generation);
+            g_list_demo.rows = list_demo_rows(comfortable, g_list_demo.list->count(), ++generation, g_list_demo.kinds);
             g_list_demo.list->set_rows(g_list_demo.rows);
             settle(200);
             return true;
@@ -1311,21 +1430,42 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             settle(200);
             return true;
         }
+        /* listdemo kind INDEX unspecified|info|open|edit|action: one row's affordance in place, through update_row
+         * (same label, value and tone) */
+        if (w.size() == 4 && w[1] == "kind") {
+            if (!g_list_demo.list) return fail(scene, line, "listdemo kind needs a list (listdemo compact N first)");
+            using cp0::ui::RowAffordance;
+            static const std::map<std::string, RowAffordance> kinds = {
+                {"unspecified", RowAffordance::Unspecified}, {"info", RowAffordance::Info},
+                {"open", RowAffordance::Open},               {"edit", RowAffordance::Edit},
+                {"action", RowAffordance::Action}};
+            const auto kind = kinds.find(w[3]);
+            const int index = to_int(w[2], -1);
+            if (kind == kinds.end() || index < 0 || index >= g_list_demo.list->count())
+                return fail(scene, line, "usage: listdemo kind INDEX unspecified|info|open|edit|action");
+            cp0::ui::ListRow row = g_list_demo.list->row(index);
+            row.affordance = kind->second;
+            g_list_demo.list->update_row(index, row);
+            settle(200);
+            return true;
+        }
         if (w.size() < 3 || (w[1] != "compact" && w[1] != "comfortable"))
-            return fail(scene, line, "usage: listdemo compact|comfortable ROWS [readonly] [separators] [wrap] "
-                                     "[empty TEXT...] | listdemo update | listdemo value|row INDEX TONE TEXT");
-        bool read_only = false, separators = false, wrap = false;
+            return fail(scene, line, "usage: listdemo compact|comfortable ROWS [readonly] [separators] [wrap] [kinds] "
+                                     "[empty TEXT...] | listdemo update | listdemo value|row INDEX TONE TEXT | "
+                                     "listdemo kind INDEX KIND");
+        bool read_only = false, separators = false, wrap = false, kinds = false;
         std::string empty;
         for (std::size_t i = 3; i < w.size(); ++i) {
             if (w[i] == "readonly") read_only = true;
             else if (w[i] == "separators") separators = true;
             else if (w[i] == "wrap") wrap = true;
+            else if (w[i] == "kinds") kinds = true;
             else if (w[i] == "empty") {
                 for (std::size_t j = i + 1; j < w.size(); ++j) empty += (j > i + 1 ? " " : "") + w[j];
                 break;
             } else return fail(scene, line, "listdemo: unknown option " + w[i]);
         }
-        list_demo_open(w[1] == "comfortable", std::max(0, to_int(w[2])), read_only, separators, wrap, empty);
+        list_demo_open(w[1] == "comfortable", std::max(0, to_int(w[2])), read_only, separators, wrap, kinds, empty);
         settle(200);
     } else if (cmd == "toast") {
         std::string text;

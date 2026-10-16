@@ -48,11 +48,12 @@
  *                      (a row token per press), Page Up / Down, Home / End; Esc / Left go back.
  *   CompactList        the apps' list (cp0_ui_list.h): top-aligned rows (row 0 under the area's top edge, the highlight
  *                      moves down, the list scrolls only to keep the highlight and one row of context in view, never
- *                      centred), no chevrons, a thin scrollbar at the right edge while scrolling. Two densities:
+ *                      centred), no scroll chevrons, a thin scrollbar at the right edge while scrolling. Two densities:
  *                      Compact (dense data, 5 mm rows, about 7 on the deck) and Comfortable (the roller's row height, a few
- *                      touch-friendly rows). Rows: item (label cut with dots, value right never cut, value tone) and
- *                      section header. Live refresh in place (no flicker, no scroll jump, selection kept), read-only
- *                      mode, an empty-state line. Keys, tap and tap-again-to-activate as the Roller.
+ *                      touch-friendly rows). Rows: item (label cut with dots, value right never cut, value tone, an
+ *                      optional affordance: Info / Open / Edit / Action) and section header. Live refresh in place (no
+ *                      flicker, no scroll jump, selection kept), read-only mode, an empty-state line. Keys, tap and
+ *                      tap-again-to-activate as the Roller.
  *   Dialog             (task 014 P3b) a title, a body (text, TextFields) and 1-3 buttons: the primary one is Enter, the
  *                      cancel one Esc (also the keyboard's Enter / Esc while a field edits). Width DIALOG_MAX_W,
  *                      centred in the room between the page header and the on-screen keyboard and following the
@@ -354,6 +355,14 @@ enum class ListRowKind { Item, Section };
 /* Value colour: green (the roller's), light green, amber, red; Muted: grey for an absent / unset thing
  * (never the only signal of status). */
 enum class ValueTone { Normal, Ok, Warn, Bad, Muted };
+/* What an item does when activated, shown by its look (cp0_ui_list.h, "Row affordances"); opt-in per row, purely
+ * visual (keys and taps unchanged). Unspecified (the default) draws the row exactly as before affordances existed.
+ *   Info    read-only information: no chevron; a Normal value is drawn grey (Muted), Ok / Warn / Bad / Muted as given
+ *   Open    navigates to a page: a grey chevron at the right edge
+ *   Edit    changes a value, in place or through a picker: the value in its tone, then the chevron
+ *   Action  performs something (save, start, send): the label in the accent blue (#5AAAFF), no chevron
+ * Section rows ignore it. */
+enum class RowAffordance { Unspecified, Info, Open, Edit, Action };
 
 struct ListRow {
     ListRowKind kind = ListRowKind::Item;
@@ -361,15 +370,17 @@ struct ListRow {
     std::string value;                 /* right, never cut; empty: none (the label takes the whole row) */
     ValueTone tone = ValueTone::Normal;
     std::intptr_t id = 0;              /* the app's own identifier, given back to activate */
+    RowAffordance affordance = RowAffordance::Unspecified; /* an item's chevron / colours (see RowAffordance) */
 
     static ListRow item(std::string label, std::string value = std::string(), ValueTone tone = ValueTone::Normal,
-                        std::intptr_t id = 0)
+                        std::intptr_t id = 0, RowAffordance affordance = RowAffordance::Unspecified)
     {
         ListRow row;
         row.label = std::move(label);
         row.value = std::move(value);
         row.tone = tone;
         row.id = id;
+        row.affordance = affordance;
         return row;
     }
     static ListRow section(std::string title)
@@ -412,7 +423,8 @@ public:
     /* New content (another page of the app): the rows, scrolled to the top, `selected` highlighted (clamped; the next
      * item when it is a section) and in view. The scrollbar shows for a second when the rows do not all fit. */
     void reset_rows(const std::vector<ListRow> &rows, int selected = 0);
-    /* One row in place (same kind: only its texts / colour; another kind: the rows below move, nothing scrolls). */
+    /* One row in place (same kind: only its texts / colours / affordance; another kind: the rows below move, nothing
+     * scrolls). */
     void update_row(int index, const ListRow &row);
     void set_value(int index, const std::string &value, ValueTone tone = ValueTone::Normal);
 
@@ -438,6 +450,7 @@ private:
         lv_obj_t *obj = nullptr;
         lv_obj_t *label = nullptr;
         lv_obj_t *value = nullptr;
+        lv_obj_t *chevron = nullptr; /* Open / Edit: made the first time the row needs it, hidden otherwise */
         bool styled_selected = false;
     };
 
@@ -449,6 +462,7 @@ private:
     void build_row(int index);
     void style_kind(Row &row);
     void fill_row(Row &row, const ListRow *previous);
+    void show_chevron(Row &row, bool shown);
     void style_selected(int index);
     const lv_font_t *label_font(const Row &row) const;
     void relayout();
