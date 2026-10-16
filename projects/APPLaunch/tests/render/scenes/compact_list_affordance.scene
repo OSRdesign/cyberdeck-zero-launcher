@@ -1,10 +1,14 @@
 # CompactList row affordances (review-only, no goldens): a device page whose rows carry each kind (Edit: value in its
 # tone then the chevron; Open: the chevron; Info: no chevron, a Normal value grey, an explicit Bad value still red;
-# Action: the label in the accent blue; one Unspecified row as today), in both densities, each kind on a plain row and
-# on the selected one (the #2B2B2B bar, bold label). expect_chevron checks the chevron (grey, drawn, right of the texts,
-# inside the row, centred on its middle, larger than the label, row height unchanged); expect_color the colours. Then
-# the legacy case: an untagged list tagged with four kinds and set back to Unspecified is pixel-identical to the shot
-# taken before (expect_same).
+# Action: a white dot in the chevron's slot, the label white; Action running: the dot in the accent blue; one
+# Unspecified row as today), in both densities, each kind on a plain row and on the selected one (the #2B2B2B bar, bold
+# label). expect_chevron checks the chevron (grey, drawn, right of the texts, inside the row, centred on its middle,
+# larger than the label, row height unchanged); expect_dot the dot (its colour drawn, a circle of the list's dot size,
+# centred on the row's middle and in the chevron's slot, the value ending in the chevron rows' column); expect_color the
+# colours. The dot switches between idle and running through the live refresh (set_rows: setkind) and update_row (kind)
+# without a rebuild: switched back, the screen is pixel-identical to the shot before (expect_same; a rebuild would move
+# the selection and the scroll). Then the legacy case: an untagged list tagged with five kinds and set back to
+# Unspecified is pixel-identical to the shot taken before.
 title compact list row affordances
 review
 sizes 640x480 800x480 480x320 720x720 1280x720
@@ -14,13 +18,15 @@ wifi 70
 bt on
 home
 # --- Comfortable: row 0 (Edit) selected
-listdemo comfortable 10 kinds
+listdemo comfortable 11 kinds
 expect_color "Automatic (wlan0)" 00CC66
 expect_chevron Network yes
+expect_dot Network no
 expect_chevron "Diagnose my connection" yes
 expect_color "Diagnose my connection" FFFFFF
 expect_color 02:00:00:00:00:01 9A9A9A
 expect_chevron "MAC address" no
+expect_dot "MAC address" no
 expect_color "MAC address" FFFFFF
 expect_color "2 ms" 9A9A9A
 expect_color Down FF6666
@@ -39,25 +45,55 @@ key DOWN
 key DOWN
 expect_color Down FF6666
 expect_chevron Link no
-# Action selected, then plain
+expect_dot Link no
+# Action (idle) selected: white label, white dot
 key DOWN
 key DOWN
-expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_color "Save for Wake-on-LAN" FFFFFF
 expect_chevron "Save for Wake-on-LAN" no
+expect_dot "Save for Wake-on-LAN" idle
+expect_dot "Ping this device" no
 shot aff_comfortable_action
+# Action (idle) plain
 key DOWN
 expect_color /dev/ttyUSB0 00CC66
 expect_chevron Port no
-expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_dot Port no
+expect_dot "Save for Wake-on-LAN" idle
+expect_color "Save for Wake-on-LAN" FFFFFF
 expect_chevron "Ping this device" yes
-# the end: a long label cut before its chevron, a long value whole before its chevron (the label "Server" gives way:
-# cut with dots, so the row is found by its value)
+shot aff_comfortable_port
+# the action starts (live refresh, set_rows): the plain row's dot turns blue, nothing else moves; it stops: as before
+listdemo setkind 6 action-running
+expect_dot "Save for Wake-on-LAN" running
+expect_color "Save for Wake-on-LAN" FFFFFF
+shot aff_comfortable_running_plain
+listdemo setkind 6 action
+expect_dot "Save for Wake-on-LAN" idle
+expect_same aff_comfortable_port
+# the end: an action running with a value, selected (its value in the chevron rows' column)
 key END
+expect_dot Listen running
+expect_color Listen FFFFFF
+expect_color listening 00CC66
+expect_chevron Listen no
+shot aff_comfortable_end
+# a long label cut before its chevron, a long value whole before its chevron (the label "Server" gives way: cut with
+# dots, so the row is found by its value); the running action below it, plain
+key UP
 expect_chevron build-server.home.arpa yes
 expect_text build-server.home.arpa
-shot aff_comfortable_end
+expect_dot Listen running
+# update_row on the selected running row: idle, then running again
+key DOWN
+listdemo kind 10 action
+expect_dot Listen idle
+shot aff_comfortable_idle_selected
+listdemo kind 10 action-running
+expect_dot Listen running
+expect_same aff_comfortable_end
 # --- Compact (a section first): row 1 (Edit) selected
-listdemo compact 11 kinds
+listdemo compact 12 kinds
 expect_chevron Network yes
 expect_color "Automatic (wlan0)" 00CC66
 expect_chevron "Diagnose my connection" yes
@@ -67,49 +103,71 @@ expect_color Down FF6666
 expect_chevron "Ping this device" yes
 expect_chevron "Save for Wake-on-LAN" no
 shot aff_compact_top
-# Action selected, then Open selected
+# Action (idle) selected
 key DOWN
 key DOWN
 key DOWN
 key DOWN
 key DOWN
 key DOWN
-expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_color "Save for Wake-on-LAN" FFFFFF
+expect_dot "Save for Wake-on-LAN" idle
 expect_chevron "Ping this device" yes
 shot aff_compact_action
+# Open selected, Action (idle) plain, then running plain (live refresh), then running selected
 key UP
 expect_chevron "Ping this device" yes
-expect_color "Save for Wake-on-LAN" 5AAAFF
+expect_dot "Save for Wake-on-LAN" idle
+listdemo setkind 7 action-running
+expect_dot "Save for Wake-on-LAN" running
 key DOWN
+expect_dot "Save for Wake-on-LAN" running
+expect_color "Save for Wake-on-LAN" FFFFFF
+shot aff_compact_running
+listdemo setkind 7 action
+expect_dot "Save for Wake-on-LAN" idle
+expect_same aff_compact_action
 key DOWN
 expect_chevron Port no
+expect_dot Port no
 expect_color /dev/ttyUSB0 00CC66
 key END
+expect_dot Listen running
+expect_color listening 00CC66
+shot aff_compact_end
+key UP
 expect_chevron build-server.home.arpa yes
 expect_text build-server.home.arpa
-shot aff_compact_end
+expect_dot Listen running
 # --- Legacy: the untagged 12-row menu, tagged, then back to Unspecified: pixel-identical
 listdemo comfortable 12
 wait 1500
 shot aff_legacy
 expect_chevron Port no
+expect_dot Port no
 expect_color /dev/ttyUSB0 00CC66
 listdemo kind 0 edit
 expect_chevron Port yes
 expect_color /dev/ttyUSB0 00CC66
 listdemo kind 1 action
-expect_color "Baud rate" 5AAAFF
+expect_color "Baud rate" FFFFFF
+expect_dot "Baud rate" idle
 listdemo kind 2 info
 expect_color 8 9A9A9A
 listdemo kind 3 open
 expect_chevron Parity yes
+listdemo kind 4 action-running
+expect_dot "Stop bits" running
 shot aff_legacy_tagged
 listdemo kind 0 unspecified
 listdemo kind 1 unspecified
 listdemo kind 2 unspecified
 listdemo kind 3 unspecified
+listdemo kind 4 unspecified
 expect_chevron Port no
 expect_chevron Parity no
+expect_dot "Baud rate" no
+expect_dot "Stop bits" no
 expect_color "Baud rate" FFFFFF
 expect_color 8 00CC66
 expect_same aff_legacy

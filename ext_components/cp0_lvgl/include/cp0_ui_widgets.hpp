@@ -51,9 +51,9 @@
  *                      centred), no scroll chevrons, a thin scrollbar at the right edge while scrolling. Two densities:
  *                      Compact (dense data, 5 mm rows, about 7 on the deck) and Comfortable (the roller's row height, a few
  *                      touch-friendly rows). Rows: item (label cut with dots, value right never cut, value tone, an
- *                      optional affordance: Info / Open / Edit / Action) and section header. Live refresh in place (no
- *                      flicker, no scroll jump, selection kept), read-only mode, an empty-state line. Keys, tap and
- *                      tap-again-to-activate as the Roller.
+ *                      optional affordance: Info / Open / Edit / Action / ActionRunning) and section header. Live
+ *                      refresh in place (no flicker, no scroll jump, selection kept), read-only mode, an empty-state
+ *                      line. Keys, tap and tap-again-to-activate as the Roller.
  *   Dialog             (task 014 P3b) a title, a body (text, TextFields) and 1-3 buttons: the primary one is Enter, the
  *                      cancel one Esc (also the keyboard's Enter / Esc while a field edits). Width DIALOG_MAX_W,
  *                      centred in the room between the page header and the on-screen keyboard and following the
@@ -360,9 +360,11 @@ enum class ValueTone { Normal, Ok, Warn, Bad, Muted };
  *   Info    read-only information: no chevron; a Normal value is drawn grey (Muted), Ok / Warn / Bad / Muted as given
  *   Open    navigates to a page: a grey chevron at the right edge
  *   Edit    changes a value, in place or through a picker: the value in its tone, then the chevron
- *   Action  performs something (save, start, send): the label in the accent blue (#5AAAFF), no chevron
- * Section rows ignore it. */
-enum class RowAffordance { Unspecified, Info, Open, Edit, Action };
+ *   Action  performs something (save, start, listen, send), available: a white dot in the chevron's slot, white label
+ *   ActionRunning  that action is in progress (listening, a test running): the dot in the accent blue (#5AAAFF)
+ * A chevron and a dot share one slot, so values end in one column. Switch Action <-> ActionRunning with set_rows() /
+ * update_row(): only the dot's colour changes. Section rows ignore it. */
+enum class RowAffordance { Unspecified, Info, Open, Edit, Action, ActionRunning };
 
 struct ListRow {
     ListRowKind kind = ListRowKind::Item;
@@ -370,7 +372,7 @@ struct ListRow {
     std::string value;                 /* right, never cut; empty: none (the label takes the whole row) */
     ValueTone tone = ValueTone::Normal;
     std::intptr_t id = 0;              /* the app's own identifier, given back to activate */
-    RowAffordance affordance = RowAffordance::Unspecified; /* an item's chevron / colours (see RowAffordance) */
+    RowAffordance affordance = RowAffordance::Unspecified; /* an item's chevron / dot / colours (see RowAffordance) */
 
     static ListRow item(std::string label, std::string value = std::string(), ValueTone tone = ValueTone::Normal,
                         std::intptr_t id = 0, RowAffordance affordance = RowAffordance::Unspecified)
@@ -451,6 +453,7 @@ private:
         lv_obj_t *label = nullptr;
         lv_obj_t *value = nullptr;
         lv_obj_t *chevron = nullptr; /* Open / Edit: made the first time the row needs it, hidden otherwise */
+        lv_obj_t *dot = nullptr;     /* Action / ActionRunning: the same */
         bool styled_selected = false;
     };
 
@@ -463,6 +466,7 @@ private:
     void style_kind(Row &row);
     void fill_row(Row &row, const ListRow *previous);
     void show_chevron(Row &row, bool shown);
+    void show_dot(Row &row, cp0_ui_list_affordance_t affordance);
     void style_selected(int index);
     const lv_font_t *label_font(const Row &row) const;
     void relayout();

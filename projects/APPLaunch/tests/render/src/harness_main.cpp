@@ -622,8 +622,9 @@ bool sudo_prompt_open()
  * long labels, 40 rows cycled to the count asked), Comfortable = serial ports (3 rows or fewer) or a terminal app's
  * settings menu. An activation writes "Activated <label>" into the title. "listdemo update" refreshes the values in
  * place (set_rows with the same rows, other values), as a live list does every second. With "kinds": a device page
- * whose rows carry each row affordance (Edit, Open, Info with a Normal and a Bad value, Action, one Unspecified, a long
- * label and a long value beside a chevron); Compact puts a section header first. */
+ * whose rows carry each row affordance (Edit, Open, Info with a Normal and a Bad value, Action idle, one Unspecified, a
+ * long label and a long value beside a chevron, an Action running with a value last); Compact puts a section header
+ * first. */
 struct ListDemo {
     lv_obj_t *screen = nullptr;
     std::unique_ptr<cp0::ui::Page> page;
@@ -659,6 +660,7 @@ std::vector<cp0::ui::ListRow> list_demo_rows(bool comfortable, int count, int ge
             item("Port", "/dev/ttyUSB0"),
             tagged("Check a port on a host whose name is far too long for one row", "", RowAffordance::Open),
             tagged("Server", "build-server.home.arpa", RowAffordance::Edit),
+            tagged("Listen", "listening", RowAffordance::ActionRunning),
         };
         base.insert(base.end(), rows.begin(), rows.end());
     } else if (comfortable && count <= 3) {
@@ -1163,6 +1165,105 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
                     static_cast<int>(c.x2));
         return true;
     }
+    if (cmd == "expect_dot") {
+        /* expect_dot LABEL idle|running|no: the list row of the visible label LABEL shows the Action dot, white (idle)
+         * or the accent blue (running), or no dot (no). idle / running: the dot is visible, a circle of the list's dot
+         * size, its colour drawn; its drawn pixels are centred on the row's middle and on the chevron's slot (within
+         * 1.5 px: dots and chevrons share one column); it lies right of the row's texts and inside the row; the row's
+         * value (if any) ends where a chevron row's value ends; the row keeps the list's item height. A scene fails
+         * otherwise. */
+        if (w.size() != 3 || (w[2] != "idle" && w[2] != "running" && w[2] != "no"))
+            return fail(scene, line, "usage: expect_dot LABEL idle|running|no");
+        if (!g_list_demo.list) return fail(scene, line, "expect_dot needs a list (listdemo compact N first)");
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), w[1], false);
+        if (!label) return fail(scene, line, "expect_dot: no visible label " + w[1]);
+        lv_obj_t *row = lv_obj_get_parent(label);
+        lv_obj_t *dot = nullptr, *value = nullptr;
+        std::vector<lv_obj_t *> texts;
+        for (uint32_t i = 0; i < lv_obj_get_child_count(row); ++i) {
+            lv_obj_t *child = lv_obj_get_child(row, static_cast<int32_t>(i));
+            if (lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) continue;
+            if (!lv_obj_check_type(child, &lv_label_class)) {
+                dot = child;
+                continue;
+            }
+            const std::string text = lv_label_get_text(child) ? lv_label_get_text(child) : "";
+            if (text.empty()) continue;
+            texts.push_back(child);
+            if (i == 1) value = child; /* the row's children: label, value, then the chevron / dot */
+        }
+        if (w[2] == "no") {
+            if (dot) return fail(scene, line, "expect_dot: the row of " + w[1] + " shows a dot");
+            std::printf("expect_dot ok: %s no\n", w[1].c_str());
+            return true;
+        }
+        if (!dot) return fail(scene, line, "expect_dot: the row of " + w[1] + " shows no dot");
+        const cp0_ui_list_layout_t &l = g_list_demo.list->layout();
+        if (lv_obj_get_height(row) != l.row_h)
+            return fail(scene, line, "expect_dot: the row of " + w[1] + " is " +
+                                         std::to_string(lv_obj_get_height(row)) + " px high, not " +
+                                         std::to_string(l.row_h));
+        const int d = cp0_ui_list_dot_px(&l);
+        if (lv_obj_get_width(dot) != d || lv_obj_get_height(dot) != d ||
+            lv_obj_get_style_radius(dot, LV_PART_MAIN) != LV_RADIUS_CIRCLE)
+            return fail(scene, line, "expect_dot: the dot is not a circle of " + std::to_string(d) + " px");
+        const uint32_t want = w[2] == "idle" ? CP0_UI_LIST_DOT_IDLE_RGB : CP0_UI_LIST_DOT_RUNNING_RGB;
+        const uint32_t style = lv_color_to_u32(lv_obj_get_style_bg_color(dot, LV_PART_MAIN)) & 0xFFFFFF;
+        char have[8];
+        std::snprintf(have, sizeof(have), "%06X", static_cast<unsigned>(style));
+        if (style != want) return fail(scene, line, "expect_dot: the dot's colour is " + std::string(have));
+        lv_area_t c, r;
+        lv_obj_get_coords(dot, &c);
+        lv_obj_get_coords(row, &r);
+        if (c.x2 > r.x2 || c.x1 < r.x1 || c.y1 < r.y1 || c.y2 > r.y2)
+            return fail(scene, line, "expect_dot: the dot is outside its row");
+        for (lv_obj_t *text : texts) {
+            lv_area_t t;
+            lv_obj_get_coords(text, &t);
+            if (t.x2 >= c.x1)
+                return fail(scene, line, std::string("expect_dot: \"") + lv_label_get_text(text) + "\" reaches x " +
+                                             std::to_string(t.x2) + ", the dot starts at " + std::to_string(c.x1));
+        }
+        if (value) {
+            lv_area_t v;
+            lv_obj_get_coords(value, &v);
+            const int chevron_row_end = r.x2 - l.inset - cp0_ui_list_trail_w(&l, CP0_UI_LIST_AFFORDANCE_EDIT);
+            if (v.x2 != chevron_row_end)
+                return fail(scene, line, "expect_dot: the value ends at x " + std::to_string(v.x2) +
+                                             ", a chevron row's at " + std::to_string(chevron_row_end));
+        }
+        const Image image = grab(run);
+        int hits = 0, top = INT32_MAX, bottom = -1, left = INT32_MAX, right = -1;
+        for (int y = std::max<int>(0, c.y1); y <= std::min<int>(run.size.h - 1, c.y2); ++y)
+            for (int x = std::max<int>(0, c.x1); x <= std::min<int>(run.size.w - 1, c.x2); ++x) {
+                const unsigned char *p = image.at(x, y);
+                const int dr = std::abs(p[0] - int((want >> 16) & 0xFF)), dg = std::abs(p[1] - int((want >> 8) & 0xFF)),
+                          db = std::abs(p[2] - int(want & 0xFF));
+                if (dr <= 8 && dg <= 4 && db <= 8) {
+                    ++hits;
+                    top = std::min(top, y);
+                    bottom = std::max(bottom, y);
+                    left = std::min(left, x);
+                    right = std::max(right, x);
+                }
+            }
+        if (hits == 0) return fail(scene, line, "expect_dot: no " + w[2] + " dot pixel drawn in the row of " + w[1]);
+        const int slot_x1 = r.x1 + l.w - l.inset - cp0_ui_list_chevron_w(&l);
+        const int slot_x2 = slot_x1 + cp0_ui_list_chevron_w(&l) - 1;
+        const int off_y = (top + bottom) - (r.y1 + r.y2), off_x = (left + right) - (slot_x1 + slot_x2);
+        if (off_y < -3 || off_y > 3 || off_x < -3 || off_x > 3)
+            return fail(scene, line, "expect_dot: the dot's pixels (x " + std::to_string(left) + ".." +
+                                         std::to_string(right) + ", y " + std::to_string(top) + ".." +
+                                         std::to_string(bottom) + ") are not centred on the row (y " +
+                                         std::to_string(r.y1) + ".." + std::to_string(r.y2) + ") and the slot (x " +
+                                         std::to_string(slot_x1) + ".." + std::to_string(slot_x2) + ")");
+        std::printf("expect_dot ok: %s %s (%d px, x %d..%d in slot %d..%d, y %d..%d in row %d..%d)\n", w[1].c_str(),
+                    w[2].c_str(), hits, left, right, slot_x1, slot_x2, top, bottom, static_cast<int>(r.y1),
+                    static_cast<int>(r.y2));
+        return true;
+    }
     if (cmd == "expect_same") {
         /* expect_same SHOT: the screen as drawn now is pixel-identical to the shot SHOT taken earlier in this scene at
          * this size (out/<WxH>/SHOT.png). A scene fails otherwise. */
@@ -1430,29 +1531,39 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             settle(200);
             return true;
         }
-        /* listdemo kind INDEX unspecified|info|open|edit|action: one row's affordance in place, through update_row
-         * (same label, value and tone) */
-        if (w.size() == 4 && w[1] == "kind") {
-            if (!g_list_demo.list) return fail(scene, line, "listdemo kind needs a list (listdemo compact N first)");
+        /* listdemo kind|setkind INDEX unspecified|info|open|edit|action|action-running: one row's affordance in place
+         * (same label, value and tone), through update_row (kind) or the live refresh set_rows with every other row
+         * unchanged (setkind) */
+        if (w.size() == 4 && (w[1] == "kind" || w[1] == "setkind")) {
+            if (!g_list_demo.list)
+                return fail(scene, line, "listdemo " + w[1] + " needs a list (listdemo compact N first)");
             using cp0::ui::RowAffordance;
             static const std::map<std::string, RowAffordance> kinds = {
                 {"unspecified", RowAffordance::Unspecified}, {"info", RowAffordance::Info},
                 {"open", RowAffordance::Open},               {"edit", RowAffordance::Edit},
-                {"action", RowAffordance::Action}};
+                {"action", RowAffordance::Action},           {"action-running", RowAffordance::ActionRunning}};
             const auto kind = kinds.find(w[3]);
             const int index = to_int(w[2], -1);
             if (kind == kinds.end() || index < 0 || index >= g_list_demo.list->count())
-                return fail(scene, line, "usage: listdemo kind INDEX unspecified|info|open|edit|action");
-            cp0::ui::ListRow row = g_list_demo.list->row(index);
-            row.affordance = kind->second;
-            g_list_demo.list->update_row(index, row);
+                return fail(scene, line, "usage: listdemo kind|setkind INDEX "
+                                         "unspecified|info|open|edit|action|action-running");
+            if (w[1] == "kind") {
+                cp0::ui::ListRow row = g_list_demo.list->row(index);
+                row.affordance = kind->second;
+                g_list_demo.list->update_row(index, row);
+            } else {
+                std::vector<cp0::ui::ListRow> rows;
+                for (int i = 0; i < g_list_demo.list->count(); ++i) rows.push_back(g_list_demo.list->row(i));
+                rows[static_cast<size_t>(index)].affordance = kind->second;
+                g_list_demo.list->set_rows(rows);
+            }
             settle(200);
             return true;
         }
         if (w.size() < 3 || (w[1] != "compact" && w[1] != "comfortable"))
             return fail(scene, line, "usage: listdemo compact|comfortable ROWS [readonly] [separators] [wrap] [kinds] "
                                      "[empty TEXT...] | listdemo update | listdemo value|row INDEX TONE TEXT | "
-                                     "listdemo kind INDEX KIND");
+                                     "listdemo kind|setkind INDEX KIND");
         bool read_only = false, separators = false, wrap = false, kinds = false;
         std::string empty;
         for (std::size_t i = 3; i < w.size(); ++i) {

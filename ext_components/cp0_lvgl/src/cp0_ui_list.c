@@ -205,9 +205,24 @@ int cp0_ui_list_has_chevron(cp0_ui_list_affordance_t affordance)
     return affordance == CP0_UI_LIST_AFFORDANCE_OPEN || affordance == CP0_UI_LIST_AFFORDANCE_EDIT;
 }
 
+int cp0_ui_list_has_dot(cp0_ui_list_affordance_t affordance)
+{
+    return affordance == CP0_UI_LIST_AFFORDANCE_ACTION || affordance == CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING;
+}
+
 unsigned cp0_ui_list_label_rgb(cp0_ui_list_affordance_t affordance)
 {
-    return affordance == CP0_UI_LIST_AFFORDANCE_ACTION ? CP0_UI_LIST_ACCENT_RGB : CP0_UI_LIST_TEXT_RGB;
+    (void)affordance; /* every item's label is white: an action says itself by its dot */
+    return CP0_UI_LIST_TEXT_RGB;
+}
+
+unsigned cp0_ui_list_dot_rgb(cp0_ui_list_affordance_t affordance)
+{
+    switch (affordance) {
+    case CP0_UI_LIST_AFFORDANCE_ACTION: return CP0_UI_LIST_DOT_IDLE_RGB;
+    case CP0_UI_LIST_AFFORDANCE_ACTION_RUNNING: return CP0_UI_LIST_DOT_RUNNING_RGB;
+    default: return 0;
+    }
 }
 
 unsigned cp0_ui_list_value_rgb(cp0_ui_list_tone_t tone, cp0_ui_list_affordance_t affordance)
@@ -233,8 +248,22 @@ int cp0_ui_list_chevron_w(const cp0_ui_list_layout_t *l)
 
 int cp0_ui_list_trail_w(const cp0_ui_list_layout_t *l, cp0_ui_list_affordance_t affordance)
 {
-    if (!l || !cp0_ui_list_has_chevron(affordance)) return 0;
+    if (!l || !(cp0_ui_list_has_chevron(affordance) || cp0_ui_list_has_dot(affordance))) return 0;
     return cp0_ui_list_chevron_w(l) + imax(0, l->gap);
+}
+
+int cp0_ui_list_dot_px(const cp0_ui_list_layout_t *l)
+{
+    if (!l) return 0;
+    return imax(CP0_UI_LIST_DOT_MIN_PX, pct_of(imax(0, l->text_px), CP0_UI_LIST_DOT_PCT));
+}
+
+int cp0_ui_list_dot_x(const cp0_ui_list_layout_t *l, int row_w)
+{
+    if (!l) return 0;
+    const int slot_w = cp0_ui_list_chevron_w(l);
+    const int slot_x = row_w - imax(0, l->inset) - slot_w;
+    return slot_x + (slot_w - cp0_ui_list_dot_px(l)) / 2; /* may start a pixel or two left of the slot: a wider dot */
 }
 
 int cp0_ui_list_chevron_y(int row_h, int ink_top, int ink_h)
