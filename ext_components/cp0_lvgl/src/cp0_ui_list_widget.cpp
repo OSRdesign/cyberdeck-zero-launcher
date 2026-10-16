@@ -55,6 +55,7 @@ cp0_ui_list_tone_t tone_of(ValueTone tone)
     case ValueTone::Ok: return CP0_UI_LIST_TONE_OK;
     case ValueTone::Warn: return CP0_UI_LIST_TONE_WARN;
     case ValueTone::Bad: return CP0_UI_LIST_TONE_BAD;
+    case ValueTone::Muted: return CP0_UI_LIST_TONE_MUTED;
     default: return CP0_UI_LIST_TONE_NORMAL;
     }
 }

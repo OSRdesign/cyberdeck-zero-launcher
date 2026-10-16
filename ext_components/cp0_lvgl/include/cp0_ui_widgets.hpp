@@ -351,7 +351,9 @@ private:
 
 enum class ListDensity { Compact, Comfortable };
 enum class ListRowKind { Item, Section };
-enum class ValueTone { Normal, Ok, Warn, Bad }; /* value colour: green (the roller's), light green, amber, red */
+/* Value colour: green (the roller's), light green, amber, red; Muted: grey for an absent / unset thing
+ * (never the only signal of status). */
+enum class ValueTone { Normal, Ok, Warn, Bad, Muted };
 
 struct ListRow {
     ListRowKind kind = ListRowKind::Item;

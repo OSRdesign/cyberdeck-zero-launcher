@@ -1035,6 +1035,35 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_text ok: %s\n", lv_label_get_text(label));
         return true;
     }
+    if (cmd == "expect_color") {
+        /* expect_color TEXT RRGGBB: a visible label of the native screen shows TEXT, its text colour is RRGGBB and the
+         * screen as drawn has pixels of that colour (within the RGB565 rounding) inside the label's box: a colour change
+         * reached the framebuffer, not only the style. A scene fails otherwise. */
+        if (w.size() != 3 || w[2].size() != 6) return fail(scene, line, "usage: expect_color TEXT RRGGBB");
+        const uint32_t want = static_cast<uint32_t>(std::strtoul(w[2].c_str(), nullptr, 16));
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), w[1], false);
+        if (!label) return fail(scene, line, "expect_color: no visible label " + w[1]);
+        const uint32_t style = lv_color_to_u32(lv_obj_get_style_text_color(label, LV_PART_MAIN)) & 0xFFFFFF;
+        char have[8];
+        std::snprintf(have, sizeof(have), "%06X", static_cast<unsigned>(style));
+        if (style != want) return fail(scene, line, "expect_color: " + w[1] + " has text colour " + have);
+        lv_area_t area;
+        lv_obj_get_coords(label, &area);
+        const Image image = grab(run);
+        int hits = 0;
+        for (int y = std::max<int>(0, area.y1); y <= std::min<int>(run.size.h - 1, area.y2); ++y)
+            for (int x = std::max<int>(0, area.x1); x <= std::min<int>(run.size.w - 1, area.x2); ++x) {
+                const unsigned char *p = image.at(x, y);
+                const int dr = std::abs(p[0] - int((want >> 16) & 0xFF)), dg = std::abs(p[1] - int((want >> 8) & 0xFF)),
+                          db = std::abs(p[2] - int(want & 0xFF));
+                if (dr <= 8 && dg <= 4 && db <= 8) ++hits;
+            }
+        if (hits == 0) return fail(scene, line, "expect_color: no pixel of " + w[2] + " drawn in the label " + w[1]);
+        std::printf("expect_color ok: %s %s (%d px)\n", w[1].c_str(), w[2].c_str(), hits);
+        return true;
+    }
     if (cmd == "bt") {
         if (w.size() != 2) return fail(scene, line, "usage: bt off|on|connected");
         fx.bt_powered = w[1] != "off";
@@ -1259,9 +1288,32 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             settle(200);
             return true;
         }
+        /* listdemo value|row INDEX normal|ok|warn|bad|muted TEXT: one row's value and tone in place, through
+         * set_value (value) or update_row (row, same label) */
+        if (w.size() == 5 && (w[1] == "value" || w[1] == "row")) {
+            if (!g_list_demo.list) return fail(scene, line, "listdemo " + w[1] + " needs a list (listdemo compact N first)");
+            using cp0::ui::ValueTone;
+            static const std::map<std::string, ValueTone> tones = {{"normal", ValueTone::Normal}, {"ok", ValueTone::Ok},
+                                                                   {"warn", ValueTone::Warn},     {"bad", ValueTone::Bad},
+                                                                   {"muted", ValueTone::Muted}};
+            const auto tone = tones.find(w[3]);
+            const int index = to_int(w[2], -1);
+            if (tone == tones.end() || index < 0 || index >= g_list_demo.list->count())
+                return fail(scene, line, "usage: listdemo value|row INDEX normal|ok|warn|bad|muted TEXT");
+            if (w[1] == "value") {
+                g_list_demo.list->set_value(index, w[4], tone->second);
+            } else {
+                cp0::ui::ListRow row = g_list_demo.list->row(index);
+                row.value = w[4];
+                row.tone = tone->second;
+                g_list_demo.list->update_row(index, row);
+            }
+            settle(200);
+            return true;
+        }
         if (w.size() < 3 || (w[1] != "compact" && w[1] != "comfortable"))
             return fail(scene, line, "usage: listdemo compact|comfortable ROWS [readonly] [separators] [wrap] "
-                                     "[empty TEXT...] | listdemo update");
+                                     "[empty TEXT...] | listdemo update | listdemo value|row INDEX TONE TEXT");
         bool read_only = false, separators = false, wrap = false;
         std::string empty;
         for (std::size_t i = 3; i < w.size(); ++i) {
