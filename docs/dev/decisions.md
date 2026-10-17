@@ -2,6 +2,8 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-10-18: two standard touch sizes, 5 mm and 7 mm; the 9 mm target is dropped.** Owner decision: lists already work at 5-7 mm on touch (CompactList 5 mm, rows 7 mm), so a separate 9 mm class for buttons was inconsistent. Standard now: 5 mm for rows where a tap only selects (`CP0_TOK_LIST_ROW_H`), 7 mm for everything that acts (buttons, action bars, dialog buttons, the header Esc, rows that act: `CP0_TOK_ROW_H`). `CP0_TOK_TARGET` stays as a name for compatibility and equals the row value (7 mm); its pixel floor goes from 48 to 44 px (the usual finger minimum; the floor applies below 6.3 px/mm, e.g. the Pi 3A+ at 6.1 px/mm gets 44 instead of 55). The stock-app toolbar (pinned 140 deck / 100 Pi 3A+, computed sizes 9 mm keys) and the on-screen keyboard (keys and 9 mm Esc/Tab/Ctrl) keep their sizes: they have their own constants (`CP0_UI_TOOLBAR_KEY_MM_X10`, the OSK's) and no longer derive from TARGET. App-facing: `screen.state` `target=` is now 7 mm (79 px deck); the apps repo's APP-GUIDELINES and layout checker change separately.
+
 - **2026-10-15: Net Toolbox, scope and phases as in report 027** (`reports/027-net-toolbox.md`). One native app,
   package `net-toolbox`, name **Net Toolbox**, `X-MinSize=640x480`; it does not repeat LanScan or Wi-Fi Survey. Phases:
   0.1 Home, Interfaces, Diagnosis, Ping, DNS lookup, Port check; 0.2 Traceroute, HTTP check, Public IP, Whois; 0.3 speed

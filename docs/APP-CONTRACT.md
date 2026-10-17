@@ -8,7 +8,7 @@ header `ext_components/cp0_lvgl/include/cp0_app_contract.h` says the same in sho
 ## 1. Purpose and the three layers
 
 The launcher runs on panels from 480x320 to 1280x720, rotated or not, at 16 or 32 bpp. An app needs to know which
-mode it runs in, how many pixels it draws, how dense they are (a 9 mm button is 102 px on the deck at 2x and 57 px
+mode it runs in, how many pixels it draws, how dense they are (a 7 mm button is 79 px on the deck at 2x and 44 px
 on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen keyboard.
 
 | Layer | What | Promise |
@@ -110,7 +110,7 @@ gen=33
 | `compat=x,y,w,h`, `scale` | the compat window and its integer scale |
 | `toolbar` | the compat toolbar's height (full width, at the bottom) |
 | `fb`, `bpp`, `touch` | the panel's framebuffer device, its depth in bits, the touch device (`""` / `0` = unknown) |
-| `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 9 mm) |
+| `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 7 mm; the compact list row, `CP0_TOK_LIST_ROW_H`, is 5 mm and is not in `screen.state`; the toolbar and the on-screen keyboard keep their own 9 mm sizes) |
 | `text=title,heading,body,caption` | text sizes in px |
 | `kb_inset` | reserved, always `0` in contract 1 |
 | `gen` | increases on every write; re-read when it changes |
@@ -224,10 +224,10 @@ int main(void)
         canvas_w = scr.w, canvas_h = scr.h, ppmm = scr.ppmm_x100;
     }                                                      /* else: FBIOGET_VSCREENINFO of your framebuffer */
     const int canvas_ppmm = (ppmm + scale / 2) / scale;
-    const int button_px = cp0_ui_mm_px(canvas_ppmm, 90, 1); /* a 9 mm button, in canvas pixels */
+    const int button_px = cp0_ui_mm_px(canvas_ppmm, CP0_UI_TARGET_MM_X10, 1); /* a 7 mm button, in canvas pixels */
 
     const int osk = cp0_app_input_read(NULL, &in) == 0 && cp0_app_osk_allowed(&in, cp0_app_monotonic_s());
-    printf("%s %dx%d, 9 mm = %d px, own keyboard %s\n", contract ? cp0_app_mode_name(env.mode) : "no contract",
+    printf("%s %dx%d, 7 mm = %d px, own keyboard %s\n", contract ? cp0_app_mode_name(env.mode) : "no contract",
            canvas_w, canvas_h, button_px, osk ? "allowed" : "not now");
     return 0;
 }

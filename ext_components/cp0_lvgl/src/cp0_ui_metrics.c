@@ -229,7 +229,7 @@ static void place_pinned(int w, int h, int cap, cp0_ui_compat_t *c)
 }
 
 /* Report 022 section 3.6 with the toolbar rule of task 014 (2026-10-10): the toolbar has a fixed physical height
- * (toolbar_h: 9 mm keys plus their margins), never "the rest of the screen"; the window takes the largest integer
+ * (toolbar_h: 9 mm keys plus their margins, independent of TARGET), never "the rest of the screen"; the window takes the largest integer
  * scale that fits above it, centred horizontally and vertically in that area; what is left stays black (D8). Only a
  * canvas too small for the 1x window plus the toolbar shrinks the toolbar. */
 static void place_rule(int w, int h, int toolbar_h, int cap, cp0_ui_compat_t *c)
@@ -388,8 +388,10 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
         m.tok[CP0_TOK_TOOLBAR_H] = m.preset == CP0_UI_PRESET_DECK ? PINNED_TOOLBAR_DECK : PINNED_TOOLBAR_COMPACT;
         place_pinned(w, h, compat_cap, &m.compat);
     } else {
-        /* the toolbar keys (toolbar height minus the shell's vertical padding) are exactly the 9 mm target */
-        m.tok[CP0_TOK_TOOLBAR_H] = m.tok[CP0_TOK_TARGET] + 2 * m.shell.tb_pad_y;
+        /* the toolbar keys (toolbar height minus the shell's vertical padding) are exactly 9 mm, their own constant
+         * (not TARGET, which is 7 mm since 2026-10-18) */
+        m.tok[CP0_TOK_TOOLBAR_H] =
+            cp0_ui_mm_px(m.ppmm_x100, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX) + 2 * m.shell.tb_pad_y;
         place_rule(w, h, m.tok[CP0_TOK_TOOLBAR_H], compat_cap, &m.compat);
     }
     *out = m;

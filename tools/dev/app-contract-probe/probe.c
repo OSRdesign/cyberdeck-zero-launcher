@@ -166,7 +166,7 @@ static void probe_read(probe_t *p, const char *forced_fb, int use_fb)
         p->win_x = p->win_y = 0, p->win_w = p->screen_w, p->win_h = p->screen_h;
     }
     p->canvas_ppmm = round_div(p->ppmm, p->canvas_scale > 0 ? p->canvas_scale : 1);
-    p->square_px = cp0_ui_mm_px(p->canvas_ppmm, CP0_UI_TARGET_MM_X10, 1);
+    p->square_px = cp0_ui_mm_px(p->canvas_ppmm, 90, 1); /* the probe's own 9 mm square, independent of the design tokens */
     p->square_screen_px = p->square_px * (p->canvas_scale > 0 ? p->canvas_scale : 1);
 
     /* the tokens: the launcher's file, else the same computation (cp0_ui_metrics.c) */

@@ -207,7 +207,10 @@ static void test_density(void)
 static void test_mm_and_fonts(void)
 {
     CHECK_EQ(cp0_ui_mm_px(1130, 70, 40), 79);  /* 7 mm row on the deck */
-    CHECK_EQ(cp0_ui_mm_px(1130, 90, 48), 102); /* 9 mm target */
+    CHECK_EQ(cp0_ui_mm_px(1130, 90, 48), 102); /* 9 mm (stock toolbar keys, OSK utility keys) */
+    CHECK_EQ(cp0_ui_mm_px(1130, CP0_UI_TARGET_MM_X10, CP0_UI_TARGET_FLOOR_PX), 79); /* 7 mm target = row */
+    CHECK_EQ(cp0_ui_mm_px(610, CP0_UI_TARGET_MM_X10, CP0_UI_TARGET_FLOOR_PX), 44);  /* floor 44 */
+    CHECK_EQ(CP0_UI_TARGET_MM_X10, CP0_UI_ROW_MM_X10);
     CHECK_EQ(cp0_ui_mm_px(610, 70, 40), 43);
     CHECK_EQ(cp0_ui_mm_px(610, 90, 48), 55);
     CHECK_EQ(cp0_ui_mm_px(300, 70, 40), 40); /* floors on a 3 px/mm panel */
@@ -218,7 +221,7 @@ static void test_mm_and_fonts(void)
     const cp0_ui_metrics_t low = compute(800, 480, 300, 0);
     CHECK_EQ(low.tok[CP0_TOK_ROW_H], CP0_UI_ROW_FLOOR_PX);
     CHECK_EQ(low.tok[CP0_TOK_TARGET], CP0_UI_TARGET_FLOOR_PX);
-    CHECK_EQ(low.tok[CP0_TOK_TOOLBAR_H], CP0_UI_TARGET_FLOOR_PX + 2 * 10);
+    CHECK_EQ(low.tok[CP0_TOK_TOOLBAR_H], CP0_UI_TOOLBAR_KEY_FLOOR_PX + 2 * 10); /* toolbar keys: own 9 mm constant */
 
     CHECK_EQ(cp0_ui_font_snap(-5), 8);
     CHECK_EQ(cp0_ui_font_snap(7), 8);
@@ -237,45 +240,47 @@ static void test_targets(void)
     /* Compact 480x320 at the study's 6.1 px/mm; pinned (T3) */
     cp0_ui_metrics_t m = compute(480, 320, 610, 0);
     CHECK(m.cls == CP0_UI_COMPACT && m.preset == CP0_UI_PRESET_COMPACT);
-    check_tokens(&m, 5, 10, 14, 6, 14, 20, 40, 72, 43, 55, 100, 88, 440);
+    check_tokens(&m, 5, 10, 14, 6, 14, 20, 40, 72, 43, 44, 100, 88, 440);
     check_text(&m, 24, 20, 18, 14);
     check_compat(&m, 1, 80, 25, 220, 100);
 
     /* Standard 640x480, the deck at 11.3 px/mm; pinned */
     m = compute(640, 480, 0, 0);
     CHECK(m.cls == CP0_UI_STANDARD && m.preset == CP0_UI_PRESET_DECK);
-    check_tokens(&m, 8, 16, 20, 8, 18, 28, 56, 100, 79, 102, 140, 128, 560);
+    check_tokens(&m, 8, 16, 20, 8, 18, 28, 56, 100, 79, 79, 140, 128, 560);
     check_text(&m, 32, 28, 24, 18);
     check_compat(&m, 2, 0, 0, 340, 140);
 
     /* Wide 800x480 at 9.2 px/mm: toolbar 83 + 2 x 10 = 103 px, 2x at x 80 centred above it */
     m = compute(800, 480, 920, 0);
     CHECK(m.cls == CP0_UI_WIDE && m.preset == CP0_UI_PRESET_COMPUTED);
-    check_tokens(&m, 8, 14, 20, 8, 16, 24, 56, 100, 64, 83, 103, 128, 600);
+    check_tokens(&m, 8, 14, 20, 8, 16, 24, 56, 100, 64, 64, 103, 128, 600);
     check_text(&m, 32, 26, 22, 18);
     check_compat(&m, 2, 80, 18, 377, 103);
 
     /* Square 720x720 at 10 px/mm: toolbar 110 (never "the rest of the screen"), 2x centred in the 610 px above */
     m = compute(720, 720, 1000, 0);
     CHECK(m.cls == CP0_UI_SQUARE && m.preset == CP0_UI_PRESET_COMPUTED);
-    check_tokens(&m, 8, 16, 24, 8, 18, 28, 64, 100, 70, 90, 110, 128, 600);
+    check_tokens(&m, 8, 16, 24, 8, 18, 28, 64, 100, 70, 70, 110, 128, 600);
     check_text(&m, 32, 28, 24, 20);
     check_compat(&m, 2, 40, 135, 610, 110);
 
     /* Large 1280x720 at 11.6 px/mm: toolbar 124, 3x (not 4x with a 40 px toolbar) */
     m = compute(1280, 720, 1160, 0);
     CHECK(m.cls == CP0_UI_LARGE && m.preset == CP0_UI_PRESET_COMPUTED);
-    check_tokens(&m, 10, 16, 24, 10, 20, 28, 64, 115, 81, 104, 124, 160, 720);
+    check_tokens(&m, 10, 16, 24, 10, 20, 28, 64, 115, 81, 81, 124, 160, 720);
     check_text(&m, 36, 30, 26, 20);
     check_compat(&m, 3, 160, 43, 596, 124);
     CHECK_EQ(m.compat.scale_max, 3);
 
-    /* computed sizes: the toolbar keys (toolbar minus the shell's vertical padding) are exactly 9 mm */
+    /* computed sizes: the toolbar keys (toolbar minus the shell's vertical padding) are exactly 9 mm (own constant, not TARGET) */
     static const int sizes[][3] = {{800, 480, 920}, {720, 720, 1000}, {1280, 720, 1160}, {1024, 600, 660},
                                    {1280, 390, 1130}, {800, 480, 300}};
     for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
         m = compute(sizes[i][0], sizes[i][1], sizes[i][2], 0);
-        CHECK_EQ(m.compat.toolbar_h - 2 * m.shell.tb_pad_y, m.tok[CP0_TOK_TARGET]);
+        CHECK_EQ(m.compat.toolbar_h - 2 * m.shell.tb_pad_y,
+                 cp0_ui_mm_px(m.ppmm_x100, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX));
+        CHECK(m.compat.toolbar_h - 2 * m.shell.tb_pad_y >= m.tok[CP0_TOK_TARGET]);
         CHECK_EQ(m.compat.toolbar_h, m.tok[CP0_TOK_TOOLBAR_H]);
     }
 }
@@ -284,10 +289,10 @@ static void test_targets(void)
 
 static void test_odd_sizes(void)
 {
-    /* 1024x600 7" at its real 6.6 px/mm: 3x fits above a 79 px toolbar (59 px keys) */
+    /* 1024x600 7" at its real 6.6 px/mm: 3x fits above a 79 px toolbar (59 px toolbar keys) */
     cp0_ui_metrics_t m = compute(1024, 600, 660, 0);
     CHECK(m.cls == CP0_UI_WIDE);
-    CHECK_EQ(m.tok[CP0_TOK_TARGET], 59);
+    CHECK_EQ(m.tok[CP0_TOK_TARGET], 46);
     check_compat(&m, 3, 32, 5, 521, 79);
     /* ... at the default 11.3 px/mm the 122 px toolbar does not fit under 3x: 2x */
     m = compute(1024, 600, 0, 0);
@@ -430,7 +435,7 @@ static void test_pinned(void)
     /* the Pi 3A+ as installed: APPLAUNCH_PANEL_MM=79x49 */
     cp0_ui_metrics_t m = compute(480, 320, 630, 1);
     CHECK_EQ(m.tok[CP0_TOK_ROW_H], 44);
-    CHECK_EQ(m.tok[CP0_TOK_TARGET], 57);
+    CHECK_EQ(m.tok[CP0_TOK_TARGET], 44);
 
     /* the deck with APPLAUNCH_COMPAT_SCALE=1: today's 1x window at (160, 0), toolbar from y 170 */
     m = compute(640, 480, 0, 1);
@@ -582,7 +587,7 @@ static void test_state_text(void)
     CHECK(n > 0);
     CHECK(strcmp(text, "v=1\nw=640\nh=480\nrot=0\nppmm=1130\ndensity=default\nclass=standard\ncompat=0,0,640,340\n"
                        "scale=2\ntoolbar=140\nfb=/dev/fb0\nbpp=32\ntouch=/dev/input/event1\n"
-                       "space=8,16,20\nradius=8,18,28\nheader=56\nrow=79\ntarget=102\ndialog_max_w=560\n"
+                       "space=8,16,20\nradius=8,18,28\nheader=56\nrow=79\ntarget=79\ndialog_max_w=560\n"
                        "text=32,28,24,18\nkb_inset=0\ngen=1\n") == 0);
     CHECK(cp0_ui_state_parse_gen(text, (size_t)n) == 1);
     char tiny[16];
@@ -595,7 +600,7 @@ static void test_state_text(void)
     CHECK(cp0_ui_state_format(&m, &pi3a, 42, text, sizeof(text)) > 0);
     CHECK(strcmp(text, "v=1\nw=480\nh=320\nrot=90\nppmm=610\ndensity=panel_mm\nclass=compact\ncompat=80,25,320,170\n"
                        "scale=1\ntoolbar=100\nfb=/dev/fb1\nbpp=16\ntouch=/dev/input/event0\n"
-                       "space=5,10,14\nradius=6,14,20\nheader=40\nrow=43\ntarget=55\ndialog_max_w=440\n"
+                       "space=5,10,14\nradius=6,14,20\nheader=40\nrow=43\ntarget=44\ndialog_max_w=440\n"
                        "text=24,20,18,14\nkb_inset=0\ngen=42\n") == 0);
     CHECK(cp0_ui_state_parse_gen(text, strlen(text)) == 42);
     CHECK(cp0_ui_state_format(&m, NULL, 3, text, sizeof(text)) > 0);
@@ -687,7 +692,7 @@ static void test_publish(void)
     read_file(path, text, sizeof(text));
     CHECK(strcmp(text, "v=1\nw=800\nh=480\nrot=0\nppmm=921\ndensity=fbdev\nclass=wide\ncompat=80,18,640,340\n"
                        "scale=2\ntoolbar=103\nfb=/dev/fb0\nbpp=32\ntouch=/dev/input/event5\n"
-                       "space=8,14,20\nradius=8,16,24\nheader=56\nrow=64\ntarget=83\ndialog_max_w=600\n"
+                       "space=8,14,20\nradius=8,16,24\nheader=56\nrow=64\ntarget=64\ndialog_max_w=600\n"
                        "text=32,26,22,18\nkb_inset=0\ngen=1\n") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_W") && strcmp(getenv("APPLAUNCH_SCREEN_W"), "800") == 0);
     CHECK(getenv("APPLAUNCH_SCREEN_H") && strcmp(getenv("APPLAUNCH_SCREEN_H"), "480") == 0);
