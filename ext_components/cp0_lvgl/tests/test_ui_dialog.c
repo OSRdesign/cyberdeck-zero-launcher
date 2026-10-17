@@ -53,8 +53,8 @@ static void test_tokens(void)
     CHECK_EQ(d.title_px, 28);
     CHECK_EQ(d.text_px, 24);
     CHECK_EQ(d.button_px, 24);
-    CHECK_EQ(d.button_h, m.tok[CP0_TOK_TARGET]); /* 9 mm: 102 on the deck */
-    CHECK_EQ(d.button_h, 102);
+    CHECK_EQ(d.button_h, m.tok[CP0_TOK_TARGET]); /* 7 mm: 79 on the deck (was 9 mm, 102) */
+    CHECK_EQ(d.button_h, 79);
     CHECK_EQ(d.content_w, 560 - 32);
     CHECK_EQ(d.buttons, 2);
     CHECK_EQ(d.button_w, (528 - 8) / 2);
@@ -66,10 +66,10 @@ static void test_centred_without_keyboard(void)
 {
     const cp0_ui_metrics_t m = deck();
     cp0_ui_dialog_t d;
-    /* title 31, body 120, 2 buttons: 16 + 31 + 8 + 120 + 8 + 102 + 16 = 301 in the 424 under the header */
+    /* title 31, body 120, 2 buttons: 16 + 31 + 8 + 120 + 8 + 79 + 16 = 278 in the 424 under the header */
     CHECK_EQ(cp0_ui_dialog_layout(&m, 56, 0, 31, 120, 2, 1, &d), 0);
-    CHECK_EQ(d.h, 301);
-    CHECK_EQ(d.y, 56 + (424 - 301) / 2);
+    CHECK_EQ(d.h, 278);
+    CHECK_EQ(d.y, 56 + (424 - 278) / 2);
     CHECK_EQ(d.title_y, 16);
     CHECK_EQ(d.body_y, 16 + 31 + 8);
     CHECK_EQ(d.body_h, 120);
@@ -89,7 +89,7 @@ static void test_centred_without_keyboard(void)
     CHECK_EQ(d.pad_y, 16);
     CHECK_EQ(d.h, 424);
     CHECK_EQ(d.y, 56);
-    CHECK_EQ(d.body_h, 424 - (16 + 31 + 8 + 8 + 102 + 16));
+    CHECK_EQ(d.body_h, 424 - (16 + 31 + 8 + 8 + 79 + 16));
     CHECK_EQ(d.scrolls, 1);
     CHECK_EQ(d.title_in_header, 0);
     CHECK_EQ(d.button_w, (528 - 2 * 8) / 3);
@@ -99,11 +99,11 @@ static void test_above_keyboard(void)
 {
     const cp0_ui_metrics_t m = deck();
     cp0_ui_dialog_t d;
-    /* a 100 px keyboard: the room is 56..380 (324); 301 fits, centred there */
+    /* a 100 px keyboard: the room is 56..380 (324); 278 fits, centred there */
     CHECK_EQ(cp0_ui_dialog_layout(&m, 56, 100, 31, 120, 2, 1, &d), 0);
     CHECK_EQ(d.buttons, 2);
-    CHECK_EQ(d.h, 301);
-    CHECK_EQ(d.y, 56 + (324 - 301) / 2);
+    CHECK_EQ(d.h, 278);
+    CHECK_EQ(d.y, 56 + (324 - 278) / 2);
     CHECK(d.y + d.h <= 480 - 100);
     /* the deck's keyboard (299): room 125 under the header. Step 1: no buttons (191 > 125); step 2: padding 8 (175 >
      * 125); step 3: the title into the header (136 > 125); step 4: padding 2: 124 fits, under the header */
@@ -157,9 +157,10 @@ static void test_password_dialog_at_target_sizes(void)
         int buttons_with_keyboard; /* expected: buttons shown while the keyboard is up */
         int title_in_header;       /* expected: the title shows in the page header while the keyboard is up */
     } sizes[] = {
-        /* the keyboard leaves no room for 9 mm buttons under a title, a field and its status line at any size: the
-         * keyboard's Enter and Esc act for them; at 480x320 and 640x480 the title also moves into the page header */
-        {480, 320, 630, 0, 1}, {640, 480, 1130, 0, 1}, {800, 480, 920, 0, 0}, {720, 720, 1000, 0, 0}, {1280, 720, 1160, 0, 0},
+        /* the keyboard leaves no room for 7 mm buttons under a title, a field and its status line at 480x320, 640x480
+         * and 800x480: the keyboard's Enter and Esc act for them (at the first two the title also moves into the page
+         * header); with 7 mm instead of 9 mm buttons, 720x720 and 1280x720 keep their buttons above the keyboard */
+        {480, 320, 630, 0, 1}, {640, 480, 1130, 0, 1}, {800, 480, 920, 0, 0}, {720, 720, 1000, 2, 0}, {1280, 720, 1160, 2, 0},
     };
     for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
         cp0_ui_metrics_t m;
@@ -181,7 +182,7 @@ static void test_password_dialog_at_target_sizes(void)
         CHECK(d.y >= header);
         CHECK(d.y + d.h <= m.h);
         CHECK(d.x >= 0 && d.x + d.w <= m.w);
-        CHECK(d.button_h >= 48);
+        CHECK(d.button_h >= 44);
 
         /* keyboard up */
         CHECK_EQ(cp0_ui_dialog_layout(&m, header, k.height, title, content, 2, 1, &d), 0);

@@ -117,8 +117,9 @@ int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
     l.pad_w = 3 * l.key_w + 2 * l.gap;
     l.pad_x = (l.w - l.pad_w) / 2;
 
-    /* Esc, Tab, Ctrl: the touch target token, at least one key, at most two keys and the gap between them */
-    l.util_key_w = imax(l.key_w, imin(m->tok[CP0_TOK_TARGET], 2 * l.key_w + l.gap));
+    /* Esc, Tab, Ctrl: 9 mm (the OSK keeps its own size, not the 7 mm TARGET token), at least one key, at most two
+     * keys and the gap between them */
+    l.util_key_w = imax(l.key_w, imin(cp0_ui_mm_px(m->ppmm_x100, 90, 48), 2 * l.key_w + l.gap));
     if (3 * l.util_key_w + 2 * l.gap > l.row_w) l.util_key_w = l.key_w;
     /* the four arrows (one key each) at the right, when they leave at least a gap after Ctrl */
     l.arrows = 3 * l.util_key_w + 3 * l.gap + 4 * l.key_w + 3 * l.gap <= l.row_w;

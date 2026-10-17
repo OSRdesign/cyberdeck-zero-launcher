@@ -282,7 +282,7 @@ static void test_screen_round_trip(void)
     /* the deck's tokens, spelled out (report 022 / test_ui_metrics) */
     cp0_app_screen_t s;
     CHECK(cp0_app_screen_compute(640, 480, 0, 0, &s) == 0);
-    CHECK(s.cls == CP0_UI_STANDARD && s.row_h == 79 && s.target == 102 && s.header_h == 56 && s.dialog_max_w == 560);
+    CHECK(s.cls == CP0_UI_STANDARD && s.row_h == 79 && s.target == 79 && s.header_h == 56 && s.dialog_max_w == 560);
     CHECK(s.text_title == 32 && s.text_heading == 28 && s.text_body == 24 && s.text_caption == 18);
     CHECK(s.compat_x == 0 && s.compat_y == 0 && s.compat_w == 640 && s.compat_h == 340 && s.compat_scale == 2);
     CHECK(s.toolbar_h == 140);

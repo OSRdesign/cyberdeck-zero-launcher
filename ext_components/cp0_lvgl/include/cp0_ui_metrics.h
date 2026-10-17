@@ -5,10 +5,10 @@
  * size and the panel density it computes
  *   - the screen class (structure: how many panes, where the actions go),
  *   - the density in px/mm (APPLAUNCH_PANEL_MM, else the framebuffer's mm, else 11.3 px/mm),
- *   - the design tokens in px (spacing, radii, header, list row 7 mm, touch target 9 mm, with pixel floors),
+ *   - the design tokens in px (spacing, radii, header, compact list row 5 mm, row and touch target 7 mm, with pixel floors),
  *   - the text sizes, snapped to the builtin Montserrat sizes of the build (every even size 8..48),
  *   - where the 320x170 stock-app window goes and how tall the bottom toolbar is (D8: always a bottom bar; a fixed
- *     physical height, 9 mm keys plus margins; the window takes the largest integer scale that fits above it,
+ *     physical height, 9 mm keys plus margins, independent of the 7 mm TARGET; the window takes the largest integer scale that fits above it,
  *     centred there),
  *   - the geometry of today's home grid and toolbar ("shell"), so the native shell takes its numbers from here.
  *
@@ -34,11 +34,16 @@ extern "C" {
 #define CP0_UI_DEFAULT_PPMM_X100 1130 /* no density source: the deck's Waveshare 2.8" 640x480 (11.3 px/mm) */
 #define CP0_UI_PPMM_MIN_X100 200      /* a source outside 2..40 px/mm is ignored (bogus driver values) */
 #define CP0_UI_PPMM_MAX_X100 4000
-#define CP0_UI_ROW_MM_X10 70           /* D5: list rows 7 mm ... */
-#define CP0_UI_TARGET_MM_X10 90        /* ... primary buttons and toolbar keys 9 mm ... */
-#define CP0_UI_ROW_FLOOR_PX 40         /* ... never smaller than 40 / 48 px on low-density panels */
-#define CP0_UI_TARGET_FLOOR_PX 48
-#define CP0_UI_LIST_ROW_MM_X10 50      /* CompactList's compact rows (dense data): 5.0 mm, under D5's 7 mm ... */
+#define CP0_UI_ROW_MM_X10 70           /* two standard sizes (2026-10-18): 7 mm for everything that acts (buttons, action bars,
+                                        * dialog buttons, rows that act) ... */
+#define CP0_UI_TARGET_MM_X10 70        /* ... TARGET is the same 7 mm (the old 9 mm primary-button size is dropped) ... */
+#define CP0_UI_ROW_FLOOR_PX 40         /* ... never smaller than 40 / 44 px on low-density panels */
+#define CP0_UI_TARGET_FLOOR_PX 44      /* 44 px = the usual minimum finger target (Apple HIG 44 pt) on a screen whose
+                                        * density would make 7 mm smaller; at 7 mm the floor applies below 6.3 px/mm */
+#define CP0_UI_TOOLBAR_KEY_MM_X10 90   /* stock-app toolbar keys stay 9 mm (computed sizes only; the deck and the Pi 3A+
+                                        * are pinned): not derived from TARGET, so lowering TARGET does not move the window */
+#define CP0_UI_TOOLBAR_KEY_FLOOR_PX 48
+#define CP0_UI_LIST_ROW_MM_X10 50      /* CompactList's compact rows (a tap only selects): 5.0 mm ... */
 #define CP0_UI_LIST_ROW_FLOOR_PX 24    /* ... never smaller than 24 px (a mis-tap there only moves the highlight) */
 #define CP0_UI_COMPAT_W 320            /* the stock apps' canvas */
 #define CP0_UI_COMPAT_H 170
@@ -84,9 +89,9 @@ typedef enum {
     CP0_TOK_RADIUS_L,
     CP0_TOK_HEADER_H,    /* status bar / page header */
     CP0_TOK_STATUS_PCT,  /* clock / Wi-Fi / Bluetooth strip scale (D11: may exceed 100 on Large) */
-    CP0_TOK_ROW_H,       /* list row: 7 mm, at least 40 px */
-    CP0_TOK_TARGET,      /* primary button, toolbar key: 9 mm, at least 48 px */
-    CP0_TOK_TOOLBAR_H,   /* stock-app toolbar: TARGET keys + the shell's padding (pinned: 140 deck, 100 Pi 3A+) */
+    CP0_TOK_ROW_H,       /* acting row: 7 mm, at least 40 px */
+    CP0_TOK_TARGET,      /* button, action bar, dialog button, Esc: 7 mm (= ROW), at least 44 px */
+    CP0_TOK_TOOLBAR_H,   /* stock-app toolbar: 9 mm keys + the shell's padding (pinned: 140 deck, 100 Pi 3A+); not derived from TARGET */
     CP0_TOK_TILE_ICON,   /* home tile icon */
     CP0_TOK_DIALOG_MAX_W,
     CP0_TOK_LIST_ROW_H,  /* CompactList compact row (cp0_ui_list.h): 5.0 mm, at least 24 px. Not in screen.state */

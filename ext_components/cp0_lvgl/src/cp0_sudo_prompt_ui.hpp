@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: MIT
  *
- * The responsive sudo password prompt (task 014 P3d): the shared Dialog (title "Sudo Password", Cancel / OK at 9 mm,
+ * The responsive sudo password prompt (task 014 P3d): the shared Dialog (title "Sudo Password", Cancel / OK at 7 mm,
  * one status line) with a masked TextField, built on the display's top layer so it sits above any page. The fallback
  * on-screen keyboard comes through the TextField exactly as on the Wi-Fi password dialog. No policy here: cp0_sudo_async
  * owns the request, the password and the key gate; this class only draws and reports what the user did.

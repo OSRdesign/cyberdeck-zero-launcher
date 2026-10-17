@@ -7,7 +7,7 @@
  * and hidden-network dialogs (P3b), meant for the Bluetooth PIN (P3c) and the sudo prompt (P3d).
  *
  * Sizes from the tokens: width DIALOG_MAX_W (already narrower than the screen by SPACE_M each side), padding SPACE_M,
- * gaps SPACE_S, radius RADIUS_M, title HEADING text, body and buttons BODY text, buttons TARGET high (9 mm).
+ * gaps SPACE_S, radius RADIUS_M, title HEADING text, body and buttons BODY text, buttons TARGET high (7 mm).
  *
  * Placement (cp0_ui_osk_dialog_y): centred in the room between `top` (the page header's bottom) and the on-screen
  * keyboard (the bottom of the screen when it is hidden); the page header (its title, the Esc button, the status strip)
