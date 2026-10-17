@@ -8,13 +8,16 @@
  * Pi 3A+ (480x320) stay pixel-identical:
  *   DECK     padding 10, top bar 44, display 104, gap 6, title 28 at (16, 6), radius 14, keys 32 / 28 (Esc)
  *   COMPACT  padding 6, top bar 36, display 64, gap 4, title 20 at (10, 8), radius 8, keys 20
- * Any other canvas is COMPUTED from the layout service's tokens:
+ * Any other canvas is COMPUTED to fill the screen. The Calculator is exempt from the touch-target token (decision
+ * 2026-10-18): its keys are as big as the room allows, never capped at or floored on TARGET.
  *   - header: the Settings page header (cp0::ui::Page: the home grid's title place, the Esc button, the status strip),
  *     HEADER_H high;
- *   - display: a source line and a result line right-aligned in the keypad's width, the result anchored at the bottom
- *     so it stays next to the keys; the biggest result font that still leaves the keys a TARGET-based height;
- *   - keypad: 6 x 4 keys, centred, at most kKeypadMaxW wide (never full-width slabs on a wide screen), gap SPACE_S,
- *     radius RADIUS_M, key height the room that is left (about TARGET, at most 1.3 x TARGET), label fonts from the key.
+ *   - display: a source line and a result line right-aligned across the keypad's width, the result anchored at the
+ *     bottom so it stays next to the keys; at most kDisplayPct of the room under the header, the biggest result font
+ *     (up to the 48 px the font set has) that fits in it, and no taller than that font needs;
+ *   - keypad: 6 x 4 keys over the full width between the SPACE_M margins and down to the bottom margin, gap SPACE_S,
+ *     radius RADIUS_M; keys stretch as wide as the screen is, but never get taller than kKeyTallPct of their width
+ *     (a very tall screen gives the rest to the display); label fonts from the key size, snapped to the font set.
  */
 #pragma once
 
@@ -24,10 +27,14 @@ namespace calculator_layout {
 
 constexpr int kCols = 4;
 constexpr int kRows = 6;
-constexpr int kKeypadMaxW = 640;      // computed layouts: the keypad never gets wider
-constexpr int kKeyAspectPct = 240;   // key width at most 2.4 x its height (a short screen gets a narrower keypad)
-constexpr int kKeyGrowPct = 130;      // keys grow to at most this share of TARGET, the rest goes to the display
-constexpr int kKeyWantPct = 75;       // a display size is taken while keys stay at least this share of TARGET
+constexpr int kDisplayPct = 22;       // computed layouts: the display takes at most this share of the room under the
+                                      // header (the deck preset gives it 104 of 426 px, 24 %), the keys the rest
+constexpr int kMainMaxPx = 48;        // biggest result font (the largest builtin Montserrat; DejaVu is drawn as large)
+constexpr int kMainMinPx = 20;        // smallest result font a display gets, even when the room is tighter
+constexpr int kKeyTallPct = 150;      // a key is at most this share of its width high (very tall screens)
+constexpr int kKeyLabelPct = 55;      // key label: this share of the key height (the deck preset: 32 of 48 px) ...
+constexpr int kKeyLabelWPct = 45;     // ... and at most this share of its width ("Esc" stays well inside)
+constexpr int kKeyLabelMinPx = 12;
 constexpr int kMainStepShort = 12;    // result text up to this many bytes: the big font ...
 constexpr int kMainStepMid = 18;      // ... up to this: the middle font, else the small one
 
@@ -64,10 +71,20 @@ struct Layout {
 // Upper bound of a text line's height for a font of px (Montserrat and DejaVu are about 1.17 x px).
 constexpr int text_h(int px) { return px * 6 / 5 + 2; }
 
-constexpr int snap_even(int px) { return px < 8 ? 8 : px > 48 ? 48 : (px & ~1); }
-
 constexpr int mini(int a, int b) { return a < b ? a : b; }
 constexpr int maxi(int a, int b) { return a > b ? a : b; }
+
+// Computed layouts: the source line's font for a result font (7/12 of it, at least the caption size).
+inline int display_src_px(const cp0_ui_metrics_t &m, int main_px)
+{
+    return cp0_ui_font_snap(maxi(main_px * 7 / 12, m.text_px[CP0_TEXT_CAPTION]));
+}
+
+// Computed layouts: the display height a result font needs (SPACE_S, the source line, the result line, SPACE_M).
+inline int display_need(const cp0_ui_metrics_t &m, int main_px)
+{
+    return m.tok[CP0_TOK_SPACE_S] + text_h(display_src_px(m, main_px)) + text_h(main_px) + m.tok[CP0_TOK_SPACE_M];
+}
 
 // The old code, kept as it was (480x320 compact: height < 400, else the 640x480 numbers).
 inline Layout pinned(int w, int h, bool compact)
@@ -113,58 +130,51 @@ inline Layout computed(const cp0_ui_metrics_t &m)
     const int space_s = m.tok[CP0_TOK_SPACE_S];
     const int space_m = m.tok[CP0_TOK_SPACE_M];
     const int header_h = m.tok[CP0_TOK_HEADER_H];
-    const int target = m.tok[CP0_TOK_TARGET];
-    const int heading = m.text_px[CP0_TEXT_HEADING];
 
     l.gap = space_s;
     l.radius = m.tok[CP0_TOK_RADIUS_M];
     const int margin = space_m;
-    // the display column; the keypad is as wide, unless its keys would turn into slabs (short screens)
-    const int column_w = mini(m.w - 2 * margin, kKeypadMaxW);
-    l.text_x = (m.w - column_w) / 2 + space_m;
+    // the keypad and the display take the full width between the margins
+    const int column_w = m.w - 2 * margin;
+    l.text_x = margin + space_m;
     l.text_w = column_w - 2 * space_m;
 
-    // display sizes, biggest first: the result font and the source font (the heading size at most)
-    const int tier_main[] = {48, 40, 36, 30};
-    const int tier_src[] = {28, 24, 20, 18};
-    const int tiers = 4;
+    // display: the biggest result font that fits in kDisplayPct of the room, and only the height that font needs
     const int rows_gap = (kRows - 1) * l.gap;
     const int body_h = m.h - header_h - margin;
-    int main_px = tier_main[tiers - 1];
-    int src_px = tier_src[tiers - 1];
-    int display_h = 0;
-    for (int i = 0; i < tiers; ++i) {
-        const int src = mini(tier_src[i], maxi(heading, 18));
-        const int d = space_s + text_h(src) + text_h(tier_main[i]) + space_m;
-        const int key_h = (body_h - d - rows_gap) / kRows;
-        if (key_h * 100 >= target * kKeyWantPct || i == tiers - 1) {
-            main_px = tier_main[i];
-            src_px = src;
-            display_h = d;
-            break;
-        }
-    }
-    l.cell_h = (body_h - display_h - rows_gap) / kRows;
-    if (l.cell_h * 100 > target * kKeyGrowPct) l.cell_h = target * kKeyGrowPct / 100;
-    if (l.cell_h < 1) l.cell_h = 1;
-    l.cell_w = mini((column_w - (kCols - 1) * l.gap) / kCols, l.cell_h * kKeyAspectPct / 100);
+    const int display_room = body_h * kDisplayPct / 100;
+    int main_px = kMainMaxPx;
+    while (main_px > kMainMinPx && display_need(m, main_px) > display_room) main_px -= 2;
+    const int display_h = display_need(m, main_px);
+    const int src_px = display_src_px(m, main_px);
+
+    // keys: everything else, as wide as the screen (stretched keys are fine), never taller than kKeyTallPct of their
+    // width (the extra height goes to the display)
+    l.cell_w = maxi((column_w - (kCols - 1) * l.gap) / kCols, 1);
+    l.cell_h = maxi((body_h - display_h - rows_gap) / kRows, 1);
+    l.cell_h = mini(l.cell_h, maxi(l.cell_w * kKeyTallPct / 100, 1));
     l.kp_w = kCols * l.cell_w + (kCols - 1) * l.gap;
     l.kp_x = (m.w - l.kp_w) / 2;
-    // what the keys do not take goes to the display (the keypad stays against the bottom margin)
+    // the rounding rest and any height the keys do not take go to the display (the keypad stays against the bottom
+    // margin)
     const int keys_h = kRows * l.cell_h + rows_gap;
     l.kp_y = m.h - margin - keys_h;
     l.display_top = header_h;
     l.display_bottom = l.kp_y;
     l.main_px[0] = main_px;
-    l.main_px[1] = snap_even(main_px * 3 / 4);
-    l.main_px[2] = snap_even(main_px * 58 / 100);
+    l.main_px[1] = cp0_ui_font_snap(main_px * 3 / 4);
+    l.main_px[2] = cp0_ui_font_snap(main_px * 58 / 100);
     l.src_px = src_px;
     l.main_bottom = l.display_bottom - space_m;
     l.src_y = l.main_bottom - text_h(main_px) - text_h(src_px);
     l.main_y = l.main_bottom - text_h(main_px);
-    // key labels: 40 % of the key height, between the body and the title size, an even size
-    l.key_px = snap_even(mini(maxi(l.cell_h * 40 / 100, m.text_px[CP0_TEXT_BODY]), 40));
-    l.esc_px = snap_even(l.key_px * 7 / 8);
+    // key labels from the key: kKeyLabelPct of its height, at most kKeyLabelWPct of its width, snapped to the font set
+    // (every even size 8..48), never taller than the key
+    int key_px = mini(l.cell_h * kKeyLabelPct / 100, l.cell_w * kKeyLabelWPct / 100);
+    key_px = cp0_ui_font_snap(maxi(key_px, kKeyLabelMinPx));
+    while (key_px > CP0_UI_FONT_MIN_PX && text_h(key_px) > l.cell_h) key_px -= 2;
+    l.key_px = key_px;
+    l.esc_px = cp0_ui_font_snap(l.key_px * 7 / 8);
     return l;
 }
 

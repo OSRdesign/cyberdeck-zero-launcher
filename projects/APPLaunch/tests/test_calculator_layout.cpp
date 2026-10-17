@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * Calculator layout (task 014 P4): the deck and the Pi 3A+ presets equal the literals the page always drew; computed
- * canvases leave no overlap (header, display, keypad) and keep the keypad inside the screen.
+ * canvases leave no overlap (header, display, keypad), keep the keypad inside the screen and fill it (decision
+ * 2026-10-18: the Calculator is exempt from the touch-target token; the keys take all the room the display leaves).
  * Links ext_components/cp0_lvgl/src/cp0_ui_metrics.c (the real tokens).
  */
 
@@ -78,40 +79,78 @@ static void check_computed(int w, int h, int ppmm_x100)
     CHECK(l.main_bottom <= l.display_bottom);
     CHECK(l.display_bottom <= l.kp_y);
     CHECK(l.display_bottom - l.main_bottom >= m.tok[CP0_TOK_SPACE_M]);
-    // keypad inside the screen, centred, never a full-width slab
+    // keypad inside the screen and centred
+    const int margin = m.tok[CP0_TOK_SPACE_M];
     CHECK(l.kp_x >= 0 && l.kp_x + l.kp_w <= w);
-    CHECK(l.kp_w <= kKeypadMaxW);
-    CHECK(l.cell_w <= l.cell_h * kKeyAspectPct / 100);
     CHECK(l.kp_x == w - l.kp_x - l.kp_w || l.kp_x + 1 == w - l.kp_x - l.kp_w);
     CHECK(l.kp_w == kCols * l.cell_w + (kCols - 1) * l.gap);
     CHECK(l.keypad_bottom() <= h);
-    CHECK(l.keypad_bottom() == h - m.tok[CP0_TOK_SPACE_M]);
-    CHECK(l.cell_h >= 44); // no key under 44 px on any of these canvases
-    CHECK(l.cell_h <= m.tok[CP0_TOK_TARGET] * kKeyGrowPct / 100);
-    CHECK(l.cell_w >= l.cell_h / 2);
-    CHECK(l.text_x >= 0 && l.text_x + l.text_w <= w && l.text_w <= kKeypadMaxW);
+    CHECK(l.keypad_bottom() == h - margin);
+    // the keypad fills the screen: full width between the margins (less the rounding of 4 columns), and the display
+    // takes no more than its biggest font needs (unless the keys hit their height cap) and no more than kDisplayPct
+    // of the room (unless even the smallest font needs more), the keys all the rest (less the rounding of 6 rows)
+    const int free_w = w - 2 * margin;
+    const int body_h = h - header_h - margin;
+    CHECK(l.kp_w > free_w - kCols);
+    const int display_h = l.display_bottom - l.display_top;
+    const bool tall_capped = l.cell_h == l.cell_w * kKeyTallPct / 100;
+    CHECK(tall_capped || display_h < display_need(m, l.main_px[0]) + kRows);
+    CHECK(display_h <= body_h * kDisplayPct / 100 + kRows || l.main_px[0] == kMainMinPx || tall_capped);
+    CHECK(display_h >= display_need(m, l.main_px[0]));
+    // a bigger result font would not have fit in the display share (the display font scales with the space)
+    CHECK(l.main_px[0] == kMainMaxPx || display_need(m, l.main_px[0] + 2) > body_h * kDisplayPct / 100);
+    // nothing of the TARGET token: keys are not capped or floored on it, only on their own width
+    CHECK(l.cell_h <= l.cell_w * kKeyTallPct / 100);
+    CHECK(l.cell_h >= 40); // no key under 40 px on any of these canvases
+    CHECK(l.text_x >= 0 && l.text_x + l.text_w <= w && l.text_w >= l.kp_w - 2 * margin - kCols);
     // the labels fit in the keys and in the display
     CHECK(text_h(l.key_px) <= l.cell_h);
+    CHECK(l.key_px <= l.cell_w * kKeyLabelWPct / 100 + 1 && l.key_px % 2 == 0 && l.key_px <= CP0_UI_FONT_MAX_PX);
+    CHECK(l.esc_px <= l.key_px && l.esc_px % 2 == 0);
     CHECK(l.main_px[0] >= l.main_px[1] && l.main_px[1] >= l.main_px[2] && l.main_px[2] >= 8);
+    CHECK(l.src_px < l.main_px[0]);
     CHECK(l.gap == space_s && l.radius == m.tok[CP0_TOK_RADIUS_M]);
-    // keys are at least 75 % of TARGET, unless even the smallest display size left them less (then they share what is left)
-    CHECK(l.cell_h * 100 >= m.tok[CP0_TOK_TARGET] * kKeyWantPct || l.main_px[0] == 30);
+}
+
+// The pinned presets fill the screen too (their padding is the margin): no more than the rounding of the keys left.
+static void check_pinned_fill(int w, int h, int ppmm_x100, int pad)
+{
+    const Layout l = compute(metrics(w, h, ppmm_x100));
+    std::printf("  %dx%d pinned: keypad x %d w %d y %d key %dx%d\n", w, h, l.kp_x, l.kp_w, l.kp_y, l.cell_w, l.cell_h);
+    CHECK(!l.computed);
+    CHECK(l.kp_x == pad && l.kp_w > w - 2 * pad - kCols);
+    CHECK(l.keypad_bottom() <= h - pad && l.keypad_bottom() > h - pad - kRows);
 }
 
 int main()
 {
     test_deck();
     test_compact();
+    check_pinned_fill(640, 480, 1130, 10);
+    check_pinned_fill(480, 320, 630, 6);
     std::puts("computed layouts:");
     check_computed(800, 480, 920);
+    check_computed(800, 480, 0);
     check_computed(720, 720, 1000);
     check_computed(1280, 720, 1160);
+    check_computed(1280, 720, 0);
     check_computed(1024, 600, 660);
     check_computed(1024, 600, 1130);
     check_computed(1920, 1080, 1130);
     check_computed(1920, 1080, 660);
     check_computed(800, 600, 1130); // 800x600 is not a pinned size
+    check_computed(480, 800, 1130); // portrait
     check_computed(480, 480, 1130);
+    check_computed(480, 1280, 1130); // very tall: the keys stop at kKeyTallPct, the display takes the rest
+    {
+        // the wide keypad is not capped any more: on 1280x720 the keys span the screen, wider than the old 640 px
+        const Layout l = compute(metrics(1280, 720, 1160));
+        CHECK(l.kp_w > 1200 && l.cell_w > 2 * l.cell_h);
+        // the density changes the tokens (margins, gaps) only: no TARGET-based key height
+        const Layout lo = compute(metrics(1024, 600, 660));
+        const Layout hi = compute(metrics(1024, 600, 1130));
+        CHECK(std::abs(lo.cell_h - hi.cell_h) <= 4);
+    }
     std::puts("test_calculator_layout OK");
     return 0;
 }
