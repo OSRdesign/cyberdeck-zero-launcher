@@ -7,6 +7,7 @@
 #include "settings_page.hpp"
 #include "settings_hw_profile.hpp"
 #include "settings_keyboard_page.hpp"
+#include "settings_pointer_page.hpp"
 #include "settings_native_host.hpp"
 #include "settings_native_mode.hpp"
 #include "settings_session.hpp"
@@ -680,7 +681,7 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
         // value pages: LvSettingValuePage3Base subclasses (SettingsChoiceBinding)
         for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
                                          confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
-                                         settings_keyboard_choice_page_factory,
+                                         settings_keyboard_choice_page_factory, settings_pointer_choice_page_factory,
                                          settings_rtc_confirm_page_factory}) // Save?: its warning is a host Dialog
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
         // any other page of its own: not migrated (the Pi boards have none left; the other boards' pages are
@@ -885,6 +886,10 @@ void UISettingTreePage::create_page_detail()
                                        SettingEntry{"About", settings_t12b_about_page_factory, PageType::FullCustom});
         }
         // the fallback on-screen keyboard's entries: native Settings only (the compat Settings stays as it is)
+        // pointer navigation (a mouse or trackpoint as arrows / Enter): native Settings only, like the keyboard's;
+        // before them, so the rows counted from the end of the section (Shutdown, Reboot, Keyboard test, On-screen
+        // keyboard) stay where they were
+        if (settings_ui::native_selected()) settings_pointer::append_entries(mode_tree, system);
         if (settings_ui::native_selected()) settings_keyboard::append_entries(mode_tree, system);
         // Quit to desktop: a launcher started by the desktop boards' unit only (settings_session_model.hpp)
         settings_session::append_quit_to_desktop(mode_tree, system, confirm_page3_factory);

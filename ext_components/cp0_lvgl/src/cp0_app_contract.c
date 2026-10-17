@@ -370,6 +370,11 @@ static void input_line(const char *key, size_t key_len, const char *v, size_t le
         if (parse_int(v, len, 0, LLONG_MAX, &n)) in->bt_gone = n;
     } else if (key_is(key, key_len, "vkb")) {
         if (copy_text(v, len, word, sizeof(word))) (void)cp0_app_vkb_parse(word, &in->vkb);
+    } else if (key_is(key, key_len, "pointer")) {
+        if (copy_text(v, len, word, sizeof(word))) {
+            if (strcmp(word, "on") == 0) in->pointer_nav = 1;
+            else if (strcmp(word, "off") == 0) in->pointer_nav = 0;
+        }
     } else if (key_is(key, key_len, "gen")) {
         if (parse_int(v, len, 0, UINT_MAX, &n)) in->gen = (unsigned)n;
     }

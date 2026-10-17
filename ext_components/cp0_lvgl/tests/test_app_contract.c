@@ -352,12 +352,19 @@ static void test_input_files(void)
     cp0_app_input_t in;
     CHECK(cp0_app_input_parse(text, (size_t)n, &in) == 0);
     CHECK(in.keyboards == 1 && in.bt_keyboards == 1 && in.last_seen == 1760000000 && in.kb_gone == 300 &&
-          in.bt_gone == 310 && in.vkb == CP0_APP_VKB_OFF && in.gen == 12);
+          in.bt_gone == 310 && in.vkb == CP0_APP_VKB_OFF && in.gen == 12 && in.pointer_nav == 0);
+    /* pointer navigation on, as the launcher writes it */
+    st.pointer_nav = 1;
+    const int n_on = cp0_input_state_format(&st, text, sizeof(text));
+    CHECK(n_on > 0 && cp0_app_input_parse(text, (size_t)n_on, &in) == 0 && in.pointer_nav == 1 && in.gen == 12);
+    st.pointer_nav = 0;
 
-    /* an F1 phase 0 file (before the contract): vkb reads auto */
+    /* an F1 phase 0 file (before the contract): vkb reads auto, pointer navigation off */
     const char *phase0 = "v=1\nkeyboards=0\nlast_seen=1760000100\ngen=4\n";
     CHECK(cp0_app_input_parse(phase0, strlen(phase0), &in) == 0);
-    CHECK(in.keyboards == 0 && in.vkb == CP0_APP_VKB_AUTO && in.kb_gone == 0 && in.gen == 4);
+    CHECK(in.keyboards == 0 && in.vkb == CP0_APP_VKB_AUTO && in.kb_gone == 0 && in.gen == 4 && in.pointer_nav == 0);
+    const char *stray = "v=1\npointer=maybe\r\ngen=5\n";
+    CHECK(cp0_app_input_parse(stray, strlen(stray), &in) == 0 && in.pointer_nav == 0 && in.gen == 5);
     const char *v2 = "v=2\nkeyboards=1\n";
     CHECK(cp0_app_input_parse(v2, strlen(v2), &in) == -1);
     CHECK(in.keyboards == 0 && in.vkb == CP0_APP_VKB_AUTO);

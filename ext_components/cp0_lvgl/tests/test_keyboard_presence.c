@@ -124,6 +124,108 @@ static void test_fixture(const char *fixture)
     CHECK(cp0_kbd_presence_enumerate("/nonexistent/devices", 64, &read_list) == -1);
     CHECK(read_list.count == 0);
     CHECK(cp0_kbd_presence_count("/nonexistent/devices") == -1);
+
+    /* pointers (pointer navigation): the HackBerry's pad (event1) and the 2.4G receiver's mouse (event5). Not
+     * pointers: every keyboard (event0 has no REL), the Consumer Control siblings (REL_HWHEEL and ABS_VOLUME only),
+     * the ZMK / M4 keyboards (REL_HWHEEL only), HDMI CEC (REL_X/Y but no BTN_LEFT), the Goodix panel (ABS, BTN_TOUCH),
+     * the AVRCP remote (REL=0) and applaunch-vkbd. */
+    cp0_kbd_presence_list_t pointers;
+    CHECK(cp0_kbd_presence_parse_pointers(text, len, 64, &pointers) == 2);
+    CHECK(pointers.count == 2);
+    CHECK(strcmp(pointers.devices[0].path, "/dev/input/event1") == 0);
+    CHECK(strcmp(pointers.devices[0].name, "ZitaoTech HACKBerryPiQ20 Mouse") == 0);
+    CHECK(pointers.devices[0].bus == 0x0003);
+    CHECK(strcmp(pointers.devices[1].path, "/dev/input/event5") == 0);
+    CHECK(strcmp(pointers.devices[1].name, "2.4G Composite Devic Mouse") == 0);
+    /* both lists from one read */
+    cp0_kbd_presence_list_t both_k, both_p;
+    CHECK(cp0_kbd_presence_enumerate_all(fixture, 64, &both_k, &both_p) == 5);
+    CHECK(cp0_kbd_presence_list_equal(&both_k, &list) && cp0_kbd_presence_list_equal(&both_p, &pointers));
+    CHECK(cp0_kbd_presence_enumerate_all(fixture, 64, NULL, &both_p) == 5 && both_p.count == 2);
+    both_p.count = 9;
+    CHECK(cp0_kbd_presence_enumerate_all("/nonexistent/devices", 64, &both_k, &both_p) == -1);
+    CHECK(both_k.count == 0 && both_p.count == 0);
+    CHECK(cp0_kbd_presence_parse_pointers(text, len, 64, NULL) == 2);
+}
+
+static int is_pointer(const char *key, const char *rel, const char *abs, unsigned word_bits)
+{
+    cp0_ptr_caps_t caps;
+    memset(&caps, 0, sizeof(caps));
+    caps.has_node = 1;
+    cp0_ptr_caps_from_bitmaps(key, rel, abs, word_bits, &caps);
+    return cp0_ptr_caps_is_pointer(&caps);
+}
+
+static void test_pointer_classifier(void)
+{
+    const char *logi64 = "1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe";
+    /* the HackBerry keyboard (event0): keys, no REL */
+    CHECK(!is_pointer(logi64, NULL, NULL, 64));
+    /* the HackBerry pad (event1): BTN_LEFT..BTN_EXTRA, REL_X REL_Y HWHEEL WHEEL WHEEL_HI_RES HWHEEL_HI_RES */
+    CHECK(is_pointer("1f0000 0 0 0 0", "1943", NULL, 64));
+    /* the same as a 32-bit reader prints it */
+    CHECK(is_pointer("1f0000 0 0 0 0 0 0 0 0", "1943", NULL, 32));
+    CHECK(!is_pointer("1f0000 0 0 0 0", "1943", NULL, 32)); /* 64-bit words read as 32-bit: BTN_LEFT not there */
+    /* a USB mouse with a wheel: left, right, middle; REL_X REL_Y REL_WHEEL REL_WHEEL_HI_RES */
+    CHECK(is_pointer("70000 0 0 0 0", "903", NULL, 64));
+    /* a trackball with only the left button */
+    CHECK(is_pointer("10000 0 0 0 0", "3", NULL, 64));
+    /* a touch screen: ABS and BTN_TOUCH, no REL */
+    CHECK(!is_pointer("400 0 0 0 0 0", NULL, "265800000000003", 64));
+    /* a touchpad: BTN_LEFT, BTN_TOOL_FINGER, BTN_TOUCH and absolute axes */
+    CHECK(!is_pointer("420 10000 0 0 0 0", NULL, "660800001000003", 64));
+    /* a touchpad that also declares REL_X / REL_Y: still not (ABS, BTN_TOUCH) */
+    CHECK(!is_pointer("420 10000 0 0 0 0", "3", "660800001000003", 64));
+    /* BTN_TOUCH alone is enough to refuse, even without ABS */
+    CHECK(!is_pointer("400 10000 0 0 0 0", "3", NULL, 64));
+    /* a mouse node that declares any absolute axis (ABS_VOLUME here) is refused too (the "no ABS" rule) */
+    CHECK(!is_pointer("70000 0 0 0 0", "903", "100000000", 64));
+    /* HDMI CEC: REL_X / REL_Y without BTN_LEFT */
+    CHECK(!is_pointer("800 80040000000000 3ff 0 400000002fc000 c30db00000000 0 18300 41c2c0006401 "
+                      "9e378000000000 f810000010000000",
+                      "3", NULL, 64));
+    /* a consumer-control sibling: horizontal wheel only */
+    CHECK(!is_pointer("3fb2800000000 0 0 302019300 3978f8401000 10e000000000000 10000002", "1040", "100000000", 64));
+    /* only one axis */
+    CHECK(!is_pointer("10000 0 0 0 0", "1", NULL, 64));
+    CHECK(!is_pointer("10000 0 0 0 0", "2", NULL, 64));
+    /* a zero ABS line ("B: ABS=0") is no absolute axis */
+    CHECK(is_pointer("10000 0 0 0 0", "3", "0", 64));
+
+    /* the device-level parts: no node, the virtual bus, the launcher's own devices */
+    cp0_ptr_caps_t caps;
+    memset(&caps, 0, sizeof(caps));
+    cp0_ptr_caps_from_bitmaps("1f0000 0 0 0 0", "1943", NULL, 64, &caps);
+    CHECK(!cp0_ptr_caps_is_pointer(&caps)); /* has_node 0 */
+    caps.has_node = 1;
+    CHECK(cp0_ptr_caps_is_pointer(&caps));
+    caps.is_virtual = 1;
+    CHECK(!cp0_ptr_caps_is_pointer(&caps));
+    caps.is_virtual = 0;
+    caps.hub_name = 1;
+    CHECK(!cp0_ptr_caps_is_pointer(&caps));
+    CHECK(!cp0_ptr_caps_is_pointer(NULL));
+    cp0_ptr_caps_from_bitmaps(NULL, NULL, NULL, 64, NULL); /* no crash */
+
+    /* the same rules through /proc text: a combined node (keyboard + pointer on one node) is in both lists, a
+     * virtual mouse and an "applaunch-" one in neither, a mouse without a node neither */
+    char text[4096];
+    snprintf(text, sizeof(text),
+             "I: Bus=0003\nN: Name=\"combo\"\nH: Handlers=sysrq kbd leds mouse0 event3\nB: EV=120017\n"
+             "B: KEY=%s\nB: REL=103\n\n"
+             "I: Bus=0006\nN: Name=\"virtual mouse\"\nH: Handlers=mouse1 event4\nB: KEY=10000 0 0 0 0\nB: REL=3\n\n"
+             "I: Bus=0003\nN: Name=\"applaunch-pointer\"\nH: Handlers=mouse2 event6\nB: KEY=10000 0 0 0 0\n"
+             "B: REL=3\n\n"
+             "I: Bus=0003\nN: Name=\"no node\"\nH: Handlers=mouse3\nB: KEY=10000 0 0 0 0\nB: REL=3\n\n"
+             "I: Bus=0005\nN: Name=\"BT mouse\"\nH: Handlers=mouse4 event12\nB: KEY=70000 0 0 0 0\nB: REL=903\n",
+             "70000 1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe"); /* BTN_LEFT.. + keys */
+    cp0_kbd_presence_list_t list;
+    CHECK(cp0_kbd_presence_parse_pointers(text, strlen(text), 64, &list) == 2);
+    CHECK(strcmp(list.devices[0].name, "combo") == 0 && strcmp(list.devices[0].path, "/dev/input/event3") == 0);
+    CHECK(strcmp(list.devices[1].name, "BT mouse") == 0 && list.devices[1].bus == CP0_KBD_PRESENCE_BUS_BLUETOOTH);
+    CHECK(cp0_kbd_presence_parse(text, strlen(text), 64, &list) == 1);
+    CHECK(strcmp(list.devices[0].name, "combo") == 0);
 }
 
 static void test_rule_edges(void)
@@ -407,14 +509,74 @@ static void test_watcher(void)
     CHECK(system(cmd) == 0);
 }
 
+/* hot-plug of a pointer: its own generation; the keyboard generation and the keyboard listeners do not move */
+static void test_pointer_watcher(void)
+{
+    char root[] = "/tmp/cp0-ptr-presence-XXXXXX";
+    CHECK(mkdtemp(root) != NULL);
+    char devices[600];
+    snprintf(devices, sizeof(devices), "%s/devices", root);
+    write_devices(devices, 1);
+    cp0_kbd_presence_options_t poll_only = {devices, "/nonexistent-dev-input", 60, 1000, 100, 64};
+    cp0_kbd_presence_watcher_t *w = cp0_kbd_presence_watcher_start(&poll_only);
+    CHECK(w != NULL);
+    cp0_kbd_presence_list_t list;
+    CHECK(cp0_kbd_presence_watcher_pointer_generation(w) == 1);
+    CHECK(cp0_kbd_presence_watcher_pointer_snapshot(w, &list) == 1 && list.count == 0);
+    listener_log_t log = {PTHREAD_MUTEX_INITIALIZER, 0, 0, 0};
+    CHECK(cp0_kbd_presence_watcher_add_listener(w, listener, &log) == 0 && log_calls(&log) == 1);
+
+    /* the HackBerry pad appears next to the keyboard */
+    char tmp[700];
+    snprintf(tmp, sizeof(tmp), "%s.new", devices);
+    FILE *f = fopen(tmp, "w");
+    CHECK(f != NULL);
+    fputs("I: Bus=0005 Vendor=04e8 Product=7021 Version=0001\nN: Name=\"M4 Keyboard\"\nH: Handlers=sysrq kbd leds "
+          "event10 \nB: KEY=1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe\n\n"
+          "I: Bus=0003 Vendor=1209 Product=0b20 Version=0111\nN: Name=\"ZitaoTech HACKBerryPiQ20 Mouse\"\n"
+          "H: Handlers=mouse0 event1 \nB: PROP=0\nB: EV=17\nB: KEY=1f0000 0 0 0 0\nB: REL=1943\nB: MSC=10\n\n",
+          f);
+    fclose(f);
+    CHECK(rename(tmp, devices) == 0);
+    unsigned gen = 0;
+    for (int i = 0; i < 200 && gen < 2; i++) {
+        sleep_ms(10);
+        gen = cp0_kbd_presence_watcher_pointer_generation(w);
+    }
+    CHECK(gen == 2);
+    CHECK(cp0_kbd_presence_watcher_pointer_snapshot(w, &list) == 2 && list.count == 1);
+    CHECK(strcmp(list.devices[0].path, "/dev/input/event1") == 0);
+    CHECK(cp0_kbd_presence_watcher_generation(w) == 1 && log_calls(&log) == 1);
+
+    /* it goes away again */
+    write_devices(devices, 1);
+    for (int i = 0; i < 200 && gen < 3; i++) {
+        sleep_ms(10);
+        gen = cp0_kbd_presence_watcher_pointer_generation(w);
+    }
+    CHECK(gen == 3);
+    CHECK(cp0_kbd_presence_watcher_pointer_snapshot(w, &list) == 3 && list.count == 0);
+    CHECK(cp0_kbd_presence_watcher_generation(w) == 1 && log_calls(&log) == 1);
+    cp0_kbd_presence_watcher_remove_listener(w, listener, &log);
+    cp0_kbd_presence_watcher_stop(w);
+    CHECK(cp0_kbd_presence_watcher_pointer_generation(NULL) == 0);
+    CHECK(cp0_kbd_presence_watcher_pointer_snapshot(NULL, &list) == 0 && list.count == 0);
+
+    char cmd[700];
+    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", root);
+    CHECK(system(cmd) == 0);
+}
+
 int main(int argc, char **argv)
 {
     CHECK(argc == 2); /* the fixture path */
     test_bitmap_decoder();
     test_fixture(argv[1]);
     test_rule_edges();
+    test_pointer_classifier();
     test_timer();
     test_watcher();
+    test_pointer_watcher();
     printf("test_keyboard_presence: PASS\n");
     return 0;
 }

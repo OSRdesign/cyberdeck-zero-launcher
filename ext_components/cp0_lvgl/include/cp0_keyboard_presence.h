@@ -9,6 +9,13 @@
  * This rejects consumer/system-control siblings, mice, power buttons, IR receivers (RTL2832U), HDMI CEC,
  * Bluetooth AVRCP remotes and touch panels. Same rule as Mesh Hop's keyboard_present().
  *
+ * The same scan lists the pointer devices for pointer navigation (cp0_pointer_nav.h). A "pointer" is an input device
+ * that has an event node, reports REL_X and REL_Y and BTN_LEFT, has no absolute axis at all (B: ABS) and no BTN_TOUCH,
+ * is not on the virtual bus and is not named "applaunch-...": mice, trackpoints, trackballs and the HackBerry's
+ * optical pad, never a touch screen, a touchpad (ABS + BTN_TOUCH), HDMI CEC (REL_X/Y without BTN_LEFT) or a
+ * keyboard's consumer-control sibling. Decided by capability only, never by name or udev tag (the HackBerry's pad has
+ * PROP=0 and only ID_INPUT_MOUSE). A combined node (keys and a pointer on one node) is in both lists.
+ *
  * The list is read from /proc/bus/input/devices. Its bitmaps are hexadecimal words, most significant first,
  * leading zero words and leading zero digits left out; a word is as wide as a C long of the READING process
  * (the kernel prints 32-bit words to a 32-bit process on a 64-bit kernel), so the default word size is
@@ -72,6 +79,34 @@ int cp0_kbd_presence_count(const char *proc_path);
 /* 1 when both lists hold the same devices in the same order. */
 int cp0_kbd_presence_list_equal(const cp0_kbd_presence_list_t *a, const cp0_kbd_presence_list_t *b);
 
+/* ---- pointers (pure, no I/O) --------------------------------------------------------------------------------- */
+
+/* What the pointer rule looks at, for one device. */
+typedef struct {
+    int has_node;   /* an eventN handler */
+    int rel_x;      /* REL_X (0) in B: REL */
+    int rel_y;      /* REL_Y (1) */
+    int btn_left;   /* BTN_LEFT (0x110) in B: KEY */
+    int btn_touch;  /* BTN_TOUCH (0x14a): a touch screen or a touchpad */
+    int abs_any;    /* any bit in B: ABS */
+    int is_virtual; /* Bus=0006 */
+    int hub_name;   /* named "applaunch-..." */
+} cp0_ptr_caps_t;
+
+/* The capability part of caps from the bitmaps as /proc prints them (NULL = the line is absent); has_node, is_virtual
+ * and hub_name are left as they are. word_bits 0 = native. */
+void cp0_ptr_caps_from_bitmaps(const char *key, const char *rel, const char *abs, unsigned word_bits,
+                               cp0_ptr_caps_t *caps);
+/* 1 when caps describe a pointer (the rule above). */
+int cp0_ptr_caps_is_pointer(const cp0_ptr_caps_t *caps);
+
+/* Like cp0_kbd_presence_parse(), for the pointers: fills `out` (may be NULL) and returns how many the text lists. */
+int cp0_kbd_presence_parse_pointers(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out);
+/* Both lists from one read of the devices file (NULL = /proc). Returns the number of keyboards, or -1 when the file
+ * cannot be read (both counts are then 0). Either list may be NULL. */
+int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *keyboards,
+                                   cp0_kbd_presence_list_t *pointers);
+
 /* ---- rescan timing (pure; the watcher thread drives it with CLOCK_MONOTONIC milliseconds) -------- */
 
 typedef struct {
@@ -126,6 +161,11 @@ void cp0_kbd_presence_watcher_stop(cp0_kbd_presence_watcher_t *watcher);
 unsigned cp0_kbd_presence_watcher_generation(const cp0_kbd_presence_watcher_t *watcher);
 /* Copies the current list into `out` and returns its generation. Thread safe. */
 unsigned cp0_kbd_presence_watcher_snapshot(cp0_kbd_presence_watcher_t *watcher, cp0_kbd_presence_list_t *out);
+/* The pointer list (see above) of the same scans: its own generation, increased each time the pointer list changes
+ * (1 after the first scan; keyboard listeners are not called for a pointer change). Lock free / thread safe. */
+unsigned cp0_kbd_presence_watcher_pointer_generation(const cp0_kbd_presence_watcher_t *watcher);
+unsigned cp0_kbd_presence_watcher_pointer_snapshot(cp0_kbd_presence_watcher_t *watcher,
+                                                   cp0_kbd_presence_list_t *out);
 /* Up to 4 listeners. Returns 0, or -1 when the table is full. */
 int cp0_kbd_presence_watcher_add_listener(cp0_kbd_presence_watcher_t *watcher,
                                           cp0_kbd_presence_listener_t listener, void *user);

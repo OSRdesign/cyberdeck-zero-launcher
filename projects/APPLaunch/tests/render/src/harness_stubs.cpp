@@ -82,6 +82,7 @@ input_presence::KeyboardSnapshot input_presence::keyboards()
 
 /* input.state is not published by the harness (no presence watcher) */
 void input_presence::set_vkb(cp0_app_vkb_t) {}
+void input_presence::set_pointer_nav(bool) {}
 
 /* ui_screensaver.cpp (the lock screen) is not linked: never locked */
 extern "C" int ui_screensaver_is_active(void)
