@@ -1,8 +1,10 @@
 # Native Calculator on the computed layouts (task 014 P4), review only: empty, a long expression, a result of 8 and
-# more digits, a long result, an error, then the dimmed clock (DarkTime) over it. At the five default sizes; the
-# 640x480 and 480x320 Calculator goldens are in calculator.scene (pinned, unchanged).
+# more digits, a long result, an error, then the dimmed clock (DarkTime) over it. At the five default sizes plus
+# 1024x600, 800x600 and the 480x800 portrait (2026-10-18: the keypad fills the screen at every size); the 640x480 and
+# 480x320 Calculator goldens are in calculator.scene (pinned, unchanged).
 title calculator_more
 review
+sizes 640x480 800x480 720x720 1024x600 1280x720 480x320 800x600 480x800
 apps Settings Store CLI SSH Calculator
 clock 20:30 2026-10-10
 wifi 70
