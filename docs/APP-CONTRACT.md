@@ -110,7 +110,7 @@ gen=33
 | `compat=x,y,w,h`, `scale` | the compat window and its integer scale |
 | `toolbar` | the compat toolbar's height (full width, at the bottom) |
 | `fb`, `bpp`, `touch` | the panel's framebuffer device, its depth in bits, the touch device (`""` / `0` = unknown) |
-| `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 7 mm; the compact list row, `CP0_TOK_LIST_ROW_H`, is 5 mm and is not in `screen.state`; the toolbar and the on-screen keyboard keep their own 9 mm sizes) |
+| `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 7 mm; the compact list row, `CP0_TOK_LIST_ROW_H`, is 5 mm and is not in `screen.state`; the toolbar, the native page header's Esc (`cp0_ui_toolbar_key_px`) and the on-screen keyboard keep their own 9 mm sizes) |
 | `text=title,heading,body,caption` | text sizes in px |
 | `kb_inset` | reserved, always `0` in contract 1 |
 | `gen` | increases on every write; re-read when it changes |

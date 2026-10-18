@@ -166,11 +166,13 @@ static void check_page(const expected_page_t *e)
     CHECK_EQ(p.strip_y, 0);
     CHECK_EQ(p.strip_left, e->strip_left);
     CHECK_EQ(p.title_max_w, e->title_max_w);
-    /* the Esc: TARGET (7 mm) wide, TARGET high but inside the bar's margins, centred on the pill's line, SPACE_M left of
-     * the strip's Bluetooth icon, never over the title */
-    CHECK_EQ(p.esc_w, m.tok[CP0_TOK_TARGET]);
+    /* the Esc: a 9 mm toolbar key wide (not the 7 mm TARGET, never smaller than it), as high but inside the bar's
+     * margins, centred on the pill's line, SPACE_M left of the strip's Bluetooth icon, never over the title */
+    CHECK_EQ(p.esc_w, cp0_ui_mm_px(m.ppmm_x100, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX));
+    CHECK_EQ(p.esc_w, cp0_ui_toolbar_key_px(m.ppmm_x100));
+    CHECK(p.esc_w >= m.tok[CP0_TOK_TARGET]);
     CHECK_EQ(p.esc_h, e->esc_h);
-    CHECK(p.esc_h <= m.tok[CP0_TOK_TARGET]);
+    CHECK(p.esc_h <= p.esc_w);
     CHECK(p.esc_h <= p.header_h - 2 * m.shell.status_top);
     CHECK_EQ(p.esc_y, e->esc_y);
     CHECK_EQ(2 * p.esc_y + p.esc_h, p.header_h);
@@ -216,11 +218,11 @@ static void test_page_layout(void)
     /* strip_left: the strip canvas' left + where its Bluetooth icon starts (about 104 px at 100 %, 75 px at 72 %) */
     static const expected_page_t pages[] = {
         /* w    h   ppmm  left   hdr tmax escx escy esch body  rx   rw  row  pad txt val chev capw */
-        {640, 480, 1130, 424, 56, 293, 329, 8, 40, 424, 40, 560, 79, 172, 34, 32, 43, 600},
-        {480, 320, 630, 325, 40, 247, 271, 5, 30, 280, 10, 460, 44, 118, 20, 18, 24, 452},
-        {800, 480, 920, 584, 56, 472, 506, 8, 40, 424, 120, 560, 64, 180, 28, 26, 35, 760},
-        {720, 720, 1000, 504, 64, 382, 418, 12, 40, 656, 80, 560, 70, 293, 30, 28, 39, 680},
-        {1280, 720, 1160, 1064, 64, 931, 967, 12, 40, 656, 320, 640, 81, 287, 36, 32, 45, 1240},
+        {640, 480, 1130, 424, 56, 270, 306, 8, 40, 424, 40, 560, 79, 172, 34, 32, 43, 600},
+        {480, 320, 630, 325, 40, 234, 258, 5, 30, 280, 10, 460, 44, 118, 20, 18, 24, 452},
+        {800, 480, 920, 584, 56, 453, 487, 8, 40, 424, 120, 560, 64, 180, 28, 26, 35, 760},
+        {720, 720, 1000, 504, 64, 362, 398, 12, 40, 656, 80, 560, 70, 293, 30, 28, 39, 680},
+        {1280, 720, 1160, 1064, 64, 908, 944, 12, 40, 656, 320, 640, 81, 287, 36, 32, 45, 1240},
     };
     for (size_t i = 0; i < sizeof(pages) / sizeof(pages[0]); ++i) check_page(&pages[i]);
 
@@ -230,7 +232,7 @@ static void test_page_layout(void)
     CHECK_EQ(cp0_ui_metrics_compute(640, 480, 0, 1130, CP0_UI_DENSITY_PANEL_MM, 0, &m), 0);
     CHECK_EQ(cp0_ui_roller_page(&m, 0, &p), 0);
     CHECK_EQ(p.strip_left, 320);
-    CHECK_EQ(p.esc_x, 320 - 16 - 79);
+    CHECK_EQ(p.esc_x, 320 - 16 - 102); /* 9 mm at 11.3 px/mm, as before the 7 mm TARGET */
     CHECK_EQ(cp0_ui_roller_page(&m, 700, &p), 0); /* past the screen: ignored */
     CHECK_EQ(p.strip_left, 320);
 

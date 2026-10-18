@@ -47,7 +47,8 @@ typedef struct {
     int title_max_w;                         /* up to the Esc button */
     int strip_x, strip_y, strip_w, strip_h;  /* the shared status strip canvas, exactly the home grid's */
     int strip_left;                          /* the leftmost pixel it draws (its Bluetooth icon) */
-    int esc_x, esc_y, esc_w, esc_h;          /* TARGET wide; TARGET high but not above header_h - 2 status_top;
+    int esc_x, esc_y, esc_w, esc_h;          /* a 9 mm toolbar key wide (cp0_ui_toolbar_key_px, not TARGET); as high
+                                                but not above header_h - 2 status_top;
                                                 centred on the clock pill's line; SPACE_M left of strip_left */
     int esc_radius, esc_text_px;             /* the stock-app toolbar keys' look */
 

@@ -195,6 +195,11 @@ int cp0_ui_mm_px(int ppmm_x100, int mm_x10, int floor_px)
     return px < floor_px ? floor_px : px;
 }
 
+int cp0_ui_toolbar_key_px(int ppmm_x100)
+{
+    return cp0_ui_mm_px(ppmm_x100, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX);
+}
+
 int cp0_ui_font_snap(int px)
 {
     if (px < CP0_UI_FONT_MIN_PX) return CP0_UI_FONT_MIN_PX;
@@ -390,8 +395,7 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
     } else {
         /* the toolbar keys (toolbar height minus the shell's vertical padding) are exactly 9 mm, their own constant
          * (not TARGET, which is 7 mm since 2026-10-18) */
-        m.tok[CP0_TOK_TOOLBAR_H] =
-            cp0_ui_mm_px(m.ppmm_x100, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX) + 2 * m.shell.tb_pad_y;
+        m.tok[CP0_TOK_TOOLBAR_H] = cp0_ui_toolbar_key_px(m.ppmm_x100) + 2 * m.shell.tb_pad_y;
         place_rule(w, h, m.tok[CP0_TOK_TOOLBAR_H], compat_cap, &m.compat);
     }
     *out = m;
