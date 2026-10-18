@@ -11,7 +11,8 @@
  *                      started)
  *   bt_gone=S          monotonic seconds when the Bluetooth keyboard count last dropped to 0 (0 = never)
  *   vkb=auto|off|force the on-screen keyboard rule in force (cp0_ui_osk_effective_vkb)
- *   gen=G              increases on every write (every change of the keyboard list or of vkb)
+ *   pointer=on|off     Settings > System > Pointer navigation (cp0_pointer_nav.h); a missing line means off
+ *   gen=G              increases on every write (every change of the keyboard list, of vkb or of pointer)
  *
  * Readers must ignore unknown keys (later versions add lines). Apps read it with cp0_app_input_read() and decide
  * with cp0_app_osk_allowed() (the app contract, cp0_app_contract.h); kb_gone / bt_gone are the launcher's own
@@ -45,13 +46,15 @@ typedef struct {
     int64_t kb_gone;   /* monotonic s, 0 = never */
     int64_t bt_gone;   /* monotonic s, 0 = never */
     cp0_app_vkb_t vkb; /* a missing line parses as auto */
+    int pointer_nav;   /* 1 = pointer=on; a missing line parses as 0 (off) */
 } cp0_input_state_t;
 
 /* Path of the state file: <runtime_dir>/applaunch/input.state, or the /tmp fallback when runtime_dir is NULL
  * or empty. Pass getenv("XDG_RUNTIME_DIR"). Returns 0, or -1 when `buf` is too small. */
 int cp0_input_state_path(const char *runtime_dir, char *buf, size_t size);
 
-/* The file text ("v=1\nkeyboards=..\nlast_seen=..\nbt_keyboards=..\nkb_gone=..\nbt_gone=..\nvkb=..\ngen=..\n").
+/* The file text ("v=1\nkeyboards=..\nlast_seen=..\nbt_keyboards=..\nkb_gone=..\nbt_gone=..\nvkb=..\npointer=..\n"
+ * "gen=..\n").
  * Returns its length, or -1 if it does not fit. */
 int cp0_input_state_format(const cp0_input_state_t *state, char *buf, size_t size);
 

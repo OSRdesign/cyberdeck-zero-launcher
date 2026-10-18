@@ -86,6 +86,16 @@ and `src/sdl/sdl_lvgl_keyboard.c` in simulation, before APPLaunch setup.
 The setup callback does not register another event. Native navigation uses
 `LV_EVENT_KEY`; text, modifiers and press/release/repeat use the custom event.
 
+Pointer navigation (Settings > System > Pointer navigation, default Off) feeds the
+same queue: `src/cp0/cp0_pointer_reader.c` (a thread started by `init_input()`
+where every keyboard is read) reads the pointer devices that the presence
+watcher classifies (`cp0_keyboard_presence.h`), the pure core
+`src/cp0_pointer_nav.c` (`include/cp0_pointer_nav.h`) turns motion, wheel and
+BTN_LEFT into Up / Down / Left / Right, Enter and Ctrl+O, and
+`cp0_keyboard_inject()` queues them as press + release. The launcher's setting
+is `projects/APPLaunch/main/ui/launcher_pointer.*` (config `pointer_nav`) and
+`settings/settings_pointer_page.*`; apps follow `input.state` `pointer=`.
+
 ## Optional services
 
 `ext_components/cp0_lvgl/Kconfig` exposes filesystem, configuration, PTY, RPC,

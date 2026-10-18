@@ -36,9 +36,10 @@ int cp0_input_state_format(const cp0_input_state_t *state, char *buf, size_t siz
     if (!state || !buf) return -1;
     const int n = snprintf(buf, size,
                            "v=%d\nkeyboards=%u\nlast_seen=%" PRId64 "\nbt_keyboards=%u\nkb_gone=%" PRId64
-                           "\nbt_gone=%" PRId64 "\nvkb=%s\ngen=%u\n",
+                           "\nbt_gone=%" PRId64 "\nvkb=%s\npointer=%s\ngen=%u\n",
                            CP0_INPUT_STATE_VERSION, state->keyboards, state->last_seen, state->bt_keyboards,
-                           state->kb_gone, state->bt_gone, cp0_app_vkb_name(state->vkb), state->gen);
+                           state->kb_gone, state->bt_gone, cp0_app_vkb_name(state->vkb),
+                           state->pointer_nav ? "on" : "off", state->gen);
     if (n < 0 || (size_t)n >= size) return -1;
     return n;
 }
@@ -98,6 +99,11 @@ int cp0_input_state_parse(const char *text, size_t len, cp0_input_state_t *out)
                 word[n] = '\0';
                 (void)cp0_app_vkb_parse(word, &state.vkb);
             }
+        } else if (line_len > 8 && memcmp(line, "pointer=", 8) == 0) {
+            size_t n = line_len - 8;
+            while (n > 0 && (line[8 + n - 1] == '\r' || line[8 + n - 1] == ' ' || line[8 + n - 1] == '\t')) n--;
+            if (n == 2 && memcmp(line + 8, "on", 2) == 0) state.pointer_nav = 1;
+            else if (n == 3 && memcmp(line + 8, "off", 3) == 0) state.pointer_nav = 0;
         } else if (parse_number(line, line_len, "gen", &value) && value >= 0 && value <= UINT_MAX)
             state.gen = (unsigned)value;
         start = end + 1;

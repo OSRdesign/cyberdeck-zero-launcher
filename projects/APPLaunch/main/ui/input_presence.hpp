@@ -41,4 +41,9 @@ void stop();
  * the launcher's keyboard is installed the file says off, or force / off from APPLAUNCH_OSK. Any thread. */
 void set_vkb(cp0_app_vkb_t vkb);
 
+/* Settings > System > Pointer navigation (input.state pointer=on|off, the app contract): set by launcher_pointer when
+ * it installs and when the setting changes; the file is rewritten (gen + 1) when the value changes. Off until then.
+ * Any thread. */
+void set_pointer_nav(bool on);
+
 } // namespace input_presence

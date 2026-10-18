@@ -25,6 +25,8 @@
 
 /* evdev codes of the four keys a real keyboard has (linux/input-event-codes.h) */
 enum { PRESENCE_KEY_ENTER = 28, PRESENCE_KEY_A = 30, PRESENCE_KEY_Z = 44, PRESENCE_KEY_SPACE = 57 };
+/* evdev codes the pointer rule looks at */
+enum { PRESENCE_REL_X = 0, PRESENCE_REL_Y = 1, PRESENCE_BTN_LEFT = 0x110, PRESENCE_BTN_TOUCH = 0x14a };
 #define PRESENCE_BUS_VIRTUAL 0x0006u
 #define PRESENCE_HUB_PREFIX "applaunch-"
 
@@ -75,14 +77,44 @@ int cp0_kbd_presence_bitmap_bit(const char *bitmap, size_t len, unsigned word_bi
     }
 }
 
+/* 1 when a bitmap has any bit set */
+static int bitmap_any(const char *bitmap, size_t len)
+{
+    for (size_t i = 0; bitmap && i < len; i++)
+        if (hex_value(bitmap[i]) > 0) return 1;
+    return 0;
+}
+
+void cp0_ptr_caps_from_bitmaps(const char *key, const char *rel, const char *abs, unsigned word_bits,
+                               cp0_ptr_caps_t *caps)
+{
+    if (!caps) return;
+    const unsigned wb = word_bits ? word_bits : cp0_kbd_presence_native_word_bits();
+    const size_t key_len = key ? strlen(key) : 0, rel_len = rel ? strlen(rel) : 0, abs_len = abs ? strlen(abs) : 0;
+    caps->btn_left = cp0_kbd_presence_bitmap_bit(key, key_len, wb, PRESENCE_BTN_LEFT);
+    caps->btn_touch = cp0_kbd_presence_bitmap_bit(key, key_len, wb, PRESENCE_BTN_TOUCH);
+    caps->rel_x = cp0_kbd_presence_bitmap_bit(rel, rel_len, wb, PRESENCE_REL_X);
+    caps->rel_y = cp0_kbd_presence_bitmap_bit(rel, rel_len, wb, PRESENCE_REL_Y);
+    caps->abs_any = bitmap_any(abs, abs_len);
+}
+
+int cp0_ptr_caps_is_pointer(const cp0_ptr_caps_t *c)
+{
+    return c && c->has_node && c->rel_x && c->rel_y && c->btn_left && !c->abs_any && !c->btn_touch &&
+           !c->is_virtual && !c->hub_name;
+}
+
 typedef struct {
     unsigned word_bits;
-    cp0_kbd_presence_list_t *out;
+    cp0_kbd_presence_list_t *out;     /* keyboards */
+    cp0_kbd_presence_list_t *ptr_out; /* pointers */
     int total;
+    int ptr_total;
     /* the device block being read */
     int is_virtual;
     unsigned bus;
     int has_keys;
+    cp0_ptr_caps_t caps;
     char event[16];
     char name[CP0_KBD_PRESENCE_NAME_SIZE];
 } presence_parser_t;
@@ -92,31 +124,47 @@ static void parser_reset_block(presence_parser_t *p)
     p->is_virtual = 0;
     p->bus = 0;
     p->has_keys = 0;
+    memset(&p->caps, 0, sizeof(p->caps));
     p->event[0] = '\0';
     p->name[0] = '\0';
 }
 
-static void parser_init(presence_parser_t *p, unsigned word_bits, cp0_kbd_presence_list_t *out)
+static void parser_init(presence_parser_t *p, unsigned word_bits, cp0_kbd_presence_list_t *out,
+                        cp0_kbd_presence_list_t *ptr_out)
 {
     p->word_bits = word_bits ? word_bits : cp0_kbd_presence_native_word_bits();
     p->out = out;
+    p->ptr_out = ptr_out;
     p->total = 0;
+    p->ptr_total = 0;
     if (out) out->count = 0;
+    if (ptr_out) ptr_out->count = 0;
     parser_reset_block(p);
+}
+
+static void list_add(cp0_kbd_presence_list_t *list, const presence_parser_t *p)
+{
+    if (!list || list->count >= CP0_KBD_PRESENCE_MAX_DEVICES) return;
+    cp0_kbd_presence_device_t *device = &list->devices[list->count++];
+    snprintf(device->path, sizeof(device->path), CP0_KBD_PRESENCE_DEV_DIR "/%s", p->event);
+    snprintf(device->name, sizeof(device->name), "%s", p->name);
+    device->bus = p->bus;
 }
 
 static void parser_flush(presence_parser_t *p)
 {
-    const int keyboard = p->event[0] != '\0' && p->has_keys && !p->is_virtual &&
-                         strncmp(p->name, PRESENCE_HUB_PREFIX, sizeof(PRESENCE_HUB_PREFIX) - 1) != 0;
+    const int hub = strncmp(p->name, PRESENCE_HUB_PREFIX, sizeof(PRESENCE_HUB_PREFIX) - 1) == 0;
+    const int keyboard = p->event[0] != '\0' && p->has_keys && !p->is_virtual && !hub;
     if (keyboard) {
-        if (p->out && p->out->count < CP0_KBD_PRESENCE_MAX_DEVICES) {
-            cp0_kbd_presence_device_t *device = &p->out->devices[p->out->count++];
-            snprintf(device->path, sizeof(device->path), CP0_KBD_PRESENCE_DEV_DIR "/%s", p->event);
-            snprintf(device->name, sizeof(device->name), "%s", p->name);
-            device->bus = p->bus;
-        }
+        list_add(p->out, p);
         p->total++;
+    }
+    p->caps.has_node = p->event[0] != '\0';
+    p->caps.is_virtual = p->is_virtual;
+    p->caps.hub_name = hub;
+    if (cp0_ptr_caps_is_pointer(&p->caps)) {
+        list_add(p->ptr_out, p);
+        p->ptr_total++;
     }
     parser_reset_block(p);
 }
@@ -178,32 +226,59 @@ static void parser_line(presence_parser_t *p, const char *line, size_t len)
                       cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_KEY_Z) &&
                       cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_KEY_ENTER) &&
                       cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_KEY_SPACE);
+        p->caps.btn_left = cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_BTN_LEFT);
+        p->caps.btn_touch = cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_BTN_TOUCH);
+    } else if (line_starts(line, len, "B: REL=", &skip)) {
+        p->caps.rel_x = cp0_kbd_presence_bitmap_bit(line + skip, len - skip, p->word_bits, PRESENCE_REL_X);
+        p->caps.rel_y = cp0_kbd_presence_bitmap_bit(line + skip, len - skip, p->word_bits, PRESENCE_REL_Y);
+    } else if (line_starts(line, len, "B: ABS=", &skip)) {
+        p->caps.abs_any = bitmap_any(line + skip, len - skip);
     }
+}
+
+static void parse_text(presence_parser_t *p, const char *text, size_t len)
+{
+    size_t start = 0;
+    for (size_t i = 0; text && i < len; i++) {
+        if (text[i] != '\n') continue;
+        parser_line(p, text + start, i - start);
+        start = i + 1;
+    }
+    if (text && start < len) parser_line(p, text + start, len - start);
+    parser_flush(p);
 }
 
 int cp0_kbd_presence_parse(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out)
 {
     presence_parser_t p;
-    parser_init(&p, word_bits, out);
-    size_t start = 0;
-    for (size_t i = 0; text && i < len; i++) {
-        if (text[i] != '\n') continue;
-        parser_line(&p, text + start, i - start);
-        start = i + 1;
-    }
-    if (text && start < len) parser_line(&p, text + start, len - start);
-    parser_flush(&p);
+    parser_init(&p, word_bits, out, NULL);
+    parse_text(&p, text, len);
     return p.total;
+}
+
+int cp0_kbd_presence_parse_pointers(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out)
+{
+    presence_parser_t p;
+    parser_init(&p, word_bits, NULL, out);
+    parse_text(&p, text, len);
+    return p.ptr_total;
 }
 
 int cp0_kbd_presence_enumerate(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *out)
 {
+    return cp0_kbd_presence_enumerate_all(proc_path, word_bits, out, NULL);
+}
+
+int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *out,
+                                   cp0_kbd_presence_list_t *pointers)
+{
     if (out) out->count = 0;
+    if (pointers) pointers->count = 0;
     const int fd = open(proc_path ? proc_path : CP0_KBD_PRESENCE_PROC_PATH, O_RDONLY | O_CLOEXEC);
     if (fd < 0) return -1;
 
     presence_parser_t p;
-    parser_init(&p, word_bits, out);
+    parser_init(&p, word_bits, out, pointers);
     char chunk[2048];
     char line[512]; /* the longest real line, a 32-bit KEY bitmap, is about 230 bytes */
     size_t line_len = 0;
@@ -213,6 +288,7 @@ int cp0_kbd_presence_enumerate(const char *proc_path, unsigned word_bits, cp0_kb
             if (errno == EINTR) continue;
             close(fd);
             if (out) out->count = 0;
+            if (pointers) pointers->count = 0;
             return -1;
         }
         if (n == 0) break;
@@ -320,14 +396,17 @@ struct cp0_kbd_presence_watcher {
     int wake_fd;
     atomic_int stop;
 
-    pthread_mutex_t list_lock;          /* guards list */
+    pthread_mutex_t list_lock;          /* guards list and pointers */
     cp0_kbd_presence_list_t list;
     atomic_uint generation;
+    cp0_kbd_presence_list_t pointers;   /* pointer navigation (cp0_pointer_nav.h) */
+    atomic_uint pointer_generation;
 
     pthread_mutex_t listener_lock;      /* guards listeners and serialises their calls */
     struct cp0_kbd_presence_listener_slot listeners[PRESENCE_MAX_LISTENERS];
 
     cp0_kbd_presence_list_t scratch;    /* watcher thread only */
+    cp0_kbd_presence_list_t ptr_scratch;
 };
 
 static uint64_t presence_monotonic_ms(void)
@@ -347,14 +426,18 @@ static void watcher_notify(cp0_kbd_presence_watcher_t *w, const cp0_kbd_presence
 
 static void watcher_scan(cp0_kbd_presence_watcher_t *w)
 {
-    /* an unreadable file keeps the previous list */
-    if (cp0_kbd_presence_enumerate(w->proc_path, w->word_bits, &w->scratch) < 0) return;
+    /* an unreadable file keeps the previous lists */
+    if (cp0_kbd_presence_enumerate_all(w->proc_path, w->word_bits, &w->scratch, &w->ptr_scratch) < 0) return;
     unsigned gen = 0;
     pthread_mutex_lock(&w->list_lock);
     const int changed = !cp0_kbd_presence_list_equal(&w->list, &w->scratch);
     if (changed) {
         w->list = w->scratch;
         gen = atomic_fetch_add_explicit(&w->generation, 1u, memory_order_acq_rel) + 1u;
+    }
+    if (!cp0_kbd_presence_list_equal(&w->pointers, &w->ptr_scratch)) {
+        w->pointers = w->ptr_scratch; /* keyboard listeners are not told: they list keyboards */
+        atomic_fetch_add_explicit(&w->pointer_generation, 1u, memory_order_acq_rel);
     }
     pthread_mutex_unlock(&w->list_lock);
     if (changed) watcher_notify(w, &w->scratch, gen);
@@ -424,6 +507,7 @@ cp0_kbd_presence_watcher_t *cp0_kbd_presence_watcher_start(const cp0_kbd_presenc
     w->poll_ms = options ? options->poll_ms : 0;
     atomic_init(&w->stop, 0);
     atomic_init(&w->generation, 0u);
+    atomic_init(&w->pointer_generation, 0u);
     pthread_mutex_init(&w->list_lock, NULL);
     pthread_mutex_init(&w->listener_lock, NULL);
 
@@ -437,8 +521,9 @@ cp0_kbd_presence_watcher_t *cp0_kbd_presence_watcher_start(const cp0_kbd_presenc
     }
     if (w->wake_fd < 0) goto fail;
 
-    (void)cp0_kbd_presence_enumerate(w->proc_path, w->word_bits, &w->list);
+    (void)cp0_kbd_presence_enumerate_all(w->proc_path, w->word_bits, &w->list, &w->pointers);
     atomic_store_explicit(&w->generation, 1u, memory_order_release);
+    atomic_store_explicit(&w->pointer_generation, 1u, memory_order_release);
 
     if (pthread_create(&w->thread, NULL, watcher_main, w) != 0) goto fail;
     return w;
@@ -483,6 +568,25 @@ unsigned cp0_kbd_presence_watcher_snapshot(cp0_kbd_presence_watcher_t *w, cp0_kb
     pthread_mutex_lock(&w->list_lock);
     *out = w->list;
     const unsigned gen = atomic_load_explicit(&w->generation, memory_order_acquire);
+    pthread_mutex_unlock(&w->list_lock);
+    return gen;
+}
+
+unsigned cp0_kbd_presence_watcher_pointer_generation(const cp0_kbd_presence_watcher_t *w)
+{
+    if (!w) return 0;
+    return atomic_load_explicit((atomic_uint *)&w->pointer_generation, memory_order_acquire);
+}
+
+unsigned cp0_kbd_presence_watcher_pointer_snapshot(cp0_kbd_presence_watcher_t *w, cp0_kbd_presence_list_t *out)
+{
+    if (!w || !out) {
+        if (out) out->count = 0;
+        return 0;
+    }
+    pthread_mutex_lock(&w->list_lock);
+    *out = w->pointers;
+    const unsigned gen = atomic_load_explicit(&w->pointer_generation, memory_order_acquire);
     pthread_mutex_unlock(&w->list_lock);
     return gen;
 }
@@ -562,6 +666,17 @@ unsigned cp0_kbd_presence_watcher_generation(const cp0_kbd_presence_watcher_t *w
     return 0;
 }
 unsigned cp0_kbd_presence_watcher_snapshot(cp0_kbd_presence_watcher_t *watcher, cp0_kbd_presence_list_t *out)
+{
+    (void)watcher;
+    if (out) out->count = 0;
+    return 0;
+}
+unsigned cp0_kbd_presence_watcher_pointer_generation(const cp0_kbd_presence_watcher_t *watcher)
+{
+    (void)watcher;
+    return 0;
+}
+unsigned cp0_kbd_presence_watcher_pointer_snapshot(cp0_kbd_presence_watcher_t *watcher, cp0_kbd_presence_list_t *out)
 {
     (void)watcher;
     if (out) out->count = 0;

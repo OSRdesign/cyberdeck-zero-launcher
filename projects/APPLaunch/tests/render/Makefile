@@ -75,6 +75,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_dialog_widget.cpp \
     $(CP0)/src/cp0_sudo_prompt_ui.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
+    $(CP0)/src/cp0_pointer_nav.c \
     $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \
     $(CP0)/src/cp0/cp0_keyboard_lvgl_input.c \
@@ -107,7 +108,7 @@ APPS_BACKEND_SYMS := _ZN12apps_backend(3run|11run_program|9available)E
 APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
-    native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp \
+    native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
     page_app/ui_app_calculator.cpp \
     page_app/ui_app_ssh.cpp page_app/ui_app_ssh_view.cpp page_app/ui_app_ssh_native.cpp \

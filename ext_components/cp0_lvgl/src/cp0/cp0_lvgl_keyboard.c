@@ -40,6 +40,7 @@
 #include "../cp0_keyboard_text.h"
 #include "cp0_keyboard_presence.h"
 #include "cp0_keyboard_sources.h"
+#include "cp0_pointer_reader.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 #include "../../../../SDK/components/utilities/include/sample_log.h"
@@ -78,6 +79,12 @@ int cp0_keyboard_get_read_all_keyboards(void)
     return atomic_load_explicit(&g_read_all_keyboards, memory_order_acquire) ? 1 : 0;
 }
 
+/* The pointer reader stops while the keyboard is paused (an external app reads the devices itself). */
+int cp0_keyboard_input_paused(void)
+{
+    return keyboard_paused_flag != 0;
+}
+
 #ifdef __linux__
 static struct libinput *g_libinput = NULL;
 /* libinput is not thread safe: the keyboard thread holds this lock while it uses the context, and
@@ -85,6 +92,7 @@ static struct libinput *g_libinput = NULL;
 static pthread_mutex_t g_libinput_mutex = PTHREAD_MUTEX_INITIALIZER;
 void keyboard_pause(void) {
     keyboard_paused_flag = 1;
+    cp0_pointer_reader_wake(); /* it closes its pointer devices at once */
     pthread_mutex_lock(&g_libinput_mutex);
     if (g_libinput) libinput_suspend(g_libinput);
     pthread_mutex_unlock(&g_libinput_mutex);
@@ -96,6 +104,7 @@ void keyboard_resume(void) {
     if (g_libinput) rc = libinput_resume(g_libinput);
     pthread_mutex_unlock(&g_libinput_mutex);
     keyboard_paused_flag = 0;
+    cp0_pointer_reader_wake();
     /* rc != 0: a keyboard went away during the app; libinput then drops all of them and the thread
      * re-opens the ones still there once their removal grace is over */
     SLOGI("[KBD] keyboard_resume()%s", rc != 0 ? ": a keyboard left meanwhile, re-attaching" : "");
@@ -910,6 +919,9 @@ void init_input(void)
 
     cp0_keyboard_thread_mark_started(&keyboard_thread_lifecycle);
     cp0_keyboard_create_lvgl_input_devices();
+    /* Pointer navigation (cp0_pointer_nav.h) where every keyboard is read (the launcher, the native apps): its
+     * thread stays idle (closed devices) until the switch is on. */
+    if (cp0_keyboard_get_read_all_keyboards()) cp0_pointer_reader_start();
     pthread_mutex_unlock(&keyboard_thread_mutex);
 }
 
@@ -917,6 +929,7 @@ void deinit_input(void)
 {
     pthread_t thread;
     int should_join = 0;
+    cp0_pointer_reader_stop();
     atomic_store_explicit(&keyboard_shutdown_requested, true,
                           memory_order_release);
     pthread_mutex_lock(&keyboard_thread_mutex);

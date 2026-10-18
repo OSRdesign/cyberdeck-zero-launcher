@@ -43,7 +43,7 @@ static void test_format_parse(void)
     const int n = cp0_input_state_format(&state, text, sizeof(text));
     CHECK(n > 0);
     CHECK(strcmp(text, "v=1\nkeyboards=2\nlast_seen=1760000000\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\n"
-                       "gen=7\n") == 0);
+                       "pointer=off\ngen=7\n") == 0);
     char tiny[8];
     CHECK(cp0_input_state_format(&state, tiny, sizeof(tiny)) == -1);
 
@@ -60,10 +60,20 @@ static void test_format_parse(void)
     full.vkb = CP0_APP_VKB_OFF;
     CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0);
     CHECK(strcmp(text, "v=1\nkeyboards=1\nlast_seen=1760000000\nbt_keyboards=1\nkb_gone=120\nbt_gone=130\nvkb=off\n"
-                       "gen=9\n") == 0);
+                       "pointer=off\ngen=9\n") == 0);
     CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0);
     CHECK(parsed.keyboards == 1 && parsed.bt_keyboards == 1 && parsed.kb_gone == 120 && parsed.bt_gone == 130 &&
-          parsed.vkb == CP0_APP_VKB_OFF && parsed.gen == 9);
+          parsed.vkb == CP0_APP_VKB_OFF && parsed.gen == 9 && parsed.pointer_nav == 0);
+    /* pointer navigation (Settings > System > Pointer navigation): on, read back; a missing line or a stray value is
+     * off */
+    full.pointer_nav = 1;
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\npointer=on\ngen=9\n") != NULL);
+    CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0 && parsed.pointer_nav == 1);
+    const char *crlf_on = "v=1\r\npointer=on\r\ngen=4\r\n";
+    CHECK(cp0_input_state_parse(crlf_on, strlen(crlf_on), &parsed) == 0 && parsed.pointer_nav == 1);
+    const char *stray = "v=1\npointer=yes\ngen=4\n";
+    CHECK(cp0_input_state_parse(stray, strlen(stray), &parsed) == 0 && parsed.pointer_nav == 0);
+    full.pointer_nav = 0;
     full.vkb = CP0_APP_VKB_FORCE;
     CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\nvkb=force\n") != NULL);
     /* the longest values still fit the writer's buffer */
@@ -72,6 +82,7 @@ static void test_format_parse(void)
     big.kb_gone = INT64_MAX;
     big.bt_gone = INT64_MAX;
     big.vkb = CP0_APP_VKB_FORCE;
+    big.pointer_nav = 0; /* "off": the longer word */
     CHECK(cp0_input_state_format(&big, text, sizeof(text)) > 0);
 
     /* an older file (no new keys): vkb reads auto, the rest 0; unknown vkb values keep auto; CRLF is tolerated */
@@ -138,7 +149,7 @@ static void test_write(void)
     fclose(f);
     text[len] = '\0';
     CHECK(strcmp(text, "v=1\nkeyboards=0\nlast_seen=1760000100\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\n"
-                       "gen=2\n") == 0);
+                       "pointer=off\ngen=2\n") == 0);
 
     /* unwritable place: error, no crash */
     CHECK(cp0_input_state_write("/proc/applaunch-test/input.state", &state) == -1);

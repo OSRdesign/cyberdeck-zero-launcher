@@ -9,6 +9,7 @@
 #include "app_launch_env.hpp"
 #include "launch.h"
 #include "launcher_osk.hpp"
+#include "launcher_pointer.hpp"
 #include "launcher_toast.h"
 #include "native_vkbd.hpp"
 #include "settings/settings_apps_jobs.hpp"
@@ -658,6 +659,8 @@ void show_home()
     // the fallback on-screen keyboard belongs to the page that asked for it: it goes with the page (task 014 P2b)
     launcher_osk::install();
     launcher_osk::dismiss();
+    // Settings > System > Pointer navigation, applied once (the launcher's pointer reader and input.state)
+    launcher_pointer::install();
     ensure_home();
 
     // Park an empty screen on the compat display so a finishing app's screen is

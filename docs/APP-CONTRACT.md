@@ -24,7 +24,7 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 | per-launch environment | the launcher, on the app's command line only | each start of an app | that app |
 | panel environment (`APPLAUNCH_SCREEN_*`) | the launcher, process-wide at display creation | once | every child process |
 | `screen.state` | **only** the launcher (atomic rename) | at display creation, and again after **every** app exits (`gen + 1`) | any app |
-| `input.state` | **only** the launcher (atomic rename) | keyboard list change, Settings > System > On-screen keyboard change | any app |
+| `input.state` | **only** the launcher (atomic rename) | keyboard list change, Settings > System > On-screen keyboard or Pointer navigation change | any app |
 | `.desktop` keys | the app's package | install | the launcher |
 
 The state files live in one directory: `$APPLAUNCH_STATE_DIR`, else `$XDG_RUNTIME_DIR/applaunch/`, else the files
@@ -128,6 +128,7 @@ bt_keyboards=1
 kb_gone=0
 bt_gone=0
 vkb=auto
+pointer=off
 gen=4
 ```
 
@@ -138,9 +139,10 @@ gen=4
 | `last_seen` | unix seconds of the last time `keyboards > 0` (0 = never since boot) |
 | `kb_gone`, `bt_gone` | **monotonic** seconds (`CLOCK_MONOTONIC`, same in every process of the boot) when the keyboard / Bluetooth keyboard count last dropped to 0; `0` = never |
 | `vkb` | the on-screen keyboard rule in force: `auto`, `off` (Settings > System > On-screen keyboard Off, or a desktop session owns the screen), `force` (`APPLAUNCH_OSK=force`, development and the HackBerry) |
+| `pointer` | Settings > System > Pointer navigation: `on` or `off` (the default). See section 10b |
 | `gen` | increases on every write |
 
-A file without `vkb` (an older launcher) means `auto`.
+A file without `vkb` (an older launcher) means `auto`; a file without `pointer` means `off`.
 
 ## 6. `.desktop` keys
 
@@ -186,7 +188,7 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 
 | Files | What | Needs |
 |---|---|---|
-| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()`, `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
 
@@ -242,6 +244,23 @@ probably asleep) and not within 2 s of any keyboard going away. `vkb=off` never.
 exactly this function, so the app and the launcher agree. Re-read `input.state` when its `gen` changes (a keyboard
 connects, the user switches the setting). The keyboard must never be the only way in: the policy is "physical
 keyboard first, fallback keyboard only when none is connected, never summoned by hand".
+
+## 10b. Pointer navigation
+
+With `pointer=on`, a mouse, trackball, trackpoint or the HackBerry's optical pad drives the keyboard UI: motion is
+turned into arrow keys at a rate that follows the push (one axis at a time, a dead zone for rest noise), the wheel into
+Up / Down, a click (button released within 0.6 s, without moving) into Enter, and a held click (0.6 s without moving)
+into **Ctrl+O, the options key** (`KEY_O` with `KBD_MOD_CTRL`; Mesh Hop's chat options use it). A pointer is a device
+with `REL_X`, `REL_Y` and `BTN_LEFT` and no absolute axis or `BTN_TOUCH` (never a touch screen or a touchpad). The keys
+arrive like a physical keyboard's (press + release, `keysym` 0), so an app needs no code for them; an app that has an
+options menu should open it on Ctrl+O. While a text field edits (`KBD_INPUT_CONTEXT_TEXT`) Left / Right and Ctrl+O are
+not sent (the caret, a terminal's control character); Up / Down and Enter are.
+
+An app that links `cp0_lvgl` and reads every keyboard (`cp0_keyboard_set_read_all_keyboards(1)`, as
+`apps/_common/platform.cpp` does) gets this from its own keyboard backend, which follows `pointer=` (re-read when the file
+changes, at most once a second). It needs a `cp0_lvgl` that has it: rebuild against a launcher commit with
+`cp0_pointer_nav.h`. The launcher stops its own pointer reading while an app runs. `APPLAUNCH_POINTER_NAV=1|0` in the
+environment forces it on or off for a test; the tuning variables are in `ext_components/cp0_lvgl/include/cp0_pointer_nav.h`.
 
 ## 11. Wrapped (compat) apps in v1
 

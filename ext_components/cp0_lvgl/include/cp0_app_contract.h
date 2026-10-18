@@ -36,9 +36,12 @@
  *      v=1 keyboards=N (real keyboards present now) bt_keyboards=N (of them Bluetooth) last_seen= (unix s, the last
  *      time keyboards > 0) kb_gone= bt_gone= (monotonic s when the last keyboard / Bluetooth keyboard went away,
  *      0 = never) vkb=auto|off|force (the on-screen keyboard rule in force: Settings > System > On-screen keyboard,
- *      APPLAUNCH_OSK, off when a desktop session owns the screen) gen=
+ *      APPLAUNCH_OSK, off when a desktop session owns the screen) pointer=on|off (Settings > System > Pointer
+ *      navigation; missing = off) gen=
  *    An app that has text fields and no physical keyboard draws its own on-screen keyboard when
- *    cp0_app_osk_allowed() says so (the launcher never draws over a fullscreen app).
+ *    cp0_app_osk_allowed() says so (the launcher never draws over a fullscreen app). An app linking cp0_lvgl that
+ *    reads every keyboard (cp0_keyboard_set_read_all_keyboards) follows pointer= by itself (cp0_pointer_nav.h): a
+ *    mouse or trackpoint then sends Up / Down / Left / Right, Enter (click) and Ctrl+O (held click, "options").
  *
  * 4. .desktop keys: X-Fullscreen=true (fullscreen mode); X-MinSize=WxH (the tile is hidden on a smaller screen; an
  *    older launcher ignores it). Full reference: docs/APP-CONTRACT.md.
@@ -164,6 +167,7 @@ typedef struct {
     int64_t kb_gone;             /* monotonic s, 0 = never */
     int64_t bt_gone;             /* monotonic s, 0 = never */
     cp0_app_vkb_t vkb;           /* missing line (an older launcher): CP0_APP_VKB_AUTO */
+    int pointer_nav;             /* pointer=on: 1 (Settings > System > Pointer navigation); missing line or off: 0 */
     unsigned gen;
 } cp0_app_input_t;
 

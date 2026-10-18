@@ -537,6 +537,15 @@ TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_de
     "$root/tests/test_keyboard_sources.c" -o "$binary"
 "$binary"
 
+# Pointer navigation core (dead zone, axis, step rate and its cap, release, tap / hold / drag / click guard, wheel,
+# the APPLAUNCH_POINTER_* overrides, the process-wide switch) against traces of the measured HackBerry pad; the
+# pointer classifier is in test_keyboard_presence above
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_pointer_nav.c" \
+    "$root/tests/test_pointer_nav.c" -o "$binary"
+"$binary"
+
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/include" \
     "$root/src/cp0/cp0_input_state.c" \
