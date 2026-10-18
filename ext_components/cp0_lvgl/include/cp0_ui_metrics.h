@@ -40,8 +40,10 @@ extern "C" {
 #define CP0_UI_ROW_FLOOR_PX 40         /* ... never smaller than 40 / 44 px on low-density panels */
 #define CP0_UI_TARGET_FLOOR_PX 44      /* 44 px = the usual minimum finger target (Apple HIG 44 pt) on a screen whose
                                         * density would make 7 mm smaller; at 7 mm the floor applies below 6.3 px/mm */
-#define CP0_UI_TOOLBAR_KEY_MM_X10 90   /* stock-app toolbar keys stay 9 mm (computed sizes only; the deck and the Pi 3A+
-                                        * are pinned): not derived from TARGET, so lowering TARGET does not move the window */
+#define CP0_UI_TOOLBAR_KEY_MM_X10 90   /* 9 mm, not derived from TARGET (cp0_ui_toolbar_key_px): the stock-app toolbar keys
+                                        * (computed sizes only; the deck and the Pi 3A+ are pinned), so lowering TARGET does
+                                        * not move the window, and the native page header's Esc (cp0_ui_roller_page), the
+                                        * same size in the launcher and every app */
 #define CP0_UI_TOOLBAR_KEY_FLOOR_PX 48
 #define CP0_UI_LIST_ROW_MM_X10 50      /* CompactList's compact rows (a tap only selects): 5.0 mm ... */
 #define CP0_UI_LIST_ROW_FLOOR_PX 24    /* ... never smaller than 24 px (a mis-tap there only moves the highlight) */
@@ -90,7 +92,7 @@ typedef enum {
     CP0_TOK_HEADER_H,    /* status bar / page header */
     CP0_TOK_STATUS_PCT,  /* clock / Wi-Fi / Bluetooth strip scale (D11: may exceed 100 on Large) */
     CP0_TOK_ROW_H,       /* acting row: 7 mm, at least 40 px */
-    CP0_TOK_TARGET,      /* button, action bar, dialog button, Esc: 7 mm (= ROW), at least 44 px */
+    CP0_TOK_TARGET,      /* button, action bar, dialog button: 7 mm (= ROW), at least 44 px (the header Esc is 9 mm) */
     CP0_TOK_TOOLBAR_H,   /* stock-app toolbar: 9 mm keys + the shell's padding (pinned: 140 deck, 100 Pi 3A+); not derived from TARGET */
     CP0_TOK_TILE_ICON,   /* home tile icon */
     CP0_TOK_DIALOG_MAX_W,
@@ -174,6 +176,10 @@ cp0_ui_density_t cp0_ui_density_resolve(int w, int h, int rot, const char *panel
 
 /* round(mm_x10 / 10 * ppmm_x100 / 100), at least floor_px. */
 int cp0_ui_mm_px(int ppmm_x100, int mm_x10, int floor_px);
+
+/* A 9 mm key (CP0_UI_TOOLBAR_KEY_MM_X10, at least CP0_UI_TOOLBAR_KEY_FLOOR_PX): the stock-app toolbar keys and the
+ * native page header's Esc. */
+int cp0_ui_toolbar_key_px(int ppmm_x100);
 
 /* The builtin Montserrat size used for px: even, CP0_UI_FONT_MIN_PX..CP0_UI_FONT_MAX_PX (an odd px rounds down). */
 int cp0_ui_font_snap(int px);

@@ -108,10 +108,12 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
     p.title_y = s->title_y;
     p.title_px = s->title_px;
 
-    /* the on-screen Esc: TARGET wide, TARGET high but inside the bar's margins (status_top above and below, like the
-     * clock pill), centred on the pill's line, right-aligned SPACE_M left of the strip's Bluetooth icon */
-    p.esc_w = m->tok[CP0_TOK_TARGET];
-    p.esc_h = imax(1, imin(m->tok[CP0_TOK_TARGET], p.header_h - 2 * s->status_top));
+    /* the on-screen Esc: a 9 mm toolbar key wide (not TARGET, 7 mm since 2026-10-18: the header Esc keeps its size,
+     * the same in the launcher and every app), as high but inside the bar's margins (status_top above and below, like
+     * the clock pill), centred on the pill's line, right-aligned SPACE_M left of the strip's Bluetooth icon */
+    const int esc_key = cp0_ui_toolbar_key_px(m->ppmm_x100);
+    p.esc_w = esc_key;
+    p.esc_h = imax(1, imin(esc_key, p.header_h - 2 * s->status_top));
     p.esc_y = (p.header_h - p.esc_h) / 2;
     p.esc_x = imax(p.title_x, p.strip_left - space_m - p.esc_w);
     p.esc_radius = s->tb_radius;

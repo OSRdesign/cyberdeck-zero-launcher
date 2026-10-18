@@ -217,6 +217,15 @@ static void test_mm_and_fonts(void)
     CHECK_EQ(cp0_ui_mm_px(300, 90, 48), 48);
     CHECK_EQ(cp0_ui_mm_px(1160, 90, 48), 104);
 
+    /* the 9 mm key (stock-app toolbar keys, the native page header's Esc): its own constant, not the 7 mm TARGET;
+     * 102 px on the deck = the header Esc before TARGET went to 7 mm */
+    CHECK_EQ(cp0_ui_toolbar_key_px(1130), 102);
+    CHECK_EQ(cp0_ui_toolbar_key_px(630), 57);
+    CHECK_EQ(cp0_ui_toolbar_key_px(610), 55);
+    CHECK_EQ(cp0_ui_toolbar_key_px(300), CP0_UI_TOOLBAR_KEY_FLOOR_PX);
+    CHECK_EQ(cp0_ui_toolbar_key_px(1130), cp0_ui_mm_px(1130, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX));
+    CHECK(cp0_ui_toolbar_key_px(1130) > cp0_ui_mm_px(1130, CP0_UI_TARGET_MM_X10, CP0_UI_TARGET_FLOOR_PX));
+
     /* floors reach the tokens */
     const cp0_ui_metrics_t low = compute(800, 480, 300, 0);
     CHECK_EQ(low.tok[CP0_TOK_ROW_H], CP0_UI_ROW_FLOOR_PX);
