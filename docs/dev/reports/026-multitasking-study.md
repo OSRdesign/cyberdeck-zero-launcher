@@ -708,6 +708,13 @@ Taken as recommended except where marked. Status: **parked** after the decisions
 
 ## 9. Not verified
 
+**Status 2026-10-19: P-a started** (branch `multitasking-pa`). The spike tools are in `tools/multitasking-spike/`:
+`mtrec` + `mta_analyse.py` (touch recordings, the G1 rules of section 5.2 replayed on them), `fbhandoff` + `fbhapp`
+(the handoff of section 7.2), `memprobe.py` (memory, CPU, readsb, `oom_score_adj`). They are tested on the PC only;
+the owner runs them on the boards with `docs/dev/tests/multitasking-pa-protocol.md`. Everything below stays open
+until those results are in. Read-only probes the same day: the deck's MemAvailable is 269 MB (its `/tmp` was
+emptied), and the HackBerry answered (touch `EP0110M09`: slots, positions, tracking id, no `TOUCH_MAJOR`; 4 GB RAM).
+
 - **Not probed:** multitouch on the HackBerry and the Pi 5 (offline) and the Pi 3A+ SPI panel (not mounted): their
   slot counts come from report 021 and the driver names.
 - **Real touch sequences:** whether three fingers fit and separate on the deck's panel, ghosts, palms, `TOUCH_MAJOR`
