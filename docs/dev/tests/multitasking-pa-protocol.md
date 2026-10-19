@@ -45,17 +45,17 @@ RUN.txt`, and on the deck a line `/dev/input/event0    touch_score=7  keyboard=0
 TouchScreen"` (the Pi 3A+: `slots=10 "10-0038 generic ft5x06 (79)"`). A line `(cannot open: not in group input?)`
 means the user is not in group `input`: tell the Controller.
 
-## A. Deck: touch recordings (about 12 minutes)
+## A. Deck: touch recordings (about 14 minutes)
 
 Have the deck in your hands as you normally hold it; the PC screen shows the instructions.
 
-1. Stop the launcher, record the guided script, start the launcher again (one line; about 6 minutes):
+1. Stop the launcher, record the guided script, start the launcher again (one line; about 7 minutes):
 
        cd ~/mta-spike && systemctl --user stop cyberdeckzero; ./mtrec --guided --board deck; systemctl --user start cyberdeckzero
 
    It prints first `mtrec: /dev/input/event0 "11-005d Goodix Capacitive TouchScreen" mt-b, 5 slot(s), x 0..639
    y 0..479` and `panel 56.6 x 42.5 mm (screen.state), swap 1 (preset-deck)`. Then for each step: the instruction,
-   `3... 2... 1... GO`, sometimes `LIFT`, then `STOP: hands off` and a `seen:` line, for example after a 3-finger
+   `5... 4... 3... 2... 1... GO` (5 s to get ready; `--countdown N` changes it, 1..10 s), sometimes `LIFT`, then `STOP: hands off` and a `seen:` line, for example after a 3-finger
    hold: `seen: max 3 finger(s), 3 contact(s), 0 short (<30 ms), closest 18.4 mm, moved up to 0.9 mm, major 9..14`.
    Do each step as you naturally would; **do not try to help the detector**. If a step clearly went wrong (you
    were not ready), note its name; you can redo it in step 2.
@@ -66,14 +66,14 @@ Have the deck in your hands as you normally hold it; the PC screen shows the ins
    **grip** the deck as when carrying it x3; both thumbs resting on the screen edges x2; **two thumbs typing** on the
    lower half x2; hands off. At the end a table and `mtrec: saved /home/osrde/mta-results/mtrec-zero7-<date>.csv`.
 
-2. More repetitions of the cases that matter (about 4 minutes):
+2. More repetitions of the cases that matter (about 5 minutes):
 
        systemctl --user stop cyberdeckzero; ./mtrec --guided=hold3,hold3close,palm,grip,gripthumbs,osk --reps 5; systemctl --user start cyberdeckzero
 
 3. Optional, with the launcher **running** (it reacts to the touches: you may open apps; Esc brings you back), only
    to compare noise with the launcher drawing (1 minute): `./mtrec --guided=idle,hold3,palm --reps 2`.
 
-## B. Pi 3A+: touch recordings (about 12 minutes)
+## B. Pi 3A+: touch recordings (about 14 minutes)
 
 The Pi 3A+ touch stopped working with the **PiSugar S Plus** fitted (2026-10-15) and is flaky with it. Check first.
 
@@ -87,7 +87,7 @@ The Pi 3A+ touch stopped working with the **PiSugar S Plus** fitted (2026-10-15)
        systemctl --user stop cyberdeckzero; ./mtrec --guided --board pi3a; systemctl --user start cyberdeckzero
        systemctl --user stop cyberdeckzero; ./mtrec --guided=hold3,hold3close,palm,grip,gripthumbs,osk --reps 5; systemctl --user start cyberdeckzero
 
-## C. HackBerry: touch recordings (optional, about 10 minutes)
+## C. HackBerry: touch recordings (optional, about 11 minutes)
 
 The HackBerry runs its desktop; the launcher is not running there. `mtrec` only reads, but the desktop will react to
 your touches (it may open things). If you prefer a quiet screen, stop the desktop first (`sudo systemctl stop lightdm`,

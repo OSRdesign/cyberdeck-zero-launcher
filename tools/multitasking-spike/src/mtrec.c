@@ -129,7 +129,8 @@ static void usage(void)
         "  --steps           print the default guided steps and exit\n"
         "  --script FILE     guided script from a file: lines 'id|seconds|reps|lift_at|instruction'\n"
         "  --reps N          repetitions for the steps that repeat (default: the script's)\n"
-        "  --prep S          countdown before each step (default 3)\n"
+        "  --countdown N     count down N s before each step, '5... 4... 3... 2... 1... GO' (1..10, default 5)\n"
+        "  --prep S          the same in seconds, 0 allowed (tests)\n"
         "  --gap S           pause after each step (default 1.5)\n"
         "  --wait-enter      wait for Enter on the terminal before each step\n"
         "  --board NAME      deck | pi3a | hackberry: panel size and axis swap preset (default: detected)\n"
@@ -507,16 +508,16 @@ int main(int argc, char **argv)
 {
     const char *dev = NULL, *out_path = NULL, *guided_ids = NULL, *script = NULL, *opt_board = NULL,
                *opt_panel = NULL, *abs_spec = NULL;
-    double duration = 0, prep = 3, gap = 1.5;
+    double duration = 0, prep = 5, gap = 1.5;
     int guided = 0, reps = 0, raw = 0, opt_swap = -1, wait_enter = 0;
-    enum { O_LIST = 1000, O_GUIDED, O_STEPS, O_SCRIPT, O_REPS, O_PREP, O_GAP, O_WAIT, O_BOARD, O_PANEL, O_SWAP, O_RAW,
+    enum { O_LIST = 1000, O_GUIDED, O_STEPS, O_SCRIPT, O_REPS, O_PREP, O_COUNTDOWN, O_GAP, O_WAIT, O_BOARD, O_PANEL, O_SWAP, O_RAW,
            O_ABS, O_QUIET, O_DUR };
     static const struct option opts[] = {
         {"dev", required_argument, 0, 'd'},       {"out", required_argument, 0, 'o'},
         {"list", no_argument, 0, O_LIST},         {"duration", required_argument, 0, O_DUR},
         {"guided", optional_argument, 0, O_GUIDED}, {"steps", no_argument, 0, O_STEPS},
         {"script", required_argument, 0, O_SCRIPT}, {"reps", required_argument, 0, O_REPS},
-        {"prep", required_argument, 0, O_PREP},   {"gap", required_argument, 0, O_GAP},
+        {"prep", required_argument, 0, O_PREP},   {"countdown", required_argument, 0, O_COUNTDOWN},   {"gap", required_argument, 0, O_GAP},
         {"wait-enter", no_argument, 0, O_WAIT},   {"board", required_argument, 0, O_BOARD},
         {"panel-mm", required_argument, 0, O_PANEL}, {"swap", required_argument, 0, O_SWAP},
         {"raw", no_argument, 0, O_RAW},           {"abs", required_argument, 0, O_ABS},
@@ -539,6 +540,16 @@ int main(int argc, char **argv)
         case O_SCRIPT: script = optarg; guided = 1; break;
         case O_REPS: reps = atoi(optarg); break;
         case O_PREP: prep = atof(optarg); break;
+        case O_COUNTDOWN: {
+            char *end = NULL;
+            long n = strtol(optarg, &end, 10);
+            if (!end || *end || n < 1 || n > 10) {
+                fprintf(stderr, "mtrec: --countdown wants a whole number of seconds from 1 to 10\n");
+                return 2;
+            }
+            prep = (double)n;
+            break;
+        }
         case O_GAP: gap = atof(optarg); break;
         case O_WAIT: wait_enter = 1; break;
         case O_BOARD: opt_board = optarg; break;

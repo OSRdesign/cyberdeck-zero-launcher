@@ -49,8 +49,9 @@ what the board protocol is for.
 
 ```sh
 ./mtrec --list                        # input devices, touch score, slots
-./mtrec --guided --board deck         # the guided script (about 5 minutes), saves ~/mta-results/mtrec-*.csv
+./mtrec --guided --board deck         # the guided script (about 6 minutes), saves ~/mta-results/mtrec-*.csv
 ./mtrec --guided=hold3,palm,grip --reps 5
+./mtrec --guided --countdown 3         # shorter count-down before each step (1..10 s, default 5)
 ./mtrec --duration 30                 # free recording, live finger count
 ./mtrec --steps                       # the default steps
 ```
@@ -70,6 +71,8 @@ what the board protocol is for.
 - Statistics, per step and in total: most fingers at once, contacts, short-lived contacts (< 30 ms), closest pair
   (mm), largest move from the landing point (mm), `TOUCH_MAJOR` range (Goodix only; the FT5x06 reports none). One
   `seen:` line after each guided step lets the user redo a step that went wrong.
+- Guided steps start after a count-down, `5... 4... 3... 2... 1... GO` by default (`--countdown N`, 1..10 s); the
+  step's duration and its LIFT time count from GO.
 - Guided script (`--steps`): idle, corners (checks the axis swap), tap1, drag1, pinch2, pan2, hold3 x5, hold3close
   x3, hold3wide x2, tap3, swipe3, four x2, palm x3, palmside x2, grip x3, gripthumbs x2, osk x2 (two thumbs on the
   lower half), idle_end. `--script FILE` takes `id|seconds|reps|lift_at|instruction` lines; `--wait-enter` pauses
