@@ -845,7 +845,13 @@ int cp0_display_fb_restore(const void *src, size_t len, int page_y)
     uint8_t *dst = g.fb + (size_t)page_y * (size_t)g.stride;
     pthread_mutex_lock(&fb_lock);
     memcpy(dst, src, page);
-    const int same = memcmp(dst, src, page) == 0;
+    /* Verified on 9 rows (first, last and 7 between) rather than the whole page: reading the framebuffer back is
+     * slow (an uncached mapping: about 10 ms for the deck's 1.2 MB, deck finding 2026-10-20), writing it is not. */
+    int same = 1;
+    for (int i = 0; i <= 8 && same; i++) {
+        const size_t row = (size_t)((g.ph - 1) * i / 8);
+        same = memcmp(dst + row * (size_t)g.stride, (const uint8_t *)src + row * (size_t)g.stride, (size_t)g.stride) == 0;
+    }
     pan_to(page_y);
     pthread_mutex_unlock(&fb_lock);
     return same ? 0 : 1;

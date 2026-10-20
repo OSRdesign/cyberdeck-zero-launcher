@@ -188,6 +188,11 @@ struct FifoKeys : KeyPort {
     }
     int poll(Listener listener, void *context) override { return sources.poll(listener, context); }
     void esc_state(int held) override { rec.add("keys esc " + std::to_string(held)); }
+    void fds(std::vector<int> &out) override
+    {
+        int f[cp0_esc_key_watch::Sources::kMax];
+        out.assign(f, f + sources.fds(f, cp0_esc_key_watch::Sources::kMax));
+    }
 };
 
 /* ---------------------------------------------------------------------------------------------- helpers */
@@ -250,6 +255,13 @@ int count(const std::string &text, const std::string &needle)
     return n;
 }
 
+/* the group still has a process (zombies included). Not group_members(): that walks this process's descendants,
+ * and the guardian scenario's apps are orphans of another process by then */
+bool group_exists(int pgid)
+{
+    return ::kill(-pgid, 0) == 0 || errno == EPERM;
+}
+
 /* every process of the group in state T */
 bool group_stopped(int pgid)
 {
@@ -298,12 +310,13 @@ struct Rig {
     std::unique_ptr<Supervisor> sup;
     int kw = -1; /* the "keyboard": every reader's FIFO stays open (no EOF) */
 
-    explicit Rig(SupervisorConfig cfg = SupervisorConfig(), const std::string &tag = "rig")
+    /* fast: a 5 ms tick for the pumped scenarios; false keeps the launcher's defaults (the cost scenario) */
+    explicit Rig(SupervisorConfig cfg = SupervisorConfig(), const std::string &tag = "rig", bool fast = true)
         : fb(g_dir + "/fb-" + tag + ".raw"), ui(fb, rec), input(rec, g_dir + "/app-in-"),
           keys_fifo(make_fifo("keys-" + tag)), keys(keys_fifo, rec)
     {
         cfg.guardian = false;
-        cfg.tick_ms = 5;
+        (void)fast; /* the pumped scenarios call run_once() themselves; the cost scenario runs the thread */
         sup = std::make_unique<Supervisor>(cfg, proc, fb, input, keys, ui);
         sup->set_log_sink([this](const std::string &l) { rec.add("log " + l); });
         kw = writer(keys_fifo);
@@ -611,6 +624,23 @@ void scenario_alt_tab_evdev()
     for (const std::string &l : r.rec.get())
         if (l == "ui overlay ") hidden_text = true;
     check("text hidden", hidden_text);
+    int selects = 0;
+    for (const std::string &l : r.rec.get())
+        if (l.find("log session: select ") == 0) ++selects;
+    check("one 'session: select' line per Tab / Shift+Tab (3)", selects == 3, std::to_string(selects));
+    check("the lines name the selection", r.rec.has("log session: select Home") && r.rec.has("log session: select alpha"));
+    // Esc with Alt held cancels: back to the app the session started from
+    r.pump_for(300);
+    r.rec.clear();
+    key(kw, KEY_LEFTALT, 1);
+    key(kw, KEY_TAB, 1);
+    key(kw, KEY_TAB, 0);
+    check("second session hides alpha", r.pump(2000, [&] { return r.state("alpha") == "hidden-frozen"; }), r.status());
+    key(kw, KEY_ESC, 1);
+    key(kw, KEY_ESC, 0);
+    key(kw, KEY_LEFTALT, 0);
+    check("Esc with Alt held: 'session: cancelled'", r.pump(1000, [&] { return r.rec.has("log session: cancelled"); }));
+    check("back to alpha", r.pump(2000, [&] { return r.state("alpha") == "foreground"; }), r.status());
     r.sup->stop();
 }
 
@@ -691,10 +721,55 @@ void scenario_shutdown_no_stopped_left()
     r.rec.clear();
     const std::uint64_t t0 = Supervisor::now_ms();
     r.sup->stop();
-    check("both groups gone", group_members(frozen).empty() && group_members(running).empty());
+    check("both groups gone", !group_exists(frozen) && !group_exists(running));
     check("quickly (SIGTERM honoured)", Supervisor::now_ms() - t0 < 2500, std::to_string(Supervisor::now_ms() - t0));
     check("SIGCONT before SIGTERM for the frozen app", r.rec.index("ice: SIGCONT") >= 0 &&
                                                           r.rec.index("ice: SIGCONT") < r.rec.index("ice: SIGTERM"));
+}
+
+/* Deck finding (2026-10-20): about 5 % launcher CPU with an app in front. The supervisor's own loop, threaded as in
+ * the launcher, with a legacy app in front that draws nothing, then with an app hidden and the launcher in front. */
+void scenario_loop_cost()
+{
+    std::printf("== loop cost: wake-ups and CPU of the supervisor thread\n");
+    Rig r(SupervisorConfig(), "cost", false);
+    App a = make_app("idle");
+    App b = make_app("parked");
+    r.sup->start();
+    const auto wait_for = [](const std::function<bool()> &cond, int ms) {
+        for (int i = 0; i < ms / 10 && !cond(); ++i) ::usleep(10000);
+        return cond();
+    };
+    const auto measure = [&r](const char *what, double max_wakeups) {
+        ::usleep(300000);
+        const Supervisor::Stats s0 = r.sup->stats();
+        ::usleep(3000000);
+        const Supervisor::Stats s1 = r.sup->stats();
+        const double wps = static_cast<double>(s1.wakeups - s0.wakeups) / 3.0;
+        const double cpu = static_cast<double>(s1.cpu_us - s0.cpu_us) / 3000.0; /* ms of CPU per second */
+        std::printf("     %s: %.1f wake-ups/s, %.3f ms CPU/s (%.3f %%)\n", what, wps, cpu, cpu / 10.0);
+        if (std::getenv("MT_COST_DEBUG")) {
+            std::printf("%s\n", r.status().c_str());
+            for (const std::string &l : r.rec.get()) std::printf("  | %s\n", l.c_str());
+        }
+        char detail[96];
+        std::snprintf(detail, sizeof(detail), "%.1f wake-ups/s", wps);
+        check(std::string("at most ") + std::to_string(static_cast<int>(max_wakeups)) + " wake-ups/s, " + what,
+              wps <= max_wakeups, detail);
+    };
+    r.sup->launch(spec_for(a, r.fb.path, Background::None, "--static"));
+    wait_for([&] { return app_logged(a, "rec=start"); }, 3000);
+    measure("legacy app in front", 5);
+    r.sup->command("close idle");
+    wait_for([&] { return r.status().find("front=home") != std::string::npos; }, 5000);
+    r.sup->launch(spec_for(b, r.fb.path, Background::Freeze, "--static"));
+    wait_for([&] { return app_logged(b, "rec=start"); }, 3000);
+    ::usleep(150000);
+    r.sup->go_launcher();
+    check("an app hidden for the second measurement",
+          wait_for([&] { return r.state("parked") == "hidden-frozen"; }, 3000), r.status());
+    measure("one app hidden, launcher in front", 5);
+    r.sup->stop();
 }
 
 void scenario_guardian()
@@ -752,7 +827,7 @@ void scenario_guardian()
     ::waitpid(child, nullptr, 0);
     bool gone = false;
     for (int i = 0; i < 450 && !gone; ++i) {
-        gone = group_members(frozen).empty() && group_members(running).empty();
+        gone = !group_exists(frozen) && !group_exists(running);
         if (!gone) ::usleep(10000);
     }
     check("the guardian ended both within 4.5 s", gone);
@@ -771,6 +846,11 @@ int main(int argc, char **argv)
     g_fbhapp = argv[1];
     g_dir = argv[2];
     ::signal(SIGPIPE, SIG_IGN);
+    if (const char *only = std::getenv("MT_ONLY")) { /* MT_ONLY=cost: the loop cost measurement alone */
+        if (std::string(only) == "cost") scenario_loop_cost();
+        std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);
+        return g_fail ? 1 : 0;
+    }
     scenario_freeze_cycle();
     scenario_run_mode();
     scenario_draw_hidden_negative();
@@ -784,6 +864,7 @@ int main(int argc, char **argv)
     scenario_cap_and_memory();
     scenario_shutdown_no_stopped_left();
     scenario_guardian();
+    scenario_loop_cost();
     std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);
     return g_fail ? 1 : 0;
 }

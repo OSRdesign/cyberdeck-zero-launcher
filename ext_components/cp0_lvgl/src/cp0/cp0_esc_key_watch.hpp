@@ -44,6 +44,8 @@ public:
 
     bool esc_held() const;
     std::size_t count() const;
+    // The open fds (at most `max`), for a caller that poll()s them instead of reading on a timer. Returns how many.
+    std::size_t fds(int *out, std::size_t max) const;
     void close_all();
 
 private:

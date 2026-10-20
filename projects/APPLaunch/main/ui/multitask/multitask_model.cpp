@@ -178,6 +178,21 @@ std::vector<AppId> Model::live() const
     return ids;
 }
 
+std::uint64_t Model::next_deadline() const
+{
+    std::uint64_t next = 0;
+    const auto at = [&next](std::uint64_t t) {
+        if (t != 0 && (next == 0 || t < next)) next = t;
+    };
+    for (const Entry &e : entries_) {
+        if (e.state == State::Hiding) at(e.hide_deadline);
+        if (e.state != State::Closing) continue;
+        if (!e.term_sent) at(e.term_at);
+        else if (!e.kill_sent) at(e.kill_at);
+    }
+    return next;
+}
+
 int Model::resident_count() const
 {
     int n = 0;
@@ -409,7 +424,7 @@ Actions Model::launch(const AppSpec &spec, std::uint64_t now)
             pending_.kind = Pending::Kind::Launch;
             pending_.spec = spec;
             start_hide(*f, now, out);
-        } else if (f && f->state == State::Hiding) {
+        } else if (f && (f->state == State::Hiding || f->state == State::Closing)) { /* runs when it ends */
             pending_ = Pending();
             pending_.kind = Pending::Kind::Launch;
             pending_.spec = spec;
@@ -447,7 +462,7 @@ Actions Model::resume(AppId id, std::uint64_t now)
             pending_.kind = Pending::Kind::App;
             pending_.id = id;
             start_hide(*f, now, out);
-        } else if (f && f->state == State::Hiding) {
+        } else if (f && (f->state == State::Hiding || f->state == State::Closing)) { /* runs when it ends */
             pending_ = Pending();
             pending_.kind = Pending::Kind::App;
             pending_.id = id;

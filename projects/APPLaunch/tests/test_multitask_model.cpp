@@ -509,10 +509,51 @@ void test_front_exit_republish()
     });
 }
 
+void test_next_deadline()
+{
+    const char *t = "next deadline (the supervisor sleeps until it)";
+    World w;
+    expect(t, "nothing resident", std::to_string(w.m.next_deadline()), "0");
+    w.launch("A", Background::Freeze, 0);
+    w.m.spawned(w.id("A"), 100, true, 0, 0);
+    expect(t, "in front: none", std::to_string(w.m.next_deadline()), "0");
+    w.m.go_launcher(1000);
+    expect(t, "hiding: the ack deadline", std::to_string(w.m.next_deadline()), "1300");
+    w.m.ack(w.id("A"), 1, 1001);
+    expect(t, "frozen: none", std::to_string(w.m.next_deadline()), "0");
+    w.m.close(w.id("A"), 2000);
+    expect(t, "closing: SIGTERM due", std::to_string(w.m.next_deadline()), "5000");
+    w.m.tick(5000);
+    expect(t, "SIGTERM sent: SIGKILL due", std::to_string(w.m.next_deadline()), "8000");
+    w.m.tick(8000);
+    expect(t, "SIGKILL sent: none", std::to_string(w.m.next_deadline()), "0");
+}
+
+void test_launch_behind_closing_front()
+{
+    const char *t = "a launch while the app in front is closing waits for its exit";
+    World w;
+    w.launch("L", Background::None, 0);
+    w.m.spawned(w.id("L"), 100, false, 0, 0);
+    run_table(t, w, {
+        {"Esc held 3 s", [](World &w) { return w.m.force_close_front(3000); }, "Term(L)"},
+        {"tap B meanwhile: queued", [](World &w) { return w.launch("B", Background::Freeze, 3100); }, ""},
+    });
+    Actions a = w.m.exited(w.id("L"), 3200);
+    for (const Action &x : a)
+        if (x.op == Op::Spawn) {
+            w.ids["B"] = x.id;
+            w.names[x.id] = "B";
+        }
+    expect(t, "L exits: B starts", w.render(a), "AppFront(B) Spawn(B)");
+}
+
 } // namespace
 
 int main()
 {
+    test_next_deadline();
+    test_launch_behind_closing_front();
     test_background_parse();
     test_freeze_ack_and_resume();
     test_run_ack_and_resume();

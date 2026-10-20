@@ -81,6 +81,14 @@ bool Sources::esc_held() const
     return false;
 }
 
+std::size_t Sources::fds(int *out, std::size_t max) const
+{
+    std::size_t n = 0;
+    for (const Source &source : sources_)
+        if (source.fd >= 0 && n < max && out) out[n++] = source.fd;
+    return n;
+}
+
 std::size_t Sources::count() const
 {
     std::size_t n = 0;

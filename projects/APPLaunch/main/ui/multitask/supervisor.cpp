@@ -17,6 +17,7 @@
 #if defined(__linux__)
 #include <cerrno>
 #include <csignal>
+#include <ctime>
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/prctl.h>
@@ -154,12 +155,26 @@ void Supervisor::stop()
 
 void Supervisor::loop()
 {
+    stat_since_ms_ = now_ms();
     while (!stop_) {
         run_once();
         if (stop_) break;
         wait_for_work();
+        ++stat_wakeups_;
+        struct timespec ts;
+        if (::clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
+            stat_cpu_us_ = static_cast<std::uint64_t>(ts.tv_sec) * 1000000u + static_cast<std::uint64_t>(ts.tv_nsec / 1000);
     }
     shutdown_now();
+}
+
+Supervisor::Stats Supervisor::stats() const
+{
+    Stats s;
+    s.wakeups = stat_wakeups_.load();
+    s.cpu_us = stat_cpu_us_.load();
+    s.since_ms = stat_since_ms_;
+    return s;
 }
 
 void Supervisor::shutdown_now()
@@ -179,11 +194,16 @@ void Supervisor::shutdown_now()
             proc_.signal_group(it->second.pgid, SIGKILL);
         }
     }
-    for (auto &kv : runtime_)
+    for (auto &kv : runtime_) {
         if (kv.second.control_fd >= 0) {
             ::close(kv.second.control_fd);
             kv.second.control_fd = -1;
         }
+        if (kv.second.exit_fd >= 0) {
+            ::close(kv.second.exit_fd);
+            kv.second.exit_fd = -1;
+        }
+    }
     if (raw_open_) {
         keys_.close();
         raw_open_ = false;
@@ -196,16 +216,48 @@ void Supervisor::shutdown_now()
     publish_residents();
 }
 
+/* How long the loop may sleep: until the next thing that is due, not a fixed tick (deck finding 2026-10-20: a 10 ms
+ * tick cost about 5 % CPU on the Pi Zero 2 W with an app in front). Everything else wakes it through poll(): requests
+ * (the wake pipe), the dev FIFO, control sockets, the keyboards, the leaders' pidfds. */
+int Supervisor::next_timeout_ms()
+{
+    const std::uint64_t now = now_ms();
+    if (model_.live().empty() && !raw_open_ && !session_.active) return 500;
+    std::uint64_t next = now + 2000; /* safety: never sleep longer while an app is resident */
+    const auto at = [&next](std::uint64_t t) {
+        if (t != 0 && t < next) next = t;
+    };
+    at(model_.next_deadline());
+    if (raw_open_) {
+        at(now + 1000); /* keyboards that appear (a Bluetooth keyboard waking up) are attached within 1 s */
+        if (esc_down_ && esc_press_ms_ != 0 && model_.front() != kNoApp && !esc_fired_)
+            at(esc_press_ms_ + (esc_hint_ ? cp0_esc_exit_policy::TERMINATE_DELAY_MS : cp0_esc_exit_policy::HINT_DELAY_MS));
+    }
+    if (next_mem_ms_ != 0) at(next_mem_ms_);
+    for (const auto &kv : runtime_) {
+        const Runtime &rt = kv.second;
+        if (rt.show_waiting) at(rt.show_sent_ms + config_.show_ack_log_ms);
+        if (rt.leader_gone) at(now + 100);          /* helpers left in the group: check them */
+        else if (rt.exit_fd < 0) at(now + 250);     /* no pidfd: look for the exit now and then */
+    }
+    return next > now ? static_cast<int>(next - now) : 0;
+}
+
 void Supervisor::wait_for_work()
 {
     std::vector<struct pollfd> fds;
     if (wake_fd_[0] >= 0) fds.push_back({wake_fd_[0], POLLIN, 0});
     if (fifo_fd_ >= 0) fds.push_back({fifo_fd_, POLLIN, 0});
-    for (const auto &kv : runtime_)
+    for (const auto &kv : runtime_) {
         if (kv.second.control_fd >= 0) fds.push_back({kv.second.control_fd, POLLIN, 0});
-    /* nothing resident and no key session: requests and FIFO commands wake the loop; no 10 ms ticking */
-    const bool idle = model_.live().empty() && !raw_open_ && !session_.active;
-    (void)::poll(fds.data(), static_cast<nfds_t>(fds.size()), idle ? 500 : config_.tick_ms);
+        if (kv.second.exit_fd >= 0) fds.push_back({kv.second.exit_fd, POLLIN, 0});
+    }
+    if (raw_open_) {
+        std::vector<int> key_fds;
+        keys_.fds(key_fds);
+        for (const int fd : key_fds) fds.push_back({fd, POLLIN, 0});
+    }
+    (void)::poll(fds.data(), static_cast<nfds_t>(fds.size()), next_timeout_ms());
     if (wake_fd_[0] >= 0) {
         char buf[64];
         while (::read(wake_fd_[0], buf, sizeof(buf)) > 0) {
@@ -328,16 +380,22 @@ void Supervisor::run_once()
         next_mem_ms_ = now + config_.mem_poll_ms;
     } else if (now >= next_mem_ms_) {
         next_mem_ms_ = now + config_.mem_poll_ms;
+        const long before = model_.last_memory_kb();
         execute(model_.memory(proc_.mem_available_kb(), now));
+        if (model_.last_memory_kb() != before) dirty_ = true;
     }
     poll_fifo();
-    write_status();
-    publish_residents();
+    if (dirty_) { /* only after something happened: not on every wake-up */
+        dirty_ = false;
+        write_status();
+        publish_residents();
+    }
 }
 
 void Supervisor::handle(const Request &r)
 {
     const std::uint64_t now = now_ms();
+    dirty_ = true;
     switch (r.kind) {
     case Request::Kind::Launch: {
         log("launch " + r.spec.name + " (" + background_name(r.spec.background) + ")");
@@ -361,6 +419,7 @@ void Supervisor::handle(const Request &r)
 
 void Supervisor::execute(Actions actions)
 {
+    if (!actions.empty()) dirty_ = true;
     std::deque<Action> work(actions.begin(), actions.end());
     while (!work.empty()) {
         const Action a = work.front();
@@ -426,6 +485,7 @@ void Supervisor::execute_one(const Action &a, std::deque<Action> &more)
         r.name = entry->spec.name;
         r.pgid = s.pgid;
         r.control_fd = s.control_fd;
+        r.exit_fd = s.exit_fd;
         r.guardian_slot = guardian_.set(-1, s.pgid);
         runtime_[a.id] = std::move(r);
         log("spawn " + entry->spec.name + " pid=" + std::to_string(s.pid) + " pgid=" + std::to_string(s.pgid) +
@@ -532,6 +592,7 @@ void Supervisor::forget(AppId id)
     auto it = runtime_.find(id);
     if (it == runtime_.end()) return;
     if (it->second.control_fd >= 0) ::close(it->second.control_fd);
+    if (it->second.exit_fd >= 0) ::close(it->second.exit_fd);
     if (it->second.guardian_slot >= 0) guardian_.set(it->second.guardian_slot, 0);
     runtime_.erase(it);
 }
@@ -592,7 +653,16 @@ void Supervisor::poll_reaping(std::uint64_t now)
     for (const AppId id : model_.live()) {
         auto it = runtime_.find(id);
         if (it == runtime_.end()) continue;
-        if (!proc_.reap(it->second.pgid)) continue;
+        Runtime &rt = it->second;
+        if (rt.exit_fd >= 0) { /* readable once the leader exited; then it stays readable: close it */
+            struct pollfd p = {rt.exit_fd, POLLIN, 0};
+            if (::poll(&p, 1, 0) == 1) {
+                ::close(rt.exit_fd);
+                rt.exit_fd = -1;
+                rt.leader_gone = true;
+            }
+        }
+        if (!proc_.reap(rt.pgid)) continue;
         log(it->second.name + ": process group " + std::to_string(it->second.pgid) + " gone");
         execute(model_.exited(id, now));
         forget(id);
@@ -672,9 +742,19 @@ std::string Supervisor::session_text() const
     return text;
 }
 
+std::string Supervisor::session_selection() const
+{
+    if (session_.selected < 0 || session_.selected >= static_cast<int>(session_.cycle.size())) return "-";
+    const AppId id = session_.cycle[static_cast<std::size_t>(session_.selected)];
+    if (id == kNoApp) return "Home";
+    const Entry *e = model_.find(id);
+    return e ? e->spec.name : std::string("(gone)");
+}
+
 void Supervisor::switch_event(SwitchEvent event, bool raw)
 {
     const std::uint64_t now = now_ms();
+    dirty_ = true;
     if (event == SwitchEvent::Home) {
         if (session_.active) return;
         if (model_.front() != kNoApp) {
@@ -708,6 +788,7 @@ void Supervisor::switch_event(SwitchEvent event, bool raw)
         if (front != kNoApp) execute(model_.go_launcher(now));
         const std::string text = session_text();
         log("session " + std::string(raw ? "(evdev) " : "(launcher) ") + text);
+        log("session: select " + session_selection()); /* one line per Tab / Shift+Tab, the first included */
         ui_.overlay(text);
         return;
     }
@@ -717,10 +798,14 @@ void Supervisor::switch_event(SwitchEvent event, bool raw)
     case SwitchEvent::Next:
     case SwitchEvent::Prev:
         if (n > 0) session_.selected = (session_.selected + (event == SwitchEvent::Next ? 1 : n - 1)) % n;
+        log("session: select " + session_selection());
         ui_.overlay(session_text());
         break;
     case SwitchEvent::Commit: end_session(n > 0 ? session_.cycle[static_cast<std::size_t>(session_.selected)] : kNoApp); break;
-    case SwitchEvent::Cancel: end_session(session_.origin); break;
+    case SwitchEvent::Cancel:
+        log("session: cancelled");
+        end_session(session_.origin);
+        break;
     default: break;
     }
 }
@@ -858,6 +943,7 @@ void Supervisor::command(const std::string &) {}
 bool Supervisor::is_resident_key(const std::string &) const { return false; }
 std::string Supervisor::status_text() const { return std::string(); }
 void Supervisor::set_log_sink(LogSink) {}
+Supervisor::Stats Supervisor::stats() const { return Stats(); }
 void Supervisor::run_once() {}
 
 #endif

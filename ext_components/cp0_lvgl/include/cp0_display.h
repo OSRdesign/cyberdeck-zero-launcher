@@ -101,7 +101,8 @@ void cp0_display_set_mode(cp0_display_mode_t mode);
  *    both displays' screens and layers are invalidated so the next refresh repaints everything.
  *  - snapshot / restore (any thread): one framebuffer page (line length x height bytes, see page_bytes) copied
  *    from the page shown now / written back to the page given (and panned to it), under the same lock. Restore
- *    returns 0 when the page reads back identical, 1 when it differs (someone wrote meanwhile), -1 on error.
+ *    returns 0 when the page reads back identical (9 sample rows: reading the framebuffer is slow), 1 when it
+ *    differs (someone wrote meanwhile), -1 on error.
  *  - touch grab (any thread): EVIOCGRAB on the launcher's own touch file descriptor (it keeps reading it; nobody
  *    else gets the touches). 0 = done or already in that state, -1 = no touch device or the ioctl failed. */
 void cp0_display_suspend(void);

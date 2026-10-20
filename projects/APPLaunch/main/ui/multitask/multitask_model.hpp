@@ -190,6 +190,9 @@ public:
     bool needs_memory_poll() const { return hidden_count() > 0; }
     bool key_session_active() const { return raw_session_; }
     long last_memory_kb() const { return last_memory_kb_; }
+    /* The earliest time tick() has something to do (a hide deadline, a SIGTERM or SIGKILL due), 0 = none: the
+     * supervisor sleeps until then instead of ticking. */
+    std::uint64_t next_deadline() const;
 
 private:
     struct Pending {

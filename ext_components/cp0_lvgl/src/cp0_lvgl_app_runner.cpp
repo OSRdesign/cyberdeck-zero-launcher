@@ -14,6 +14,7 @@
 #include "cp0_runner_shutdown.hpp"
 #include "hal_lvgl_bsp.h"
 
+#include <atomic>
 #include <cerrno>
 #include <cstdio>
 #include <mutex>
@@ -26,6 +27,7 @@ sem_t lvgl_sem;
 std::mutex runner_mutex;
 cp0::RunnerLifetime runner_lifetime;
 bool semaphore_ready = false;
+std::atomic<void (*)()> loop_hook{nullptr};
 
 void post_lvgl_semaphore()
 {
@@ -109,6 +111,11 @@ void cp0_lvgl_wake()
     post_lvgl_semaphore();
 }
 
+void cp0_lvgl_set_loop_hook(void (*hook)())
+{
+    loop_hook.store(hook);
+}
+
 int cp0_lvgl_run(Cp0LvglRunOptions options)
 {
     {
@@ -178,6 +185,7 @@ int cp0_lvgl_run(Cp0LvglRunOptions options)
         lv_refr_now(nullptr);
 
         while (!options.should_quit || !options.should_quit()) {
+            if (void (*hook)() = loop_hook.load()) hook();
             uint32_t milliseconds = lv_timer_handler();
             if (options.should_quit && options.should_quit())
                 break;

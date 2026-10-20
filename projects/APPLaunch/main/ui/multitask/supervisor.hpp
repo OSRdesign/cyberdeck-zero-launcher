@@ -5,9 +5,10 @@
  * blocking runner loop for the apps started under APPLAUNCH_MULTITASK=1 and runs on its own thread, so the launcher's
  * UI thread is never blocked by an app:
  *   - requests from the UI thread (launch, resume, home, close, close all, Alt+Tab events) are queued;
- *   - every tick (10 ms): control sockets (ack, home, switcher), reaping, the keyboards from evdev while an app is in
- *     front (Esc held 3 s, Alt+Tab, Super), deadlines, MemAvailable every 2 s while an app is hidden, the dev
- *     control FIFO, the status file;
+ *   - it sleeps in poll() on what can happen (requests, control sockets with ack / home / switcher, the leaders'
+ *     pidfds, the keyboards from evdev while an app is in front: Esc held 3 s, Alt+Tab, Super, the dev control
+ *     FIFO) and wakes on its own only for what is due (deadlines, the Esc hold, MemAvailable every 2 s while an app
+ *     is hidden, keyboards re-attached once a second): no fixed tick (deck finding 2026-10-20);
  *   - the pure multitask::Model decides; the actions it returns are carried out through ports, so the same code runs
  *     in the launcher (framebuffer and input of cp0_lvgl, its keyboard thread) and in the host tests (a file-backed
  *     framebuffer, FIFOs as keyboards, a fake app).
@@ -39,6 +40,7 @@ struct SpawnResult {
     int pgid = 0;
     int control_fd = -1; /* the launcher's end of the socketpair, or -1 */
     int oom_base = 0;    /* the app's oom_score_adj at start (inherited from the launcher) */
+    int exit_fd = -1;    /* a pidfd of the group's leader: readable once it exited (-1: not supported) */
 };
 
 class ProcessPort {
@@ -94,6 +96,8 @@ public:
     /* Reads what is pending: every key to `listener`; returns the new "Esc held" state (0 / 1) or -1 unchanged. */
     virtual int poll(Listener listener, void *context) = 0;
     virtual void esc_state(int held) = 0; /* publish Esc held / released (cp0_esc_state) */
+    /* The open keyboard fds: the loop sleeps in poll() on them instead of reading on a timer. */
+    virtual void fds(std::vector<int> &out) = 0;
 };
 
 class UiPort {
@@ -140,7 +144,6 @@ struct SupervisorConfig {
     bool use_drain = true;
     std::string status_path;       /* debug status file, "" = none */
     std::string control_fifo;      /* dev control FIFO, "" = none */
-    int tick_ms = 10;
     std::uint32_t mem_poll_ms = 2000;
     std::uint32_t show_ack_log_ms = 1000;
     int stop_wait_ms = 3000;       /* stop(): SIGTERM -> SIGKILL */
@@ -178,6 +181,13 @@ public:
 
     /* ---- any thread ---- */
     int resident_count() const { return residents_.load(); }
+    /* The loop's cost since start(): wake-ups and CPU time of its thread (task 015 deck findings). */
+    struct Stats {
+        std::uint64_t wakeups = 0;
+        std::uint64_t cpu_us = 0;
+        std::uint64_t since_ms = 0;
+    };
+    Stats stats() const;
     bool is_resident_key(const std::string &key) const;
     std::string status_text() const;
     void set_log_sink(LogSink sink);
@@ -193,6 +203,8 @@ private:
         int pgid = 0;
         int guardian_slot = -1;
         int control_fd = -1;
+        int exit_fd = -1;          /* the leader's pidfd, closed once it fired */
+        bool leader_gone = false;  /* the leader exited, helpers may remain: checked every 100 ms */
         std::vector<std::uint8_t> snapshot;
         int page_y = 0;
         std::uint64_t hide_sent_ms = 0;
@@ -231,6 +243,7 @@ private:
     void switch_event(SwitchEvent event, bool raw);
     void end_session(AppId target);
     std::string session_text() const;
+    std::string session_selection() const;
     void handle_command(const std::string &line);
     AppId lookup(const std::string &what) const;
     void write_status();
@@ -248,6 +261,8 @@ private:
     std::map<AppId, Runtime> runtime_;
     SwitchKeys raw_keys_;
     bool raw_open_ = false;
+    bool dirty_ = true; /* the status file and the resident list need writing */
+    int next_timeout_ms();
     Session session_;
     std::vector<SwitchEvent> raw_events_;
     bool esc_down_ = false;
@@ -268,6 +283,9 @@ private:
     LogSink log_sink_;
     std::atomic<int> residents_{0};
     std::atomic<bool> stop_{false};
+    std::atomic<std::uint64_t> stat_wakeups_{0};
+    std::atomic<std::uint64_t> stat_cpu_us_{0};
+    std::uint64_t stat_since_ms_ = 0;
     int wake_fd_[2] = {-1, -1};
     std::thread thread_;
     bool stopped_ = false;

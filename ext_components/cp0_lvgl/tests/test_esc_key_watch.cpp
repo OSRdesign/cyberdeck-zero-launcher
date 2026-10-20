@@ -201,6 +201,9 @@ void test_key_listener()
     key(writer, KEY_LEFTALT, 0);
     assert(sources.poll(listen, &seen) == -1); // no Esc change
     assert(seen.log == "56:1 15:1 15:0 56:0 ");
+    int fds[4] = {-1, -1, -1, -1};
+    assert(sources.fds(fds, 4) == 1 && fds[0] >= 0); // pollable instead of a timer
+    assert(sources.fds(fds, 0) == 0);
     seen.log.clear();
     key(writer, KEY_ESC, 1);
     assert(sources.poll(listen, &seen) == 1);

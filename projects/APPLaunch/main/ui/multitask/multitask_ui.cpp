@@ -6,6 +6,7 @@
 #include "multitask_ui.hpp"
 
 #include "display_handoff.hpp"
+#include "notice_queue.hpp"
 #include "supervisor.hpp"
 
 #include "cp0_display.h"
@@ -76,7 +77,7 @@ public:
 };
 
 /* The keyboards the external app runner's Esc watcher reads: the explicit device and every keyboard the presence
- * watcher lists, re-attached every 500 ms or when the list changes (a Bluetooth keyboard waking up). */
+ * watcher lists, re-attached every second or when the list changes (a Bluetooth keyboard waking up). */
 class LauncherKeys : public multitask::KeyPort {
 public:
     void open() override
@@ -102,6 +103,11 @@ public:
         return sources_.poll(listener, context);
     }
     void esc_state(int held) override { cp0_esc_state_write(held); }
+    void fds(std::vector<int> &out) override
+    {
+        int f[cp0_esc_key_watch::Sources::kMax];
+        out.assign(f, f + sources_.fds(f, cp0_esc_key_watch::Sources::kMax));
+    }
 
 private:
     void attach()
@@ -115,7 +121,7 @@ private:
             seen_ = cp0_kbd_presence_watcher_snapshot(presence_, &list);
             for (unsigned i = 0; i < list.count; ++i) sources_.open(list.devices[i].path);
         }
-        next_attach_ = multitask::Supervisor::now_ms() + 500;
+        next_attach_ = multitask::Supervisor::now_ms() + 1000; /* the supervisor wakes at least once a second */
     }
 
     cp0_esc_key_watch::Sources sources_;
@@ -135,13 +141,16 @@ std::mutex s_events_mutex;
 std::deque<UiEvent> s_events;
 std::atomic<int> s_residents{0};
 
+std::atomic<bool> s_pending{false}; /* the supervisor posted events: the main-loop hook takes them */
+
 void post(UiEvent event)
 {
     {
         std::lock_guard<std::mutex> lock(s_events_mutex);
         s_events.push_back(std::move(event));
     }
-    cp0_lvgl_wake();
+    s_pending.store(true);
+    cp0_lvgl_wake(); /* the main loop turns and its hook takes the event at once */
 }
 
 class LauncherUi : public multitask::UiPort {
@@ -173,6 +182,8 @@ lv_timer_t *s_bridge = nullptr;
 bool s_app_front = false;
 bool s_overlay = false;        /* the Alt+Tab text is on the panel */
 std::string s_overlay_text;    /* the Alt+Tab text wanted ("" = none); shown once the launcher is in front */
+std::string s_overlay_shown;   /* the text last put on the toast for it */
+multitask::NoticeQueue s_notices;
 cp0_keyboard_key_filter_t s_prev_filter = nullptr;
 multitask::SwitchKeys s_filter_keys;
 
@@ -183,28 +194,52 @@ std::unique_ptr<LauncherUi> s_ui;
 std::unique_ptr<multitask::LinuxProcessPort> s_proc;
 std::unique_ptr<multitask::Supervisor> s_sup;
 
-/* The P-b stand-in for the switcher: one line of text in the existing toast while an Alt+Tab session runs, touch
- * ignored meanwhile. A session started inside an app asks for the text before the app is hidden: it appears when the
- * launcher is in front. */
-void apply_overlay()
+/* The toast carries two things: the P-b stand-in for the switcher (one line of text while an Alt+Tab session runs,
+ * touch ignored meanwhile; a session started inside an app asks for it before the app is hidden: it appears when the
+ * launcher is in front) and the supervisor's notices, one at a time, each readable (NoticeQueue). */
+void refresh_toast()
 {
-    if (s_app_front) return;
-    if (s_overlay_text.empty()) {
-        if (s_overlay) {
-            launcher_toast().hide();
-            cp0_display_set_touch_swallow(2); /* until the finger in contact, if any, is lifted */
+    const bool overlay_wanted = !s_app_front && !s_overlay_text.empty();
+    const multitask::NoticeQueue::Step step =
+        s_notices.tick(multitask::Supervisor::now_ms(), !s_app_front && !overlay_wanted);
+    if (overlay_wanted) {
+        if (!s_overlay || s_overlay_shown != s_overlay_text) {
+            launcher_toast().show_persistent(s_overlay_text.c_str());
+            s_overlay_shown = s_overlay_text;
         }
-        s_overlay = false;
+        s_overlay = true;
+        cp0_display_set_touch_swallow(1);
         return;
     }
-    launcher_toast().show_persistent(s_overlay_text.c_str());
-    s_overlay = true;
-    cp0_display_set_touch_swallow(1);
+    if (s_overlay) {
+        launcher_toast().hide();
+        if (!s_app_front) cp0_display_set_touch_swallow(2); /* until the finger in contact, if any, is lifted */
+        s_overlay = false;
+        s_overlay_shown.clear();
+    }
+    if (step.kind == multitask::NoticeQueue::Step::Kind::Show) launcher_toast().show_persistent(step.text.c_str());
+    else if (step.kind == multitask::NoticeQueue::Step::Kind::Hide) launcher_toast().hide();
 }
 
-/* LVGL thread, every 20 ms (the one timer that runs while an app is in front) */
-void bridge_cb(lv_timer_t *)
+/* The bridge timer is only the fallback now: events arrive through the main-loop hook at once. Fast while notices
+ * are on the toast (their timing), slow otherwise, very slow while an app is in front (deck finding 2026-10-20: a
+ * 20 ms timer kept the launcher's loop turning 50 times a second behind the app). */
+uint32_t s_bridge_period = 1000;
+
+void tune_bridge()
 {
+    if (!s_bridge) return;
+    const uint32_t period = s_app_front ? 2000 : s_notices.active() ? 100 : 1000;
+    if (period == s_bridge_period) return;
+    s_bridge_period = period;
+    lv_timer_set_period(s_bridge, period);
+}
+
+
+/* LVGL thread: the supervisor's UI events, then the toast. */
+void process_events()
+{
+    s_pending.store(false);
     std::deque<UiEvent> batch;
     {
         std::lock_guard<std::mutex> lock(s_events_mutex);
@@ -213,18 +248,14 @@ void bridge_cb(lv_timer_t *)
     for (const UiEvent &e : batch) {
         switch (e.kind) {
         case UiEvent::Kind::AppFront:
-            if (s_overlay) {
-                launcher_toast().hide();
-                s_overlay = false;
-            }
             s_app_front = true;
+            refresh_toast(); /* hides what the toast shows; a notice not read yet comes back later */
             if (s_hooks.app_front) s_hooks.app_front();
             break;
         case UiEvent::Kind::LauncherFront:
             /* also after a refused launch: undoes what the launch prepared (loading overlay, input group) */
             s_app_front = false;
             if (s_hooks.launcher_front) s_hooks.launcher_front(e.flag);
-            apply_overlay();
             break;
         case UiEvent::Kind::Repaint:
             if (!s_app_front) {
@@ -233,14 +264,26 @@ void bridge_cb(lv_timer_t *)
             }
             break;
         case UiEvent::Kind::Notice:
-            if (!s_app_front && !s_overlay) launcher_toast().show(e.text.c_str());
+            s_notices.push(e.text);
             break;
         case UiEvent::Kind::Overlay:
             s_overlay_text = e.text;
-            apply_overlay();
             break;
         }
     }
+    refresh_toast();
+    tune_bridge();
+}
+
+/* every turn of the LVGL main loop (cp0_lvgl_set_loop_hook): cheap unless the supervisor posted something */
+void loop_hook()
+{
+    if (s_pending.load()) process_events();
+}
+
+void bridge_cb(lv_timer_t *)
+{
+    process_events();
 }
 
 /* LVGL thread, launcher in front: Alt+Tab is consumed (and handed to the supervisor) only while an app is resident */
@@ -311,7 +354,8 @@ bool start(Hooks hooks)
     s_proc.reset(new multitask::LinuxProcessPort(&exec_child));
     s_sup.reset(new multitask::Supervisor(cfg, *s_proc, *s_fb, *s_input, *s_keys, *s_ui));
 
-    s_bridge = lv_timer_create(bridge_cb, 20, nullptr);
+    s_bridge = lv_timer_create(bridge_cb, 1000, nullptr); /* the fallback; events come through the loop hook */
+    cp0_lvgl_set_loop_hook(&loop_hook);
     s_prev_filter = cp0_keyboard_get_key_filter();
     cp0_keyboard_set_key_filter(key_filter);
     bool started = false;
@@ -334,6 +378,7 @@ bool start(Hooks hooks)
 void stop()
 {
     if (s_sup) s_sup->stop();
+    cp0_lvgl_set_loop_hook(nullptr);
     if (cp0_keyboard_get_key_filter() == key_filter) cp0_keyboard_set_key_filter(s_prev_filter);
     s_prev_filter = nullptr;
     if (s_bridge) {

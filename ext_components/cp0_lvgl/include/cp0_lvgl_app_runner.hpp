@@ -31,6 +31,10 @@ struct Cp0LvglAppHooks
 
 int cp0_lvgl_run(Cp0LvglRunOptions options = {});
 void cp0_lvgl_wake();
+/* A function called on the LVGL thread at every turn of cp0_lvgl_run()'s main loop, before lv_timer_handler();
+ * cp0_lvgl_wake() from any thread makes the loop turn. Lets another thread hand work to the LVGL thread at once
+ * without a fast polling timer (the launcher's multitasking bridge). It must be cheap. nullptr removes it. */
+void cp0_lvgl_set_loop_hook(void (*hook)());
 
 template <class PageT>
 int cp0_lvgl_run_app(Cp0LvglAppHooks hooks = {})

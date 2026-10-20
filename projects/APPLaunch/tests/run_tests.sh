@@ -76,6 +76,12 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
     "$test_root/../main/ui/multitask/lifecycle_protocol.cpp" \
     -o "$build_dir/test_lifecycle_protocol"
 "$build_dir/test_lifecycle_protocol"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_notice_queue.cpp" \
+    "$test_root/../main/ui/multitask/notice_queue.cpp" \
+    -o "$build_dir/test_notice_queue"
+"$build_dir/test_notice_queue"
 # ... and the host process tests: the real supervisor runs the spike's fake app on a file-backed framebuffer (~40 s)
 sh "$test_root/multitask/run_supervisor_host.sh"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \

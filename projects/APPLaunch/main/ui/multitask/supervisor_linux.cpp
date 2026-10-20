@@ -100,10 +100,50 @@ void count_events(DrainStats &st, const unsigned char *buf, size_t bytes, bool &
 
 } // namespace
 
+namespace {
+
+/* Children of every thread of `pid` (/proc/<pid>/task/<tid>/children, CONFIG_PROC_CHILDREN), appended to `out`;
+ * false when the kernel does not have those files. */
+bool read_children(int pid, std::vector<int> &out)
+{
+    const std::string dir = "/proc/" + std::to_string(pid) + "/task";
+    DIR *d = ::opendir(dir.c_str());
+    if (!d) return false;
+    bool have_file = false;
+    while (struct dirent *e = ::readdir(d)) {
+        if (!is_number(e->d_name)) continue;
+        FILE *f = std::fopen((dir + "/" + e->d_name + "/children").c_str(), "r");
+        if (!f) continue;
+        have_file = true;
+        int child = 0;
+        while (std::fscanf(f, "%d", &child) == 1) out.push_back(child);
+        std::fclose(f);
+    }
+    ::closedir(d);
+    return have_file;
+}
+
+} // namespace
+
 std::vector<int> group_members(int pgid)
 {
     std::vector<int> pids;
     if (pgid <= 0) return pids;
+    /* Every app is a descendant of the launcher (orphans come back to it, the subreaper): walking its descendants
+     * reads a few /proc files instead of the stat of every process (about 125 on the deck, several ms on the
+     * Pi Zero 2 W: deck finding 2026-10-20, drain_ms 7-10). Kernels without the children files: the full scan. */
+    std::vector<int> stack;
+    if (read_children(static_cast<int>(::getpid()), stack)) {
+        for (std::size_t guard = 0; !stack.empty() && guard < 4096; ++guard) {
+            const int pid = stack.back();
+            stack.pop_back();
+            char state = 0;
+            int pgrp = 0;
+            if (read_stat(pid, state, pgrp) && pgrp == pgid) pids.push_back(pid);
+            (void)read_children(pid, stack);
+        }
+        return pids;
+    }
     DIR *d = ::opendir("/proc");
     if (!d) return pids;
     while (struct dirent *e = ::readdir(d)) {
@@ -224,6 +264,9 @@ SpawnResult LinuxProcessPort::spawn(const AppSpec &spec, bool with_control)
     result.pgid = pid;
     result.control_fd = sv[0];
     result.oom_base = base;
+    /* readable when the leader exits: the supervisor sleeps in poll() instead of checking every 10 ms (always
+     * close-on-exec; -1 on kernels before 5.3, then it checks every 250 ms) */
+    result.exit_fd = static_cast<int>(::syscall(SYS_pidfd_open, pid, 0));
     return result;
 }
 
