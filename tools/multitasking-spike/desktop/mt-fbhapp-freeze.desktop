@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=MT Freeze
+Exec=/usr/share/APPLaunch/bin/mt-fbhapp --tag freeze --log /tmp/mt-fbhapp-freeze.log
+Terminal=false
+X-Fullscreen=true
+X-Background=freeze

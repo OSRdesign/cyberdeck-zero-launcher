@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=MT Run
+Exec=/usr/share/APPLaunch/bin/mt-fbhapp --tag run --log /tmp/mt-fbhapp-run.log
+Terminal=false
+X-Fullscreen=true
+X-Background=run
