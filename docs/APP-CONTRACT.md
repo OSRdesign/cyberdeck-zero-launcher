@@ -326,7 +326,7 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
 | launcher -> app | `close <n>` | save and quit. `SIGTERM` follows 3 s later, `SIGKILL` 3 s after that |
 | app -> launcher | `ack <n>` | `hide` or `show` done |
 | app -> launcher | `home` | leave to the launcher (an app's own "minimise" control). Esc at the app's root still **quits** (decision D5) |
-| app -> launcher | `switcher` | open the switcher (multitasking P-d; until then the same as `home`) |
+| app -> launcher | `switcher` | open the switcher: the app is hidden as for `home`, then the launcher shows its switcher screen (on screens under 640x480: the same as `home`) |
 
 ### Obligations
 
@@ -351,7 +351,10 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
 ### Gestures (draft, multitasking phase P-c)
 
 - **Three fingers held still for 1 s anywhere** (G1) and **a long-press on the status strip** (G2) open the
-  switcher; until it exists (phase P-d) they hide the app in front, as Super does (a legacy app stays). While an app
+  switcher (phase P-d): the app in front is hidden (`hide`), as Super does. An app without `X-Background` is frozen
+  instead (`SIGSTOP` of its group) behind a "Close <app>?" sheet: Keep continues it as a `show` would (last frame put
+  back, input queues emptied first; no message, it has no socket), Close ends it as Esc held 3 s does (after a
+  `SIGCONT`). On screens under 640x480 the gestures hide a lifecycle app and leave others alone. While an app
   is in front the launcher reads the touch screen **passively** (a second file descriptor, never `EVIOCGRAB`): the app
   still gets every touch, including the three fingers. When G1 fires the fingers are still down: `hide` arrives in
   the middle of a press; cancel it (no click) as the `hide` obligation says, and ignore the touches until `show`.

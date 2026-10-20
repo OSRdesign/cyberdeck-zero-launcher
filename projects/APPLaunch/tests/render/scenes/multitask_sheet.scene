@@ -1,0 +1,29 @@
+# Multitasking P-d (task 015-pd): the legacy app sheet (study 6.2, D12) after a three-finger hold in an app that cannot
+# stay in the background. The screen shown before (the Calculator here) stands for the app's last frame: the launcher
+# keeps it (snapshot), writes it back dimmed to 38 % (cp0_display_fb_backdrop) and draws only the sheet's box over it
+# (the native clip). The "sheet" command checks every pixel: outside the box the dimmed frame, inside the sheet.
+# Checked too: Keep and Close at least 7 mm, Keep and Close by touch (Close at the corner of its target), Esc = Keep.
+title multitask legacy sheet
+sizes 640x480 800x480 720x720 1280x720 1024x600
+@1024x600 ppmm 660
+apps Settings Store CLI SSH Calculator viz1090=tank_100.png
+clock 20:30
+wifi 70
+bt on
+home
+launch Calculator
+sheet viz1090
+shot sheet_viz1090
+expect_targets
+tapitem keep
+expect_event keep
+tapitem sheetclose edge
+expect_event sheet-close
+key ESC
+expect_event keep
+key BACKSPACE
+expect_event keep
+sheet off
+sheet Spectrum Analyzer for the Software Defined Radio
+shot sheet_long_name
+sheet off

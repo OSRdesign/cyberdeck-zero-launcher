@@ -586,7 +586,9 @@ private:
 
 /* ------------------------------------------------------------------ dialog (task 014 P3b) */
 
-enum class ButtonRole { Normal, Primary, Cancel };
+/* Destructive (multitasking P-d): drawn as Normal with its label in red (#FF8A8E): an action that ends something
+ * (the legacy sheet's Close); no key presses it. */
+enum class ButtonRole { Normal, Primary, Cancel, Destructive };
 
 struct DialogButton {
     std::string text;

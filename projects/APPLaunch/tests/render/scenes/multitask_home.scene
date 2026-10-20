@@ -1,0 +1,28 @@
+# Multitasking P-d (task 015-pd): the home grid with the apps left open marked (a green dot with a ring of the tile's
+# colour at the tile's top right, mockup) and the one-time hint on the toast (D15; "Alt+Tab switches apps" without a
+# three-finger touch screen). The dots are hidden again when the apps close: the grid is then pixel-identical to the
+# grid before (no trace). The reference is taken after a selection round trip (the first frames of the grid and the
+# ones after a key differ in a few anti-aliased edge pixels, with or without dots).
+title multitask home dots
+sizes 640x480 800x480 720x720 1280x720 1024x600
+@1024x600 ppmm 660
+apps "Mesh Hop=ip_panel_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png" "RSS Reader=store_100.png" Settings CLI
+clock 20:30
+wifi 70
+bt on
+home
+key RIGHT
+key LEFT
+shot home_plain
+dots "Mesh Hop" "Serial Console"
+toast Hold three fingers to switch apps
+shot home_dots_hint
+toast off
+key RIGHT
+shot home_dots_selected
+key LEFT
+dots
+expect_same home_plain
+toast Alt+Tab switches apps
+shot home_hint_keyboard
+toast off

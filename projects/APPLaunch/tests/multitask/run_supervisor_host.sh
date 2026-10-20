@@ -33,7 +33,7 @@ ${CXX:-g++} -std=c++17 -O1 -g -Wall -Wextra -Werror -pthread $san \
     -I"$ui" -I"$cp0/include" -I"$cp0/src/cp0" \
     "$here/test_supervisor_host.cpp" \
     "$ui/multitask/supervisor.cpp" "$ui/multitask/supervisor_linux.cpp" "$ui/multitask/multitask_model.cpp" \
-    "$ui/multitask/switch_keys.cpp" "$ui/multitask/lifecycle_protocol.cpp" \
+    "$ui/multitask/switch_keys.cpp" "$ui/multitask/lifecycle_protocol.cpp" "$ui/multitask/switcher_model.cpp" \
     "$cp0/src/cp0/cp0_esc_key_watch.cpp" \
     "$build/cp0_touch_slots.o" "$build/cp0_gesture_g1.o" "$build/cp0_touch_reader.o" -lm \
     -o "$build/test_supervisor_host"

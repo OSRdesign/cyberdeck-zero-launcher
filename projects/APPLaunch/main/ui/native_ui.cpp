@@ -65,6 +65,9 @@ lv_obj_t *s_chrome = nullptr;   // toolbar screen shown in compat mode (native d
 lv_obj_t *s_idle = nullptr;     // empty screen parked on the compat display while at home
 std::vector<lv_obj_t *> s_tiles;
 int s_selected = 0;
+// Multitasking P-d: the tiles' "left open" dots (made the first time a tile needs one) and the apps they mark
+std::vector<lv_obj_t *> s_dots;
+std::vector<std::string> s_resident_keys;
 
 // Geometry of the native screens, from the layout service (cp0_ui_metrics.h) for the native display. The
 // 640x480 deck and the 480x320 Pi 3A+ are pinned presets: the values the UI always had (they must not
@@ -293,6 +296,47 @@ void build_tile(int index, const app &item)
     lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -l.label_bottom);
 
     s_tiles.push_back(tile);
+    s_dots.push_back(nullptr);
+}
+
+// Multitasking P-d: a green dot at the tile's top right for an app left open (mockup: 16 px with a 3 px ring of the
+// tile's colour, 12 px inside the tile's border on the deck; 1.4 mm and 1.1 mm elsewhere). Tiles without one have no
+// object at all.
+constexpr uint32_t kResidentDot = 0x35C25A;
+constexpr int kResidentRing = 3;
+
+void apply_resident_dots()
+{
+    if (!s_launch) return;
+    const Layout &l = layout();
+    const cp0_ui_metrics_t &m = *cp0_ui_metrics_get();
+    for (std::size_t i = 0; i < s_tiles.size() && i < s_dots.size(); ++i) {
+        const app *item = s_launch->app_at(i);
+        const bool open = item && !item->Exec.empty() &&
+                          std::find(s_resident_keys.begin(), s_resident_keys.end(), item->Exec) != s_resident_keys.end();
+        lv_obj_t *&dot = s_dots[i];
+        if (!open) {
+            if (dot) lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        if (!dot) {
+            const int size = cp0_ui_mm_px(m.ppmm_x100, 14, 10) + 2 * kResidentRing;
+            const int inset = l.tile_border + cp0_ui_mm_px(m.ppmm_x100, 11, 6) - kResidentRing;
+            dot = lv_obj_create(s_tiles[i]);
+            lv_obj_remove_style_all(dot);
+            lv_obj_remove_flag(dot, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_remove_flag(dot, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_set_size(dot, size, size);
+            lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+            lv_obj_set_style_bg_color(dot, lv_color_hex(kResidentDot), 0);
+            lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_color(dot, lv_color_hex(kTileBg), 0);
+            lv_obj_set_style_border_width(dot, kResidentRing, 0);
+            lv_obj_set_style_border_opa(dot, LV_OPA_COVER, 0);
+            lv_obj_align(dot, LV_ALIGN_TOP_RIGHT, -inset, inset);
+        }
+        lv_obj_remove_flag(dot, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 // --------------------------------------------------------------- toolbar
@@ -642,10 +686,34 @@ void refresh_apps()
 
     lv_obj_clean(s_grid);
     s_tiles.clear();
+    s_dots.clear();
     const std::size_t count = s_launch->app_count();
     for (std::size_t i = 0; i < count; ++i)
         if (const app *item = s_launch->app_at(i)) build_tile(static_cast<int>(i), *item);
     select_tile(s_selected < static_cast<int>(s_tiles.size()) ? s_selected : 0, false);
+    if (!s_resident_keys.empty()) apply_resident_dots();
+}
+
+void set_resident_apps(const std::vector<std::string> &exec_keys)
+{
+    if (!enabled() || exec_keys == s_resident_keys) return;
+    s_resident_keys = exec_keys;
+    apply_resident_dots();
+}
+
+std::string app_icon(const std::string &exec_key)
+{
+    if (!s_launch || exec_key.empty()) return std::string();
+    const std::size_t count = s_launch->app_count();
+    for (std::size_t i = 0; i < count; ++i)
+        if (const app *item = s_launch->app_at(i))
+            if (item->Exec == exec_key) return item->Icon;
+    return std::string();
+}
+
+bool external_app_running()
+{
+    return external_running();
 }
 
 void show_home()
@@ -732,6 +800,9 @@ void enter_compat() {}
 void begin_page(bool, bool, bool, unsigned short) {}
 bool run_external(const std::string &, bool, std::function<void()>) { return false; }
 void refresh_apps() {}
+void set_resident_apps(const std::vector<std::string> &) {}
+std::string app_icon(const std::string &) { return std::string(); }
+bool external_app_running() { return false; }
 
 } // namespace native_ui
 

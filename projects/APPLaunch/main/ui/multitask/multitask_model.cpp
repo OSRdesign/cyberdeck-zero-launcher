@@ -70,13 +70,14 @@ const char *state_name(State state)
     case State::NotResponding: return "not-responding";
     case State::Closing: return "closing";
     case State::Gone: return "gone";
+    case State::Held: return "held";
     }
     return "gone";
 }
 
 bool is_resident(State state)
 {
-    return state == State::Foreground || state == State::Hiding || is_hidden(state);
+    return state == State::Foreground || state == State::Hiding || state == State::Held || is_hidden(state);
 }
 
 bool is_hidden(State state)
@@ -86,7 +87,7 @@ bool is_hidden(State state)
 
 bool is_frozen(State state)
 {
-    return state == State::HiddenFrozen || state == State::NotResponding;
+    return state == State::HiddenFrozen || state == State::NotResponding || state == State::Held;
 }
 
 const char *op_name(Op op)
@@ -109,6 +110,7 @@ const char *op_name(Op op)
     case Op::Kill: return "Kill";
     case Op::Snapshot: return "Snapshot";
     case Op::Restore: return "Restore";
+    case Op::Backdrop: return "Backdrop";
     case Op::DropSnapshot: return "DropSnapshot";
     case Op::Drain: return "Drain";
     case Op::SetOom: return "SetOom";
@@ -209,6 +211,13 @@ int Model::hidden_count() const
     return n;
 }
 
+AppId Model::held() const
+{
+    for (const Entry &e : entries_)
+        if (e.state == State::Held) return e.id;
+    return kNoApp;
+}
+
 void Model::set_state(Entry &e, State s, std::uint64_t now)
 {
     e.state = s;
@@ -256,7 +265,8 @@ void Model::sync_derived(Actions &out)
     d.front = front_;
     const bool launcher = front_ == kNoApp;
     d.launcher_keys = launcher && !raw_session_;
-    d.grab_touch = launcher && hidden_count() > 0;
+    /* P-d: also behind the legacy sheet, so the frozen app's queues stay empty (study 5.2 G1 step 6) */
+    d.grab_touch = launcher && (hidden_count() > 0 || held() != kNoApp);
     d.grab_keys = d.grab_touch && !raw_session_;
     d.raw_keys = !launcher || raw_session_;
     if (d.raw_keys && !derived_.raw_keys) out.push_back(act(Op::RawKeys, kNoApp, 0, 1));
@@ -374,7 +384,7 @@ bool Model::run_pending(std::uint64_t now, Actions &out)
 void Model::show(AppId id, std::uint64_t now, Actions &out)
 {
     Entry *e = get(id);
-    if (!e || !is_hidden(e->state)) return;
+    if (!e || !(is_hidden(e->state) || e->state == State::Held)) return; /* Held: Keep on the legacy sheet */
     const bool frozen = is_frozen(e->state);
     set_front(id, false, out);
     if (e->has_snapshot) out.push_back(act(Op::Restore, id));
@@ -538,6 +548,21 @@ Actions Model::force_close_front(std::uint64_t now)
     return out;
 }
 
+Actions Model::hold_front(std::uint64_t now)
+{
+    Actions out;
+    if (front_ == kNoApp) return out;
+    Entry *f = get(front_);
+    if (!f || f->state != State::Foreground || f->lifecycle()) return out;
+    out.push_back(act(Op::Stop, f->id));
+    out.push_back(act(Op::Snapshot, f->id));
+    out.push_back(act(Op::Backdrop, f->id));
+    f->has_snapshot = true;
+    set_state(*f, State::Held, now);
+    set_front(kNoApp, false, out);
+    return out;
+}
+
 Actions Model::shutdown(std::uint64_t now)
 {
     Actions out;
@@ -636,8 +661,10 @@ Actions Model::exited(AppId id, std::uint64_t now)
     if (was_front) {
         /* the app in front (or being hidden) is gone: a pending target, else the launcher (republish) */
         if (!run_pending(now, out)) set_front(kNoApp, true, out);
-    } else if (front_ == kNoApp && prev == State::Closing && closed_from == State::NotResponding) {
-        out.push_back(act(Op::Repaint, kNoApp)); /* it never acked hide: it may have drawn once continued */
+    } else if (front_ == kNoApp && prev == State::Closing &&
+               (closed_from == State::NotResponding || closed_from == State::Held)) {
+        /* it never acked hide (a legacy app behind the sheet knows nothing of it): it may have drawn once continued */
+        out.push_back(act(Op::Repaint, kNoApp));
     }
     erase_gone();
     sync_derived(out);

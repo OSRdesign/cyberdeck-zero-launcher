@@ -116,6 +116,15 @@ int cp0_display_fb_snapshot(void *dst, size_t len, int *page_y);
 int cp0_display_fb_restore(const void *src, size_t len, int page_y);
 int cp0_display_set_touch_grab(int on);
 
+/* Multitasking P-d (task 015-pd): the legacy app sheet drawn over the frozen app's last frame.
+ *  - backdrop (any thread): a page snapshot written to the launcher's page (page 0, panned to it) with every colour
+ *    scaled to keep_pct percent (the dimmed picture behind the sheet). 0, or -1 on error.
+ *  - native clip (LVGL thread): while w > 0 the native display writes only inside this rectangle (landscape
+ *    coordinates), and there no pure black pixel (the screen's ground around a rounded box: the backdrop shows); the
+ *    rest of the panel keeps what is there (the backdrop). w <= 0 clears it (the default). */
+int cp0_display_fb_backdrop(const void *src, size_t len, int keep_pct);
+void cp0_display_set_native_clip(int x, int y, int w, int h);
+
 /* Multitasking P-c (task 015-pc): the touch screen's contacts for the launcher's gestures.
  *  - Every slot of a protocol B panel is tracked (cp0_touch_slots.h); the LVGL pointer is the first contact of a
  *    touch (one finger: as before; a second finger no longer moves or releases it). Other panels read as before.

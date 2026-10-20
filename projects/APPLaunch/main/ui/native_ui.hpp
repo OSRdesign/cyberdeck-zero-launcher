@@ -15,6 +15,7 @@
 #include <cstddef>
 #include <functional>
 #include <string>
+#include <vector>
 
 class Launch;
 typedef struct _lv_obj_t lv_obj_t;
@@ -49,6 +50,15 @@ void set_launching_app(const std::string &name);
 
 /* Rebuild the home grid from the launcher's app list. */
 void refresh_apps();
+
+/* Multitasking P-d (task 015-pd; only called with APPLAUNCH_MULTITASK=1): the apps left open, by their .desktop Exec
+ * line. Their tiles get a small green dot at the top right (a ring of the tile's colour around it); the others none.
+ * Never called: no dot object exists. LVGL thread. */
+void set_resident_apps(const std::vector<std::string> &exec_keys);
+/* The icon file of the tile whose Exec line is exec_key ("" when none): the switcher's cards show it. */
+std::string app_icon(const std::string &exec_key);
+/* A stock (wrapped) app runs in the compat window (run_external). */
+bool external_app_running();
 
 /* Run a stock (framebuffer) app inside the compat window, scaled up. The app runs on a
  * worker thread (the UI stays alive: toolbar, Esc hold); on_exit is called on the UI thread when it

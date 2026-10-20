@@ -93,6 +93,15 @@ struct FileFb : FramebufferPort {
         std::memcpy(map, in.data(), kLen);
         return std::memcmp(map, in.data(), kLen) == 0 ? 0 : 1;
     }
+    /* P-d: the frame dimmed under the legacy sheet (as cp0_display_fb_backdrop, 38 %) */
+    std::atomic<int> backdrops{0};
+    int backdrop(const std::vector<uint8_t> &frame) override
+    {
+        if (frame.size() != kLen) return -1;
+        for (size_t i = 0; i < kLen; ++i) map[i] = static_cast<uint8_t>(frame[i] * 97 / 256);
+        ++backdrops;
+        return 0;
+    }
     /* the launcher repaints its home grid: a flat 0x5A page */
     void launcher_draw()
     {
@@ -162,6 +171,30 @@ struct TestUi : UiPort {
     void overlay(const std::string &text) override { rec.add("ui overlay " + text); }
     void esc_hint(bool visible) override { rec.add(std::string("ui esc_hint ") + (visible ? "1" : "0")); }
     void residents(int count) override { rec.add("ui residents " + std::to_string(count)); }
+    /* P-d: "ui switcher open n=2 B:hidden-running* A:hidden-frozen sel=0 session=0 suspended=1",
+     * "ui switcher close app_next=1 suspended=1", "ui sheet NAME", "ui sheet hide suspended=0", "ui apps KEY KEY" */
+    void switcher(const SwitcherInfo &info) override
+    {
+        std::string s = info.open ? "ui switcher open n=" + std::to_string(info.cards.size()) : "ui switcher close";
+        if (info.open) {
+            for (const SwitcherCard &c : info.cards)
+                s += " " + c.name + ":" + state_name(c.state) + (c.origin ? "*" : "");
+            s += " sel=" + std::to_string(info.selected) + " session=" + (info.session ? "1" : "0");
+        } else {
+            s += std::string(" app_next=") + (info.app_next ? "1" : "0");
+        }
+        rec.add(s + " suspended=" + (fb.suspended ? "1" : "0"));
+    }
+    void sheet(AppId id, const std::string &name) override
+    {
+        rec.add(id == kNoApp ? std::string("ui sheet hide suspended=") + (fb.suspended ? "1" : "0") : "ui sheet " + name);
+    }
+    void apps(const std::vector<SwitcherCard> &residents) override
+    {
+        std::string s = "ui apps";
+        for (const SwitcherCard &c : residents) s += " " + c.key;
+        rec.add(s);
+    }
 };
 
 struct TestInput : InputPort {
@@ -1038,6 +1071,323 @@ void scenario_g1_legacy_and_fifo()
     r.sup->stop();
 }
 
+/* ------------------------------------------------------------------------------------- P-d: the switcher screen */
+
+SupervisorConfig pd_config()
+{
+    SupervisorConfig c;
+    c.switcher_ui = true;
+    return c;
+}
+
+AppId app_id(Rig &r, const std::string &name)
+{
+    return std::atoi(status_field(r.status(), name, "id").c_str());
+}
+
+/* a three-finger hold in the app in front until G1 fires, then the hand lifts */
+bool g1_now(Rig &r, int first_id)
+{
+    three_fingers(r, first_id);
+    const bool fired = r.pump(2500, [&] { return r.rec.has("G1 fired"); });
+    lift_all(r, 3);
+    r.pump_for(50);
+    return fired;
+}
+
+/* the last recorded line that starts with prefix, "" when none */
+std::string last_with(Rig &r, const std::string &prefix)
+{
+    std::string found;
+    for (const std::string &l : r.rec.get())
+        if (l.rfind(prefix, 0) == 0) found = l;
+    return found;
+}
+
+bool before(Rig &r, const std::string &first, const std::string &second)
+{
+    const int a = r.rec.index(first), b = r.rec.index(second);
+    return a >= 0 && b >= 0 && a < b;
+}
+
+void scenario_pd_switcher_from_app()
+{
+    std::printf("== P-d: G1 in an app opens the switcher with that app hidden; a card, the X, Home, G2 on the launcher, "
+                "Close all\n");
+    Rig r(pd_config(), "pdsw", true, true);
+    App a = make_app("pda");
+    App b = make_app("pdb");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    check("A started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    r.pump_for(100);
+    r.sup->go_launcher();
+    check("A frozen", r.pump(2000, [&] { return r.state("pda") == "hidden-frozen"; }), r.status());
+    r.sup->launch(spec_for(b, r.fb.path, Background::Run));
+    check("B started", r.pump(3000, [&] { return app_logged(b, "rec=start"); }));
+    check("B: touch read passively", r.pump(1000, [&] { return r.rec.has("touch: reading the touch screen passively"); }));
+    r.pump_for(100);
+    r.rec.clear();
+    check("G1 fires in B", g1_now(r, 10));
+    check("the switcher opens", r.pump(2000, [&] { return r.rec.has("ui switcher open"); }), r.status());
+    check("B is hidden first (the P-b path)", r.rec.has("log switcher (G1): hiding pdb first") &&
+                                                 r.state("pdb") == "hidden-running");
+    check("log: opened by G1 with 2 apps (from pdb)", r.rec.has("log switcher: opened by G1 with 2 apps (from pdb)"));
+    check("two cards: B (In front, selected) first, A paused",
+          r.rec.has("ui switcher open n=2 pdb:hidden-running* pda:hidden-frozen sel=0 session=0"),
+          last_with(r, "ui switcher"));
+    check("the switcher reaches the launcher before it takes the panel back",
+          before(r, "ui switcher open", "ui launcher_front"));
+    check("status switcher=open", status_field(r.status(), "", "switcher") == "open", r.status());
+    check("the grid's dots: both apps resident", r.rec.has("ui apps fbhapp-pdb fbhapp-pda"));
+    // stale input for A typed while the switcher is up: drained when A is resumed (P-b)
+    key(a.in_writer, KEY_ENTER, 1);
+    key(a.in_writer, KEY_ENTER, 0);
+    r.rec.clear();
+    r.sup->switcher_pick(app_id(r, "pda"));
+    check("a card tapped: A is resumed", r.pump(2000, [&] { return r.state("pda") == "foreground"; }), r.status());
+    check("log: card tapped pda", r.rec.has("log switcher: card tapped pda"));
+    check("the switcher goes with the display already suspended, before the app is shown",
+          r.rec.has("ui switcher close app_next=1 suspended=1") && before(r, "ui switcher close", "ui app_front pda"));
+    check("restore and drain before the thaw", before(r, "pda: restore", "pda: SIGCONT") &&
+                                                   before(r, "pda: drain", "pda: SIGCONT"));
+    check("the stale Enter was drained", r.rec.has("keys=1"));
+    r.pump_for(300);
+    check("A acted on no stale input", count(read_file(a.log), "acted=1") == 0);
+    // the X: G1 in A, then B's card is closed
+    r.rec.clear();
+    check("G1 fires in A", g1_now(r, 20));
+    check("the switcher: A (In front) first now",
+          r.pump(2000, [&] { return r.rec.has("ui switcher open n=2 pda:hidden-frozen* pdb:hidden-running"); }),
+          last_with(r, "ui switcher"));
+    r.sup->switcher_close(app_id(r, "pdb"));
+    check("X: B closes", r.pump(4000, [&] { return r.status().find("\"pdb\"") == std::string::npos; }), r.status());
+    check("log: closed pdb", r.rec.has("log switcher: closed pdb"));
+    check("its card goes (one card left)", r.pump(500, [&] { return r.rec.has("ui switcher open n=1 pda:hidden-frozen*"); }),
+          last_with(r, "ui switcher"));
+    check("the switcher stays open", status_field(r.status(), "", "switcher") == "open");
+    r.sup->switcher_home();
+    check("Home: the switcher closes, A stays hidden",
+          r.pump(1000, [&] { return r.rec.has("ui switcher close app_next=0"); }) && r.state("pda") == "hidden-frozen");
+    check("log: home", r.rec.has("log switcher: home"));
+    // G2 on the launcher with an app resident: the switcher opens; Close all
+    r.rec.clear();
+    r.sup->launcher_gesture("G2", "G2 fired (status strip held 503 ms)", true);
+    check("G2 on the launcher opens it",
+          r.pump(1000, [&] { return r.rec.has("log switcher: opened by G2 with 1 app (on the launcher)"); }));
+    check("opened on the launcher: no In front card", r.rec.has("ui switcher open n=1 pda:hidden-frozen sel=0"),
+          last_with(r, "ui switcher"));
+    r.sup->switcher_close_all();
+    check("Close all: every app ends", r.pump(4000, [&] { return r.status().find("residents=0") != std::string::npos; }),
+          r.status());
+    check("log: close-all (1 app)", r.rec.has("log switcher: close-all (1 app)"));
+    check("the switcher closed, the launcher stays", r.rec.has("ui switcher close app_next=0"));
+    check("the grid's dots: none left", r.pump(500, [&] { return last_with(r, "ui apps") == "ui apps"; }),
+          last_with(r, "ui apps"));
+    r.rec.clear();
+    r.sup->launcher_gesture("G1", "G1 fired (3 contacts, held 1003 ms)", true);
+    check("nothing open: G1 on the launcher does nothing",
+          r.pump(500, [&] { return r.rec.has("log switcher (G1): nothing open, nothing to do"); }) &&
+              !r.rec.has("ui switcher open"));
+    r.sup->stop();
+}
+
+void scenario_pd_cancel()
+{
+    std::printf("== P-d: leaving the switcher without a change (Esc / the header's Esc, G1 again) resumes the app\n");
+    Rig r(pd_config(), "pdcx", true, true);
+    App a = make_app("pcx");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    check("touch read passively", r.pump(1000, [&] { return r.rec.has("touch: reading"); }));
+    r.pump_for(100);
+    r.rec.clear();
+    check("G1 fires", g1_now(r, 30));
+    check("the switcher opens", r.pump(2000, [&] { return r.rec.has("ui switcher open n=1 pcx:hidden-frozen*"); }));
+    r.sup->switcher_cancel();
+    check("Esc: back to the app", r.pump(2000, [&] { return r.state("pcx") == "foreground"; }), r.status());
+    check("log: cancelled (back to pcx)", r.rec.has("log switcher: cancelled (back to pcx)"));
+    check("the switcher goes as the app takes the panel", r.rec.has("ui switcher close app_next=1 suspended=1"));
+    r.pump_for(300);
+    r.rec.clear();
+    check("G1 fires again", g1_now(r, 40));
+    check("the switcher opens again", r.pump(2000, [&] { return r.rec.has("ui switcher open"); }));
+    r.sup->launcher_gesture("G1", "G1 fired (3 contacts, held 1001 ms)", true); /* the launcher's own reader */
+    check("G1 while it is up: back to the app", r.pump(2000, [&] { return r.state("pcx") == "foreground"; }), r.status());
+    check("log: cancelled by G1 (back to pcx)", r.rec.has("log switcher: cancelled by G1 (back to pcx)"));
+    r.sup->stop();
+}
+
+void scenario_pd_legacy_sheet()
+{
+    std::printf("== P-d: G1 in a legacy app: the sheet (frozen, its frame dimmed), Keep (no stale input), G1 again = "
+                "Keep, Close\n");
+    Rig r(pd_config(), "pdsh", true, true);
+    App l = make_app("leg");
+    r.sup->launch(spec_for(l, r.fb.path, Background::None));
+    check("started", r.pump(3000, [&] { return app_logged(l, "rec=start"); }));
+    check("touch read passively", r.pump(1000, [&] { return r.rec.has("touch: reading"); }));
+    r.pump_for(100);
+    const int pgid = r.pgid("leg");
+    r.rec.clear();
+    check("G1 fires", g1_now(r, 50));
+    check("the sheet: the app is held", r.pump(2000, [&] { return r.state("leg") == "held"; }), r.status());
+    check("log: sheet shown for leg (G1)",
+          r.rec.has("log switcher: sheet shown for leg (G1): it cannot stay in the background"));
+    check("frozen (SIGSTOP on its group, state T)", group_stopped(pgid));
+    check("its frame kept and written back dimmed", r.rec.has("leg: snapshot") && r.fb.backdrops.load() == 1 &&
+                                                        r.rec.has("leg: backdrop"));
+    check("the sheet reaches the launcher before it takes the panel", before(r, "ui sheet leg", "ui launcher_front"));
+    check("touch and keyboards grabbed while it is up", r.rec.has("input grab_touch 1") && r.rec.has("input grab_keys 1"));
+    check("status sheet=leg", status_field(r.status(), "", "sheet") == "leg", r.status());
+    // typed while the sheet is up (the FIFOs here are not grabbed): drained before the app is continued
+    key(l.in_writer, KEY_ENTER, 1);
+    key(l.in_writer, KEY_ENTER, 0);
+    r.rec.clear();
+    r.sup->sheet_answer(true);
+    check("Keep: the app is back in front", r.pump(2000, [&] { return r.state("leg") == "foreground"; }), r.status());
+    check("log: sheet keep leg", r.rec.has("log switcher: sheet keep leg"));
+    check("the sheet goes with the display suspended", r.rec.has("ui sheet hide suspended=1"));
+    check("restore and drain before the thaw", before(r, "leg: restore", "leg: SIGCONT") &&
+                                                   before(r, "leg: drain", "leg: SIGCONT"));
+    check("the stale Enter was drained", r.rec.has("keys=1"));
+    check("running again", !group_stopped(pgid));
+    r.pump_for(300);
+    check("the app acted on no stale input", count(read_file(l.log), "acted=1") == 0);
+    r.rec.clear();
+    check("G1 fires again", g1_now(r, 60));
+    check("held again", r.pump(2000, [&] { return r.state("leg") == "held"; }));
+    r.sup->launcher_gesture("G1", "G1 fired (3 contacts, held 1002 ms)", true);
+    check("G1 while the sheet is up = Keep", r.pump(2000, [&] { return r.state("leg") == "foreground"; }), r.status());
+    check("log: the sheet is up: Keep", r.rec.has("log switcher (G1): the sheet is up: Keep"));
+    r.pump_for(300);
+    r.rec.clear();
+    check("G1 fires a third time", g1_now(r, 70));
+    check("held a third time", r.pump(2000, [&] { return r.state("leg") == "held"; }));
+    r.sup->sheet_answer(false);
+    check("Close: the app ends", r.pump(5000, [&] { return r.status().find("\"leg\"") == std::string::npos; }),
+          r.status());
+    check("log: sheet close leg", r.rec.has("log switcher: sheet close leg"));
+    check("SIGCONT before SIGTERM (as Esc held 3 s, after the freeze)", before(r, "leg: SIGCONT", "leg: SIGTERM"));
+    check("the sheet goes, the launcher stays in front", r.rec.has("ui sheet hide suspended=0") &&
+                                                             r.status().find("front=home") != std::string::npos);
+    check("the launcher repaints after the exit (it may have drawn once continued)", r.rec.has("ui repaint"));
+    check("grabs released", r.rec.has("input grab_touch 0"));
+    r.sup->stop();
+}
+
+void scenario_pd_alt_tab()
+{
+    std::printf("== P-d: Alt+Tab shows the switcher screen: the selection follows Tab / Shift+Tab, Alt release commits, "
+                "Backspace cancels\n");
+    Rig r(pd_config(), "pdat");
+    App a = make_app("ata");
+    App b = make_app("atb");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    check("A started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    r.pump_for(100);
+    r.sup->go_launcher();
+    check("A frozen", r.pump(2000, [&] { return r.state("ata") == "hidden-frozen"; }));
+    r.sup->launch(spec_for(b, r.fb.path, Background::Run));
+    check("B started", r.pump(3000, [&] { return app_logged(b, "rec=start"); }));
+    r.pump_for(100);
+    r.rec.clear();
+    key(r.kw, KEY_LEFTALT, 1);
+    key(r.kw, KEY_TAB, 1);
+    key(r.kw, KEY_TAB, 0);
+    check("the switcher shows the session on the previous app",
+          r.pump(2000, [&] { return r.rec.has("ui switcher open n=2 atb:hidden-running* ata:hidden-frozen sel=1 session=1"); }),
+          last_with(r, "ui switcher"));
+    check("log: opened by Alt+Tab", r.rec.has("log switcher: opened by Alt+Tab with 2 apps (from atb)"));
+    check("no P-b text overlay", !r.rec.has("ui overlay"));
+    key(r.kw, KEY_TAB, 1);
+    key(r.kw, KEY_TAB, 0);
+    check("Tab: the selection on Home", r.pump(1000, [&] { return last_with(r, "ui switcher").find(" sel=4 session=1") != std::string::npos; }),
+          last_with(r, "ui switcher"));
+    key(r.kw, KEY_LEFTSHIFT, 1);
+    key(r.kw, KEY_TAB, 1);
+    key(r.kw, KEY_TAB, 0);
+    key(r.kw, KEY_LEFTSHIFT, 0);
+    check("Shift+Tab: back on the previous app", r.pump(1000, [&] { return last_with(r, "ui switcher").find(" sel=1 session=1") != std::string::npos; }),
+          last_with(r, "ui switcher"));
+    key(r.kw, KEY_LEFTALT, 0);
+    check("Alt released: A in front", r.pump(2000, [&] { return r.state("ata") == "foreground"; }), r.status());
+    check("the switcher goes as A takes the panel", r.rec.has("ui switcher close app_next=1 suspended=1"));
+    check("the P-b session lines stay", r.rec.has("log session ends: ata") && r.rec.has("log session: select Home"));
+    r.pump_for(300);
+    r.rec.clear();
+    key(r.kw, KEY_LEFTALT, 1);
+    key(r.kw, KEY_TAB, 1);
+    key(r.kw, KEY_TAB, 0);
+    check("second session: the switcher", r.pump(2000, [&] { return r.rec.has("ui switcher open n=2 ata:hidden-frozen*"); }),
+          last_with(r, "ui switcher"));
+    key(r.kw, KEY_BACKSPACE, 1);
+    key(r.kw, KEY_BACKSPACE, 0);
+    key(r.kw, KEY_LEFTALT, 0);
+    check("Backspace with Alt held: cancelled", r.pump(1000, [&] { return r.rec.has("log session: cancelled"); }));
+    check("back to A", r.pump(2000, [&] { return r.state("ata") == "foreground"; }), r.status());
+    check("the switcher goes", r.rec.has("ui switcher close app_next=1"));
+    r.pump_for(300);
+    r.rec.clear();
+    key(r.kw, KEY_LEFTALT, 1);
+    key(r.kw, KEY_TAB, 1);
+    key(r.kw, KEY_TAB, 0);
+    key(r.kw, KEY_TAB, 1);
+    key(r.kw, KEY_TAB, 0);
+    r.pump(2000, [&] { return last_with(r, "ui switcher").find(" sel=4") != std::string::npos; });
+    key(r.kw, KEY_LEFTALT, 0);
+    check("released on Home: the switcher closes to the launcher",
+          r.pump(2000, [&] { return r.rec.has("ui switcher close app_next=0"); }) &&
+              r.status().find("front=home") != std::string::npos,
+          r.status());
+    r.sup->stop();
+}
+
+void scenario_pd_hint()
+{
+    std::printf("== P-d: the first-run hint shows once, the first time an app is left open, and is remembered\n");
+    SupervisorConfig c = pd_config();
+    c.hint_path = g_dir + "/hint-home/.config/cardputerzero/multitask-hint-shown";
+    c.hint_text = "Hold three fingers to switch apps";
+    ::unlink(c.hint_path.c_str());
+    const std::string notice = "ui notice Hold three fingers to switch apps";
+    {
+        Rig r(c, "pdh1");
+        App a = make_app("hinta");
+        r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+        check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+        r.pump_for(100);
+        check("no hint while the app is in front", !r.rec.has(notice));
+        r.sup->go_launcher();
+        check("left open: the hint", r.pump(2000, [&] { return r.rec.has(notice); }), r.status());
+        check("log: hint", r.rec.has("log hint: \"Hold three fingers to switch apps\" (the first app left open"));
+        struct stat st;
+        check("remembered in its file", ::stat(c.hint_path.c_str(), &st) == 0);
+        r.sup->command("switch hinta");
+        r.pump(2000, [&] { return r.state("hinta") == "foreground"; });
+        r.pump_for(100);
+        r.sup->go_launcher();
+        r.pump(2000, [&] { return r.state("hinta") == "hidden-frozen"; });
+        r.pump_for(200);
+        int n = 0;
+        for (const std::string &l : r.rec.get())
+            if (l == notice) ++n;
+        check("shown once", n == 1, std::to_string(n));
+        r.sup->stop();
+    }
+    {
+        Rig r(c, "pdh2"); /* the next run of the launcher */
+        App a = make_app("hintb");
+        r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+        r.pump(3000, [&] { return app_logged(a, "rec=start"); });
+        r.pump_for(100);
+        r.sup->go_launcher();
+        r.pump(2000, [&] { return r.state("hintb") == "hidden-frozen"; });
+        r.pump_for(200);
+        check("the next run: no hint (its file exists)", !r.rec.has(notice));
+        r.sup->stop();
+    }
+}
+
 void scenario_guardian()
 {
     /* Two apps that would outlive the supervisor without the guardian: a frozen one that ignores SIGHUP (the kernel
@@ -1115,6 +1465,13 @@ int main(int argc, char **argv)
     if (const char *only = std::getenv("MT_ONLY")) { /* MT_ONLY=cost: the loop cost measurement alone */
         if (std::string(only) == "cost") scenario_loop_cost();
         if (std::string(only) == "cancel") scenario_alt_tab_cancel_deck();
+        if (std::string(only) == "pd") { /* MT_ONLY=pd: the P-d scenarios alone */
+            scenario_pd_switcher_from_app();
+            scenario_pd_cancel();
+            scenario_pd_legacy_sheet();
+            scenario_pd_alt_tab();
+            scenario_pd_hint();
+        }
         std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);
         return g_fail ? 1 : 0;
     }
@@ -1134,6 +1491,11 @@ int main(int argc, char **argv)
     scenario_g1_from_app();
     scenario_g1_false_positives();
     scenario_g1_legacy_and_fifo();
+    scenario_pd_switcher_from_app();
+    scenario_pd_cancel();
+    scenario_pd_legacy_sheet();
+    scenario_pd_alt_tab();
+    scenario_pd_hint();
     scenario_guardian();
     scenario_loop_cost();
     std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);

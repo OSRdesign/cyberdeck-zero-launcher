@@ -548,10 +548,72 @@ void test_launch_behind_closing_front()
     expect(t, "L exits: B starts", w.render(a), "AppFront(B) Spawn(B)");
 }
 
+/* P-d: the legacy sheet (study 6.2, D12): a three-finger hold in a legacy app freezes it behind "Close <app>?". */
+void test_legacy_sheet_keep()
+{
+    const char *t = "legacy sheet: hold, Keep";
+    World w;
+    launch_and_hide(w, "A", Background::Freeze, 0, 100);
+    w.launch("L", Background::None, 100);
+    w.m.spawned(w.id("L"), 200, false, 200, 100);
+    run_table(t, w, {
+        {"a lifecycle app is never held", [](World &) {
+             World v;
+             v.launch("F", Background::Freeze, 0);
+             v.m.spawned(v.id("F"), 1, true, 0, 0);
+             return v.m.hold_front(10);
+         }, ""},
+        {"hold L: frozen, its frame kept and dimmed, the launcher takes the panel (grabs: nothing reaches L)",
+         [](World &w) { return w.m.hold_front(1000); },
+         cat({"Stop(L) Snapshot(L) Backdrop(L) LauncherFront", kToLauncherGrab})},
+        {"hold again: nothing", [](World &w) { return w.m.hold_front(1001); }, ""},
+        {"Super while held: nothing (no app in front)", [](World &w) { return w.m.go_launcher(1002); }, ""},
+        {"close all while held: the hidden apps only, not L", [](World &w) { return w.m.close_all(1003); },
+         "Cont(A) SendClose(A,2)"},
+    });
+    expect_state(t, w, "L", State::Held);
+    expect(t, "held()", std::to_string(w.m.held()), std::to_string(w.id("L")));
+    expect(t, "Held counts against the cap (A is closing)", std::to_string(w.m.resident_count()), "1");
+    expect(t, "Held is not hidden (no memory rule, no LRU)", std::to_string(w.m.hidden_count()), "0");
+    expect(t, "the memory rule leaves it", w.render(w.m.memory(10 * 1024, 1004)), "");
+    run_table(t, w, {
+        {"Keep: L comes back as it was (restore, drain, SIGCONT; no show message: no socket)",
+         [](World &w) { return w.m.resume(w.id("L"), 2000); },
+         cat({"AppFront(L)", kToAppGrabbed, "Restore(L) Drain(L) Cont(L)"})},
+    });
+    expect_state(t, w, "L", State::Foreground);
+    expect(t, "held() after Keep", std::to_string(w.m.held()), std::to_string(kNoApp));
+}
+
+void test_legacy_sheet_close()
+{
+    const char *t = "legacy sheet: hold, Close (as Esc held 3 s, after a SIGCONT)";
+    World w;
+    w.launch("L", Background::None, 0);
+    w.m.spawned(w.id("L"), 100, false, 200, 0);
+    w.m.hold_front(1000);
+    run_table(t, w, {
+        {"Close: SIGCONT, SIGTERM now (no socket), grabs released", [](World &w) { return w.m.close(w.id("L"), 2000); },
+         "Cont(L) Term(L) GrabKeys(0) GrabTouch(0)"},
+        {"tick 3 s: SIGKILL", [](World &w) { return w.m.tick(5000); }, "Kill(L)"},
+        {"exited: repaint (it may have drawn once continued)", [](World &w) { return w.m.exited(w.id("L"), 5100); },
+         "DropSnapshot(L) Repaint"},
+    });
+    expect(t, "residents", std::to_string(w.m.resident_count()), "0");
+    World v;
+    v.launch("L", Background::None, 0);
+    v.m.spawned(v.id("L"), 100, false, 200, 0);
+    v.m.hold_front(1000);
+    expect(t, "killed while held: gone, a notice, the grabs go",
+           v.render(v.m.exited(v.id("L"), 1500)), "DropSnapshot(L) Notice(L exited) GrabKeys(0) GrabTouch(0)");
+}
+
 } // namespace
 
 int main()
 {
+    test_legacy_sheet_keep();
+    test_legacy_sheet_close();
     test_next_deadline();
     test_launch_behind_closing_front();
     test_background_parse();

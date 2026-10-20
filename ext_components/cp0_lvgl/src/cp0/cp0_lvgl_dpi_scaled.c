@@ -95,6 +95,8 @@ static void fill_window_black(void);
  * cp0_display_resume(). Snapshot and restore of an app's page use the lock too. */
 static pthread_mutex_t fb_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile bool suspended;
+/* Multitasking P-d: the native display writes only inside this rectangle while w > 0 (the legacy sheet) */
+static struct { int x, y, w, h; } native_clip;
 
 static bool fb_begin(void)
 {
@@ -176,10 +178,30 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
         return;
     }
     cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
-    if (compat)
+    if (compat) {
         cp0_fbo_blit_except(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp, g.ox, g.oy, g.ww, g.wh);
-    else
+    } else if (native_clip.w > 0) {
+        /* P-d, the legacy sheet over the app's frame: only the part inside the clip, and in it no pure black pixel (the
+         * screen's ground around the sheet's rounded corners: the frame shows there; the sheet itself has none) */
+        const int x1 = area->x1 > native_clip.x ? area->x1 : native_clip.x;
+        const int y1 = area->y1 > native_clip.y ? area->y1 : native_clip.y;
+        const int x2 = area->x2 < native_clip.x + native_clip.w - 1 ? area->x2 : native_clip.x + native_clip.w - 1;
+        const int y2 = area->y2 < native_clip.y + native_clip.h - 1 ? area->y2 : native_clip.y + native_clip.h - 1;
+        const int pb = g.bpp == 4 ? 3 : g.bpp; /* bytes compared per pixel (not XRGB's X) */
+        for (int y = y1; y <= y2 && x2 >= x1; y++) {
+            const uint8_t *row = px_map + (size_t)(y - area->y1) * (size_t)(w * g.bpp);
+            int x = x1;
+            while (x <= x2) {
+                while (x <= x2 && !memcmp(row + (size_t)(x - area->x1) * g.bpp, "\0\0\0\0", (size_t)pb)) x++;
+                const int start = x;
+                while (x <= x2 && memcmp(row + (size_t)(x - area->x1) * g.bpp, "\0\0\0\0", (size_t)pb)) x++;
+                if (x > start)
+                    cp0_fbo_blit(&g.out, start, y, x - start, 1, row + (size_t)(start - area->x1) * g.bpp, w * g.bpp);
+            }
+        }
+    } else {
         cp0_fbo_blit(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp);
+    }
     fb_end();
     lv_display_flush_ready(disp);
 }
@@ -936,6 +958,55 @@ int cp0_display_fb_restore(const void *src, size_t len, int page_y)
     pan_to(page_y);
     pthread_mutex_unlock(&fb_lock);
     return same ? 0 : 1;
+}
+
+/* Multitasking P-d: the frozen app's frame, dimmed, on the launcher's page; the sheet is then drawn over it through
+ * the native clip. Pixel by pixel, so the rotation does not matter; the colours are scaled in the panel's own format
+ * (XRGB8888, or the 16 bpp layout of the framebuffer). */
+int cp0_display_fb_backdrop(const void *src, size_t len, int keep_pct)
+{
+    const size_t page = cp0_display_fb_page_bytes();
+    if (!src || page == 0 || len < page) return -1;
+    const uint32_t k = (uint32_t)(keep_pct < 0 ? 0 : keep_pct > 100 ? 100 : keep_pct) * 256u / 100u;
+    const cp0_fb_layout_t *l = &g.out.layout;
+    pthread_mutex_lock(&fb_lock);
+    for (int y = 0; y < g.ph; y++) {
+        const uint8_t *s = (const uint8_t *)src + (size_t)y * (size_t)g.stride;
+        uint8_t *d = g.fb + (size_t)y * (size_t)g.stride;
+        if (g.bpp == 4) {
+            for (int x = 0; x < g.pw; x++, s += 4, d += 4) {
+                d[0] = (uint8_t)((s[0] * k) >> 8);
+                d[1] = (uint8_t)((s[1] * k) >> 8);
+                d[2] = (uint8_t)((s[2] * k) >> 8);
+                d[3] = s[3];
+            }
+        } else if (g.bpp == 2) {
+            for (int x = 0; x < g.pw; x++, s += 2, d += 2) {
+                uint16_t v;
+                memcpy(&v, s, 2);
+                const uint32_t r = ((v >> l->r.off) & ((1u << l->r.len) - 1u)) * k >> 8;
+                const uint32_t gr = ((v >> l->g.off) & ((1u << l->g.len) - 1u)) * k >> 8;
+                const uint32_t b = ((v >> l->b.off) & ((1u << l->b.len) - 1u)) * k >> 8;
+                v = (uint16_t)((r << l->r.off) | (gr << l->g.off) | (b << l->b.off));
+                memcpy(d, &v, 2);
+            }
+        } else {
+            memcpy(d, s, (size_t)g.stride);
+        }
+    }
+    pan_to(0);
+    pthread_mutex_unlock(&fb_lock);
+    return 0;
+}
+
+void cp0_display_set_native_clip(int x, int y, int w, int h)
+{
+    pthread_mutex_lock(&fb_lock);
+    native_clip.x = x;
+    native_clip.y = y;
+    native_clip.w = w > 0 && h > 0 ? w : 0;
+    native_clip.h = w > 0 && h > 0 ? h : 0;
+    pthread_mutex_unlock(&fb_lock);
 }
 
 static int touch_grabbed;

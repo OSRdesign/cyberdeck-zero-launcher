@@ -67,8 +67,9 @@ Launch::Launch()
             app_list.emplace_back(spec.name, spec.icon, page_v<UISSHPage>);
         else if (spec.kind == "cli") // the terminal page as the CLI tile opens it, on the fake PTY (task 014 P4b)
             app_list.emplace_back(spec.name, spec.icon, page_v<UISTPage>);
-        else // a tile only: stock apps are shown with the harness placeholder (scene "stockapp")
-            app_list.emplace_back(spec.name, spec.icon, std::string(), false);
+        else // a tile only: stock apps are shown with the harness placeholder (scene "stockapp"); the Exec line
+             // "tile:NAME" names it for the multitasking scenes (dots, switcher icons); launch_Exec does nothing here
+            app_list.emplace_back(spec.name, spec.icon, "tile:" + spec.name, false);
     }
 }
 

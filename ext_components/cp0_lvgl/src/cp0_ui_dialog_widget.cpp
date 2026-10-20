@@ -32,6 +32,7 @@ constexpr uint32_t kButton = 0x2A2A2A;               /* the toolbar keys ... */
 constexpr uint32_t kButtonPressed = 0x2D9CDB;        /* ... and their pressed colour */
 constexpr uint32_t kPrimary = CP0_UI_OSK_ENTER_RGB;  /* the keyboard's Enter */
 constexpr uint32_t kPrimaryPressed = CP0_UI_OSK_ENTER_PRESSED_RGB;
+constexpr uint32_t kDestructive = 0xFF8A8E;          /* a Destructive button's label (multitasking P-d) */
 
 const lv_font_t *text_font(int px, bool bold)
 {
@@ -158,7 +159,7 @@ Dialog::Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec 
         lv_obj_t *label = lv_label_create(button);
         lv_label_set_text(label, spec.text.c_str());
         lv_obj_set_style_text_font(label, text_font(geometry_.button_px, primary), 0);
-        lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_color(label, lv_color_hex(spec.role == ButtonRole::Destructive ? kDestructive : 0xFFFFFF), 0);
         lv_obj_center(label);
         buttons_.push_back(button);
     }
