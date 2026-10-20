@@ -266,7 +266,7 @@ Everything in sections 2-11 is built as described; the differences are listed un
 | Suite | Before (main 798381c) | After |
 |---|---|---|
 | `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`) | 106 test programs, PASS | 106 programs (`test_esc_key_watch` has one more case), PASS |
-| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 57 compiled tests (+ model 112 checks, keys 71, protocol 32, notice queue 29, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (106 checks, ASan + UBSan, with the loop-cost bound), PASS (pb.1: 56 tests, model 102, host 98) |
+| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 57 compiled tests (+ model 112 checks, keys 89, protocol 32, notice queue 29, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (126 checks, ASan + UBSan, with the loop-cost bound and the deck-order cancel cases), PASS (pb.1: 56 tests, model 102, keys 71, host 98; pb.2: keys 71, host 106) |
 | render harness | 40 scenes, 64 goldens (32 at 640x480, 32 at 480x320), 1459 screenshots | 41 scenes (+ `multitask_handoff`, review-only), **64 goldens byte-identical**, 1469 screenshots (+10: the new scene, 2 shots at 5 sizes); `compare`, `twice`, `header`, `contract` PASS |
 | `branding` | PASS | PASS |
 | P-a spike tests (`tools/multitasking-spike/run_tests.sh`, not in check-all) | 20 Python OK; host e2e 37 of 38 in 3 of 3 runs on this PC | 20 Python OK; host e2e 37 of 38 (passed 38 once in 3 runs). The failing case, fbhandoff's own guardian line `ended_group=1`, is timing-dependent and fails on `main` too: when fbhandoff is killed, the kernel sends SIGHUP + SIGCONT to the newly orphaned stopped group and the fake app quits before fbhandoff's guardian looks (the group is gone either way) |
@@ -317,6 +317,20 @@ The logs showed five things, fixed in pb.2:
 
 Found on the PC while measuring: a launch while the app in front was closing was refused with a misleading notice;
 it now waits for that app to end (model test).
+
+**Second deck run (pb.2), build 0.8.0-pb.3.** Esc with Alt held did not cancel an Alt+Tab session (protocol D5): the
+log showed `session: select Home` then `session ends: Home` and no `session: cancelled`. `select Home` is the
+supervisor's answer to a **Tab press**; a cancel needs an **Esc press** read while the session runs, and none arrived.
+On the PC the cancel works with the deck's exact state and key order (a run app in front, a frozen app hidden; Alt,
+Tab, Tab up, the app hidden, Esc, Esc up, Alt up), with Esc autorepeat, with Esc from a second keyboard, with Esc
+before the hide completes and with a Tab repeated by the keyboard's firmware (host suite, 20 checks, and the pure
+key-session table). The supervisor reads the keyboards from evdev during such a session (the launcher's keyboard
+thread stays paused and nothing grabs them, which the Tab and the Alt release that did arrive confirm), so the likely
+cause is the keyboard: the M4 seems not to send Esc while Alt is held (a Fn-layer or blocking key matrix), or sends
+Tab. Not confirmed: pb.3 logs every key read during a session and for 2 s after it (`session key: <key> down|up`,
+with `-> start|next|prev|commit|cancel`), in the supervisor and in the launcher's key filter, and the protocol's D5
+says which lines to expect and what to report. No typed text is logged (only during sessions, and the keys there are
+the session's).
 
 ### Verified on the PC only (needs the boards)
 
