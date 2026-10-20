@@ -699,8 +699,12 @@ void scenario_shutdown_no_stopped_left()
 
 void scenario_guardian()
 {
-    std::printf("== guardian: the supervisor's process is SIGKILLed with a frozen app\n");
+    /* Two apps that would outlive the supervisor without the guardian: a frozen one that ignores SIGHUP (the kernel
+     * sends SIGHUP + SIGCONT to a stopped, newly orphaned process group; --no-hup survives that, so only the guardian
+     * can end it) and a hidden running one (no stopped member: the kernel sends it nothing). */
+    std::printf("== guardian: the supervisor's process is SIGKILLed with a frozen and a running app hidden\n");
     App a = make_app("orphan");
+    App b = make_app("runner");
     const std::string pg_file = g_dir + "/orphan.pgid";
     ::unlink(pg_file.c_str());
     std::fflush(stdout);
@@ -717,32 +721,43 @@ void scenario_guardian()
         Supervisor sup(cfg, proc, fb, input, keys, ui);
         sup.set_log_sink([&rec](const std::string &l) { rec.add(l); });
         sup.start();
-        sup.launch(spec_for(a, fb.path, Background::Freeze));
+        const auto wait_state = [&sup](const std::string &app, const std::string &state) {
+            for (int i = 0; i < 300; ++i) {
+                if (status_field(sup.status_text(), app, "state") == state) return;
+                ::usleep(10000);
+            }
+        };
+        sup.launch(spec_for(a, fb.path, Background::Freeze, "--no-hup"));
         for (int i = 0; i < 300 && !app_logged(a, "rec=start"); ++i) ::usleep(10000);
         ::usleep(150000);
         sup.go_launcher();
-        for (int i = 0; i < 300; ++i) {
-            if (status_field(sup.status_text(), "orphan", "state") == "hidden-frozen") break;
-            ::usleep(10000);
-        }
-        std::ofstream(pg_file) << status_field(sup.status_text(), "orphan", "pgid");
+        wait_state("orphan", "hidden-frozen");
+        sup.launch(spec_for(b, fb.path, Background::Run));
+        for (int i = 0; i < 300 && !app_logged(b, "rec=start"); ++i) ::usleep(10000);
+        ::usleep(150000);
+        sup.go_launcher();
+        wait_state("runner", "hidden-running");
+        std::ofstream(pg_file) << status_field(sup.status_text(), "orphan", "pgid") << " "
+                               << status_field(sup.status_text(), "runner", "pgid");
         for (;;) ::pause(); /* killed by the parent */
     }
-    int pgid = 0;
-    for (int i = 0; i < 500 && pgid <= 0; ++i) {
-        pgid = std::atoi(read_file(pg_file).c_str());
-        if (pgid <= 0) ::usleep(10000);
+    int frozen = 0, running = 0;
+    for (int i = 0; i < 500 && (frozen <= 0 || running <= 0); ++i) {
+        std::istringstream in(read_file(pg_file));
+        in >> frozen >> running;
+        if (frozen <= 0 || running <= 0) ::usleep(10000);
     }
-    check("frozen app in the child supervisor", pgid > 0 && group_stopped(pgid));
+    check("a frozen and a running app in the child supervisor", frozen > 0 && running > 0 && group_stopped(frozen));
     ::kill(child, SIGKILL);
     ::waitpid(child, nullptr, 0);
     bool gone = false;
-    for (int i = 0; i < 400 && !gone; ++i) {
-        gone = group_members(pgid).empty();
+    for (int i = 0; i < 450 && !gone; ++i) {
+        gone = group_members(frozen).empty() && group_members(running).empty();
         if (!gone) ::usleep(10000);
     }
-    check("the guardian continued and ended the frozen app", gone);
-    check("the app ran its SIGTERM handler (so it was continued first)", app_logged(a, "rec=end"));
+    check("the guardian ended both within 4.5 s", gone);
+    check("the frozen app ran its SIGTERM handler (it was continued first)", app_logged(a, "rec=end"));
+    check("the running app ended", app_logged(b, "rec=end"));
 }
 
 } // namespace

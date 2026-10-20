@@ -87,6 +87,7 @@ int main(int argc, char **argv)
     const char *fb_path = NULL, *fb_geom = NULL, *inputs = "auto", *log_path = NULL, *tag = "app";
     double fps = 20, duration = 0;
     int is_static = 0, ack_delay = 0, ignore_hide = 0, draw_hidden = 0, no_drain = 0, no_contract = 0, no_esc = 0;
+    int no_hup = 0;
     static const struct option opts[] = {
         {"fb", required_argument, 0, 'f'},       {"fb-geom", required_argument, 0, 'g'},
         {"input", required_argument, 0, 'i'},    {"log", required_argument, 0, 'l'},
@@ -95,6 +96,7 @@ int main(int argc, char **argv)
         {"draw-hidden", no_argument, 0, 'D'},    {"no-drain", no_argument, 0, 'N'},
         {"no-contract", no_argument, 0, 'C'},    {"duration", required_argument, 0, 'd'},
         {"tag", required_argument, 0, 't'},      {"no-esc", no_argument, 0, 'E'},
+        {"no-hup", no_argument, 0, 'H'},
         {"help", no_argument, 0, 'h'},           {0, 0, 0, 0}};
     int c;
     while ((c = getopt_long(argc, argv, "h", opts, NULL)) != -1) {
@@ -113,10 +115,11 @@ int main(int argc, char **argv)
         case 'd': duration = atof(optarg); break;
         case 't': tag = optarg; break;
         case 'E': no_esc = 1; break;
+        case 'H': no_hup = 1; break;
         default:
             printf("fbhapp [--fb PATH] [--fb-geom WxHxBPP] [--input auto|none|PATH,...] [--log FILE] [--fps N]\n"
                    "       [--static] [--ack-delay-ms N] [--ignore-hide] [--draw-hidden] [--no-drain] [--no-contract]\n"
-                   "       [--no-esc] [--duration S] [--tag NAME]\n"
+                   "       [--no-esc] [--no-hup] [--duration S] [--tag NAME]\n"
                    "A fake fullscreen app for fbhandoff (see the README). Esc quits; Enter changes the colour.\n");
             return c == 'h' ? 0 : 2;
         }
@@ -130,7 +133,8 @@ int main(int argc, char **argv)
     sa.sa_handler = on_quit;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGHUP, &sa, NULL);
+    if (no_hup) signal(SIGHUP, SIG_IGN); /* tests: survive the kernel's SIGHUP to an orphaned stopped group */
+    else sigaction(SIGHUP, &sa, NULL);
     sa.sa_handler = on_cont;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGCONT, &sa, NULL);
