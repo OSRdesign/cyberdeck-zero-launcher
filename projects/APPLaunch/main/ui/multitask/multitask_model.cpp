@@ -282,12 +282,13 @@ void Model::spawn_new(const AppSpec &spec, std::uint64_t now, Actions &out)
 bool Model::launch_into(const AppSpec &spec, std::uint64_t now, Actions &out)
 {
     if (resident_count() >= config_.cap) {
+        const std::string open = std::to_string(config_.cap) + (config_.cap == 1 ? " app open" : " apps open");
         Entry *victim = lru_hidden(true);
         if (!victim) {
-            notice(kNoApp, std::to_string(config_.cap) + " apps open: close one first", out);
+            notice(kNoApp, open + ": close one first", out);
             return false;
         }
-        notice(victim->id, "Closed " + victim->spec.name + " (" + std::to_string(config_.cap) + " apps open)", out);
+        notice(victim->id, "Closed " + victim->spec.name + " (" + open + ")", out);
         close_into(*victim, CloseReason::Cap, now, out);
     }
     spawn_new(spec, now, out);
