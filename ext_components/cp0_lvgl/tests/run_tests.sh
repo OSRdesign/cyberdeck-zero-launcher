@@ -546,6 +546,35 @@ TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_de
     "$root/tests/test_pointer_nav.c" -o "$binary"
 "$binary"
 
+# Multitasking P-c: the slot-aware touch tracker (single touch unchanged against the reader of before), the
+# three-finger hold G1 (study 026 section 5.3 cases in both touch orientations) and the status strip long-press G2, then
+# G1 replayed over the P-a recordings of the deck and the Pi 3A+ (the analyser's numbers: deck 9 + 0 + 8 of 20 holds,
+# Pi 3A+ 9 of 10, no false positive); AddressSanitizer + UndefinedBehaviorSanitizer when the compiler has them
+mt_san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+if ! printf 'int main(void){return 0;}\n' | "${CC:-cc}" -x c $mt_san - -o "$binary" 2>/dev/null; then
+    echo "NOTE touch tracker / gesture tests without sanitizers (no ASan/UBSan runtime)"
+    mt_san=""
+fi
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $mt_san \
+    -I"$root/include" \
+    "$root/src/cp0_touch_slots.c" \
+    "$root/tests/test_touch_slots.c" -o "$binary"
+"$binary"
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $mt_san \
+    -I"$root/include" \
+    "$root/src/cp0_touch_slots.c" "$root/src/cp0_gesture_g1.c" "$root/src/cp0_gesture_g2.c" \
+    "$root/tests/test_gesture_g1.c" -lm -o "$binary"
+"$binary" > /dev/null || "$binary"
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $mt_san \
+    -I"$root/include" \
+    "$root/src/cp0_touch_slots.c" "$root/src/cp0_gesture_g1.c" "$root/src/cp0_ui_metrics.c" \
+    "$root/tests/test_g1_replay.c" -lm -o "$binary"
+fx="$root/tests/fixtures/mta"
+gzip -dc "$fx/mtrec-zero7-20261020-000203.csv.gz" | "$binary" - 640x480 9/10 0
+gzip -dc "$fx/mtrec-zero7-20261020-000730.csv.gz" | "$binary" - 640x480 0/0 0
+gzip -dc "$fx/mtrec-zero7-20261020-000753.csv.gz" | "$binary" - 640x480 8/10 0
+gzip -dc "$fx/mtrec-PI3A-20261020-002544.csv.gz" | "$binary" - 800x480 9/10 0
+
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/include" \
     "$root/src/cp0/cp0_input_state.c" \

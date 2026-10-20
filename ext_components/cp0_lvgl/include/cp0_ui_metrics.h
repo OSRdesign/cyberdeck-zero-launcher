@@ -198,6 +198,7 @@ const cp0_ui_metrics_t *cp0_ui_metrics_current(void);
  * (/tmp/applaunch-screen.state when XDG_RUNTIME_DIR is unset), one key per line, readers ignore unknown keys:
  *   v=1  w=  h=  rot=  ppmm= (x100)  density=default|panel_mm|fbdev  class=  compat=x,y,w,h  scale=  toolbar= (px)
  *   fb= bpp= touch= (the panel's framebuffer, its depth, the touch device; "" / 0 when unknown)
+ *   touch_slots= (multitasking P-c, only when published: 0 no touch, 1 single touch, N multi-touch slots)
  *   space=s,m,l radius=s,m,l header= row= target= dialog_max_w= text=title,heading,body,caption (tokens, px)
  *   kb_inset=0 (reserved, always 0 in contract 1)  gen= (increases on every write) */
 #define CP0_UI_STATE_VERSION 1
@@ -224,6 +225,10 @@ unsigned cp0_ui_state_parse_gen(const char *text, size_t len); /* gen= of a v=1 
 int cp0_ui_state_republish(void);
 /* Device side (cp0_ui_state.c): installs the function cp0_ui_state_republish() calls. */
 void cp0_ui_state_set_republisher(int (*fn)(void));
+/* Multitasking P-c: from now on cp0_ui_state_format() writes touch_slots=slots after touch= (slots < 0, the start
+ * value: no such line). The launcher sets it with APPLAUNCH_MULTITASK=1, then republishes; without the flag
+ * screen.state is unchanged. */
+void cp0_ui_state_set_touch_slots(int slots);
 
 /* Human-readable summary (render harness, logs). Returns the length or -1 when it does not fit. */
 int cp0_ui_metrics_describe(const cp0_ui_metrics_t *m, char *buf, size_t size);

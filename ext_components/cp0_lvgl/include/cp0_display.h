@@ -12,8 +12,10 @@
 #pragma once
 
 #include "lvgl/lvgl.h"
+#include "cp0_touch_slots.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -73,7 +75,8 @@ void cp0_display_set_touch_mode(cp0_display_touch_mode_t mode, int center_y, int
  *  - touch activity: called on the LVGL thread whenever a finger is down; press_edge is 1 on the
  *    first report of a new touch.
  *  - touch swallow: 1 = touches are not delivered to any UI (screensaver up); 2 = same, until the
- *    current finger is lifted (the touch that woke the screen must not act on the UI). */
+ *    current finger is lifted (the touch that woke the screen must not act on the UI); with a
+ *    multi-touch panel, until every finger is lifted (multitasking P-c). */
 typedef void (*cp0_display_touch_activity_cb_t)(int press_edge);
 
 /* External (stock CardputerZero) apps draw to a virtual 320x170 framebuffer; while one runs the
@@ -112,6 +115,28 @@ size_t cp0_display_fb_page_bytes(void);
 int cp0_display_fb_snapshot(void *dst, size_t len, int *page_y);
 int cp0_display_fb_restore(const void *src, size_t len, int page_y);
 int cp0_display_set_touch_grab(int on);
+
+/* Multitasking P-c (task 015-pc): the touch screen's contacts for the launcher's gestures.
+ *  - Every slot of a protocol B panel is tracked (cp0_touch_slots.h); the LVGL pointer is the first contact of a
+ *    touch (one finger: as before; a second finger no longer moves or releases it). Other panels read as before.
+ *  - frame callback (LVGL thread; NULL = none, the default): every frame (each SYN_REPORT) with its contacts in
+ *    landscape coordinates, while the launcher draws (not while suspended); frame == NULL is a tick, once per read of
+ *    the touch device, so a hold completes without events. Returning 1 says the contacts down now belong to a
+ *    recognised gesture: they are swallowed (the pointer reads released, the press in progress ends with
+ *    LV_EVENT_PRESS_LOST and no click, LIST / SWIPE keys are not sent) until every finger is up. Setting it also asks
+ *    the device for monotonic
+ *    event times (the frames' t_us; cp0_touch_now_us() is the same clock).
+ *  - map (any thread, after the display exists): a raw position of the touch device -> landscape, as the pointer does
+ *    (another reader of the same node uses it: the supervisor while an app is in front).
+ *  - path: the touch device read ("" = none); slots: 0 none, 1 single touch (or no slots), N protocol B slots. */
+typedef int (*cp0_display_touch_frame_cb_t)(const cp0_touch_frame_t *frame, int64_t now_us);
+void cp0_display_set_touch_frame_cb(cp0_display_touch_frame_cb_t cb);
+/* LVGL thread: reads what the touch device queued (into the tracker; no frame to the callback) and returns how many
+ * contacts are down now: when the launcher takes the panel back, its queue holds what happened meanwhile. */
+int cp0_display_touch_sync(void);
+void cp0_display_touch_map(int raw_x, int raw_y, int *x, int *y);
+const char *cp0_display_touch_path(void);
+int cp0_display_touch_slots(void);
 
 #ifdef __cplusplus
 }

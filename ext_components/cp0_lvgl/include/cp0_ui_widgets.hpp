@@ -205,6 +205,11 @@ public:
      * screen so the icons are current at once. */
     void refresh();
     lv_obj_t *canvas() const { return canvas_; }
+    /* Multitasking P-c (G2, the long-press on the strip): the area of a strip shown now on `display` (its canvas on the
+     * active screen, from status_strip_left() to its right edge), in display coordinates; false when none is (another
+     * screen, a page without the strip, the SDL simulator). The strip itself stays as it is: not clickable, a tap on it
+     * does what it did. LVGL thread. */
+    static bool active_area(lv_display_t *display, lv_area_t *out);
 
     StatusStrip(const StatusStrip &) = delete;
     StatusStrip &operator=(const StatusStrip &) = delete;
