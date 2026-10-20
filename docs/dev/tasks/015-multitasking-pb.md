@@ -1,6 +1,7 @@
 # 015 - Multitasking P-b: launcher core (lifecycle, handoff, input protection)
 
-Status: design written 2026-10-20 on branch `multitasking-pb` (from `main` 798381c, which has the P-a spike tools).
+Status: designed and built 2026-10-20 on branch `multitasking-pb` (from `main` 798381c, which has the P-a spike
+tools); verified on the PC (section 12); board tests pending.
 Study: [`reports/026-multitasking-study.md`](../reports/026-multitasking-study.md) (sections 1, 2.2-2.3, 4.2, 4.3,
 6.4, 7.1, 7.3, 7.4; owner decisions D1-D15 of 2026-10-14). P-a tools and protocol: `tools/multitasking-spike/`,
 [`tests/multitasking-pa-protocol.md`](../tests/multitasking-pa-protocol.md). Board protocol of this phase:
@@ -228,7 +229,121 @@ drained). The contract asks a lifecycle app to treat every key as released on `s
 - Test apps: `tools/multitasking-spike/desktop/*.desktop` install the spike's `fbhapp` as freeze, run, slow-ack (not
   responding) and legacy fullscreen apps.
 
-## 12. As built
+## 12. As built (2026-10-20)
 
-(Filled in when the implementation is done: files, tests and counts, host-only checks, risks, deviations, decisions
-to confirm.)
+Everything in sections 2-11 is built as described; the differences are listed under "Deviations" below.
+
+### Files
+
+| File | What changed |
+|---|---|
+| `projects/APPLaunch/main/ui/multitask/multitask_model.{hpp,cpp}` | new, pure: registry, state machine, MRU, cap, memory rule, oom tiers, pending target, derived outputs |
+| `.../multitask/switch_keys.{hpp,cpp}` | new, pure: Alt+Tab / Shift / Esc-cancel / Super-tap session |
+| `.../multitask/lifecycle_protocol.{hpp,cpp}` | new, pure: datagram format and parser, environment exports |
+| `.../multitask/supervisor.{hpp,cpp}` | new: the supervisor thread over ports, the Alt+Tab session controller, the dev FIFO, the status file |
+| `.../multitask/supervisor_linux.cpp` | new: spawn with a socketpair, signals, `/proc` members, wait for `T`, reaping, `oom_score_adj`, MemAvailable, drain through `pidfd_getfd`, the guardian |
+| `.../multitask/display_handoff.{hpp,cpp}` | new: display suspended mode on the LVGL thread (also compiled into the render harness) |
+| `.../multitask/multitask_ui.{hpp,cpp}` | new: flag, launcher ports (cp0_display, keyboard grab, keyboard pause / resume, evdev keyboards with the presence watcher), bridge timer, key filter |
+| `projects/APPLaunch/main/ui/launch.{h,cpp}` | `launch_Exec` takes the app's name and `X-Background`; the flagged branch to `launch_fullscreen_supervised`; `mt_app_front`, `mt_launcher_front`; start / stop in `bind_ui` / `~Launch` |
+| `projects/APPLaunch/main/ui/launcher_app.cpp`, `desktop_app_loader.cpp`, `desktop_entry.{h,cpp}` | `X-Background` parsed and carried to the launch |
+| `ext_components/cp0_lvgl/include/cp0_display.h`, `src/cp0/cp0_lvgl_dpi_scaled.c` | `cp0_display_suspend/resume/suspended`, `cp0_display_fb_page_bytes/snapshot/restore`, `cp0_display_set_touch_grab`; one lock around every framebuffer write |
+| `ext_components/cp0_lvgl/include/keyboard_input.h`, `src/cp0/cp0_lvgl_keyboard.c` | `cp0_keyboard_set_grab`: the libinput fds are recorded in `open_restricted` |
+| `ext_components/cp0_lvgl/src/cp0/cp0_esc_key_watch.{hpp,cpp}` | `Sources::poll(listener, context)`: every key event, the Esc state as before |
+| `projects/APPLaunch/tests/test_multitask_model.cpp`, `test_switch_keys.cpp`, `test_lifecycle_protocol.cpp` | new pure tests (ASan + UBSan) |
+| `projects/APPLaunch/tests/multitask/test_supervisor_host.cpp`, `run_supervisor_host.sh` | new host process tests (ASan + UBSan) |
+| `projects/APPLaunch/tests/test_desktop_entry.cpp`, `test_external_framebuffer_ownership.py`, `run_tests.sh` | `X-Background` cases; both fullscreen paths and the hand-overs; registration |
+| `ext_components/cp0_lvgl/tests/test_esc_key_watch.cpp` | the key listener |
+| `projects/APPLaunch/tests/render/{Makefile, src/harness_main.cpp, src/harness_launch.cpp, scenes/multitask_handoff.scene}` | `handoff` / `expect_fb` commands and the review-only scene |
+| `tools/multitasking-spike/src/fbhapp.c`, `desktop/*.desktop`, `README.md` | `work` counter, `h` = `home`, `--no-hup`, no 1 ms polling while hidden; the four test apps |
+| `docs/APP-CONTRACT.md` | `APPLAUNCH_LIFECYCLE` / `APPLAUNCH_CONTROL_FD` in section 3, `X-Background` in section 6, section 13 (draft) |
+| `docs/dev/reports/026-multitasking-study.md` | sections 10 (P-a results) and 11 (P-b status) |
+| `docs/dev/tests/multitasking-pb-protocol.md` | the board protocol |
+
+### Tests (PC, WSL)
+
+| Suite | Before (main 798381c) | After |
+|---|---|---|
+| `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`) | 106 test programs, PASS | 106 programs (`test_esc_key_watch` has one more case), PASS |
+| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 56 compiled tests (+ model 102 checks, keys 71, protocol 32, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (98 checks, ASan + UBSan), PASS |
+| render harness | 40 scenes, 64 goldens (32 at 640x480, 32 at 480x320), 1459 screenshots | 41 scenes (+ `multitask_handoff`, review-only), **64 goldens byte-identical**, 1469 screenshots (+10: the new scene, 2 shots at 5 sizes); `compare`, `twice`, `header`, `contract` PASS |
+| `branding` | PASS | PASS |
+| P-a spike tests (`tools/multitasking-spike/run_tests.sh`, not in check-all) | 20 Python OK; host e2e 37 of 38 in 3 of 3 runs on this PC | 20 Python OK; host e2e 37 of 38 (passed 38 once in 3 runs). The failing case, fbhandoff's own guardian line `ended_group=1`, is timing-dependent and fails on `main` too: when fbhandoff is killed, the kernel sends SIGHUP + SIGCONT to the newly orphaned stopped group and the fake app quits before fbhandoff's guardian looks (the group is gone either way) |
+| launcher build (`tools/dev/wsl-build.sh`, aarch64) | OK | OK, no new warning |
+
+The host process suite runs the real supervisor and Linux port with the fake app on a file-backed framebuffer and
+FIFOs as input nodes: hide and ack (0-1 ms), the 300 ms deadline and not responding, freeze (state `T`) and thaw,
+snapshot and verified restore, no framebuffer write while hidden (and a misbehaving app as the negative control),
+2 Enters and a touch typed while frozen drained before the thaw (the app then saw nothing), `oom_score_adj` 900 / 700
+and back, a `run` app kept working hidden, SIGCONT before the close message, exit and SIGKILL while hidden, Esc held
+3 s, Alt+Tab from evdev (keyboard grab deferred to the Alt release), the app's `home`, `close-all`, the cap, the memory
+floor, shutdown with nothing left stopped, and the guardian (both a frozen app that ignores SIGHUP and a running app
+end within 4.5 s of a SIGKILL of the supervisor's process; without the guardian both survive, checked by hand). The
+render scene checks the display suspended mode with the real display backend: a toast and a forced refresh write no
+byte over the app's frame, the home grid comes back pixel-identical, the snapshot restores byte for byte.
+
+### Verified on the PC only (needs the boards)
+
+- Real evdev: `EVIOCGRAB` on libinput's own fds and on the touch fd (and libinput's behaviour when its grabbed fds
+  are suspended and resumed), `pidfd_getfd` on evdev fds of a real app (P-a did it on the deck), a Bluetooth
+  keyboard sleeping while grabbed, the presence watcher feeding the supervisor's evdev reader.
+- Real fbdev: the deck's `BCM2708 FB` and the Pi 3A+'s `vc4drmfb` (RGB565, possibly two pages: the pan code is
+  untested on hardware); snapshot / restore timings in the launcher.
+- The launcher integration itself: `launch_fullscreen_supervised`, the bridge timer and the hand-overs on the device
+  (the harness covers display_handoff, not launch.cpp), Alt+Tab from a built-in page coming back to that page, the
+  text overlay, the key filter, the launcher's CPU while an app is in front.
+- Today's real apps on the supervised path (System Monitor, Serial Console, Mesh Hop, viz1090, the template) and
+  today's paths with the flag off (wrapped apps, terminal, built-in pages): unchanged code with the flag off;
+  with it on only the fullscreen path differs.
+- Under systemd: the guardian's interplay with the service stop, `oom_score_adj` from the service's 200.
+
+### Deviations from the study
+
+1. **Everything is behind `APPLAUNCH_MULTITASK=1`**: with it off the blocking fullscreen path is kept verbatim (the
+   study's "restructure the fullscreen path" happens only with the flag). With it on, legacy fullscreen apps also
+   run non-blocking under the supervisor (only the hide is refused).
+2. **Not responding is resumable** (study 4.2: "card offers Close only"); P-d decides what its card offers.
+3. **Cap reached with only running apps hidden: the launch is refused** with a notice (D6 says "ask first": that
+   question needs the P-d UI).
+4. **`switcher` from an app = `home`** until P-d.
+5. **Alt+Tab stand-in**: no switcher screen; the app in front is hidden at the first Tab and the home grid shows one
+   line of text in the existing toast; touch is ignored while it shows.
+6. **Super in launcher pages and on the grid does nothing** (K2 "Super = Home" applies to the app in front only), and
+   **Alt+Tab is consumed in launcher pages only while an app is resident** (study K1: always consumed).
+7. **Input protection by the launcher** (grab of its own fds + drain), in addition to the app's duty (study risk 1
+   relied on the app); `APPLAUNCH_MT_INPUT` chooses for experiments.
+8. **A guardian process** (not in the study) ends resident apps if the launcher dies outside systemd.
+9. **`oom_score_adj` base read per app** (study assumed 200; P-a measured 0 over ssh; the service gives 200).
+10. Pointer-navigation devices (mice) are not grabbed; the drain covers them.
+
+### Decisions for the owner to confirm
+
+1. The flag (`APPLAUNCH_MULTITASK=1`, off by default; set per run with `board.py test-start --env` or a user
+   drop-in for the service; no Settings row).
+2. With the flag on, legacy fullscreen apps use the non-blocking path too.
+3. Not responding apps can be resumed.
+4. At the cap with only `run` apps hidden: refuse the launch (until the P-d question).
+5. The Alt+Tab rules: the app is hidden at the first Tab; the cycle is resident apps in MRU order then Home; the
+   selection starts on the second entry (a quick Alt+Tab = the previous app); Shift+Tab back; Esc with Alt held
+   cancels; both Alt keys; Tab auto-repeat ignored.
+6. Super does nothing in launcher pages; Alt+Tab passes through to pages (terminals) while nothing is resident.
+7. `switcher` = `home` until P-d.
+8. The stand-in notice wording: "X is not responding", "Closed X (4 apps open)", "Closed X: low memory (N MB free)",
+   "4 apps open: close one first", "X cannot stay in the background", "X exited" (a hidden app that ended by itself).
+9. The memory rule closes hidden apps only, one per reading; the app in front is never closed by it.
+10. Default input protection grab + drain.
+11. The test apps stay dev tools (`tools/multitasking-spike/desktop/`), not packaged.
+
+### Risks
+
+- **Stuck modifiers in apps** after an Alt+Tab (the app saw Alt down, never up): app side, APP-CONTRACT section 13
+  asks apps to reset key state on `show`; today's apps never get hidden, so it starts with P-e.
+- **Grab and libinput**: the grab is taken on fds libinput owns; a libinput that re-opens devices on its own (a
+  Bluetooth keyboard reconnecting) gets the grab in `open_restricted`. If a board shows lost keys on the home grid
+  with an app hidden, `APPLAUNCH_MT_INPUT=drain` turns the grab off.
+- **A not responding app that is continued to be closed may draw once** over the launcher: the launcher repaints
+  after it exits.
+- **Helpers outside the app's process group** are not frozen or closed (D10: cgroup freezer later).
+- **viz1090's readsb link** after a freeze (P-a: dropped at about 15 s): app side.
+- The snapshot of each resident app costs one framebuffer page (1.2 MB on the deck, 4.8 MB at the cap).
+- The launcher keeps a 20 ms bridge timer while the flag is on, and the supervisor ticks every 10 ms while an app is
+  resident (500 ms idle otherwise).

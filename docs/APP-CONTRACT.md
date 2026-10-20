@@ -46,6 +46,7 @@ exits).
 | `APPLAUNCH_CANVAS=WxH` | `320x170` (the pixels the app draws) | the logical screen, e.g. `640x480` |
 | `APPLAUNCH_CANVAS_SCALE` | screen pixels per canvas pixel: `2` or `1` | `1` |
 | `APPLAUNCH_STATE_DIR` | the state directory (absent without `XDG_RUNTIME_DIR`) | same |
+| `APPLAUNCH_LIFECYCLE=1`, `APPLAUNCH_CONTROL_FD=<n>` | never | only for an app with `X-Background` and only from a launcher with multitasking on: the lifecycle control socket (section 13, draft) |
 
 All coordinates are **logical**: landscape, before the panel's rotation. Compat apps also get the launcher's
 virtual-framebuffer setup (`APPLAUNCH_VFB`, `LD_PRELOAD`, `LV_LINUX_FBDEV_DEVICE=/dev/fb0`, `APPLAUNCH_FB=/dev/fb0`,
@@ -149,6 +150,7 @@ A file without `vkb` (an older launcher) means `auto`; a file without `pointer` 
 | Key | Meaning |
 |---|---|
 | `X-Fullscreen=true` | fullscreen mode: the launcher stops drawing, the app owns the whole panel until it exits (the hold-Esc watchdog still applies). Without it the app is a compat app: 320x170 in the scaled window, toolbar below. |
+| `X-Background=run\|freeze` | **draft (section 13)**: the app may be hidden and resumed instead of owning the panel until it exits; `freeze` = stopped while hidden, `run` = keeps working while hidden. Absent or another value: today's behaviour. Only with `X-Fullscreen=true`, only under a launcher with multitasking on; an older launcher ignores it. |
 | `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (stock CardputerZero, the SDL simulator) shows it. |
 
 **An older launcher ignores `X-MinSize`** (and every contract variable), so an app must still start on a screen that
@@ -282,3 +284,71 @@ On the PC, `projects/APPLaunch/tests/render/run.sh contract` (a step of `tools/d
 against the render harness at six screen sizes with the environment the launcher's own builder produces, and checks
 every fact against the layout service. The board tests are in `docs/dev/tests/launcher-0.5.0-keyboard-tests.md`,
 section L.
+
+## 13. Lifecycle: hidden and resumed (draft, multitasking)
+
+**Status: draft, additive to contract 1** (no `v=` change, section 8). The launcher side is task 015
+(`docs/dev/tasks/015-multitasking-pb.md`, multitasking phase P-b) and runs only with `APPLAUNCH_MULTITASK=1` in the
+launcher's environment; the shared app side (`apps/_common`, the viz1090 shim, Mesh Hop) is phase P-e. Design and
+owner decisions: `docs/dev/reports/026-multitasking-study.md`. An app that declares nothing behaves exactly as
+before, under any launcher.
+
+### Declaring it
+
+| `.desktop` (with `X-Fullscreen=true`) | Hidden, the app is ... | For |
+|---|---|---|
+| `X-Background=freeze` | **stopped** (`SIGSTOP` of its process group after it answered `hide`): no CPU, memory kept | most apps: the cheap default |
+| `X-Background=run` | **running**, without drawing and ignoring input | work that must go on: logging a serial port, decoding radio, sampling |
+| absent or anything else | never hidden: it owns the panel until it exits (today) | wrapped (compat) apps, old builds |
+
+One instance per app: tapping the tile of a hidden app resumes it. At most 4 apps are resident (the app in front
+included); a 5th launch closes the least recently used *frozen* app. While an app is hidden the launcher reads
+MemAvailable every 2 s: under 64 MB it closes the least recently used frozen app, under 32 MB a running one too.
+**The launcher may close a hidden app at any time**: save what matters on `close` (and better, as you go).
+
+### What the app receives
+
+`APPLAUNCH_LIFECYCLE=1` and `APPLAUNCH_CONTROL_FD=<n>`: one end of a `SOCK_SEQPACKET` Unix socket, inherited
+(close-on-exec cleared). Set `FD_CLOEXEC` on it yourself before starting helpers. Without these variables (the key
+is absent, the launcher is older, or multitasking is off) the app keeps today's behaviour; the key alone means
+nothing.
+
+### Messages
+
+ASCII datagrams of at most 64 bytes, one message each; a trailing newline is tolerated; unknown messages are ignored
+by both sides. `<n>` is a decimal number that the launcher increases with every message to that app.
+
+| Direction | Message | Meaning |
+|---|---|---|
+| launcher -> app | `hide <n>` | finish the current frame, **stop writing the framebuffer**, cancel a press in progress (LVGL: `lv_indev_reset`), ignore input, then answer `ack <n>`, **within 300 ms**. A `freeze` app is stopped right after the answer. |
+| launcher -> app | `show <n>` | the launcher has stopped drawing, put the app's last frame back and emptied its input queues; see below, then answer `ack <n>` |
+| launcher -> app | `close <n>` | save and quit. `SIGTERM` follows 3 s later, `SIGKILL` 3 s after that |
+| app -> launcher | `ack <n>` | `hide` or `show` done |
+| app -> launcher | `home` | leave to the launcher (an app's own "minimise" control). Esc at the app's root still **quits** (decision D5) |
+| app -> launcher | `switcher` | open the switcher (multitasking P-d; until then the same as `home`) |
+
+### Obligations
+
+- **Answer `hide` in time.** No `ack <n>` within 300 ms: the launcher stops the whole process group with `SIGSTOP`
+  and shows the app as *not responding*. It can still be resumed (its last frame is restored, its input emptied, the
+  group continued) or closed. A `run` app that cannot stop drawing must not declare `run`.
+- **No framebuffer write while hidden.** The launcher draws the home grid (later the switcher) over your last frame.
+- **On `show`:** read and drop whatever input is still pending (until `EAGAIN`), **treat every key as released and
+  reset the modifiers** (re-read `EVIOCGKEY` if you track key state: the Alt+Tab that hid you showed you Alt going down
+  but never up), reset the pointer state, repaint the whole screen, resume input, answer `ack <n>`.
+- **Frozen means stopped.** `SIGSTOP` cannot be caught; `SIGCONT` can. Timers jump, network peers may drop you (in
+  the P-a measurements viz1090's link to readsb dropped after about 15 s frozen): reconnect after `show`.
+- **Exclusive hardware** (a serial port, an RTL-SDR): declare `run` and keep using it, or release it on `hide` and
+  open it again on `show`; a frozen app still holds what it opened.
+- **Background cost.** A hidden `run` app does its own work only: no rendering, low-rate timers. Its
+  `oom_score_adj` is raised to 700 while hidden (900 when frozen) and set back to its start value on `show`, so under
+  memory pressure the kernel kills hidden apps first.
+- The launcher also protects you from stale input on its own (it grabs the touch screen and the keyboards while it
+  is in front with apps hidden, and empties your evdev queues before every `show`), but an app must not rely on it:
+  another launcher, or a board with a stricter `ptrace_scope`, may not.
+
+### Testing
+
+`tools/multitasking-spike/` has `fbhapp`, a fake fullscreen app that speaks this protocol (its README), and
+`desktop/` files that install it as `freeze`, `run`, slow-to-answer and legacy test apps. The board test protocol is
+`docs/dev/tests/multitasking-pb-protocol.md`.

@@ -6,6 +6,9 @@ committed or deployed. Apps repo read at main 52fd1f2, plus the System Monitor b
 (192.168.68.170): `/proc`, `/sys`, `EVIOCGABS` ioctls, `ps`, `df`; nothing was stopped or written. The HackBerry
 (.214) and the Pi 5 (.175) did not answer.
 
+**Update 2026-10-20:** P-a measured (section 10); P-b, the launcher core, is built behind `APPLAUNCH_MULTITASK=1`
+on branch `multitasking-pb` (section 11, `docs/dev/tasks/015-multitasking-pb.md`), board tests pending.
+
 Markers: **V** = verified in code or measured on a board, **I** = inferred or taken from documentation or the web;
 needs a board. Owner decisions are numbered **D1-D15** (section 8). UI items are proposals for the owner to decide.
 
@@ -742,3 +745,51 @@ preview, Nokia C6 review; Phonearena, Nokia N9 review; WAPReview, N9 Swipe UI ti
 BananaHackers (KaiOS); Joey's Retro Handhelds, Miyoo Mini Plus guide; Onion v4 notes (Reddit mirror); Steam Community
 (Steam Deck menus); Flipper Zero firmware `app-loader.c`; Linux commit 76f969e8948d "cgroup: cgroup v2 freezer" and its
 LKML review; cage(1); Chromium xf86-video-armsoc Set/DropMaster commit; Weston issue 197; libinput-gestures README.
+
+## 10. P-a results (measured 2026-10-19/20)
+
+The owner ran `docs/dev/tests/multitasking-pa-protocol.md` on the deck (Pi Zero 2 W, 414 MB, `fb0` 640x480 at
+32 bpp); the touch recordings also on the Pi 3A+. **V** throughout.
+
+| Question | Result | Consequence for P-b and later |
+|---|---|---|
+| Handoff timing (`fbhandoff`) | freeze = `SIGSTOP` of the group; snapshot of `fb0` about **15 ms**; restore **1.5-2 ms**, verified byte for byte every time | snapshot on every hide, restore on every show |
+| Repaint after the thaw | **without the restore a frozen LVGL app does not repaint** (100 % of the test card left); apps that redraw by themselves (System Monitor, viz1090) paint again 60-200 ms after `SIGCONT` | the launcher must restore a snapshot (or force a full redraw) whenever it hands the panel back: not cosmetic, mandatory |
+| Stale input | an unprotected frozen app acts on what was typed or touched while hidden: the template's highlight moved 3 rows and the Enter fired, a stale Esc quit it; the fake app acted on 2 Enters and 2 taps within 6 ms of the thaw | input protection is needed even for apps that never cooperate |
+| Protection without the app's help | **drain**: the app's evdev queues emptied from outside (`pidfd_getfd` of its fds; no Yama on the deck) -> the app saw 0 stale events. **grab**: `EVIOCGRAB` on the keyboard and touch nodes while it is hidden -> nothing pending for the app, 0.00 % screen change, and the grabber reads the events itself (Alt+Tab while an app is hidden) | P-b: grab primary (on the launcher's own fds while it is in front), drain as the safety net before every resume |
+| The contract | a cooperating app answers `hide` in about **0.2 ms** and drains its own queue on `show`; an app without the contract (the template) timed out at the deadline and was stopped, as designed | 300 ms deadline, then `SIGSTOP` and "not responding" |
+| Memory (MemAvailable 251 MB at the start) | PSS: **viz1090 117 MB** (47 MB anonymous), System Monitor 7.6, Serial Console 7.6, Mesh Hop 9.5, template 6.9 MB. Five resident apps: 136 MB PSS, 206 MB still available, no swap growth | the cap of 4 and the 64 / 32 MB floors (D6) are comfortable |
+| CPU | viz1090 about **149 %** running; the others 0.5-1.3 %; **0 % frozen** | viz1090 must never run hidden as it is: `freeze` (or `run` only once its shim stops rendering, P-e) |
+| `oom_score_adj` | start value **0** (the apps were started from an ssh session); an unprivileged process can raise it (700, 900) and lower it back to its start value, not below (-100 refused) | P-b raises hidden apps and lowers them back on show, from each app's own start value |
+| readsb behind a frozen viz1090 | the TCP link (port 30005) dropped on readsb's side after about 15 s frozen; whether viz1090 reconnects after the thaw is **not verified** | app side (risk 6): `run` or release and reconnect around hide / show |
+| Touch (P-c) | the deck's axes are not square (raw X 14.9 units/mm, Y 8.5): G1's thresholds must be applied after the transform to screen coordinates. 3-finger hold of 1000 ms (D2): **17 of 20** on the deck, **9 of 10** on the Pi 3A+, **0 false positives** | P-c |
+
+**Where P-a contradicts or sharpens the study:**
+- viz1090 + readsb is **117 MB PSS**, not the 30-60 MB guessed in section 2.2, and about 1.5 cores running. The
+  conclusion "memory does not limit 3-4 apps" still holds (5 apps: 136 MB).
+- Section 4.2 presented the snapshot restore as cosmetic ("never sees the launcher's last frame under a partly
+  repainted app"). It is required: a frozen LVGL app does not repaint at all.
+- Risk 1's mitigation relied on the apps ignoring input while hidden and draining on show. The launcher can protect
+  any app on its own (drain and grab), so P-b does both, on top of the app's duty (APP-CONTRACT section 13).
+- The deck's MemAvailable of 144 MB in section 2.2 included 145 MB of old `/tmp` files: 251-269 MB after the cleanup.
+- `oom_score_adj`: P-a measured 0 for apps started over ssh. Apps started by the deck's service inherit the
+  launcher's **200** (read-only probe 2026-10-20: `/proc/<launcher pid>/oom_score_adj` = 200), as section 2.2 said;
+  P-b therefore reads each app's start value instead of assuming one.
+- Still not measured: systemd continuing stopped processes when it stops the service. systemd documents it
+  (`systemd.kill(5)`: `SIGCONT` follows the kill signal); P-b adds a guardian process for runs outside the service
+  (the staged test launcher).
+
+## 11. P-b status (2026-10-20)
+
+Built on branch `multitasking-pb`, **off by default** (`APPLAUNCH_MULTITASK=1` turns it on; without it every code
+path is today's). Design as built, files, tests and the decisions to confirm: `docs/dev/tasks/015-multitasking-pb.md`.
+App side, draft: `docs/APP-CONTRACT.md` section 13. Board protocol: `docs/dev/tests/multitasking-pb-protocol.md`.
+
+- Done: non-blocking fullscreen run (display suspended mode), app registry with MRU and one instance per app, the
+  lifecycle state machine (pure, table-tested), control socket and environment, hide / show / freeze / thaw / close /
+  close all, snapshot and restore on every handoff, grab + drain input protection, `oom_score_adj` tiers, the memory
+  rule (cap 4, floors 64 / 32 MB), Alt+Tab and Super, the guardian, a dev entry (control FIFO, status file, log
+  lines, a one-line text stand-in for the switcher).
+- Verified on the PC only (unit tests, host process tests with the fake app on a file-backed framebuffer, the render
+  harness); the board tests are pending.
+- Next: P-c (touch) is independent; P-d needs the UI decisions (D7-D9, D15); P-e (apps) needs P-b merged.
