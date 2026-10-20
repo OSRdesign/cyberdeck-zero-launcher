@@ -84,6 +84,15 @@ Supervisor::Supervisor(SupervisorConfig config, ProcessPort &proc, FramebufferPo
     : config_(std::move(config)), proc_(proc), fb_(fb), input_(input), keys_(keys), ui_(ui), model_(config_.model)
 {
     if (::pipe2(wake_fd_, O_CLOEXEC | O_NONBLOCK) != 0) wake_fd_[0] = wake_fd_[1] = -1;
+    if (config_.touch.params.hold_ms == 0) cp0_g1_params_default(&config_.touch.params);
+    cp0_g1_init(&g1_, &config_.touch.params, config_.touch.w, config_.touch.h, config_.touch.ppmm_x100);
+}
+
+std::int64_t Supervisor::now_us()
+{
+    struct timespec ts;
+    ::clock_gettime(CLOCK_MONOTONIC, &ts); /* the clock of the touch frames (cp0_touch_reader) */
+    return static_cast<std::int64_t>(ts.tv_sec) * 1000000 + ts.tv_nsec / 1000;
 }
 
 Supervisor::~Supervisor()
@@ -208,6 +217,10 @@ void Supervisor::shutdown_now()
         keys_.close();
         raw_open_ = false;
     }
+    if (touch_open_) {
+        touch_->close();
+        touch_open_ = false;
+    }
     if (fifo_fd_ >= 0) {
         ::close(fifo_fd_);
         fifo_fd_ = -1;
@@ -234,6 +247,13 @@ int Supervisor::next_timeout_ms()
             at(esc_press_ms_ + (esc_hint_ ? cp0_esc_exit_policy::TERMINATE_DELAY_MS : cp0_esc_exit_policy::HINT_DELAY_MS));
     }
     if (next_mem_ms_ != 0) at(next_mem_ms_);
+    if (touch_open_) { /* a three-finger hold completes when its time comes, not at the next touch event */
+        const std::int64_t due = cp0_g1_due_us(&g1_);
+        if (due >= 0) {
+            const std::int64_t left = due - now_us();
+            at(now + (left > 0 ? static_cast<std::uint64_t>(left / 1000) + 1 : 0));
+        }
+    }
     for (const auto &kv : runtime_) {
         const Runtime &rt = kv.second;
         if (rt.show_waiting) at(rt.show_sent_ms + config_.show_ack_log_ms);
@@ -257,6 +277,7 @@ void Supervisor::wait_for_work()
         keys_.fds(key_fds);
         for (const int fd : key_fds) fds.push_back({fd, POLLIN, 0});
     }
+    if (touch_open_ && touch_->fd() >= 0) fds.push_back({touch_->fd(), POLLIN, 0});
     (void)::poll(fds.data(), static_cast<nfds_t>(fds.size()), next_timeout_ms());
     if (wake_fd_[0] >= 0) {
         char buf[64];
@@ -339,6 +360,16 @@ void Supervisor::command(const std::string &line)
     post(std::move(r));
 }
 
+void Supervisor::launcher_gesture(const std::string &source, const std::string &line, bool fired)
+{
+    Request r;
+    r.kind = Request::Kind::Gesture;
+    r.source = source;
+    r.text = line;
+    r.value = fired ? 1 : 0;
+    post(std::move(r));
+}
+
 bool Supervisor::is_resident_key(const std::string &key) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -365,6 +396,7 @@ void Supervisor::run_once()
     poll_controls(now);
     poll_reaping(now);
     poll_keys(now);
+    poll_touch();
     execute(model_.tick(now_ms()));
     for (auto &kv : runtime_) {
         Runtime &rt = kv.second;
@@ -385,6 +417,7 @@ void Supervisor::run_once()
         if (model_.last_memory_kb() != before) dirty_ = true;
     }
     poll_fifo();
+    sync_touch();
     if (dirty_) { /* only after something happened: not on every wake-up */
         dirty_ = false;
         write_status();
@@ -414,6 +447,10 @@ void Supervisor::handle(const Request &r)
         execute(model_.memory(r.value, now));
         break;
     case Request::Kind::Command: handle_command(r.text); break;
+    case Request::Kind::Gesture:
+        log(r.text);
+        if (r.value) open_switcher(r.source);
+        break;
     }
 }
 
@@ -634,10 +671,12 @@ void Supervisor::poll_controls(std::uint64_t now)
                 execute(model_.ack(id, m.n, now_ms()));
                 break;
             case protocol::Kind::Home:
-            case protocol::Kind::Switcher:
-                log(rt.name + std::string(": asks for ") + protocol::kind_name(m.kind) +
-                    (m.kind == protocol::Kind::Switcher ? " (P-b: home)" : ""));
+                log(rt.name + ": asks for home");
                 if (model_.front() == id) execute(model_.go_launcher(now_ms()));
+                break;
+            case protocol::Kind::Switcher: /* G2 on the app's own status strip (P-e) */
+                log(rt.name + ": asks for switcher");
+                if (model_.front() == id) open_switcher("app");
                 break;
             default:
                 log(rt.name + ": unknown message ignored (" + std::to_string(n) + " bytes)");
@@ -873,9 +912,88 @@ void Supervisor::handle_command(const std::string &raw_line)
         log("status:\n" + status_text());
     } else if (word == "memory") {
         execute(model_.memory(std::strtol(arg.c_str(), nullptr, 10), now));
+    } else if (word == "g1" || word == "g2") { /* P-c: a recognised gesture without the fingers */
+        const std::string gesture = word == "g1" ? "G1" : "G2";
+        log(gesture + " fired (dev FIFO)");
+        open_switcher(gesture);
     } else {
-        log("command: unknown (home, switch X, close X, close-all, status, memory KB)");
+        log("command: unknown (home, switch X, close X, close-all, status, memory KB, g1, g2)");
     }
+}
+
+/* ------------------------------------------------------------------------------------------------ touch (P-c) */
+
+/* The P-c stand-in for the switcher (P-d replaces the body: draw the switcher screen). Touch has no other way out of
+ * an app, so from an app it is Home, as Super: the app goes to the background and the home grid shows (a legacy app
+ * cannot: the model's notice says so). With the launcher in front there is nothing to choose from yet. */
+void Supervisor::open_switcher(const std::string &source)
+{
+    dirty_ = true;
+    const AppId front = model_.front();
+    if (front == kNoApp) {
+        log("switcher (" + source + "): the launcher is in front, nothing to do (P-c stand-in; P-d opens the switcher)");
+        return;
+    }
+    const Entry *e = model_.find(front);
+    log("switcher (" + source + "): P-c stand-in = Home (as Super) for " + (e ? e->spec.name : std::string("the app")));
+    execute(model_.go_launcher(now_ms()));
+}
+
+/* The passive reader is open exactly while an app is in front (the launcher reads its own touch fd otherwise). */
+void Supervisor::sync_touch()
+{
+    const AppId front = model_.front();
+    if (front == kNoApp) touch_failed_ = kNoApp;
+    const bool want = touch_ && config_.touch.g1 && front != kNoApp && touch_failed_ != front;
+    if (want == touch_open_) return;
+    dirty_ = true;
+    if (!want) {
+        touch_->close();
+        touch_open_ = false;
+        log("touch: reader closed (the launcher is in front)");
+        return;
+    }
+    if (!touch_->open()) {
+        touch_failed_ = front;
+        log(std::string("touch: cannot open the touch screen (") + std::strerror(errno) + "): no G1 in this app");
+        return;
+    }
+    touch_open_ = true;
+    /* fingers down as the app comes to the front (the tap that opened it, the hand of a G1 made on the grid) are not
+     * a G1: ignored until they lift */
+    if (touch_->down() > 0) cp0_g1_block(&g1_, now_us());
+    else cp0_g1_reset(&g1_);
+    const Entry *e = model_.find(front);
+    log("touch: reading the touch screen passively (no grab) for G1 while " +
+        (e ? e->spec.name : std::string("the app")) + " is in front");
+}
+
+void Supervisor::on_touch_frame(void *context, const cp0_touch_frame_t &frame)
+{
+    auto *self = static_cast<Supervisor *>(context);
+    self->touch_event(cp0_g1_frame(&self->g1_, &frame));
+}
+
+void Supervisor::poll_touch()
+{
+    if (!touch_open_) return;
+    if (!touch_->poll(&Supervisor::on_touch_frame, this)) {
+        log("touch: the touch screen went away");
+        touch_->close();
+        touch_open_ = false;
+        touch_failed_ = model_.front();
+        return;
+    }
+    if (touch_open_) touch_event(cp0_g1_tick(&g1_, now_us()));
+}
+
+void Supervisor::touch_event(const cp0_g1_event_t &event)
+{
+    if (event.outcome == CP0_G1_NONE) return;
+    char line[192];
+    cp0_g1_describe(&g1_, &event, line, sizeof(line));
+    log(line);
+    if (event.outcome == CP0_G1_FIRED) open_switcher("G1");
 }
 
 void Supervisor::write_status()
@@ -890,7 +1008,8 @@ void Supervisor::write_status()
     text += "mem_available_kb=" + std::to_string(model_.last_memory_kb()) + "\n";
     const Derived &d = model_.derived();
     text += std::string("grab_keys=") + (d.grab_keys ? "1" : "0") + " grab_touch=" + (d.grab_touch ? "1" : "0") +
-            " launcher_keys=" + (d.launcher_keys ? "1" : "0") + " evdev_keys=" + (d.raw_keys ? "1" : "0") + "\n";
+            " launcher_keys=" + (d.launcher_keys ? "1" : "0") + " evdev_keys=" + (d.raw_keys ? "1" : "0") +
+            " evdev_touch=" + (touch_open_ ? "1" : "0") + "\n";
     for (const AppId id : model_.live()) {
         const Entry *e = model_.find(id);
         if (!e) continue;
@@ -948,6 +1067,7 @@ void Supervisor::close_all() {}
 void Supervisor::launcher_switch_event(SwitchEvent) {}
 void Supervisor::fake_memory(long) {}
 void Supervisor::command(const std::string &) {}
+void Supervisor::launcher_gesture(const std::string &, const std::string &, bool) {}
 bool Supervisor::is_resident_key(const std::string &) const { return false; }
 std::string Supervisor::status_text() const { return std::string(); }
 void Supervisor::set_log_sink(LogSink) {}

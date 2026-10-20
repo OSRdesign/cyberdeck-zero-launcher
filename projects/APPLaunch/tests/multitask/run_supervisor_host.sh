@@ -25,12 +25,17 @@ if ! printf 'int main(void){return 0;}\n' | ${CXX:-g++} -x c++ $san - -o "$build
 fi
 ui="$root/projects/APPLaunch/main/ui"
 cp0="$root/ext_components/cp0_lvgl"
+# P-c: the touch tracker, its device reader and G1 (C, compiled as C)
+for c in "$cp0/src/cp0_touch_slots.c" "$cp0/src/cp0_gesture_g1.c" "$cp0/src/cp0/cp0_touch_reader.c"; do
+    ${CC:-gcc} -std=c11 -O1 -g -Wall -Wextra -Werror $san -I"$cp0/include" -c "$c" -o "$build/$(basename "$c" .c).o"
+done
 ${CXX:-g++} -std=c++17 -O1 -g -Wall -Wextra -Werror -pthread $san \
     -I"$ui" -I"$cp0/include" -I"$cp0/src/cp0" \
     "$here/test_supervisor_host.cpp" \
     "$ui/multitask/supervisor.cpp" "$ui/multitask/supervisor_linux.cpp" "$ui/multitask/multitask_model.cpp" \
     "$ui/multitask/switch_keys.cpp" "$ui/multitask/lifecycle_protocol.cpp" \
     "$cp0/src/cp0/cp0_esc_key_watch.cpp" \
+    "$build/cp0_touch_slots.o" "$build/cp0_gesture_g1.o" "$build/cp0_touch_reader.o" -lm \
     -o "$build/test_supervisor_host"
 # leaks of the forked children (guardian, apps between fork and exec) are not ours to report
 ASAN_OPTIONS=detect_leaks=0 "$build/test_supervisor_host" "$build/fbhapp" "$work"

@@ -431,7 +431,65 @@ void Guardian::finish()
     }
 }
 
+/* ------------------------------------------------------------------------------------- touch screen (P-c) */
+
+EvdevTouchPort::EvdevTouchPort(std::string path, Map map, bool mt_fallback)
+    : path_(std::move(path)), map_(map), mt_fallback_(mt_fallback)
+{
+    reader_.fd = -1;
+}
+
+bool EvdevTouchPort::open()
+{
+    if (open_) return true;
+    if (path_.empty()) {
+        errno = ENODEV;
+        return false;
+    }
+    /* read-only, non-blocking, close-on-exec; never EVIOCGRAB: the app in front reads this node too */
+    if (cp0_touch_reader_open(&reader_, path_.c_str(), mt_fallback_ ? 1 : 0) != 0) return false;
+    open_ = true;
+    return true;
+}
+
+void EvdevTouchPort::close()
+{
+    if (!open_) return;
+    cp0_touch_reader_close(&reader_);
+    open_ = false;
+}
+
+void EvdevTouchPort::on_frame(void *context, const cp0_touch_frame_t *frame)
+{
+    auto *self = static_cast<EvdevTouchPort *>(context);
+    if (!self->listener_) return;
+    cp0_touch_frame_t f = *frame;
+    if (self->map_)
+        for (int i = 0; i < f.n; ++i) self->map_(f.c[i].x, f.c[i].y, &f.c[i].x, &f.c[i].y);
+    self->listener_(self->context_, f);
+}
+
+bool EvdevTouchPort::poll(Listener listener, void *context)
+{
+    if (!open_) return false;
+    listener_ = listener;
+    context_ = context;
+    const int n = cp0_touch_reader_read(&reader_, &EvdevTouchPort::on_frame, this);
+    listener_ = nullptr;
+    context_ = nullptr;
+    return n >= 0;
+}
+
 #else // !__linux__
+
+EvdevTouchPort::EvdevTouchPort(std::string path, Map map, bool mt_fallback)
+    : path_(std::move(path)), map_(map), mt_fallback_(mt_fallback)
+{
+}
+bool EvdevTouchPort::open() { return false; }
+void EvdevTouchPort::close() {}
+void EvdevTouchPort::on_frame(void *, const cp0_touch_frame_t *) {}
+bool EvdevTouchPort::poll(Listener, void *) { return false; }
 
 std::vector<int> group_members(int) { return {}; }
 DrainStats drain_group_input(int, const std::string &) { return DrainStats(); }

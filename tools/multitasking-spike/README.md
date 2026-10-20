@@ -14,6 +14,7 @@ The owner's step-by-step board protocol is
 | `memprobe.py` | 7.1 (3), (4), (6), risk 4: RSS / PSS / swap of each app running and frozen, 1-4 resident apps, CPU frozen vs running, readsb behind a frozen viz1090, `oom_score_adj` without privilege | starts and stops apps; the launcher only with `--stop-launcher` |
 | `launcher-env.sh` | the launcher's environment for apps started over ssh (`--env-file`) | no |
 | `mta-recover.sh` | panic button: continue stopped processes, end the tools, start the launcher | yes (that is its job) |
+| `mtplay` (C, P-c) | the scripted part of the P-c board protocol: a uinput touch screen playing three-finger holds and the patterns that must not fire | creates a virtual input device (needs `/dev/uinput`, sudo) |
 
 Everything writes to `~/mta-results/` by default: `mtrec-<host>-<date>.csv`, `fbhandoff-<host>-<date>.txt` (+
 `-app.log`), `memprobe-<host>-<date>.txt` / `.json`.
@@ -164,6 +165,20 @@ without cleaning up, even by SIGKILL, and appends `fbh rec=guardian ...` to the 
 `--env-file`, the app still finds the screen through `screen.state` (it stays in `$XDG_RUNTIME_DIR/applaunch/`), but
 not the deck's touch axes: use `launcher-env.sh` first, or let fbhandoff copy `APPLAUNCH_*` / `LV_*` from the running
 launcher (default, before `--stop-launcher` stops it).
+
+## mtplay (multitasking P-c)
+
+A virtual protocol B touch screen (uinput, 5 slots, `INPUT_PROP_DIRECT`, the real panel's ranges with
+`--like /dev/input/event0`), then touch patterns from stdin or `--script "g1; wait 2000; pinch"`, positioned in
+millimetres on the glass as the user sees it and turned into raw units with the board's panel size, axis swap and
+mirror (`/etc/applaunch/board.conf`, else `--board deck|pi3a`, or `--panel-mm`, `--swap`, `--invert-x/-y`). The
+launcher reads it when started with `APPLAUNCH_TOUCH_DEV=<the node mtplay prints>`. Patterns: `g1 [MS]` (three
+fingers 15 mm apart, down within 50 ms, held 1.5 s), `g1short`, `g1close`, `g1slow`, `g1move`, `g1edge`, `four`,
+`pinch`, `strip [MS]` (the status strip), `hold X Y [MS]`, `tap X Y`, `wait MS`, `quit` (`mtplay --help`). Each prints
+the launcher log line to expect. `--dry-run` writes an mtrec recording of the patterns instead (simulated time, no
+device): `run_tests.sh` replays it through the launcher's G1 (`ext_components/cp0_lvgl/tests/test_g1_replay.c`) on
+the deck's and the Pi 3A+'s geometry (both `g1` fire, none of the other nine patterns). Protocol:
+`docs/dev/tests/multitasking-pc-protocol.md` part E.
 
 ## memprobe.py
 

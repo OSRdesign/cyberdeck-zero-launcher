@@ -7,6 +7,9 @@
 // freeze (state T) and thaw, snapshot and restore, no framebuffer write while hidden (with a misbehaving app as the
 // negative control), the drain of the app's queue before the thaw, SIGCONT before close / SIGTERM, exit and kill
 // while hidden, the cap, the memory floor, Esc held 3 s, Alt+Tab from evdev, the dev FIFO, shutdown and the guardian.
+// P-c: a FIFO stands in for the touch screen (protocol B events, as the deck's Goodix sends them): the three-finger
+// hold G1 read passively while an app is in front, the switcher stand-in it runs, the false positives, the dev FIFO's
+// g1 / g2 and the launcher's own gestures.
 //
 //   test_supervisor_host <fbhapp binary> <work dir>
 #include "multitask/supervisor.hpp"
@@ -312,27 +315,43 @@ struct Rig {
     std::string keys_fifo;
     FifoKeys keys;
     LinuxProcessPort proc;
+    std::unique_ptr<EvdevTouchPort> touch; /* P-c: a FIFO as the touch screen (with_touch) */
     std::unique_ptr<Supervisor> sup;
     int kw = -1;  /* the "keyboard": every reader's FIFO stays open (no EOF) */
     int kw2 = -1; /* a second keyboard */
+    int tw = -1;  /* the "touch screen" (P-c) */
 
     /* fast: a 5 ms tick for the pumped scenarios; false keeps the launcher's defaults (the cost scenario) */
-    explicit Rig(SupervisorConfig cfg = SupervisorConfig(), const std::string &tag = "rig", bool fast = true)
+    explicit Rig(SupervisorConfig cfg = SupervisorConfig(), const std::string &tag = "rig", bool fast = true,
+                 bool with_touch = false)
         : fb(g_dir + "/fb-" + tag + ".raw"), ui(fb, rec), input(rec, g_dir + "/app-in-"),
           keys_fifo(make_fifo("keys-" + tag)), keys(keys_fifo, rec, make_fifo("keys2-" + tag))
     {
         cfg.guardian = false;
         (void)fast; /* the pumped scenarios call run_once() themselves; the cost scenario runs the thread */
+        if (with_touch) { /* the deck: 640x480 at 11.3 px/mm, G1 with the defaults (hold 1000 ms) */
+            cfg.touch.g1 = true;
+            cfg.touch.w = 640;
+            cfg.touch.h = 480;
+            cfg.touch.ppmm_x100 = 1130;
+        }
         sup = std::make_unique<Supervisor>(cfg, proc, fb, input, keys, ui);
         sup->set_log_sink([this](const std::string &l) { rec.add("log " + l); });
         kw = writer(keys_fifo);
         kw2 = writer(keys.path2);
+        if (with_touch) {
+            const std::string touch_fifo = make_fifo("touch-" + tag);
+            tw = writer(touch_fifo);
+            touch = std::make_unique<EvdevTouchPort>(touch_fifo, nullptr, true); /* a FIFO: protocol B */
+            sup->set_touch_port(touch.get());
+        }
     }
     ~Rig()
     {
         sup.reset();
         if (kw >= 0) ::close(kw);
         if (kw2 >= 0) ::close(kw2);
+        if (tw >= 0) ::close(tw);
     }
     /* run the loop until cond() or timeout */
     bool pump(int timeout_ms, const std::function<bool()> &cond)
@@ -384,6 +403,43 @@ AppSpec spec_for(const App &a, const std::string &fb_path, Background bg, const 
 bool app_logged(const App &a, const std::string &needle)
 {
     return read_file(a.log).find(needle) != std::string::npos;
+}
+
+/* one contact in one slot: lands or moves (id >= 0) or lifts (id -1), then SYN_REPORT */
+void touch_slot(int fd, int slot, int id, int x = 0, int y = 0)
+{
+    send_event(fd, EV_ABS, ABS_MT_SLOT, slot);
+    send_event(fd, EV_ABS, ABS_MT_TRACKING_ID, id);
+    if (id >= 0) {
+        send_event(fd, EV_ABS, ABS_MT_POSITION_X, x);
+        send_event(fd, EV_ABS, ABS_MT_POSITION_Y, y);
+    }
+    send_event(fd, EV_SYN, SYN_REPORT, 0);
+}
+
+/* three fingers put down 25 ms apart, 120 px (10.6 mm) apart, in the middle of the screen */
+void three_fingers(Rig &r, int first_id)
+{
+    touch_slot(r.tw, 0, first_id, 200, 240);
+    r.pump_for(25);
+    touch_slot(r.tw, 1, first_id + 1, 320, 250);
+    r.pump_for(25);
+    touch_slot(r.tw, 2, first_id + 2, 440, 245);
+}
+
+void lift_all(Rig &r, int slots)
+{
+    for (int s = 0; s < slots; ++s) touch_slot(r.tw, s, -1);
+}
+
+/* "G1 fired (3 contacts, held N ms)": N, or -1 */
+int fired_held_ms(Rig &r)
+{
+    for (const std::string &l : r.rec.get()) {
+        const size_t at = l.find("G1 fired (3 contacts, held ");
+        if (at != std::string::npos) return std::atoi(l.c_str() + at + 27);
+    }
+    return -1;
 }
 
 /* ---------------------------------------------------------------------------------------------- scenarios */
@@ -849,6 +905,139 @@ void scenario_loop_cost()
     r.sup->stop();
 }
 
+void scenario_g1_from_app()
+{
+    std::printf("== P-c G1: three-finger hold in an app, read passively; the stand-in hides it; swallowed after\n");
+    Rig r(SupervisorConfig(), "g1", true, true);
+    App a = make_app("touchy");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    check("the touch screen read while the app is in front",
+          r.pump(1000, [&] { return r.rec.has("touch: reading the touch screen passively (no grab) for G1 while touchy"); }));
+    r.pump_for(50);
+    check("status evdev_touch=1", r.status().find("evdev_touch=1") != std::string::npos, r.status());
+    check("no touch grab while the app is in front", !r.rec.has("input grab_touch 1"));
+    r.rec.clear();
+    three_fingers(r, 10);
+    const std::uint64_t t3 = Supervisor::now_ms();
+    check("not before the hold", !r.pump(900, [&] { return r.rec.has("G1 fired"); }));
+    check("G1 fires after 1 s", r.pump(1000, [&] { return r.rec.has("G1 fired (3 contacts, held "); }));
+    const int held = fired_held_ms(r);
+    check("held about 1000 ms", held >= 1000 && held < 1150, std::to_string(held) + " ms, " +
+                                                                std::to_string(Supervisor::now_ms() - t3) + " ms seen");
+    check("the stand-in: Home for the app", r.rec.has("switcher (G1): P-c stand-in = Home (as Super) for touchy"));
+    check("the app is hidden (frozen)", r.pump(2000, [&] { return r.state("touchy") == "hidden-frozen"; }), r.status());
+    check("the reader closes when the launcher is in front", r.pump(500, [&] { return r.rec.has("touch: reader closed"); }));
+    check("touch grabbed only once the launcher is in front (P-b), not before",
+          r.rec.index("input grab_touch 1") > r.rec.index("ui launcher_front"));
+    check("status evdev_touch=0", r.pump(500, [&] { return r.status().find("evdev_touch=0") != std::string::npos; }));
+    lift_all(r, 3);
+    r.pump_for(100);
+    int fires = 0;
+    for (const std::string &l : r.rec.get())
+        if (l.find("G1 fired") != std::string::npos) ++fires;
+    check("exactly one fire (none while the hand stays down)", fires == 1, std::to_string(fires));
+    // back in the app (the reader opens again, blocked until the screen is free): a fresh hold fires again
+    r.rec.clear();
+    r.sup->command("switch touchy");
+    check("resumed", r.pump(2000, [&] { return r.state("touchy") == "foreground"; }), r.status());
+    check("reader open again", r.pump(500, [&] { return r.rec.has("touch: reading"); }));
+    three_fingers(r, 20);
+    check("a second G1 fires", r.pump(2500, [&] { return r.rec.has("G1 fired"); }));
+    lift_all(r, 3);
+    r.pump(2000, [&] { return r.state("touchy") == "hidden-frozen"; });
+    r.sup->stop();
+}
+
+void scenario_g1_false_positives()
+{
+    std::printf("== P-c G1: a 2-finger pinch, a 4th contact, an early lift, sloppy fingers do not fire\n");
+    Rig r(SupervisorConfig(), "g1neg", true, true);
+    App a = make_app("pinchy");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Run));
+    check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    check("reader open", r.pump(1000, [&] { return r.rec.has("touch: reading"); }));
+    r.pump_for(50);
+    r.rec.clear();
+    // a 2-finger pinch over 1.5 s (viz1090's zoom)
+    touch_slot(r.tw, 0, 30, 220, 240);
+    touch_slot(r.tw, 1, 31, 420, 240);
+    for (int i = 1; i <= 15; ++i) {
+        r.pump_for(100);
+        touch_slot(r.tw, 0, 30, 220 - 5 * i, 240);
+        touch_slot(r.tw, 1, 31, 420 + 5 * i, 240);
+    }
+    lift_all(r, 2);
+    r.pump_for(300);
+    check("pinch: no fire, nothing logged", !r.rec.has("G1 fired") && !r.rec.has("G1 cancelled"));
+    // a 4th contact during the hold (a palm, a grip)
+    three_fingers(r, 40);
+    r.pump_for(300);
+    touch_slot(r.tw, 3, 43, 560, 300);
+    r.pump_for(1200);
+    lift_all(r, 4);
+    check("4th contact: cancelled, reported when the hand lifts",
+          r.pump(500, [&] { return r.rec.has("G1 cancelled: 4 contacts in one touch"); }));
+    // one finger lifts before the second
+    three_fingers(r, 50);
+    r.pump_for(400);
+    touch_slot(r.tw, 2, -1);
+    r.pump_for(900);
+    lift_all(r, 3);
+    check("early lift: cancelled", r.pump(500, [&] { return r.rec.has("G1 cancelled: a finger lifted after"); }));
+    // three fingers too close together (two 50 px = 4.4 mm apart)
+    touch_slot(r.tw, 0, 60, 200, 240);
+    touch_slot(r.tw, 1, 61, 250, 240);
+    touch_slot(r.tw, 2, 62, 440, 240);
+    r.pump_for(1300);
+    lift_all(r, 3);
+    check("too close: cancelled", r.pump(500, [&] { return r.rec.has("G1 cancelled: two fingers 4.4 mm apart"); }));
+    check("none of them fired", !r.rec.has("G1 fired"));
+    check("the app stayed in front", r.state("pinchy") == "foreground", r.status());
+    r.sup->stop();
+}
+
+void scenario_g1_legacy_and_fifo()
+{
+    std::printf("== P-c G1 on a legacy app (stays); dev FIFO g1 / g2; the launcher's own gestures\n");
+    Rig r(SupervisorConfig(), "g1leg", true, true);
+    App a = make_app("oldie");
+    r.sup->launch(spec_for(a, r.fb.path, Background::None));
+    check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    check("reader open for a legacy app too", r.pump(1000, [&] { return r.rec.has("touch: reading"); }));
+    r.pump_for(50);
+    three_fingers(r, 70);
+    check("G1 fires", r.pump(2000, [&] { return r.rec.has("G1 fired"); }));
+    check("a legacy app cannot go to the background: notice",
+          r.pump(500, [&] { return r.rec.has("ui notice oldie cannot stay in the background"); }));
+    lift_all(r, 3);
+    r.pump_for(200);
+    check("it stays in front", r.state("oldie") == "foreground", r.status());
+    r.sup->command("close oldie");
+    r.pump(4000, [&] { return r.status().find("front=home") != std::string::npos; });
+    App b = make_app("fifo");
+    r.sup->launch(spec_for(b, r.fb.path, Background::Freeze));
+    check("B started", r.pump(3000, [&] { return app_logged(b, "rec=start"); }));
+    r.pump_for(100);
+    r.rec.clear();
+    r.sup->command("g1");
+    check("FIFO g1: logged", r.pump(500, [&] { return r.rec.has("G1 fired (dev FIFO)"); }));
+    check("FIFO g1: the app is hidden", r.pump(2000, [&] { return r.state("fifo") == "hidden-frozen"; }), r.status());
+    r.rec.clear();
+    r.sup->command("g2");
+    check("FIFO g2 with the launcher in front: nothing to do",
+          r.pump(500, [&] { return r.rec.has("switcher (G2): the launcher is in front, nothing to do"); }));
+    r.sup->launcher_gesture("G1", "G1 fired (3 contacts, held 1004 ms)", true);
+    check("the launcher's own G1: logged, stand-in nothing to do",
+          r.pump(500, [&] { return r.rec.has("log G1 fired (3 contacts, held 1004 ms)") &&
+                                   r.rec.has("switcher (G1): the launcher is in front"); }));
+    r.sup->launcher_gesture("G1", "G1 cancelled: a finger moved 5.3 mm (limit 4.0 mm), 3 contacts", false);
+    check("the launcher's cancelled G1: logged only",
+          r.pump(500, [&] { return r.rec.has("log G1 cancelled: a finger moved 5.3 mm"); }));
+    check("still nothing in front", r.status().find("front=home") != std::string::npos, r.status());
+    r.sup->stop();
+}
+
 void scenario_guardian()
 {
     /* Two apps that would outlive the supervisor without the guardian: a frozen one that ignores SIGHUP (the kernel
@@ -942,6 +1131,9 @@ int main(int argc, char **argv)
     scenario_home_message_and_fifo();
     scenario_cap_and_memory();
     scenario_shutdown_no_stopped_left();
+    scenario_g1_from_app();
+    scenario_g1_false_positives();
+    scenario_g1_legacy_and_fifo();
     scenario_guardian();
     scenario_loop_cost();
     std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);

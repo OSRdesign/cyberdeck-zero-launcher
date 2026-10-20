@@ -5,8 +5,8 @@
 #
 #   sh build.sh [host|aarch64|all]     default: all
 #
-#   host     gcc (or $HOST_CC)                          -> build/host/{mtrec,fbhandoff,fbhapp,test_mt_track}
-#   aarch64  aarch64-linux-gnu-gcc (or $CC), -static    -> build/aarch64/{mtrec,fbhandoff,fbhapp}  (the Pi boards)
+#   host     gcc (or $HOST_CC)                          -> build/host/{mtrec,fbhandoff,fbhapp,mtplay,test_mt_track}
+#   aarch64  aarch64-linux-gnu-gcc (or $CC), -static    -> build/aarch64/{mtrec,fbhandoff,fbhapp,mtplay}  (the Pi boards)
 #
 # The aarch64 binaries are static, so they do not depend on the boards' glibc (the WSL cross toolchain has 2.39;
 # the boards run Debian 13 with 2.41, uConsole-era bookworm would have 2.36). C11 + POSIX + Linux headers only; the
@@ -27,7 +27,9 @@ build() { # dir compiler extra-flags
     $2 $flags $3 -o "$out/fbhandoff" "$src/fbhandoff.c" "$src/fb_util.c" $common -lm
     # shellcheck disable=SC2086
     $2 $flags $3 -o "$out/fbhapp" "$src/fbhapp.c" "$src/fb_util.c" $common -lm
-    echo "built $out/mtrec $out/fbhandoff $out/fbhapp"
+    # shellcheck disable=SC2086
+    $2 $flags $3 -o "$out/mtplay" "$src/mtplay.c" $common -lm
+    echo "built $out/mtrec $out/fbhandoff $out/fbhapp $out/mtplay"
 }
 
 target=${1:-all}

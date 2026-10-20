@@ -7,8 +7,9 @@
  *   - requests from the UI thread (launch, resume, home, close, close all, Alt+Tab events) are queued;
  *   - it sleeps in poll() on what can happen (requests, control sockets with ack / home / switcher, the leaders'
  *     pidfds, the keyboards from evdev while an app is in front: Esc held 3 s, Alt+Tab, Super, the dev control
- *     FIFO) and wakes on its own only for what is due (deadlines, the Esc hold, MemAvailable every 2 s while an app
- *     is hidden, keyboards re-attached once a second): no fixed tick (deck finding 2026-10-20);
+ *     FIFO; P-c: the touch screen, read passively while an app is in front, for the three-finger hold G1) and wakes
+ *     on its own only for what is due (deadlines, the Esc hold, a G1 hold completing, MemAvailable every 2 s while an
+ *     app is hidden, keyboards re-attached once a second): no fixed tick (deck finding 2026-10-20);
  *   - the pure multitask::Model decides; the actions it returns are carried out through ports, so the same code runs
  *     in the launcher (framebuffer and input of cp0_lvgl, its keyboard thread) and in the host tests (a file-backed
  *     framebuffer, FIFOs as keyboards, a fake app).
@@ -18,6 +19,10 @@
 
 #include "multitask_model.hpp"
 #include "switch_keys.hpp"
+
+#include "cp0_gesture_g1.h"
+#include "cp0_touch_reader.h"
+#include "cp0_touch_slots.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -100,6 +105,22 @@ public:
     virtual void fds(std::vector<int> &out) = 0;
 };
 
+/* Multitasking P-c: the touch screen while an app is in front, for the three-finger hold G1. A second file descriptor
+ * on the launcher's touch node, opened when an app comes to the front and closed when the launcher takes the panel
+ * back; read passively, NEVER grabbed (the app in front reads the same node and owns the touches). */
+class TouchPort {
+public:
+    using Listener = void (*)(void *context, const cp0_touch_frame_t &frame);
+    virtual ~TouchPort() = default;
+    virtual bool open() = 0; /* false: no touch device (G1 then never fires from an app) */
+    virtual void close() = 0;
+    virtual int fd() const = 0; /* for poll(); -1 while closed */
+    virtual int down() const = 0; /* contacts down as the reader knows now (after open: read back from the device) */
+    /* Reads what is pending: every frame, in screen pixels, stamped on CLOCK_MONOTONIC (microseconds), to listener.
+     * false when the device went away. */
+    virtual bool poll(Listener listener, void *context) = 0;
+};
+
 class UiPort {
 public:
     virtual ~UiPort() = default;
@@ -138,8 +159,17 @@ private:
 
 /* --------------------------------------------------------------------------------------------- supervisor */
 
+/* G1 from evdev while an app is in front (P-c). */
+struct TouchConfig {
+    bool g1 = false;         /* a TouchPort is set and the panel reports at least 3 slots */
+    cp0_g1_params_t params{}; /* hold_ms 0 = cp0_g1_params_default() */
+    int w = 640, h = 480;    /* the screen the frames' positions are in */
+    int ppmm_x100 = 1130;    /* its density (screen.state ppmm) */
+};
+
 struct SupervisorConfig {
     Config model;
+    TouchConfig touch;
     bool use_grab = true;          /* APPLAUNCH_MT_INPUT: grab+drain (default), grab, drain, none */
     bool use_drain = true;
     std::string status_path;       /* debug status file, "" = none */
@@ -176,8 +206,14 @@ public:
     void launcher_switch_event(SwitchEvent event);
     /* A fake MemAvailable reading (dev FIFO "memory <kB>"; tests). */
     void fake_memory(long kb);
-    /* One line of the dev control FIFO (also used by tests): home, switch X, close X, close-all, status, memory N. */
+    /* One line of the dev control FIFO (also used by tests): home, switch X, close X, close-all, status, memory N, and
+     * (P-c) g1 / g2: a recognised gesture, as if the fingers had made it. */
     void command(const std::string &line);
+    /* P-c: a gesture the launcher recognised on its own touch reader (the launcher is in front): `line` is logged; fired
+     * = G1 or G2 completed: the switcher stand-in runs. `source` "G1" or "G2". */
+    void launcher_gesture(const std::string &source, const std::string &line, bool fired);
+    /* P-c: the touch screen for G1 while an app is in front (before start(); nullptr = none). */
+    void set_touch_port(TouchPort *port) { touch_ = port; }
 
     /* ---- any thread ---- */
     int resident_count() const { return residents_.load(); }
@@ -213,12 +249,13 @@ private:
         bool show_waiting = false;
     };
     struct Request {
-        enum class Kind { Launch, Resume, Home, Close, CloseAll, Switch, Memory, Command } kind = Kind::Home;
+        enum class Kind { Launch, Resume, Home, Close, CloseAll, Switch, Memory, Command, Gesture } kind = Kind::Home;
         AppSpec spec;
         AppId id = kNoApp;
         SwitchEvent event = SwitchEvent::None;
         long value = 0;
         std::string text;
+        std::string source;
     };
     struct Session {
         bool active = false;
@@ -245,6 +282,14 @@ private:
     std::string session_text() const;
     std::string session_selection() const;
     void handle_command(const std::string &line);
+    /* The switcher (P-c stand-in; P-d draws the switcher screen here): G1, G2, the app's "switcher" message and the
+     * dev FIFO's g1 / g2 all come here. */
+    void open_switcher(const std::string &source);
+    void sync_touch();
+    void poll_touch();
+    void touch_event(const cp0_g1_event_t &event);
+    static void on_touch_frame(void *context, const cp0_touch_frame_t &frame);
+    static std::int64_t now_us();
     AppId lookup(const std::string &what) const;
     void write_status();
     void log(const std::string &line);
@@ -276,6 +321,10 @@ private:
     int fifo_fd_ = -1;
     std::string fifo_buf_;
     std::string last_status_;
+    TouchPort *touch_ = nullptr;
+    bool touch_open_ = false;
+    AppId touch_failed_ = kNoApp; /* the app in front for which the reader could not open (not retried for it) */
+    cp0_g1_t g1_{};
 
     mutable std::mutex mutex_;          /* requests_, status_text_, keys_resident_, log_sink_ */
     std::deque<Request> requests_;
@@ -316,6 +365,32 @@ public:
 
 private:
     ExecChild exec_child_;
+};
+
+/* The TouchPort of the launcher and of the host tests (P-c): a cp0_touch_reader on `path`, read-only, never grabbed.
+ * map: a raw device position -> screen pixels (the launcher: cp0_display_touch_map, the pointer's own transform;
+ * nullptr: raw positions are screen pixels). mt_fallback: the mode when the node's capabilities cannot be read (a FIFO
+ * standing in for the device in the host tests: protocol B). */
+class EvdevTouchPort : public TouchPort {
+public:
+    using Map = void (*)(int raw_x, int raw_y, int *x, int *y);
+    EvdevTouchPort(std::string path, Map map, bool mt_fallback);
+    ~EvdevTouchPort() override { close(); }
+    bool open() override;
+    void close() override;
+    int fd() const override { return open_ ? reader_.fd : -1; }
+    int down() const override { return open_ ? cp0_touch_slots_down(&reader_.t) : 0; }
+    bool poll(Listener listener, void *context) override;
+
+private:
+    static void on_frame(void *context, const cp0_touch_frame_t *frame);
+    std::string path_;
+    Map map_;
+    bool mt_fallback_;
+    bool open_ = false;
+    cp0_touch_reader_t reader_{};
+    Listener listener_ = nullptr;
+    void *context_ = nullptr;
 };
 
 } // namespace multitask
