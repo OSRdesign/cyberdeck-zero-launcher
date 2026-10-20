@@ -6,10 +6,12 @@
  * filter while the launcher is in front.
  *   Alt (left or right) held + Tab        Start (Shift held: StartReverse); further Tabs Next / Prev (Shift)
  *   Alt released during a session          Commit (switch to the selection)
- *   Esc during a session                   Cancel (back to where the session started)
+ *   Esc or Backspace during a session      Cancel (back to where the session started; Backspace: owner decision
+ *                                          2026-10-20, the M4 keyboard cannot send Esc while Alt is held)
  *   Super (left / right Meta) pressed and released with no other key in between, or KEY_HOMEPAGE   Home
- * `consume` tells the launcher's key filter to keep the key from its pages: every key of a session (Tab, Esc, the
- * closing Alt release and the release of a consumed key). Auto-repeat starts nothing. Pure, no system call.
+ * `consume` tells the launcher's key filter to keep the key from its pages: every key of a session (Tab, Esc,
+ * Backspace, the closing Alt release and the release of a consumed key). Auto-repeat starts nothing. Pure, no system
+ * call.
  * Unit-tested by tests/test_switch_keys.cpp.
  */
 #pragma once
@@ -22,6 +24,7 @@ namespace multitask {
 /* Linux input-event-codes.h values (stable kernel ABI), so this file builds without Linux headers. */
 namespace keys {
 inline constexpr unsigned kEsc = 1;
+inline constexpr unsigned kBackspace = 14;
 inline constexpr unsigned kTab = 15;
 inline constexpr unsigned kLeftShift = 42;
 inline constexpr unsigned kRightShift = 54;
@@ -35,8 +38,8 @@ inline constexpr unsigned kHomePage = 172;
 enum class SwitchEvent : std::uint8_t { None, Start, StartReverse, Next, Prev, Commit, Cancel, Home };
 
 const char *switch_event_name(SwitchEvent event);
-/* "Esc", "Tab", "Alt", "RightAlt", "Shift", "RightShift", "Super", "RightSuper", "HomePage", else "code <n>": the
- * names of the session's key trace in the log (non-text keys only have a name). */
+/* "Esc", "BackSpace", "Tab", "Alt", "RightAlt", "Shift", "RightShift", "Super", "RightSuper", "HomePage", else
+ * "code <n>": the names of the session's key trace in the log (non-text keys only have a name). */
 std::string switch_key_name(unsigned code);
 
 struct SwitchResult {
@@ -62,7 +65,8 @@ private:
     bool meta_down_ = false;   /* a Super key is down */
     bool meta_clean_ = false;  /* ... and nothing else was pressed since */
     bool swallow_tab_ = false; /* the Tab release of a consumed press */
-    bool swallow_esc_ = false; /* the Esc release of a Cancel */
+    bool swallow_esc_ = false;       /* the Esc repeats and release of a Cancel */
+    bool swallow_backspace_ = false; /* the Backspace repeats and release of a Cancel */
 };
 
 } // namespace multitask

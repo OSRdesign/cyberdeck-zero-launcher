@@ -655,16 +655,26 @@ void scenario_alt_tab_evdev()
 /* Deck finding (build pb.2): Esc with Alt held did not cancel an Alt+Tab session on the deck. The deck's state
  * exactly (a frozen app hidden, a run app in front, the session started inside it), the keyboard's real ordering with
  * gaps between the events, and the variants: Esc autorepeat, Esc from a second keyboard, Esc before the app in front
- * is hidden, and a keyboard whose firmware repeats a held Tab as new presses (the deck log's "select Home"). */
+ * is hidden, and a keyboard whose firmware repeats a held Tab as new presses (the deck log's "select Home").
+ * Build pb.4 (owner decision 2026-10-20): Backspace cancels like Esc (the M4 keyboard sends no Esc while Alt is held),
+ * so every variant runs with each of the two keys. */
 void scenario_alt_tab_cancel_deck()
 {
     std::printf("== Alt+Tab cancel as on the deck: a run app in front, a frozen app hidden\n");
-    static const char *names[] = {"plain", "esc-autorepeat", "esc-second-keyboard", "esc-before-hide", "tab-firmware-repeat"};
-    for (int v = 0; v < 5; ++v) {
-        const std::string tag = names[v];
-        Rig r(SupervisorConfig(), "cx" + std::to_string(v));
-        App frozen = make_app("cf" + std::to_string(v));
-        App front = make_app("cr" + std::to_string(v));
+    static const char *names[] = {"plain", "autorepeat", "second-keyboard", "before-hide", "tab-firmware-repeat"};
+    static const struct {
+        int code;
+        const char *name; /* switch_key_name */
+    } cancel_keys[] = {{KEY_ESC, "Esc"}, {KEY_BACKSPACE, "BackSpace"}};
+    for (int i = 0; i < 10; ++i) {
+        const int k = i / 5, v = i % 5;
+        const int cancel = cancel_keys[k].code;
+        const std::string key_name = cancel_keys[k].name;
+        const std::string tag = key_name + " " + names[v];
+        const std::string sfx = std::to_string(k) + std::to_string(v);
+        Rig r(SupervisorConfig(), "cx" + sfx);
+        App frozen = make_app("cf" + sfx);
+        App front = make_app("cr" + sfx);
         r.sup->launch(spec_for(frozen, r.fb.path, Background::Freeze));
         r.pump(3000, [&] { return app_logged(frozen, "rec=start"); });
         r.pump_for(100);
@@ -687,23 +697,25 @@ void scenario_alt_tab_cancel_deck()
         if (v != 3) r.pump(2000, [&] { return r.state(front.name) == "hidden-running"; });
         else r.pump_for(2);
         r.pump_for(v == 3 ? 0 : 300);
-        const int esc_fd = v == 2 ? r.kw2 : r.kw;
-        key(esc_fd, KEY_ESC, 1);
+        const int cancel_fd = v == 2 ? r.kw2 : r.kw;
+        key(cancel_fd, cancel, 1);
         if (v == 1)
             for (int i = 0; i < 6; ++i) {
                 r.pump_for(35);
-                send_event(esc_fd, EV_KEY, KEY_ESC, 2);
-                send_event(esc_fd, EV_SYN, SYN_REPORT, 0);
+                send_event(cancel_fd, EV_KEY, cancel, 2);
+                send_event(cancel_fd, EV_SYN, SYN_REPORT, 0);
             }
         r.pump_for(90);
-        key(esc_fd, KEY_ESC, 0);
+        key(cancel_fd, cancel, 0);
         r.pump_for(120);
         key(r.kw, KEY_LEFTALT, 0);
         check(tag + ": 'session: cancelled'", r.pump(1500, [&] { return r.rec.has("log session: cancelled"); }));
         check(tag + ": back to the app the session started from",
               r.pump(2500, [&] { return r.state(front.name) == "foreground"; }), r.status());
         check(tag + ": the Alt release after the cancel commits nothing", !r.rec.has("log session ends: Home"));
-        check(tag + ": every key of the session is in the log", r.rec.has("log session key: Esc down") &&
+        check(tag + ": the cancel key is traced as the cancel",
+              r.rec.has("log session key: " + key_name + " down -> cancel"));
+        check(tag + ": every key of the session is in the log", r.rec.has("log session key: " + key_name + " up") &&
                                                                     r.rec.has("log session key: Alt up"));
         r.sup->stop();
     }

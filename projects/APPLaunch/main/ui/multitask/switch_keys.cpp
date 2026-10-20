@@ -26,6 +26,7 @@ std::string switch_key_name(unsigned code)
 {
     switch (code) {
     case keys::kEsc: return "Esc";
+    case keys::kBackspace: return "BackSpace";
     case keys::kTab: return "Tab";
     case keys::kLeftAlt: return "Alt";
     case keys::kRightAlt: return "RightAlt";
@@ -103,19 +104,24 @@ SwitchResult SwitchKeys::key(unsigned code, int value)
         }
         return result;
     case keys::kEsc:
+    case keys::kBackspace: {
+        /* Backspace cancels too (owner decision 2026-10-20: the M4 keyboard cannot send Esc while Alt is held). Its
+         * repeats and release are the session's as well; outside a session both keys stay the page's / app's. */
+        bool &swallow = code == keys::kEsc ? swallow_esc_ : swallow_backspace_;
         if (press && active_) {
             active_ = false;
-            swallow_esc_ = true;
+            swallow = true;
             result.event = SwitchEvent::Cancel;
             result.consume = true;
             return result;
         }
-        if (release && swallow_esc_) {
-            swallow_esc_ = false;
+        if (release && swallow) {
+            swallow = false;
             result.consume = true;
         }
-        if (repeat && swallow_esc_) result.consume = true;
+        if (repeat && swallow) result.consume = true;
         return result;
+    }
     default:
         /* any other key while a session runs belongs to the session (the pages do not see it) */
         if (active_) result.consume = true;

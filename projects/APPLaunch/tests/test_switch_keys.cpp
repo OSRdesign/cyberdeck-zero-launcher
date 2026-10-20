@@ -172,6 +172,64 @@ int main()
         {kEsc, 0, "none", true},
         {kLeftAlt, 0, "none", false},
     });
+    /* Backspace cancels like Esc (owner decision 2026-10-20, build pb.4: the M4 keyboard sends no Esc with Alt held) */
+    run("Backspace with Alt held cancels; its repeats and release are swallowed; the Alt release does nothing", {
+        {kLeftAlt, 1, "none", false},
+        {kTab, 1, "start", true},
+        {kTab, 0, "none", true},
+        {kBackspace, 1, "cancel", true},
+        {kBackspace, 2, "none", true},
+        {kBackspace, 2, "none", true},
+        {kBackspace, 0, "none", true},
+        {kLeftAlt, 0, "none", false},
+    });
+    run("Backspace released after Alt: still swallowed (it was the session's)", {
+        {kLeftAlt, 1, "none", false},
+        {kTab, 1, "start", true},
+        {kTab, 0, "none", true},
+        {kBackspace, 1, "cancel", true},
+        {kLeftAlt, 0, "none", false},
+        {kBackspace, 2, "none", true},
+        {kBackspace, 0, "none", true},
+    });
+    run("Backspace outside a session is the app's or page's, held Alt or not", {
+        {kBackspace, 1, "none", false},
+        {kBackspace, 2, "none", false},
+        {kBackspace, 0, "none", false},
+        {kLeftAlt, 1, "none", false},
+        {kBackspace, 1, "none", false},
+        {kBackspace, 0, "none", false},
+        {kLeftAlt, 0, "none", false},
+    });
+    run("Backspace after a Backspace cancel: the next one types again", {
+        {kLeftAlt, 1, "none", false},
+        {kTab, 1, "start", true},
+        {kBackspace, 1, "cancel", true},
+        {kBackspace, 0, "none", true},
+        {kLeftAlt, 0, "none", false},
+        {kTab, 0, "none", true},
+        {kBackspace, 1, "none", false},
+        {kBackspace, 0, "none", false},
+    });
+    run("Esc and Backspace in one session: the first cancels, the second is not the session's", {
+        {kLeftAlt, 1, "none", false},
+        {kTab, 1, "start", true},
+        {kBackspace, 1, "cancel", true},
+        {kEsc, 1, "none", false},
+        {kEsc, 0, "none", false},
+        {kBackspace, 0, "none", true},
+        {kLeftAlt, 0, "none", false},
+    });
+    run("Esc outside a session is untouched too", {
+        {kEsc, 1, "none", false},
+        {kEsc, 2, "none", false},
+        {kEsc, 0, "none", false},
+    });
+    ++g_checks;
+    if (switch_key_name(kBackspace) != "BackSpace") {
+        ++g_failures;
+        std::printf("FAIL switch_key_name(%u): want BackSpace got %s\n", kBackspace, switch_key_name(kBackspace).c_str());
+    }
     if (g_failures) {
         std::printf("test_switch_keys: %d of %d checks failed\n", g_failures, g_checks);
         return 1;
