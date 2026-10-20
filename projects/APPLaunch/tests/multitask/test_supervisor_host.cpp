@@ -173,12 +173,17 @@ struct TestInput : InputPort {
 
 struct FifoKeys : KeyPort {
     std::string path;
+    std::string path2; /* a second keyboard ("" = none) */
     Recorder &rec;
     cp0_esc_key_watch::Sources sources;
-    FifoKeys(std::string p, Recorder &r) : path(std::move(p)), rec(r) {}
+    FifoKeys(std::string p, Recorder &r, std::string p2 = std::string())
+        : path(std::move(p)), path2(std::move(p2)), rec(r)
+    {
+    }
     void open() override
     {
         sources.open(path.c_str());
+        if (!path2.empty()) sources.open(path2.c_str());
         rec.add("keys open");
     }
     void close() override
@@ -308,23 +313,26 @@ struct Rig {
     FifoKeys keys;
     LinuxProcessPort proc;
     std::unique_ptr<Supervisor> sup;
-    int kw = -1; /* the "keyboard": every reader's FIFO stays open (no EOF) */
+    int kw = -1;  /* the "keyboard": every reader's FIFO stays open (no EOF) */
+    int kw2 = -1; /* a second keyboard */
 
     /* fast: a 5 ms tick for the pumped scenarios; false keeps the launcher's defaults (the cost scenario) */
     explicit Rig(SupervisorConfig cfg = SupervisorConfig(), const std::string &tag = "rig", bool fast = true)
         : fb(g_dir + "/fb-" + tag + ".raw"), ui(fb, rec), input(rec, g_dir + "/app-in-"),
-          keys_fifo(make_fifo("keys-" + tag)), keys(keys_fifo, rec)
+          keys_fifo(make_fifo("keys-" + tag)), keys(keys_fifo, rec, make_fifo("keys2-" + tag))
     {
         cfg.guardian = false;
         (void)fast; /* the pumped scenarios call run_once() themselves; the cost scenario runs the thread */
         sup = std::make_unique<Supervisor>(cfg, proc, fb, input, keys, ui);
         sup->set_log_sink([this](const std::string &l) { rec.add("log " + l); });
         kw = writer(keys_fifo);
+        kw2 = writer(keys.path2);
     }
     ~Rig()
     {
         sup.reset();
         if (kw >= 0) ::close(kw);
+        if (kw2 >= 0) ::close(kw2);
     }
     /* run the loop until cond() or timeout */
     bool pump(int timeout_ms, const std::function<bool()> &cond)
@@ -644,6 +652,63 @@ void scenario_alt_tab_evdev()
     r.sup->stop();
 }
 
+/* Deck finding (build pb.2): Esc with Alt held did not cancel an Alt+Tab session on the deck. The deck's state
+ * exactly (a frozen app hidden, a run app in front, the session started inside it), the keyboard's real ordering with
+ * gaps between the events, and the variants: Esc autorepeat, Esc from a second keyboard, Esc before the app in front
+ * is hidden, and a keyboard whose firmware repeats a held Tab as new presses (the deck log's "select Home"). */
+void scenario_alt_tab_cancel_deck()
+{
+    std::printf("== Alt+Tab cancel as on the deck: a run app in front, a frozen app hidden\n");
+    static const char *names[] = {"plain", "esc-autorepeat", "esc-second-keyboard", "esc-before-hide", "tab-firmware-repeat"};
+    for (int v = 0; v < 5; ++v) {
+        const std::string tag = names[v];
+        Rig r(SupervisorConfig(), "cx" + std::to_string(v));
+        App frozen = make_app("cf" + std::to_string(v));
+        App front = make_app("cr" + std::to_string(v));
+        r.sup->launch(spec_for(frozen, r.fb.path, Background::Freeze));
+        r.pump(3000, [&] { return app_logged(frozen, "rec=start"); });
+        r.pump_for(100);
+        r.sup->go_launcher();
+        r.pump(2000, [&] { return r.state(frozen.name) == "hidden-frozen"; });
+        r.sup->launch(spec_for(front, r.fb.path, Background::Run));
+        r.pump(3000, [&] { return app_logged(front, "rec=start"); });
+        r.pump_for(150);
+        r.rec.clear();
+        key(r.kw, KEY_LEFTALT, 1);
+        r.pump_for(40);
+        key(r.kw, KEY_TAB, 1);
+        r.pump_for(80);
+        if (v == 4) { /* firmware typematic: the held Tab comes again as release + press */
+            key(r.kw, KEY_TAB, 0);
+            key(r.kw, KEY_TAB, 1);
+            r.pump_for(40);
+        }
+        key(r.kw, KEY_TAB, 0);
+        if (v != 3) r.pump(2000, [&] { return r.state(front.name) == "hidden-running"; });
+        else r.pump_for(2);
+        r.pump_for(v == 3 ? 0 : 300);
+        const int esc_fd = v == 2 ? r.kw2 : r.kw;
+        key(esc_fd, KEY_ESC, 1);
+        if (v == 1)
+            for (int i = 0; i < 6; ++i) {
+                r.pump_for(35);
+                send_event(esc_fd, EV_KEY, KEY_ESC, 2);
+                send_event(esc_fd, EV_SYN, SYN_REPORT, 0);
+            }
+        r.pump_for(90);
+        key(esc_fd, KEY_ESC, 0);
+        r.pump_for(120);
+        key(r.kw, KEY_LEFTALT, 0);
+        check(tag + ": 'session: cancelled'", r.pump(1500, [&] { return r.rec.has("log session: cancelled"); }));
+        check(tag + ": back to the app the session started from",
+              r.pump(2500, [&] { return r.state(front.name) == "foreground"; }), r.status());
+        check(tag + ": the Alt release after the cancel commits nothing", !r.rec.has("log session ends: Home"));
+        check(tag + ": every key of the session is in the log", r.rec.has("log session key: Esc down") &&
+                                                                    r.rec.has("log session key: Alt up"));
+        r.sup->stop();
+    }
+}
+
 void scenario_home_message_and_fifo()
 {
     std::printf("== the app's \"home\" message; dev FIFO close-all and status\n");
@@ -848,6 +913,7 @@ int main(int argc, char **argv)
     ::signal(SIGPIPE, SIG_IGN);
     if (const char *only = std::getenv("MT_ONLY")) { /* MT_ONLY=cost: the loop cost measurement alone */
         if (std::string(only) == "cost") scenario_loop_cost();
+        if (std::string(only) == "cancel") scenario_alt_tab_cancel_deck();
         std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);
         return g_fail ? 1 : 0;
     }
@@ -860,6 +926,7 @@ int main(int argc, char **argv)
     scenario_exit_and_kill_while_hidden();
     scenario_esc_hold();
     scenario_alt_tab_evdev();
+    scenario_alt_tab_cancel_deck();
     scenario_home_message_and_fifo();
     scenario_cap_and_memory();
     scenario_shutdown_no_stopped_left();

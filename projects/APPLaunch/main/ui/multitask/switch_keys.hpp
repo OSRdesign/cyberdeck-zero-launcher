@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 namespace multitask {
 
@@ -34,6 +35,9 @@ inline constexpr unsigned kHomePage = 172;
 enum class SwitchEvent : std::uint8_t { None, Start, StartReverse, Next, Prev, Commit, Cancel, Home };
 
 const char *switch_event_name(SwitchEvent event);
+/* "Esc", "Tab", "Alt", "RightAlt", "Shift", "RightShift", "Super", "RightSuper", "HomePage", else "code <n>": the
+ * names of the session's key trace in the log (non-text keys only have a name). */
+std::string switch_key_name(unsigned code);
 
 struct SwitchResult {
     SwitchEvent event = SwitchEvent::None;

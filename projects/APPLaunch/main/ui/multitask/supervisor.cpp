@@ -674,6 +674,13 @@ void Supervisor::on_raw_key(void *context, int code, int value)
     auto *self = static_cast<Supervisor *>(context);
     const SwitchResult r = self->raw_keys_.key(static_cast<unsigned>(code), value);
     if (r.event != SwitchEvent::None) self->raw_events_.push_back(r.event);
+    /* the key trace of a session (deck finding, build pb.2: Esc with Alt held did not cancel there; the log must show
+     * what the keyboard really sent): every press and release from the key that starts a session to 2 s after it
+     * ends. Nothing is logged outside sessions (no typed text in the journal). */
+    if (value != 2 && (self->session_.active || r.event != SwitchEvent::None || now_ms() < self->trace_until_ms_))
+        self->log("session key: " + switch_key_name(static_cast<unsigned>(code)) + (value ? " down" : " up") +
+                  (r.event != SwitchEvent::None ? std::string(" -> ") + switch_event_name(r.event) : std::string()) +
+                  (self->session_.active || r.event != SwitchEvent::None ? "" : " (after the session)"));
 }
 
 void Supervisor::poll_keys(std::uint64_t now)
@@ -817,6 +824,7 @@ void Supervisor::end_session(AppId target)
     const Entry *e = target == kNoApp ? nullptr : model_.find(target);
     log("session ends: " + (target == kNoApp ? std::string("Home") : e ? e->spec.name : std::string("(gone)")));
     session_ = Session();
+    trace_until_ms_ = now + 2000;
     ui_.overlay("");
     if (raw) execute(model_.key_session(false, now));
     if (target == kNoApp) execute(model_.go_launcher(now));

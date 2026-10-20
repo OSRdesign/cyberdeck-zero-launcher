@@ -299,6 +299,15 @@ int key_filter(const struct key_item *item)
         }
         if (r.event != multitask::SwitchEvent::None && r.event != multitask::SwitchEvent::Home)
             s_sup->launcher_switch_event(r.event);
+        /* the session key trace, as the supervisor's for sessions read from evdev (see Supervisor::on_raw_key) */
+        static std::uint64_t trace_until = 0;
+        const std::uint64_t now = multitask::Supervisor::now_ms();
+        const bool session_key = r.event != multitask::SwitchEvent::None && r.event != multitask::SwitchEvent::Home;
+        if (value != 2 && (s_filter_keys.active() || session_key || now < trace_until))
+            std::fprintf(stderr, "[mt] session key (launcher): %s %s%s%s\n",
+                         multitask::switch_key_name(item->key_code).c_str(), value ? "down" : "up",
+                         session_key ? " -> " : "", session_key ? multitask::switch_event_name(r.event) : "");
+        if (r.event == multitask::SwitchEvent::Commit || r.event == multitask::SwitchEvent::Cancel) trace_until = now + 2000;
         if (r.consume) return 1;
     }
     return s_prev_filter ? s_prev_filter(item) : 0;

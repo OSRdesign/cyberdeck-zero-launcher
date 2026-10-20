@@ -146,6 +146,32 @@ int main()
         {kTab, 1, "none", false},
         {kTab, 0, "none", false},
     });
+    {
+        /* the names of the session key trace (deck finding, build pb.2) */
+        const struct {
+            unsigned code;
+            const char *name;
+        } names[] = {{kEsc, "Esc"}, {kTab, "Tab"}, {kLeftAlt, "Alt"}, {kRightAlt, "RightAlt"}, {kLeftShift, "Shift"},
+                     {kRightShift, "RightShift"}, {kLeftMeta, "Super"}, {kRightMeta, "RightSuper"},
+                     {kHomePage, "HomePage"}, {kA, "code 30"}};
+        for (const auto &n : names) {
+            ++g_checks;
+            if (switch_key_name(n.code) != n.name) {
+                ++g_failures;
+                std::printf("FAIL switch_key_name(%u): want %s got %s\n", n.code, n.name, switch_key_name(n.code).c_str());
+            }
+        }
+    }
+    run("deck order: Alt, Tab, Esc with autorepeat, Esc up, Alt up: cancel, then nothing", {
+        {kLeftAlt, 1, "none", false},
+        {kTab, 1, "start", true},
+        {kTab, 0, "none", true},
+        {kEsc, 1, "cancel", true},
+        {kEsc, 2, "none", true},
+        {kEsc, 2, "none", true},
+        {kEsc, 0, "none", true},
+        {kLeftAlt, 0, "none", false},
+    });
     if (g_failures) {
         std::printf("test_switch_keys: %d of %d checks failed\n", g_failures, g_checks);
         return 1;

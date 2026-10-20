@@ -264,6 +264,7 @@ private:
     bool dirty_ = true; /* the status file and the resident list need writing */
     int next_timeout_ms();
     Session session_;
+    std::uint64_t trace_until_ms_ = 0; /* the session key trace goes on 2 s after a session ended */
     std::vector<SwitchEvent> raw_events_;
     bool esc_down_ = false;
     std::uint64_t esc_press_ms_ = 0; /* the Esc-hold policy of today: hint at 500 ms, SIGTERM at 3 s */

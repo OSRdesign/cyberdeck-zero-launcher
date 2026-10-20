@@ -22,6 +22,23 @@ const char *switch_event_name(SwitchEvent event)
     return "none";
 }
 
+std::string switch_key_name(unsigned code)
+{
+    switch (code) {
+    case keys::kEsc: return "Esc";
+    case keys::kTab: return "Tab";
+    case keys::kLeftAlt: return "Alt";
+    case keys::kRightAlt: return "RightAlt";
+    case keys::kLeftShift: return "Shift";
+    case keys::kRightShift: return "RightShift";
+    case keys::kLeftMeta: return "Super";
+    case keys::kRightMeta: return "RightSuper";
+    case keys::kHomePage: return "HomePage";
+    default: break;
+    }
+    return "code " + std::to_string(code);
+}
+
 void SwitchKeys::reset()
 {
     *this = SwitchKeys();
