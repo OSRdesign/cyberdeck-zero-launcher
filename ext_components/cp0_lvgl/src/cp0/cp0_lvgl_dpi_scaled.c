@@ -38,6 +38,7 @@
 #include "cp0_display.h"
 #include "cp0_fb_output.h"
 #include "cp0_lvgl.h"
+#include "cp0_touch_reader.h"
 #include "cp0_ui_metrics.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
@@ -200,11 +201,17 @@ typedef struct {
     bool swap, inv_x, inv_y;
     bool buffer_mode;   /* APPLAUNCH_TOUCH_ORIENT=buffer: axes follow the framebuffer */
     int X, Y;           /* last mapped position in the landscape view */
+    /* multitasking P-c: the slot-aware tracker (cp0_touch_slots.h) behind the single pointer, and the two pointer
+     * devices (a gesture cancels the press in progress on both) */
+    cp0_touch_reader_t rd;
+    int slots;          /* screen.state touch_slots: 0 none, 1 single touch, N protocol B slots */
+    lv_indev_t *indev_native, *indev_compat;
 } touch_ctx_t;
 
 static touch_ctx_t tc;
 static cp0_display_touch_activity_cb_t activity_cb;
-static volatile int swallow_mode; /* 0 none, 1 until cleared, 2 until the finger is lifted */
+static cp0_display_touch_frame_cb_t frame_cb;
+static volatile int swallow_mode; /* 0 none, 1 until cleared, 2 until every finger is lifted */
 static bool was_pressed;
 
 static int find_touch_device(char *out, size_t n)
@@ -333,28 +340,15 @@ static int resolve_touch_device(char *out, size_t n, char *name, size_t name_siz
     return find_touch_by_capability(out, n, name, name_size);
 }
 
-/* Drain pending evdev events and refresh the mapped landscape position. */
-static void touch_update(void)
+/* Raw touch position -> landscape view (swap / invert / rotation, or the buffer orientation). */
+static void touch_map(int raw_x, int raw_y, int *X, int *Y)
 {
-    struct input_event ev;
-    ssize_t r;
-    while ((r = read(tc.fd, &ev, sizeof(ev))) == (ssize_t)sizeof(ev)) {
-        if (ev.type == EV_ABS) {
-            if (ev.code == ABS_MT_POSITION_X || ev.code == ABS_X) tc.raw_x = ev.value;
-            else if (ev.code == ABS_MT_POSITION_Y || ev.code == ABS_Y) tc.raw_y = ev.value;
-            else if (ev.code == ABS_MT_TRACKING_ID) tc.pressed = ev.value >= 0;
-        } else if (ev.type == EV_KEY && ev.code == BTN_TOUCH) {
-            tc.pressed = ev.value != 0;
-        }
-    }
-
     if (tc.buffer_mode) {
-        cp0_fbo_touch_to_logical(&g.out, tc.raw_x, tc.raw_y, tc.min_x, tc.max_x, tc.min_y, tc.max_y, &tc.X,
-                                 &tc.Y);
+        cp0_fbo_touch_to_logical(&g.out, raw_x, raw_y, tc.min_x, tc.max_x, tc.min_y, tc.max_y, X, Y);
     } else {
         const int spanx = tc.max_x - tc.min_x, spany = tc.max_y - tc.min_y;
-        double nx = spanx > 0 ? (double)(tc.raw_x - tc.min_x) / spanx : 0;
-        double ny = spany > 0 ? (double)(tc.raw_y - tc.min_y) / spany : 0;
+        double nx = spanx > 0 ? (double)(raw_x - tc.min_x) / spanx : 0;
+        double ny = spany > 0 ? (double)(raw_y - tc.min_y) / spany : 0;
         if (tc.swap) { double t = nx; nx = ny; ny = t; } /* normalise each axis first */
         if (tc.inv_x) nx = 1.0 - nx;
         if (tc.inv_y) ny = 1.0 - ny;
@@ -363,14 +357,55 @@ static void touch_update(void)
         if (px >= g.pw) px = g.pw - 1;
         if (py < 0) py = 0;
         if (py >= g.ph) py = g.ph - 1;
-        phys_to_land(px, py, &tc.X, &tc.Y);
+        phys_to_land(px, py, X, Y);
     }
+}
+
+static void cancel_key_gestures(void); /* the LIST / SWIPE gesture in progress (below) */
+
+/* A gesture took the contacts down now (multitasking P-c): the pointer reads released until every finger is up, and
+ * the press in progress on either pointer device ends with LV_EVENT_PRESS_LOST instead of a click (lv_indev_wait_release:
+ * the toolbar keys and the on-screen keyboard send their owed key release on it). */
+static void swallow_gesture(void)
+{
+    swallow_mode = 2;
+    if (tc.indev_native) lv_indev_wait_release(tc.indev_native);
+    if (tc.indev_compat) lv_indev_wait_release(tc.indev_compat);
+    cancel_key_gestures();
+}
+
+/* Each frame to the gesture callback, in landscape coordinates (only while the launcher draws). */
+static void deliver_frame(void *ctx, const cp0_touch_frame_t *raw)
+{
+    (void)ctx;
+    if (!frame_cb || suspended) return;
+    cp0_touch_frame_t f = *raw;
+    for (int i = 0; i < f.n; i++) {
+        int X, Y;
+        touch_map(f.c[i].x, f.c[i].y, &X, &Y);
+        f.c[i].x = X;
+        f.c[i].y = Y;
+    }
+    if (frame_cb(&f, f.t_us)) swallow_gesture();
+}
+
+/* Drain pending evdev events and refresh the mapped landscape position. */
+static void touch_update(void)
+{
+    /* the tracker keeps every slot; the single pointer is the first contact of a touch (one finger: as before) */
+    (void)cp0_touch_reader_read(&tc.rd, frame_cb ? deliver_frame : NULL, NULL);
+    int32_t rx, ry;
+    tc.pressed = cp0_touch_slots_pointer(&tc.rd.t, &rx, &ry) != 0;
+    tc.raw_x = rx;
+    tc.raw_y = ry;
+    touch_map(tc.raw_x, tc.raw_y, &tc.X, &tc.Y);
+    if (frame_cb && !suspended && frame_cb(NULL, cp0_touch_now_us())) swallow_gesture(); /* a hold completes */
 
     /* One notification per new touch (the second pointer device sees no edge). */
     const bool edge = tc.pressed && !was_pressed;
     was_pressed = tc.pressed;
     if (tc.pressed && activity_cb && !suspended) activity_cb(edge ? 1 : 0);
-    if (swallow_mode == 2 && !tc.pressed) swallow_mode = 0;
+    if (swallow_mode == 2 && cp0_touch_slots_down(&tc.rd.t) == 0) swallow_mode = 0;
 }
 
 /* Pointer for the native display (everything except the compat window while it is shown). */
@@ -432,6 +467,12 @@ typedef struct {
 } swipe_gesture_t;
 
 static swipe_gesture_t sw;
+
+static void cancel_key_gestures(void)
+{
+    lg.down = false;
+    sw.down = false;
+}
 
 static void swipe_gesture(void)
 {
@@ -583,6 +624,14 @@ static void init_touch(void)
         ai.minimum = 0, ai.maximum = g.ph - 1;
     tc.min_y = ai.minimum; tc.max_y = ai.maximum;
     snprintf(touch_path, sizeof(touch_path), "%s", path);
+    {
+        /* every slot is tracked (protocol B); other panels keep the flattened reading of before. Nothing is read back
+         * here: a finger already down when the launcher starts does not press, as before. */
+        int slots = 1, slot_now = 0;
+        const int mt = cp0_touch_reader_caps(tc.fd, &slots, &slot_now);
+        cp0_touch_reader_attach(&tc.rd, tc.fd, mt > 0, mt > 0 ? slots : 1, slot_now);
+        tc.slots = mt > 0 ? slots : 1;
+    }
     tc.swap = env_int("APPLAUNCH_TOUCH_SWAP_XY", 0);
     tc.inv_x = env_int("APPLAUNCH_TOUCH_INVERT_X", 0);
     tc.inv_y = env_int("APPLAUNCH_TOUCH_INVERT_Y", 0);
@@ -596,6 +645,8 @@ static void init_touch(void)
     lv_indev_set_type(compat, LV_INDEV_TYPE_POINTER);
     lv_indev_set_read_cb(compat, touch_read_compat);
     lv_indev_set_display(compat, g.compat);
+    tc.indev_native = native;
+    tc.indev_compat = compat;
 
     printf("[dpi] touch %s raw x[%d..%d] y[%d..%d]\n", path, tc.min_x, tc.max_x, tc.min_y, tc.max_y);
     if (tc.buffer_mode)
@@ -604,6 +655,10 @@ static void init_touch(void)
     else
         snprintf(touch_desc, sizeof(touch_desc), "%s via %s, legacy swap=%d invert_x=%d invert_y=%d", path, how,
                  tc.swap, tc.inv_x, tc.inv_y);
+    if (tc.rd.t.mt) {
+        const size_t used = strlen(touch_desc);
+        snprintf(touch_desc + used, sizeof(touch_desc) - used, ", %d slots", tc.slots);
+    }
 }
 
 /* -------------------------------------------------------------- public API */
@@ -614,6 +669,32 @@ lv_display_t *cp0_display_compat(void) { return g.compat; }
 cp0_display_mode_t cp0_display_get_mode(void) { return g.mode; }
 
 void cp0_display_set_touch_activity_cb(cp0_display_touch_activity_cb_t cb) { activity_cb = cb; }
+
+void cp0_display_set_touch_frame_cb(cp0_display_touch_frame_cb_t cb)
+{
+    frame_cb = cb;
+    /* the frames' times: the events' own, on the clock the gestures' ticks use (this open file only) */
+    if (cb && touch_path[0]) (void)cp0_touch_reader_use_monotonic(&tc.rd);
+}
+
+void cp0_display_touch_map(int raw_x, int raw_y, int *x, int *y)
+{
+    int X = 0, Y = 0;
+    if (g.ready) touch_map(raw_x, raw_y, &X, &Y);
+    if (x) *x = X;
+    if (y) *y = Y;
+}
+
+const char *cp0_display_touch_path(void) { return touch_path; }
+
+int cp0_display_touch_sync(void)
+{
+    if (!touch_path[0]) return 0;
+    (void)cp0_touch_reader_read(&tc.rd, NULL, NULL);
+    return cp0_touch_slots_down(&tc.rd.t);
+}
+
+int cp0_display_touch_slots(void) { return touch_path[0] ? tc.slots : 0; }
 
 void cp0_display_set_overlay_rect(int x, int y, int w, int h)
 {

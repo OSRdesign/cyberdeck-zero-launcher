@@ -7,7 +7,9 @@ committed or deployed. Apps repo read at main 52fd1f2, plus the System Monitor b
 (.214) and the Pi 5 (.175) did not answer.
 
 **Update 2026-10-20:** P-a measured (section 10); P-b, the launcher core, is built behind `APPLAUNCH_MULTITASK=1`
-on branch `multitasking-pb` (section 11, `docs/dev/tasks/015-multitasking-pb.md`), board tests pending.
+on branch `multitasking-pb` (section 11, `docs/dev/tasks/015-multitasking-pb.md`), board tests pending. P-c, touch
+(the slot tracker, G1 at 1 s, G2), is built on branch `multitasking-pc` (section 12,
+`docs/dev/tasks/015-multitasking-pc.md`), board tests pending.
 
 Markers: **V** = verified in code or measured on a board, **I** = inferred or taken from documentation or the web;
 needs a board. Owner decisions are numbered **D1-D15** (section 8). UI items are proposals for the owner to decide.
@@ -601,7 +603,7 @@ Per app:
 |---|---|---|---|---|
 | **P-a Spike and measure** | (1) a raw multitouch recorder (a tiny C or Python evdev logger, read-only): 1-4 fingers, palm, grip, two-thumb OSK typing, on the deck GT911 and the 3A+ FT5x06; ghost rate, `TOUCH_MAJOR` of finger vs palm, how close 3 fingers can be on 57 mm. (2) Handoff prototype outside the launcher: run the template fullscreen, `SIGSTOP` the group, snapshot fb0, draw a test card, restore the snapshot, `SIGCONT`; look for tearing and missing repaint. (3) PSS/anon/swap of every app running and frozen (template, System Monitor, Serial Console, Mesh Hop, viz1090 + readsb). (4) viz1090: does readsb tolerate a stopped or slow viz1090 (TCP buffer, reconnect)? (5) Can a finger start a swipe at the deck's bottom edge in its case? (6) `oom_score_adj` raise and lower without privilege | D1, D2 agreed in principle | a data table; go/no-go on G1 and its thresholds; the handoff shows no flicker and no stale input | 3 |
 | **P-b Launcher core** | non-blocking fullscreen run (a "display suspended" mode: no flush, pointer released; today's `lv_timer_enable(false)` also stops `lv_async_call`); app registry, MRU, one instance; control socket and env; hide/show/freeze/thaw/close/close all; ack timeout -> not responding; memory rule and `oom_score_adj`; snapshot capture and restore; Alt+Tab and Super in the supervisor and in the launcher's key path; rewrite `test_external_framebuffer_ownership.py` | P-a passed | unit tests of the lifecycle state machine and the memory policy; host test with a fake protocol app on a file-backed framebuffer; `check-all` green; goldens unchanged | 6 |
-| **P-c Touch** | slot-aware multitouch tracker in `cp0_lvgl_dpi_scaled.c` (fixes the flattening; single pointer = the first slot); G1 recogniser (pure C, SDK-copyable for the shims); G2 on the strip; swallow after fire; `touch_slots` in `screen.state` | P-a data | table-driven tests (section 5.3) + replay of the P-a recordings; no change in the harness goldens | 4 |
+| **P-c Touch** (built 2026-10-20, section 12) | slot-aware multitouch tracker in `cp0_lvgl_dpi_scaled.c` (fixes the flattening; single pointer = the first slot); G1 recogniser (pure C, SDK-copyable for the shims); G2 on the strip; swallow after fire; `touch_slots` in `screen.state` | P-a data | table-driven tests (section 5.3) + replay of the P-a recordings; no change in the harness goldens | 4 |
 | **P-d Switcher and grid UI** | the owner's choices from section 6 | D6-D9, D15 decided | harness scenes at 640x480, 800x480, 720x720, 1280x720 (+ 480x320 best effort); contact sheet reviewed | 4 |
 | **P-e Apps** | `_common` lifecycle (hidden flag in the `cp0_lvgl` flush, drain + `lv_indev_reset` on show, Tab-with-Alt, strip `switcher`); viz1090 shim; Mesh Hop platform; `.desktop` keys; APP-CONTRACT §13, APP-GUIDELINES (save state on exit, hardware release, background CPU budget) | P-b, P-c | headless tests per app; board protocol below | 5 |
 | P-f (optional) Terminal sessions | keep `UISTPage` + PTY alive while hidden; card from an LVGL snapshot | P-b | an SSH session survives a trip to another app | 3 |
@@ -795,3 +797,24 @@ App side, draft: `docs/APP-CONTRACT.md` section 13. Board protocol: `docs/dev/te
 - Verified on the PC only (unit tests, host process tests with the fake app on a file-backed framebuffer, the render
   harness); the board tests are pending.
 - Next: P-c (touch) is independent; P-d needs the UI decisions (D7-D9, D15); P-e (apps) needs P-b merged.
+
+## 12. P-c status (2026-10-20)
+
+Built on branch `multitasking-pc` (on `main` after P-b). Design as built, files, tests, deviations and the
+decisions to confirm: `docs/dev/tasks/015-multitasking-pc.md`. Board protocol:
+`docs/dev/tests/multitasking-pc-protocol.md`.
+
+- Done: the slot tracker under the launcher's pointer (always on; single touch unchanged: differential tests against
+  the old reader, and the harness goldens byte-identical with the fake panel now protocol B); G1 (pure C,
+  `cp0_gesture_g1.{h,c}`) with the D2 hold of 1 s as `CP0_G1_HOLD_MS` (`APPLAUNCH_MT_G1_HOLD_MS`), the section 5.2
+  thresholds in millimetres after the screen transform; G2 on the launcher's status strip (500 ms), the strip object
+  unchanged; G1 from the launcher's own reader and, while an app is in front, from a second, passive reader (never
+  grabbed); the fingers of a fired gesture click nothing; `touch_slots` (with the flag); FIFO `g1` / `g2`; the
+  `mtplay` uinput panel for the scripted board test.
+- **Until P-d draws the switcher, a gesture from an app = Home** (as Super; legacy apps stay, with a notice) and **from
+  the launcher = nothing** (a log line): one seam, `Supervisor::open_switcher`, for P-d to replace.
+- Replay of the P-a recordings at 1000 ms: **deck 17 of 20, Pi 3A+ 9 of 10, no false positive (0 of 48 labelled
+  non-hold steps on the deck, 0 of 23 on the Pi 3A+)**: the same holds hit and missed for the same reasons as
+  `mta_analyse.py`.
+- Verified on the PC only; the board tests (real hands, viz1090's pinch, two-thumb typing, palms, both panels) are
+  pending.

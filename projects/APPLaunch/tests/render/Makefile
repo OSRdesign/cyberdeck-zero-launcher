@@ -76,6 +76,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_sudo_prompt_ui.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0_pointer_nav.c \
+    $(CP0)/src/cp0_touch_slots.c \
     $(CP0)/src/cp0/cp0_ui_state.c \
     $(CP0)/src/cp0/cp0_statusbar.c \
     $(CP0)/src/cp0/cp0_keyboard_lvgl_input.c \
@@ -96,6 +97,9 @@ CP0_SRCS := \
 # harness fake devices (src/harness_fb.c) with objcopy. Nothing else in the binary is affected.
 DPI_SRC := $(CP0)/src/cp0/cp0_lvgl_dpi_scaled.c
 DPI_OBJ := $(OBJ)/dpi_scaled_redirected.o
+# Its touch reader (multitasking P-c) the same way: its ioctl calls (capabilities, read back) reach the fake device.
+TOUCH_SRC := $(CP0)/src/cp0/cp0_touch_reader.c
+TOUCH_OBJ := $(OBJ)/touch_reader_redirected.o
 
 # Settings > Apps' workers (task 014 P3d): compiled unchanged, then their references to the Store backend program
 # (apps_backend::run, run_program, available) are renamed to the in-process fake (src/harness_apps.cpp, namespace
@@ -128,12 +132,12 @@ CP0_OBJS     := $(call obj_of,$(CP0_SRCS))
 APP_OBJS     := $(call obj_of,$(APP_SRCS))
 HARNESS_OBJS := $(call obj_of,$(HARNESS_SRCS))
 ALL_OBJS     := $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(call obj_of,$(DPI_SRC)) \
-                $(call obj_of,$(APPS_JOBS_SRC))
+                $(call obj_of,$(TOUCH_SRC)) $(call obj_of,$(APPS_JOBS_SRC))
 
 .PHONY: all clean
 all: $(BIN)
 
-$(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(DPI_OBJ) $(APPS_JOBS_OBJ)
+$(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(DPI_OBJ) $(TOUCH_OBJ) $(APPS_JOBS_OBJ)
 	$(CXX) -o $@ $^ -Wl,--gc-sections $(FT_LIBS) $(PNG_LIBS) -lpthread -lm
 
 $(DPI_OBJ): $(call obj_of,$(DPI_SRC))
@@ -141,6 +145,11 @@ $(DPI_OBJ): $(call obj_of,$(DPI_SRC))
 	        --redefine-sym mmap=harness_fb_mmap $< $@
 	@if nm -u $@ | grep -Eqw 'open|open64|ioctl|mmap|mmap64'; then \
 	    echo "display manager still calls the real open/ioctl/mmap:"; nm -u $@; rm -f $@; exit 1; fi
+
+$(TOUCH_OBJ): $(call obj_of,$(TOUCH_SRC))
+	objcopy --redefine-sym open=harness_fb_open --redefine-sym ioctl=harness_fb_ioctl $< $@
+	@if nm -u $@ | grep -Eqw 'open|open64|ioctl'; then \
+	    echo "touch reader still calls the real open/ioctl:"; nm -u $@; rm -f $@; exit 1; fi
 
 $(APPS_JOBS_OBJ): $(call obj_of,$(APPS_JOBS_SRC))
 	objcopy $$(nm -u $< | awk '$$2 ~ /^$(APPS_BACKEND_SYMS)/ { t = $$2; sub(/12apps_backend/, "12harness_apps", t); \

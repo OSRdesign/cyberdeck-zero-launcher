@@ -11,8 +11,12 @@
 
 #include "cp0_display.h"
 #include "cp0_esc_state.h"
+#include "cp0_gesture_g1.h"
+#include "cp0_gesture_g2.h"
 #include "cp0_keyboard_presence.h"
 #include "cp0_lvgl_app_runner.hpp"
+#include "cp0_ui_metrics.h"
+#include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
 #include "launcher_toast.h"
 #include "native_ui.hpp"
@@ -192,7 +196,14 @@ std::unique_ptr<LauncherInput> s_input;
 std::unique_ptr<LauncherKeys> s_keys;
 std::unique_ptr<LauncherUi> s_ui;
 std::unique_ptr<multitask::LinuxProcessPort> s_proc;
+std::unique_ptr<multitask::EvdevTouchPort> s_touch;
 std::unique_ptr<multitask::Supervisor> s_sup;
+
+/* P-c: the launcher's own gestures while it is in front (LVGL thread): G1 on its touch reader, G2 on the status strip
+ * of the active screen. While an app is in front the supervisor runs G1 on its passive reader. */
+cp0_g1_t s_g1;
+cp0_g2_t s_g2;
+bool s_g1_on = false;
 
 /* The toast carries two things: the P-b stand-in for the switcher (one line of text while an Alt+Tab session runs,
  * touch ignored meanwhile; a session started inside an app asks for it before the app is hidden: it appears when the
@@ -236,6 +247,53 @@ void tune_bridge()
 }
 
 
+/* LVGL thread, from the display manager (cp0_display_set_touch_frame_cb): every touch frame while the launcher draws,
+ * and a tick per read. A completed G1 or G2 goes to the supervisor (the switcher stand-in) and its contacts are
+ * swallowed: nothing under the fingers is clicked. */
+int touch_frame_cb(const cp0_touch_frame_t *frame, int64_t now_us)
+{
+    if (!s_sup) return 0;
+    cp0_g1_event_t e1;
+    cp0_g2_event_t e2;
+    if (frame) {
+        lv_area_t a;
+        cp0_g2_rect_t strip = {0, 0, 0, 0};
+        const bool on_screen = cp0::ui::StatusStrip::active_area(cp0_display_native(), &a);
+        if (on_screen) strip = {a.x1, a.y1, a.x2 - a.x1 + 1, a.y2 - a.y1 + 1};
+        e2 = cp0_g2_frame(&s_g2, frame, on_screen ? &strip : nullptr);
+        e1 = s_g1_on ? cp0_g1_frame(&s_g1, frame) : cp0_g1_event_t{};
+    } else {
+        e2 = cp0_g2_tick(&s_g2, now_us);
+        e1 = s_g1_on ? cp0_g1_tick(&s_g1, now_us) : cp0_g1_event_t{};
+    }
+    int swallow = 0;
+    if (e1.outcome != CP0_G1_NONE) {
+        char line[192];
+        cp0_g1_describe(&s_g1, &e1, line, sizeof(line));
+        s_sup->launcher_gesture("G1", line, e1.outcome == CP0_G1_FIRED);
+        swallow = e1.outcome == CP0_G1_FIRED;
+    }
+    if (e2.fired) {
+        s_sup->launcher_gesture("G2", "G2 fired (status strip held " + std::to_string(e2.held_ms) + " ms)", true);
+        swallow = 1;
+    }
+    return swallow;
+}
+
+/* The touch screen changes hands: the launcher's queue holds what happened meanwhile (read now, without frames); a hand
+ * still down (the one that made a G1 in the app) is not a gesture of the launcher's: ignored until it lifts. */
+void hand_over_gestures()
+{
+    if (cp0_display_touch_sync() > 0) {
+        const int64_t now = cp0_touch_now_us();
+        cp0_g1_block(&s_g1, now);
+        cp0_g2_block(&s_g2, now);
+    } else {
+        cp0_g1_reset(&s_g1);
+        cp0_g2_reset(&s_g2);
+    }
+}
+
 /* LVGL thread: the supervisor's UI events, then the toast. */
 void process_events()
 {
@@ -251,11 +309,13 @@ void process_events()
             s_app_front = true;
             refresh_toast(); /* hides what the toast shows; a notice not read yet comes back later */
             if (s_hooks.app_front) s_hooks.app_front();
+            hand_over_gestures();
             break;
         case UiEvent::Kind::LauncherFront:
             /* also after a refused launch: undoes what the launch prepared (loading overlay, input group) */
             s_app_front = false;
             if (s_hooks.launcher_front) s_hooks.launcher_front(e.flag);
+            hand_over_gestures();
             break;
         case UiEvent::Kind::Repaint:
             if (!s_app_front) {
@@ -313,6 +373,11 @@ int key_filter(const struct key_item *item)
     return s_prev_filter ? s_prev_filter(item) : 0;
 }
 
+const char *env_get(const char *name)
+{
+    return std::getenv(name);
+}
+
 int env_int(const char *name, int fallback, int lo, int hi)
 {
     const char *v = std::getenv(name);
@@ -356,12 +421,30 @@ bool start(Hooks hooks)
             cfg.control_fifo = std::string(rt) + "/applaunch/multitask.ctl";
         }
     }
+    /* P-c: touch gestures. G1 needs a panel with at least 3 slots; G2 works on any touch screen. */
+    const int slots = cp0_display_touch_slots();
+    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_current();
+    cfg.touch.w = metrics ? metrics->w : 640;
+    cfg.touch.h = metrics ? metrics->h : 480;
+    cfg.touch.ppmm_x100 = metrics ? metrics->ppmm_x100 : 1130;
+    cp0_g1_params_default(&cfg.touch.params);
+    (void)cp0_g1_params_apply_env(&cfg.touch.params, env_get);
+    cfg.touch.g1 = slots >= CP0_G1_CONTACTS;
+    cp0_g2_params_t g2;
+    cp0_g2_params_default(&g2);
+    (void)cp0_g2_params_apply_env(&g2, env_get);
+    cp0_g1_init(&s_g1, &cfg.touch.params, cfg.touch.w, cfg.touch.h, cfg.touch.ppmm_x100);
+    cp0_g2_init(&s_g2, &g2, cfg.touch.ppmm_x100);
+    s_g1_on = cfg.touch.g1;
+
     s_fb.reset(new LauncherFb());
     s_input.reset(new LauncherInput());
     s_keys.reset(new LauncherKeys());
     s_ui.reset(new LauncherUi());
     s_proc.reset(new multitask::LinuxProcessPort(&exec_child));
+    s_touch.reset(new multitask::EvdevTouchPort(cp0_display_touch_path(), &cp0_display_touch_map, false));
     s_sup.reset(new multitask::Supervisor(cfg, *s_proc, *s_fb, *s_input, *s_keys, *s_ui));
+    s_sup->set_touch_port(s_touch.get());
 
     s_bridge = lv_timer_create(bridge_cb, 1000, nullptr); /* the fallback; events come through the loop hook */
     cp0_lvgl_set_loop_hook(&loop_hook);
@@ -381,11 +464,29 @@ bool start(Hooks hooks)
     std::fprintf(stderr, "[mt] multitasking P-b on (APPLAUNCH_MULTITASK=1): dev FIFO %s, status %s\n",
                  cfg.control_fifo.empty() ? "-" : cfg.control_fifo.c_str(),
                  cfg.status_path.empty() ? "-" : cfg.status_path.c_str());
+    const cp0_g1_params_t &p = cfg.touch.params;
+    char size[24] = "size off";
+    if (p.major_max > 0) std::snprintf(size, sizeof(size), "size max %d", p.major_max);
+    if (slots >= CP0_G1_CONTACTS)
+        std::fprintf(stderr,
+                     "[mt] touch gestures (P-c): %s, %d slots; G1 three-finger hold %d ms (land %d ms, still %d.%d mm, "
+                     "sep %d.%d mm, edge %d.%d mm, %s; %.0f / %.0f / %.0f px at %d.%02d px/mm); G2 status strip %d ms\n",
+                     cp0_display_touch_path(), slots, p.hold_ms, p.land_ms, p.still_mm_x10 / 10, p.still_mm_x10 % 10,
+                     p.sep_mm_x10 / 10, p.sep_mm_x10 % 10, p.edge_mm_x10 / 10, p.edge_mm_x10 % 10, size, s_g1.still_px,
+                     s_g1.sep_px, s_g1.edge_px, cfg.touch.ppmm_x100 / 100, cfg.touch.ppmm_x100 % 100, g2.hold_ms);
+    else
+        std::fprintf(stderr, "[mt] touch gestures (P-c): %s, %d slot(s): G1 off (needs 3), G2 status strip %d ms\n",
+                     slots ? cp0_display_touch_path() : "no touch screen", slots, g2.hold_ms);
+    /* screen.state says how many contacts the panel tracks (study 6.4; only with the flag on) */
+    cp0_ui_state_set_touch_slots(slots);
+    (void)cp0_ui_state_republish();
+    cp0_display_set_touch_frame_cb(&touch_frame_cb);
     return true;
 }
 
 void stop()
 {
+    cp0_display_set_touch_frame_cb(nullptr);
     if (s_sup) s_sup->stop();
     cp0_lvgl_set_loop_hook(nullptr);
     if (cp0_keyboard_get_key_filter() == key_filter) cp0_keyboard_set_key_filter(s_prev_filter);
@@ -395,6 +496,7 @@ void stop()
         s_bridge = nullptr;
     }
     s_sup.reset();
+    s_touch.reset();
     s_proc.reset();
     s_ui.reset();
     s_keys.reset();

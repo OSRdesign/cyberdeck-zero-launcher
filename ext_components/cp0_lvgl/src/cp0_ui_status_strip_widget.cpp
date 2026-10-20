@@ -57,6 +57,13 @@ std::string font_path(const char *name)
     return own ? own : "";
 }
 
+/* The strips that exist (LVGL thread): StatusStrip::active_area() looks for the one on the active screen. */
+std::vector<StatusStrip *> &live_strips()
+{
+    static std::vector<StatusStrip *> strips;
+    return strips;
+}
+
 /* One renderer per process, made on first use (LVGL thread). */
 cp0_statusbar_t *renderer()
 {
@@ -109,12 +116,15 @@ StatusStrip::StatusStrip(lv_obj_t *parent, StatusSource source) : parent_(parent
     status_timer_ = lv_timer_create(status_timer_cb, 2000, this);
     clock_tick();
     refresh();
+    live_strips().push_back(this);
 }
 
 void StatusStrip::parent_delete_cb(lv_event_t *event)
 {
     auto *self = static_cast<StatusStrip *>(lv_event_get_user_data(event));
     if (!self) return;
+    auto &strips = live_strips();
+    strips.erase(std::remove(strips.begin(), strips.end(), self), strips.end());
     if (self->clock_timer_) lv_timer_delete(self->clock_timer_);
     if (self->status_timer_) lv_timer_delete(self->status_timer_);
     delete self;
@@ -166,6 +176,21 @@ void StatusStrip::redraw()
     lv_obj_invalidate(canvas_);
 }
 
+bool StatusStrip::active_area(lv_display_t *display, lv_area_t *out)
+{
+    if (!display || !out) return false;
+    lv_obj_t *active = lv_display_get_screen_active(display);
+    for (StatusStrip *strip : live_strips()) {
+        if (!strip->canvas_ || lv_obj_get_screen(strip->canvas_) != active || !lv_obj_is_visible(strip->canvas_))
+            continue;
+        lv_obj_get_coords(strip->canvas_, out);
+        const int left = status_strip_left();
+        if (left > out->x1 && left <= out->x2) out->x1 = left;
+        return true;
+    }
+    return false;
+}
+
 int status_strip_left()
 {
     static int left = -1;
@@ -201,6 +226,8 @@ StatusSource default_status_source()
 StatusStrip *StatusStrip::add(lv_obj_t *, StatusSource) { return nullptr; }
 
 void StatusStrip::refresh() {}
+
+bool StatusStrip::active_area(lv_display_t *, lv_area_t *) { return false; }
 
 int status_strip_left() { return 0; }
 

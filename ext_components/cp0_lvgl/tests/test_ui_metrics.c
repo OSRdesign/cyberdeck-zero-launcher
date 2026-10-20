@@ -752,6 +752,26 @@ static void test_publish(void)
     CHECK(system(cmd) == 0);
 }
 
+/* Multitasking P-c: touch_slots= only once the launcher sets it (APPLAUNCH_MULTITASK=1), right after touch= */
+static void test_touch_slots_line(void)
+{
+    cp0_ui_metrics_t m = compute(640, 480, 0, 0);
+    const cp0_ui_panel_t deck = {"/dev/fb0", 32, "/dev/input/event0"};
+    char text[1024];
+    CHECK(cp0_ui_state_format(&m, &deck, 1, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "touch_slots") == NULL);
+    cp0_ui_state_set_touch_slots(5);
+    CHECK(cp0_ui_state_format(&m, &deck, 2, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "\ntouch=/dev/input/event0\ntouch_slots=5\nspace=8,16,20\n") != NULL);
+    CHECK(cp0_ui_state_parse_gen(text, strlen(text)) == 2);
+    cp0_ui_state_set_touch_slots(0);
+    CHECK(cp0_ui_state_format(&m, NULL, 3, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "\ntouch=\ntouch_slots=0\nspace=") != NULL);
+    cp0_ui_state_set_touch_slots(-1);
+    CHECK(cp0_ui_state_format(&m, &deck, 4, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "touch_slots") == NULL);
+}
+
 int main(void)
 {
     test_classes();
@@ -765,6 +785,7 @@ int main(void)
     test_determinism();
     test_state_text();
     test_publish();
+    test_touch_slots_line();
     if (failures) {
         fprintf(stderr, "test_ui_metrics: %d failure(s)\n", failures);
         return 1;

@@ -111,6 +111,7 @@ gen=33
 | `compat=x,y,w,h`, `scale` | the compat window and its integer scale |
 | `toolbar` | the compat toolbar's height (full width, at the bottom) |
 | `fb`, `bpp`, `touch` | the panel's framebuffer device, its depth in bits, the touch device (`""` / `0` = unknown) |
+| `touch_slots` | (draft, multitasking, section 13) how many contacts the touch screen tracks: `0` no touch screen, `1` single touch (or a panel without slots), `N` multi-touch slots (the deck 5, the Pi 3A+ DSI 10); written after `touch=` by a launcher running with `APPLAUNCH_MULTITASK=1` only; absent = unknown |
 | `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 7 mm; the compact list row, `CP0_TOK_LIST_ROW_H`, is 5 mm and is not in `screen.state`; the toolbar, the native page header's Esc (`cp0_ui_toolbar_key_px`) and the on-screen keyboard keep their own 9 mm sizes) |
 | `text=title,heading,body,caption` | text sizes in px |
 | `kb_inset` | reserved, always `0` in contract 1 |
@@ -347,8 +348,22 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
   is in front with apps hidden, and empties your evdev queues before every `show`), but an app must not rely on it:
   another launcher, or a board with a stricter `ptrace_scope`, may not.
 
+### Gestures (draft, multitasking phase P-c)
+
+- **Three fingers held still for 1 s anywhere** (G1) and **a long-press on the status strip** (G2) open the
+  switcher; until it exists (phase P-d) they hide the app in front, as Super does (a legacy app stays). While an app
+  is in front the launcher reads the touch screen **passively** (a second file descriptor, never `EVIOCGRAB`): the app
+  still gets every touch, including the three fingers. When G1 fires the fingers are still down: `hide` arrives in
+  the middle of a press; cancel it (no click) as the `hide` obligation says, and ignore the touches until `show`.
+- Do not give three or more fingers a meaning of your own (a four-finger contact cancels G1, but three fingers held
+  still are the launcher's). One- and two-finger gestures (pinch, pan, two-thumb typing) stay the app's.
+- G2 in an app is the app's own: a long-press on its status strip sends `switcher` (the shared `cp0_lvgl` strip will
+  do it in phase P-e).
+- `touch_slots` in `screen.state` (section 4) says whether the panel can do G1 at all.
+
 ### Testing
 
 `tools/multitasking-spike/` has `fbhapp`, a fake fullscreen app that speaks this protocol (its README), and
-`desktop/` files that install it as `freeze`, `run`, slow-to-answer and legacy test apps. The board test protocol is
-`docs/dev/tests/multitasking-pb-protocol.md`.
+`desktop/` files that install it as `freeze`, `run`, slow-to-answer and legacy test apps, and `mtplay`, a scripted
+uinput touch screen (three-finger holds and the patterns that must not fire). The board test protocols are
+`docs/dev/tests/multitasking-pb-protocol.md` and `multitasking-pc-protocol.md`.

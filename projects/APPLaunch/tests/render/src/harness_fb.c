@@ -7,7 +7,9 @@
  * so that one object, and only it, talks to this file:
  *   - HARNESS_FB_PATH is a framebuffer of the configured geometry, kept in memory;
  *   - HARNESS_TOUCH_PATH is the read end of a non-blocking pipe carrying struct input_event,
- *     written by harness_touch_report();
+ *     written by harness_touch_report(); it says it is a protocol B panel with 5 slots (as the
+ *     deck's), so the scenes' touches go through the slot tracker (multitasking P-c; the touch
+ *     reader's object is redirected here too);
  *   - every other path / descriptor goes to the real libc call.
  */
 #define _GNU_SOURCE
@@ -116,6 +118,15 @@ static int touch_ioctl(unsigned long request, void *arg)
         snprintf((char *)arg, len, "%s", "render-harness touch");
         return (int)strlen((char *)arg);
     }
+    if (nr == 0x20 + EV_ABS) { /* EVIOCGBIT(EV_ABS, len): a protocol B panel, as the boards' (multitasking P-c) */
+        const size_t len = _IOC_SIZE(request);
+        if (!arg || len == 0) return -1;
+        memset(arg, 0, len);
+        static const int axes[] = {ABS_X, ABS_Y, ABS_MT_SLOT, ABS_MT_POSITION_X, ABS_MT_POSITION_Y, ABS_MT_TRACKING_ID};
+        for (size_t i = 0; i < sizeof(axes) / sizeof(axes[0]); i++)
+            if ((size_t)axes[i] / 8 < len) ((unsigned char *)arg)[axes[i] / 8] |= (unsigned char)(1u << (axes[i] % 8));
+        return (int)len;
+    }
     if (nr >= 0x40 && nr < 0x40 + ABS_CNT) { /* EVIOCGABS(axis) */
         struct input_absinfo *ai = (struct input_absinfo *)arg;
         const unsigned axis = nr - 0x40;
@@ -127,6 +138,10 @@ static int touch_ioctl(unsigned long request, void *arg)
         }
         if (axis == ABS_MT_POSITION_Y || axis == ABS_Y) {
             ai->maximum = hf.ph - 1;
+            return 0;
+        }
+        if (axis == ABS_MT_SLOT) { /* 5 slots, as the deck's Goodix */
+            ai->maximum = 4;
             return 0;
         }
         return -1;
