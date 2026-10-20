@@ -63,6 +63,7 @@ void Launch::bind_ui()
         multitask_ui::Hooks hooks;
         hooks.app_front = [this] { mt_app_front(); };
         hooks.launcher_front = [this](bool after_exit) { mt_launcher_front(after_exit); };
+        hooks.show_home = [this] { show_home(); };
         multitask_ui::start(std::move(hooks));
     }
 }
@@ -445,7 +446,9 @@ void Launch::mt_app_front()
 
 // The launcher takes the panel back (the app in front exited, or was hidden): the legacy path's return sequence,
 // with the display handed back instead of the timers re-enabled. A built-in page that was open (Alt+Tab from a page)
-// comes back as it was; otherwise the home grid.
+// comes back as it was; otherwise the home grid. P-d: the switcher screen or the legacy sheet, when the supervisor
+// sent one with this hand-over, is already the active screen and stays (the lock screen waits while the sheet is up:
+// only the sheet's box is drawn over the frozen app's frame).
 void Launch::mt_launcher_front(bool after_exit)
 {
     if (after_exit) (void)cp0_ui_state_republish();
@@ -457,10 +460,10 @@ void Launch::mt_launcher_front(bool after_exit)
     mt_saved_group_ = nullptr;
     // the closing touch of the app must not click anything here
     cp0_display_set_touch_swallow(2);
-    if (!app_Page) show_home();
+    if (!app_Page && !multitask_ui::screen_up()) show_home();
     ui_loading::hide();
     lv_obj_invalidate(lv_screen_active());
     lv_refr_now(disp);
     LVGL_RUN_FLAGE = 1;
-    ui_screensaver_set_foreground(1);
+    ui_screensaver_set_foreground(multitask_ui::sheet_up() ? 0 : 1);
 }

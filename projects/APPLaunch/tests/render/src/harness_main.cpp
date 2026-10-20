@@ -34,6 +34,8 @@
 
 #include "launch.h"
 #include "multitask/display_handoff.hpp"
+#include "multitask/switcher_model.hpp"
+#include "multitask/switcher_view.hpp"
 #include "launcher_media_osd.h"
 #include "launcher_toast.h"
 #include "ui_loading.h"
@@ -992,6 +994,230 @@ int to_int(const std::string &text, int fallback = 0)
     return end && *end == '\0' && !text.empty() ? static_cast<int>(value) : fallback;
 }
 
+/* ---------------------------------------------------------------- multitasking P-d: the switcher screen, the sheet
+ * The real screens (multitask/switcher_view.cpp) with cards the scene names, as multitask_ui builds them from the
+ * supervisor's report; what they report (pick, close, home, close-all, cancel, keep, sheet-close) is recorded for
+ * expect_event. */
+struct SwitcherDemo {
+    std::unique_ptr<multitask_ui::SwitcherScreen> screen;
+    std::unique_ptr<multitask_ui::LegacySheet> sheet;
+    std::vector<std::string> names;  /* card names by id */
+    std::vector<std::string> events; /* reported, oldest first */
+    std::vector<uint8_t> frame;      /* the "app's" last frame under the sheet */
+};
+SwitcherDemo g_switcher;
+
+std::string switcher_name(std::intptr_t id)
+{
+    return id >= 0 && id < static_cast<std::intptr_t>(g_switcher.names.size()) ? g_switcher.names[static_cast<std::size_t>(id)]
+                                                                                : std::string("?");
+}
+
+int switcher_item(const std::string &name)
+{
+    if (name == "home") return multitask::kItemHome;
+    if (name == "closeall") return multitask::kItemCloseAll;
+    if (name.size() == 5 && name.compare(0, 4, "card") == 0 && name[4] >= '0' && name[4] <= '3') return name[4] - '0';
+    return -1;
+}
+
+/* The XRGB8888 framebuffer outside the sheet's box must be the frame dimmed (cp0_display_fb_backdrop), and inside it
+ * the sheet must be drawn. Returns "" or what is wrong. */
+std::string check_sheet_backdrop(const Run &run, const lv_area_t &box)
+{
+    size_t fb_size = 0;
+    int stride = 0;
+    const uint8_t *fb = harness_fb_memory(&fb_size, &stride);
+    if (!fb || run.profile.bpp != 32 || g_switcher.frame.size() < static_cast<size_t>(stride) * 1) return std::string();
+    const uint32_t k = static_cast<uint32_t>(multitask_ui::kSheetBackdropPct) * 256u / 100u;
+    long outside_wrong = 0, inside_drawn = 0;
+    for (int y = 0; y < run.size.h; ++y)
+        for (int x = 0; x < run.size.w; ++x) {
+            int px = 0, py = 0;
+            cp0_fbo_logical_to_buffer(&run.view, x, y, &px, &py);
+            const size_t at = static_cast<size_t>(py) * stride + static_cast<size_t>(px) * 4;
+            if (at + 3 >= g_switcher.frame.size()) continue;
+            const bool inside = x >= box.x1 && x <= box.x2 && y >= box.y1 && y <= box.y2;
+            bool same = true;
+            for (int c = 0; c < 3; ++c)
+                if (fb[at + c] != static_cast<uint8_t>((g_switcher.frame[at + c] * k) >> 8)) same = false;
+            if (!inside && !same) ++outside_wrong;
+            if (inside && !same) ++inside_drawn;
+        }
+    if (outside_wrong) return std::to_string(outside_wrong) + " pixels outside the sheet are not the dimmed frame";
+    if (!inside_drawn) return "the sheet is not drawn";
+    return std::string();
+}
+
+bool multitask_command(Run &run, const Scene &scene, const Line &line)
+{
+    const std::vector<std::string> &w = line.words;
+    const std::string &cmd = w[0];
+    SwitcherDemo &d = g_switcher;
+    if (cmd == "switcher") {
+        /* switcher CARD... (Name=front|running|paused|nr), switcher select ITEM, switcher off */
+        if (w.size() == 2 && w[1] == "off") {
+            native_ui::show_home();
+            d.screen.reset();
+            settle(300);
+            return true;
+        }
+        if (w.size() == 3 && w[1] == "select") {
+            if (!d.screen || switcher_item(w[2]) < 0) return fail(scene, line, "usage: switcher select card0..3|home|closeall");
+            d.screen->select(switcher_item(w[2]));
+            settle(200);
+            return true;
+        }
+        if (!d.screen) {
+            multitask_ui::SwitcherEvents events;
+            events.pick = [](std::intptr_t id) { g_switcher.events.push_back("pick " + switcher_name(id)); };
+            events.close = [](std::intptr_t id) { g_switcher.events.push_back("close " + switcher_name(id)); };
+            events.home = [] { g_switcher.events.push_back("home"); };
+            events.close_all = [] { g_switcher.events.push_back("close-all"); };
+            events.cancel = [] { g_switcher.events.push_back("cancel"); };
+            d.screen = std::make_unique<multitask_ui::SwitcherScreen>(std::move(events));
+            lv_screen_load(d.screen->screen());
+        }
+        d.names.clear();
+        std::vector<multitask_ui::CardView> cards;
+        for (std::size_t i = 1; i < w.size(); ++i) {
+            const std::size_t eq = w[i].rfind('=');
+            if (eq == std::string::npos) return fail(scene, line, "switcher: a card is Name=front|running|paused|nr");
+            const std::string name = w[i].substr(0, eq), state = w[i].substr(eq + 1);
+            using multitask::State;
+            const State s = state == "running" ? State::HiddenRunning
+                            : state == "nr"    ? State::NotResponding
+                                               : State::HiddenFrozen;
+            if (state != "front" && state != "running" && state != "paused" && state != "nr")
+                return fail(scene, line, "switcher: unknown state " + state);
+            multitask_ui::CardView v;
+            v.id = static_cast<std::intptr_t>(d.names.size());
+            v.name = name;
+            v.icon = native_ui::app_icon("tile:" + name); /* as multitask_ui does: the tile's icon */
+            v.label = multitask::card_label(s, state == "front");
+            d.names.push_back(name);
+            cards.push_back(std::move(v));
+        }
+        d.screen->set_cards(cards);
+        settle(300);
+        return true;
+    }
+    if (cmd == "sheet") {
+        /* sheet NAME: the screen shown now stands for the legacy app's last frame; the launcher freezes it (snapshot),
+         * writes it back dimmed and draws only the sheet's box over it, as multitask_ui does; sheet off */
+        if (w.size() == 2 && w[1] == "off") {
+            cp0_display_set_native_clip(0, 0, 0, 0);
+            native_ui::show_home();
+            d.sheet.reset();
+            settle(300);
+            return true;
+        }
+        if (w.size() < 2) return fail(scene, line, "usage: sheet NAME | sheet off");
+        std::string name;
+        for (std::size_t i = 1; i < w.size(); ++i) name += (i > 1 ? " " : "") + w[i];
+        settle(300);
+        lv_refr_now(nullptr);
+        const size_t page = cp0_display_fb_page_bytes();
+        d.frame.assign(page, 0);
+        int page_y = 0;
+        if (page == 0 || cp0_display_fb_snapshot(d.frame.data(), d.frame.size(), &page_y) != 0)
+            return fail(scene, line, "sheet: no snapshot");
+        display_handoff::enter_app_front(nullptr); /* the app is in front: the launcher is suspended */
+        if (cp0_display_fb_backdrop(d.frame.data(), d.frame.size(), multitask_ui::kSheetBackdropPct) != 0)
+            return fail(scene, line, "sheet: backdrop failed");
+        d.sheet = std::make_unique<multitask_ui::LegacySheet>(
+            name, [] { g_switcher.events.push_back("keep"); }, [] { g_switcher.events.push_back("sheet-close"); });
+        const lv_area_t box = d.sheet->box();
+        cp0_display_set_native_clip(box.x1, box.y1, box.x2 - box.x1 + 1, box.y2 - box.y1 + 1);
+        lv_screen_load(d.sheet->screen());
+        display_handoff::leave_app_front(); /* the launcher takes the panel back: only the box is written */
+        settle(500);
+        lv_refr_now(nullptr);
+        const std::string wrong = check_sheet_backdrop(run, box);
+        if (!wrong.empty()) return fail(scene, line, "sheet: " + wrong);
+        std::printf("sheet ok: box %dx%d at (%d,%d), the rest is the frame dimmed to %d %%\n", box.x2 - box.x1 + 1,
+                    box.y2 - box.y1 + 1, box.x1, box.y1, multitask_ui::kSheetBackdropPct);
+        return true;
+    }
+    if (cmd == "dots") {
+        /* dots NAME...: these tiles' apps are left open (native_ui::set_resident_apps, keys "tile:NAME") */
+        std::vector<std::string> keys;
+        for (std::size_t i = 1; i < w.size(); ++i) keys.push_back("tile:" + w[i]);
+        native_ui::set_resident_apps(keys);
+        settle(200);
+        return true;
+    }
+    if (cmd == "tapitem") {
+        /* tapitem card0..3|close0..3|home|closeall|keep|sheetclose [edge]: a tap through the touch path at the item's
+         * centre; edge: 2 px inside the corner of its touch target farthest from what is drawn (an X: the bottom-left
+         * corner of its 7 mm square, outside the key) */
+        if (w.size() < 2) return fail(scene, line, "usage: tapitem ITEM [edge]");
+        const bool edge = w.size() == 3 && w[2] == "edge";
+        lv_area_t a{};
+        bool found = false;
+        if (w[1].compare(0, 5, "close") == 0 && w[1].size() == 6 && d.screen)
+            found = d.screen->close_area(w[1][5] - '0', &a);
+        else if ((w[1] == "home" || w[1] == "closeall") && d.screen)
+            found = d.screen->bar_area(switcher_item(w[1]), &a);
+        else if (switcher_item(w[1]) >= 0 && switcher_item(w[1]) < 4 && d.screen)
+            found = d.screen->card_area(switcher_item(w[1]), &a);
+        else if ((w[1] == "keep" || w[1] == "sheetclose") && d.sheet)
+            found = d.sheet->button_area(w[1] == "keep" ? 0 : 1, &a);
+        if (!found) return fail(scene, line, "tapitem: no " + w[1] + " on the screen");
+        int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+        if (w[1].compare(0, 4, "card") == 0) x = a.x1 + (a.x2 - a.x1) / 5; /* on the icon, away from the X */
+        if (edge) {
+            x = a.x1 + 2;
+            y = a.y2 - 2;
+        }
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(400);
+        return true;
+    }
+    if (cmd == "expect_event") {
+        std::string want;
+        for (std::size_t i = 1; i < w.size(); ++i) want += (i > 1 ? " " : "") + w[i];
+        const std::string got = d.events.empty() ? std::string("(none)") : d.events.back();
+        d.events.clear();
+        if (got != want) return fail(scene, line, "expect_event: want \"" + want + "\", got \"" + got + "\"");
+        std::printf("expect_event ok: %s\n", want.c_str());
+        return true;
+    }
+    if (cmd == "expect_targets") {
+        /* every touch target of the screen up is at least 7 mm both ways; cards and bar inside the panel, apart */
+        const int ppmm = cp0_ui_metrics_get()->ppmm_x100;
+        const int seven = cp0_ui_mm_px(ppmm, 70, 0);
+        std::vector<std::pair<std::string, lv_area_t>> targets;
+        lv_area_t a{};
+        if (d.screen) {
+            for (int i = 0; i < d.screen->card_count(); ++i)
+                if (d.screen->close_area(i, &a)) targets.push_back({"close" + std::to_string(i), a});
+            if (d.screen->bar_area(multitask::kItemHome, &a)) targets.push_back({"home", a});
+            if (d.screen->bar_area(multitask::kItemCloseAll, &a)) targets.push_back({"closeall", a});
+            lv_area_t last{}, bar{};
+            d.screen->card_area(3, &last);
+            d.screen->bar_area(multitask::kItemHome, &bar);
+            if (last.y2 >= bar.y1 || bar.y2 >= run.size.h || last.x2 >= run.size.w)
+                return fail(scene, line, "expect_targets: the cards and the bar overlap or leave the panel");
+        }
+        if (d.sheet) {
+            if (d.sheet->button_area(0, &a)) targets.push_back({"keep", a});
+            if (d.sheet->button_area(1, &a)) targets.push_back({"close", a});
+        }
+        if (targets.empty()) return fail(scene, line, "expect_targets: no switcher or sheet");
+        for (const auto &t : targets) {
+            const int tw = t.second.x2 - t.second.x1 + 1, th = t.second.y2 - t.second.y1 + 1;
+            std::printf("target %s %dx%d px = %.1fx%.1f mm (7 mm = %d px)\n", t.first.c_str(), tw, th, tw * 100.0 / ppmm,
+                        th * 100.0 / ppmm, seven);
+            if (tw < seven || th < seven) return fail(scene, line, "expect_targets: " + t.first + " is under 7 mm");
+        }
+        return true;
+    }
+    return fail(scene, line, "unknown " + cmd);
+}
+
 bool run_line(Run &run, const Scene &scene, const Line &line)
 {
     const std::vector<std::string> &w = line.words;
@@ -1285,6 +1511,9 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_same ok: %s\n", w[1].c_str());
         return true;
     }
+    if (cmd == "switcher" || cmd == "sheet" || cmd == "dots" || cmd == "tapitem" || cmd == "expect_event" ||
+        cmd == "expect_targets")
+        return multitask_command(run, scene, line); /* multitasking P-d */
     if (cmd == "handoff" || cmd == "expect_fb") {
         /* Multitasking P-b (task 015 section 5), the display suspended mode with the real display backend:
          *   handoff enter      display_handoff::enter_app_front() (display suspended, timers paused)

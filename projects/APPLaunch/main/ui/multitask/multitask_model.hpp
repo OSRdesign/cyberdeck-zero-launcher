@@ -10,7 +10,9 @@
  *                             '--300 ms--> NOT_RESPONDING (SIGSTOP)
  *   hidden --resume--> FOREGROUND (restore the snapshot, drain input, oom back, SIGCONT, show n)
  *   any --group empty--> GONE;  close: SIGCONT first, "close n", SIGTERM +3 s, SIGKILL +3 s (CLOSING)
- * An app without X-Background (legacy) is only ever FOREGROUND, CLOSING or GONE.
+ * An app without X-Background (legacy) is only ever FOREGROUND, CLOSING or GONE, and (P-d) HELD: frozen (SIGSTOP)
+ * behind the launcher's "Close <app>?" sheet after a three-finger hold, until Keep (resumed as a hidden app is) or
+ * Close (closed as a frozen app is).
  */
 #pragma once
 
@@ -29,13 +31,15 @@ enum class Background : std::uint8_t { None, Freeze, Run };
 Background parse_background(std::string_view value);
 const char *background_name(Background background);
 
-enum class State : std::uint8_t { Foreground, Hiding, HiddenRunning, HiddenFrozen, NotResponding, Closing, Gone };
+/* Held (P-d): a legacy app frozen behind the legacy sheet (study 6.2, D12); never hidden for good. */
+enum class State : std::uint8_t { Foreground, Hiding, HiddenRunning, HiddenFrozen, NotResponding, Closing, Gone, Held };
 const char *state_name(State state);
-/* Counts against the cap: Foreground, Hiding, HiddenRunning, HiddenFrozen, NotResponding. */
+/* Counts against the cap: Foreground, Hiding, HiddenRunning, HiddenFrozen, NotResponding, Held. */
 bool is_resident(State state);
-/* Behind the launcher: HiddenRunning, HiddenFrozen, NotResponding. */
+/* Behind the launcher: HiddenRunning, HiddenFrozen, NotResponding (not Held: the cap, the memory rule and Close all
+ * never pick an app the sheet is asking about). */
 bool is_hidden(State state);
-/* Stopped with SIGSTOP: HiddenFrozen, NotResponding. */
+/* Stopped with SIGSTOP: HiddenFrozen, NotResponding, Held. */
 bool is_frozen(State state);
 
 struct Config {
@@ -80,6 +84,7 @@ enum class Op : std::uint8_t {
     Kill,          /* id: SIGKILL the group */
     Snapshot,      /* id: copy the visible framebuffer page */
     Restore,       /* id: write it back */
+    Backdrop,      /* id (P-d): write the snapshot back dimmed to the launcher's page, under the legacy sheet */
     DropSnapshot,  /* id */
     Drain,         /* id: empty the app's own evdev queues */
     SetOom,        /* id, value: oom_score_adj of every process of the group */
@@ -157,6 +162,11 @@ public:
     Actions close_all(std::uint64_t now);
     /* Esc held 3 s: SIGTERM the app in front now, SIGKILL 3 s later (today's policy). */
     Actions force_close_front(std::uint64_t now);
+    /* P-d, the legacy sheet (study 6.2, D12): the legacy app in front is frozen (SIGSTOP), its last frame kept and
+     * written back dimmed, and the launcher takes the panel to ask "Close <app>?" (HELD). Keep = resume(id) (restore,
+     * drain, SIGCONT, as a hidden app); Close = close(id) (SIGCONT, SIGTERM, SIGKILL 3 s later, as Esc held 3 s). Does
+     * nothing unless the app in front is a legacy app in FOREGROUND. */
+    Actions hold_front(std::uint64_t now);
     /* The launcher stops: SIGCONT + SIGTERM every app, SIGKILL when the grace is over (tick). */
     Actions shutdown(std::uint64_t now);
     /* An Alt+Tab session read from evdev runs (started inside an app): the launcher keyboard thread stays paused and
@@ -187,6 +197,8 @@ public:
     std::vector<AppId> live() const;
     int resident_count() const;
     int hidden_count() const;
+    /* P-d: the app frozen behind the legacy sheet, kNoApp when none. */
+    AppId held() const;
     bool needs_memory_poll() const { return hidden_count() > 0; }
     bool key_session_active() const { return raw_session_; }
     long last_memory_kb() const { return last_memory_kb_; }

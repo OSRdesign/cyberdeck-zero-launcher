@@ -6,6 +6,7 @@
 #include "supervisor.hpp"
 
 #include "lifecycle_protocol.hpp"
+#include "switcher_model.hpp"
 
 #include "cp0_esc_exit_policy.hpp"
 
@@ -60,9 +61,23 @@ const char *short_state(State s)
     case State::HiddenFrozen: return "paused";
     case State::NotResponding: return "not responding";
     case State::Closing: return "closing";
+    case State::Held: return "held";
     case State::Gone: break;
     }
     return "gone";
+}
+
+/* "1 app", "3 apps" */
+std::string apps_text(int n)
+{
+    return std::to_string(n) + (n == 1 ? " app" : " apps");
+}
+
+/* mkdir -p of path's directory (the hint file's: ~/.config/cardputerzero) */
+void make_parent_dirs(const std::string &path)
+{
+    for (std::size_t at = path.find('/', 1); at != std::string::npos; at = path.find('/', at + 1))
+        (void)::mkdir(path.substr(0, at).c_str(), 0755);
 }
 
 bool iequals(const std::string &a, const std::string &b)
@@ -84,6 +99,9 @@ Supervisor::Supervisor(SupervisorConfig config, ProcessPort &proc, FramebufferPo
     : config_(std::move(config)), proc_(proc), fb_(fb), input_(input), keys_(keys), ui_(ui), model_(config_.model)
 {
     if (::pipe2(wake_fd_, O_CLOEXEC | O_NONBLOCK) != 0) wake_fd_[0] = wake_fd_[1] = -1;
+    /* P-d: the first-run hint was shown in an earlier run when its file exists */
+    struct stat st;
+    hint_done_ = config_.hint_text.empty() || (!config_.hint_path.empty() && ::stat(config_.hint_path.c_str(), &st) == 0);
     if (config_.touch.params.hold_ms == 0) cp0_g1_params_default(&config_.touch.params);
     cp0_g1_init(&g1_, &config_.touch.params, config_.touch.w, config_.touch.h, config_.touch.ppmm_x100);
 }
@@ -370,6 +388,22 @@ void Supervisor::launcher_gesture(const std::string &source, const std::string &
     post(std::move(r));
 }
 
+void Supervisor::post_screen(const std::string &what, AppId id)
+{
+    Request r;
+    r.kind = Request::Kind::Screen;
+    r.text = what;
+    r.id = id;
+    post(std::move(r));
+}
+
+void Supervisor::switcher_pick(AppId id) { post_screen("pick", id); }
+void Supervisor::switcher_close(AppId id) { post_screen("close", id); }
+void Supervisor::switcher_close_all() { post_screen("close-all"); }
+void Supervisor::switcher_home() { post_screen("home"); }
+void Supervisor::switcher_cancel() { post_screen("cancel"); }
+void Supervisor::sheet_answer(bool keep) { post_screen(keep ? "keep" : "sheet-close"); }
+
 bool Supervisor::is_resident_key(const std::string &key) const
 {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -418,6 +452,7 @@ void Supervisor::run_once()
     }
     poll_fifo();
     sync_touch();
+    sync_screens();
     if (dirty_) { /* only after something happened: not on every wake-up */
         dirty_ = false;
         write_status();
@@ -437,7 +472,13 @@ void Supervisor::handle(const Request &r)
         if (model_.front() == kNoApp) ui_.launcher_front(false);
         break;
     }
-    case Request::Kind::Resume: execute(model_.resume(r.id, now)); break;
+    case Request::Kind::Resume:
+        if (sheet_ != kNoApp && r.id != sheet_) { /* P-d: the sheet waits for its answer first */
+            log("resume ignored: the sheet for the app in front is up");
+            break;
+        }
+        execute(model_.resume(r.id, now));
+        break;
     case Request::Kind::Home: execute(model_.go_launcher(now)); break;
     case Request::Kind::Close: execute(model_.close(r.id, now)); break;
     case Request::Kind::CloseAll: execute(model_.close_all(now)); break;
@@ -451,6 +492,7 @@ void Supervisor::handle(const Request &r)
         log(r.text);
         if (r.value) open_switcher(r.source);
         break;
+    case Request::Kind::Screen: screen_request(r); break;
     }
 }
 
@@ -476,6 +518,16 @@ void Supervisor::execute_one(const Action &a, std::deque<Action> &more)
     switch (a.op) {
     case Op::LauncherFront:
         log(std::string("launcher in front") + (a.value ? " (the app in front exited)" : ""));
+        /* P-d: the sheet or the switcher reach the launcher before it takes the panel back, so it paints them and not
+         * its grid */
+        if (config_.switcher_ui && sheet_ != kNoApp && !sheet_posted_) {
+            const Entry *held = model_.find(sheet_);
+            sheet_posted_ = true;
+            ui_.sheet(sheet_, held ? held->spec.name : std::string("The app"));
+        } else if (config_.switcher_ui && switcher_.wanted) {
+            switcher_.wanted = false;
+            if (model_.resident_count() > 0) post_switcher(true);
+        }
         ui_.launcher_front(a.value != 0);
         break;
     case Op::AppFront:
@@ -483,6 +535,15 @@ void Supervisor::execute_one(const Action &a, std::deque<Action> &more)
         esc_press_ms_ = 0;
         esc_hint_ = false;
         esc_fired_ = false;
+        if (config_.switcher_ui) { /* P-d: an app takes the panel: the switcher and the sheet go (silently) */
+            if (switcher_.open) close_switcher(true);
+            else switcher_ = SwitcherState();
+            if (sheet_ != kNoApp) {
+                if (sheet_posted_) ui_.sheet(kNoApp, std::string());
+                sheet_ = kNoApp;
+                sheet_posted_ = false;
+            }
+        }
         log(name + " in front");
         ui_.app_front(a.id, name);
         break;
@@ -590,6 +651,14 @@ void Supervisor::execute_one(const Action &a, std::deque<Action> &more)
         const int rc = fb_.restore(rt->snapshot, rt->page_y);
         log(name + ": restore restore_ms=" + fmt_ms(elapsed_ms(t0)) + " verified=" +
             (rc == 0 ? "1" : rc == 1 ? "0" : "error"));
+        break;
+    }
+    case Op::Backdrop: {
+        if (!rt || rt->snapshot.empty()) break;
+        const auto t0 = std::chrono::steady_clock::now();
+        const int rc = fb_.backdrop(rt->snapshot);
+        log(name + ": backdrop (its last frame dimmed under the sheet) " + (rc == 0 ? "backdrop_ms=" + fmt_ms(elapsed_ms(t0))
+                                                                                     : std::string("not drawn")));
         break;
     }
     case Op::DropSnapshot:
@@ -820,22 +889,34 @@ void Supervisor::switch_event(SwitchEvent event, bool raw)
                 return;
             }
         }
+        if (sheet_ != kNoApp) { /* P-d: the sheet waits for its answer (Keep / Close) */
+            log("Alt+Tab ignored: the sheet is up");
+            return;
+        }
         session_ = Session();
         session_.active = true;
         session_.raw = raw;
         session_.origin = front;
+        /* P-d: over a switcher opened by a gesture, a cancel goes back to where that switcher was opened from */
+        if (config_.switcher_ui && front == kNoApp && switcher_.open) session_.origin = switcher_.origin;
         session_.cycle.push_back(front);
         for (const AppId id : model_.mru())
             if (id != front) session_.cycle.push_back(id);
         if (front != kNoApp) session_.cycle.push_back(kNoApp);
         const int n = static_cast<int>(session_.cycle.size());
         session_.selected = n > 1 ? (event == SwitchEvent::Start ? 1 : n - 1) : 0;
+        if (config_.switcher_ui && !switcher_.open) { /* P-d: the switcher screen shows the session */
+            switcher_.origin = front;
+            switcher_.source = "Alt+Tab";
+            switcher_.wanted = front != kNoApp; /* after the hide, at LauncherFront */
+        }
         if (raw) execute(model_.key_session(true, now));
         if (front != kNoApp) execute(model_.go_launcher(now));
         const std::string text = session_text();
         log("session " + std::string(raw ? "(evdev) " : "(launcher) ") + text);
         log("session: select " + session_selection()); /* one line per Tab / Shift+Tab, the first included */
-        ui_.overlay(text);
+        if (!config_.switcher_ui) ui_.overlay(text);
+        else if (front == kNoApp) post_switcher(!switcher_.open);
         return;
     }
     if (!session_.active) return;
@@ -845,7 +926,8 @@ void Supervisor::switch_event(SwitchEvent event, bool raw)
     case SwitchEvent::Prev:
         if (n > 0) session_.selected = (session_.selected + (event == SwitchEvent::Next ? 1 : n - 1)) % n;
         log("session: select " + session_selection());
-        ui_.overlay(session_text());
+        if (!config_.switcher_ui) ui_.overlay(session_text());
+        else if (switcher_.open) post_switcher();
         break;
     case SwitchEvent::Commit: end_session(n > 0 ? session_.cycle[static_cast<std::size_t>(session_.selected)] : kNoApp); break;
     case SwitchEvent::Cancel:
@@ -864,10 +946,15 @@ void Supervisor::end_session(AppId target)
     log("session ends: " + (target == kNoApp ? std::string("Home") : e ? e->spec.name : std::string("(gone)")));
     session_ = Session();
     trace_until_ms_ = now + 2000;
-    ui_.overlay("");
+    if (!config_.switcher_ui) ui_.overlay("");
     if (raw) execute(model_.key_session(false, now));
     if (target == kNoApp) execute(model_.go_launcher(now));
     else execute(model_.resume(target, now));
+    if (!config_.switcher_ui) return;
+    /* P-d: an app that comes to the front takes the switcher away (AppFront); Home closes it now; an app that cannot
+     * come (closing) leaves it open, out of the session (touch works again) */
+    if (target == kNoApp) close_switcher(false);
+    else if (switcher_.open) post_switcher();
 }
 
 /* ------------------------------------------------------------------------------------------------ dev entry */
@@ -923,20 +1010,240 @@ void Supervisor::handle_command(const std::string &raw_line)
 
 /* ------------------------------------------------------------------------------------------------ touch (P-c) */
 
-/* The P-c stand-in for the switcher (P-d replaces the body: draw the switcher screen). Touch has no other way out of
- * an app, so from an app it is Home, as Super: the app goes to the background and the home grid shows (a legacy app
- * cannot: the model's notice says so). With the launcher in front there is nothing to choose from yet. */
+/* G1, G2, the app's "switcher", the FIFO's g1 / g2.
+ * P-d (switcher_ui): a lifecycle app in front is hidden (the P-b path: hide, ack, freeze, snapshot) and the switcher
+ * shows once the launcher is in front; a legacy app in front is frozen behind the sheet "Close <app>?"; on the launcher
+ * the switcher shows when an app is resident (nothing otherwise). While the switcher or the sheet is up a gesture
+ * leaves it as Esc does (back to where it was opened from; Keep).
+ * Without switcher_ui (canvases under 640x480) the P-c stand-in: from an app it is Home, as Super (a legacy app
+ * cannot: the model's notice says so); with the launcher in front there is nothing to choose from. */
 void Supervisor::open_switcher(const std::string &source)
 {
     dirty_ = true;
     const AppId front = model_.front();
-    if (front == kNoApp) {
-        log("switcher (" + source + "): the launcher is in front, nothing to do (P-c stand-in; P-d opens the switcher)");
+    if (!config_.switcher_ui) {
+        if (front == kNoApp) {
+            log("switcher (" + source + "): the launcher is in front, nothing to do (P-c stand-in; P-d opens the switcher)");
+            return;
+        }
+        const Entry *e = model_.find(front);
+        log("switcher (" + source + "): P-c stand-in = Home (as Super) for " + (e ? e->spec.name : std::string("the app")));
+        execute(model_.go_launcher(now_ms()));
         return;
     }
-    const Entry *e = model_.find(front);
-    log("switcher (" + source + "): P-c stand-in = Home (as Super) for " + (e ? e->spec.name : std::string("the app")));
-    execute(model_.go_launcher(now_ms()));
+    const std::uint64_t now = now_ms();
+    if (sheet_ != kNoApp) {
+        log("switcher (" + source + "): the sheet is up: Keep");
+        Request keep;
+        keep.text = "keep";
+        screen_request(keep);
+        return;
+    }
+    if (switcher_.open || switcher_.wanted) {
+        Request cancel;
+        cancel.text = "cancel";
+        cancel.source = source;
+        screen_request(cancel);
+        return;
+    }
+    if (session_.active) {
+        log("switcher (" + source + "): an Alt+Tab session runs, ignored");
+        return;
+    }
+    if (front != kNoApp) {
+        const Entry *e = model_.find(front);
+        if (!e) return;
+        if (e->state != State::Foreground) {
+            log("switcher (" + source + "): " + e->spec.name + " is " + state_name(e->state) + ", ignored");
+            return;
+        }
+        if (!e->lifecycle()) { /* study 6.2, D12: it cannot stay in the background; the user decides */
+            sheet_ = front;
+            sheet_posted_ = false;
+            log("switcher: sheet shown for " + e->spec.name + " (" + source + "): it cannot stay in the background");
+            execute(model_.hold_front(now));
+            return;
+        }
+        switcher_.wanted = true;
+        switcher_.origin = front;
+        switcher_.source = source;
+        log("switcher (" + source + "): hiding " + e->spec.name + " first");
+        execute(model_.go_launcher(now));
+        return;
+    }
+    if (model_.resident_count() == 0) {
+        log("switcher (" + source + "): nothing open, nothing to do");
+        return;
+    }
+    switcher_.origin = kNoApp;
+    switcher_.source = source;
+    post_switcher(true);
+}
+
+/* ------------------------------------------------------------------------------------------- switcher (P-d) */
+
+SwitcherInfo Supervisor::switcher_info()
+{
+    SwitcherInfo info;
+    info.open = true;
+    info.source = switcher_.source;
+    for (const AppId id : model_.mru()) {
+        const Entry *e = model_.find(id);
+        if (!e || static_cast<int>(info.cards.size()) >= kSwitcherSlots) continue;
+        SwitcherCard c;
+        c.id = id;
+        c.name = e->spec.name;
+        c.key = e->spec.key;
+        c.state = e->state;
+        c.origin = id == switcher_.origin;
+        info.cards.push_back(std::move(c));
+    }
+    info.session = session_.active;
+    if (session_.active) {
+        std::vector<AppId> ids;
+        for (const SwitcherCard &c : info.cards) ids.push_back(c.id);
+        info.selected = session_item(session_.cycle, session_.selected, ids);
+    }
+    return info;
+}
+
+void Supervisor::post_switcher(bool opening)
+{
+    SwitcherInfo info = switcher_info();
+    if (opening) {
+        switcher_.open = true;
+        const Entry *origin = model_.find(switcher_.origin);
+        log("switcher: opened by " + switcher_.source + " with " + apps_text(static_cast<int>(info.cards.size())) +
+            (origin ? " (from " + origin->spec.name + ")" : std::string(" (on the launcher)")));
+        if (info.selected < 0) info.selected = 0; /* the first card: the app it was opened from, or the last used */
+    }
+    ui_.switcher(info);
+}
+
+void Supervisor::close_switcher(bool app_next)
+{
+    const bool was_open = switcher_.open;
+    switcher_ = SwitcherState();
+    if (!was_open) return;
+    SwitcherInfo info;
+    info.open = false;
+    info.app_next = app_next;
+    ui_.switcher(info);
+}
+
+/* What the user did on the screens (the launcher's UI thread posts it), and gestures / Esc over them. */
+void Supervisor::screen_request(const Request &r)
+{
+    dirty_ = true;
+    const std::uint64_t now = now_ms();
+    const Entry *e = model_.find(r.id);
+    const std::string name = e ? e->spec.name : std::string("(gone)");
+    if (r.text == "keep" || r.text == "sheet-close") {
+        if (sheet_ == kNoApp) return;
+        const Entry *held = model_.find(sheet_);
+        const std::string held_name = held ? held->spec.name : std::string("(gone)");
+        if (r.text == "keep") {
+            log("switcher: sheet keep " + held_name);
+            execute(model_.resume(sheet_, now)); /* the sheet goes when the app takes the panel (AppFront) */
+        } else {
+            log("switcher: sheet close " + held_name);
+            execute(model_.close(sheet_, now)); /* the sheet goes now (sync_screens): the launcher shows its grid */
+        }
+        return;
+    }
+    if (!switcher_.open && !(r.text == "cancel" && switcher_.wanted)) return;
+    if (r.text == "pick") {
+        if (!e) return;
+        log("switcher: card tapped " + name);
+        execute(model_.resume(r.id, now)); /* the switcher goes when the app takes the panel (AppFront) */
+    } else if (r.text == "close") {
+        if (!e) return;
+        log("switcher: closed " + name);
+        execute(model_.close(r.id, now)); /* the card goes with the next update */
+    } else if (r.text == "close-all") {
+        log("switcher: close-all (" + apps_text(model_.resident_count()) + ")");
+        close_switcher(false);
+        execute(model_.close_all(now));
+    } else if (r.text == "home") {
+        log("switcher: home");
+        close_switcher(false);
+    } else if (r.text == "cancel") {
+        const AppId origin = switcher_.origin;
+        const Entry *o = model_.find(origin);
+        const std::string by = r.source.empty() ? std::string() : " by " + r.source;
+        if (o && (is_hidden(o->state) || o->state == State::Hiding)) { /* hiding: it comes back once hidden */
+            log("switcher: cancelled" + by + " (back to " + o->spec.name + ")");
+            execute(model_.resume(origin, now));
+        } else {
+            log("switcher: cancelled" + by + " (back to the launcher)");
+            close_switcher(false);
+        }
+    }
+}
+
+/* After every turn: the sheet goes once its app is no longer held (closed, or gone by itself); the switcher closes
+ * when no app is left; the cards follow the apps (UiPort::apps for the home grid's dots, the switcher's update); the
+ * first-run hint. */
+void Supervisor::sync_screens()
+{
+    if (!config_.switcher_ui) return;
+    if (sheet_ != kNoApp) {
+        const Entry *held = model_.find(sheet_);
+        if (!held || held->state != State::Held) {
+            if (sheet_posted_) ui_.sheet(kNoApp, std::string());
+            sheet_ = kNoApp;
+            sheet_posted_ = false;
+            dirty_ = true;
+        }
+    }
+    if (switcher_.open && model_.resident_count() == 0) {
+        log("switcher: no app open any more: the launcher");
+        close_switcher(false);
+        dirty_ = true;
+    }
+    std::vector<SwitcherCard> cards;
+    std::string sig;
+    for (const AppId id : model_.mru()) {
+        const Entry *e = model_.find(id);
+        if (!e) continue;
+        SwitcherCard c;
+        c.id = id;
+        c.name = e->spec.name;
+        c.key = e->spec.key;
+        c.state = e->state;
+        sig += std::to_string(id) + ":" + state_name(e->state) + ";";
+        cards.push_back(std::move(c));
+    }
+    if (sig != cards_sig_) {
+        cards_sig_ = sig;
+        ui_.apps(cards);
+        if (switcher_.open) post_switcher();
+    }
+    show_hint();
+}
+
+/* D15: the first time an app is left open (hidden), once per install: the file hint_path remembers it. */
+void Supervisor::show_hint()
+{
+    if (hint_done_ || model_.hidden_count() == 0) return;
+    hint_done_ = true;
+    if (!config_.hint_path.empty()) {
+        struct stat st;
+        if (::stat(config_.hint_path.c_str(), &st) == 0) return; /* shown in an earlier run */
+        make_parent_dirs(config_.hint_path);
+        const int fd = ::open(config_.hint_path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
+        if (fd >= 0) {
+            static const char text[] = "the launcher's first-run hint was shown (multitasking); delete this file to see "
+                                       "it again\n";
+            (void)!::write(fd, text, sizeof(text) - 1);
+            ::close(fd);
+        } else {
+            log("hint: cannot write " + config_.hint_path + ": " + std::strerror(errno) + " (it may show again)");
+        }
+    }
+    log("hint: \"" + config_.hint_text + "\" (the first app left open; shown once, " +
+        (config_.hint_path.empty() ? std::string("not remembered") : "remembered in " + config_.hint_path) + ")");
+    ui_.notice(config_.hint_text);
 }
 
 /* The passive reader is open exactly while an app is in front (the launcher reads its own touch fd otherwise). */
@@ -1005,6 +1312,11 @@ void Supervisor::write_status()
     text += "residents=" + std::to_string(model_.resident_count()) + "\n";
     text += "hidden=" + std::to_string(model_.hidden_count()) + "\n";
     text += std::string("session=") + (session_.active ? "on" : "off") + "\n";
+    if (config_.switcher_ui) { /* P-d */
+        const Entry *held = model_.find(sheet_);
+        text += std::string("switcher=") + (switcher_.open ? "open" : "off") + "\n";
+        text += "sheet=" + (held && held->state == State::Held ? held->spec.name : std::string("-")) + "\n";
+    }
     text += "mem_available_kb=" + std::to_string(model_.last_memory_kb()) + "\n";
     const Derived &d = model_.derived();
     text += std::string("grab_keys=") + (d.grab_keys ? "1" : "0") + " grab_touch=" + (d.grab_touch ? "1" : "0") +
@@ -1068,6 +1380,12 @@ void Supervisor::launcher_switch_event(SwitchEvent) {}
 void Supervisor::fake_memory(long) {}
 void Supervisor::command(const std::string &) {}
 void Supervisor::launcher_gesture(const std::string &, const std::string &, bool) {}
+void Supervisor::switcher_pick(AppId) {}
+void Supervisor::switcher_close(AppId) {}
+void Supervisor::switcher_close_all() {}
+void Supervisor::switcher_home() {}
+void Supervisor::switcher_cancel() {}
+void Supervisor::sheet_answer(bool) {}
 bool Supervisor::is_resident_key(const std::string &) const { return false; }
 std::string Supervisor::status_text() const { return std::string(); }
 void Supervisor::set_log_sink(LogSink) {}

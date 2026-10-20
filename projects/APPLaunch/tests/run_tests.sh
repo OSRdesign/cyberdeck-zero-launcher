@@ -82,6 +82,13 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
     "$test_root/../main/ui/multitask/notice_queue.cpp" \
     -o "$build_dir/test_notice_queue"
 "$build_dir/test_notice_queue"
+# P-d: the switcher screen's pure rules (card states, keyboard selection, the session's selection, sizes, the hint)
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_switcher_model.cpp" \
+    "$test_root/../main/ui/multitask/switcher_model.cpp" \
+    -o "$build_dir/test_switcher_model"
+"$build_dir/test_switcher_model"
 # ... and the host process tests: the real supervisor runs the spike's fake app on a file-backed framebuffer (~40 s)
 sh "$test_root/multitask/run_supervisor_host.sh"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \

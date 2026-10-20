@@ -8,6 +8,8 @@
 #include "display_handoff.hpp"
 #include "notice_queue.hpp"
 #include "supervisor.hpp"
+#include "switcher_model.hpp"
+#include "switcher_view.hpp"
 
 #include "cp0_display.h"
 #include "cp0_esc_state.h"
@@ -20,6 +22,7 @@
 #include "keyboard_input.h"
 #include "launcher_toast.h"
 #include "native_ui.hpp"
+#include "ui_screensaver.h"
 
 /* cp0_lvgl sources that have no public header (as the external app runner uses them) */
 #include "../../../../../ext_components/cp0_lvgl/src/cp0/cp0_esc_key_watch.hpp"
@@ -65,6 +68,10 @@ public:
     int restore(const std::vector<std::uint8_t> &in, int page_y) override
     {
         return cp0_display_fb_restore(in.data(), in.size(), page_y);
+    }
+    int backdrop(const std::vector<std::uint8_t> &frame) override
+    {
+        return cp0_display_fb_backdrop(frame.data(), frame.size(), kSheetBackdropPct);
     }
 };
 
@@ -136,9 +143,13 @@ private:
 };
 
 struct UiEvent {
-    enum class Kind { AppFront, LauncherFront, Repaint, Notice, Overlay } kind = Kind::Repaint;
+    enum class Kind { AppFront, LauncherFront, Repaint, Notice, Overlay, Switcher, Sheet, Apps } kind = Kind::Repaint;
     bool flag = false;
     std::string text;
+    /* P-d */
+    std::shared_ptr<const multitask::SwitcherInfo> info; /* Switcher */
+    AppId id = multitask::kNoApp;                        /* Sheet: the held app, kNoApp = the sheet goes */
+    std::vector<std::string> keys;                       /* Apps: the resident apps' Exec lines */
 };
 
 std::mutex s_events_mutex;
@@ -166,6 +177,28 @@ public:
     void overlay(const std::string &text) override { post({UiEvent::Kind::Overlay, false, text}); }
     void esc_hint(bool visible) override { ui_external_esc_hint(visible ? 1 : 0); }
     void residents(int count) override { s_residents.store(count); }
+    void switcher(const multitask::SwitcherInfo &info) override
+    {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Switcher;
+        e.info = std::make_shared<const multitask::SwitcherInfo>(info);
+        post(std::move(e));
+    }
+    void sheet(AppId id, const std::string &name) override
+    {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Sheet;
+        e.id = id;
+        e.text = name;
+        post(std::move(e));
+    }
+    void apps(const std::vector<multitask::SwitcherCard> &residents) override
+    {
+        UiEvent e;
+        e.kind = UiEvent::Kind::Apps;
+        for (const multitask::SwitcherCard &c : residents) e.keys.push_back(c.key);
+        post(std::move(e));
+    }
 };
 
 #if defined(__linux__)
@@ -205,14 +238,152 @@ cp0_g1_t s_g1;
 cp0_g2_t s_g2;
 bool s_g1_on = false;
 
+/* P-d: the switcher screen and the legacy sheet, each built when the supervisor opens it and deleted when it closes;
+ * the launcher screen that was active before (a page or the grid) comes back after. */
+bool s_switcher_ui = false;
+std::unique_ptr<SwitcherScreen> s_switcher;
+lv_obj_t *s_switcher_prev = nullptr;
+bool s_switcher_session = false; /* an Alt+Tab session drives it: touch is ignored meanwhile (as P-b's text) */
+std::unique_ptr<LegacySheet> s_sheet;
+lv_obj_t *s_sheet_prev = nullptr;
+
+/* While the switcher or the sheet is up the keypad has no input group: their keys come on the screen
+ * (LV_EVENT_KEYBOARD, as the home grid's), and the group of a page left under them (Settings' list) must not get them
+ * too (an Enter would also act there). The group comes back when they close. */
+lv_group_t *s_keypad_group = nullptr;
+
+void detach_keypad()
+{
+    lv_indev_t *indev = lv_indev_get_next(nullptr);
+    if (!indev) return;
+    if (lv_group_t *group = lv_indev_get_group(indev)) s_keypad_group = group;
+    lv_indev_set_group(indev, nullptr);
+}
+
+void restore_keypad()
+{
+    lv_indev_t *indev = lv_indev_get_next(nullptr);
+    if (indev && s_keypad_group && !lv_indev_get_group(indev)) lv_indev_set_group(indev, s_keypad_group);
+    s_keypad_group = nullptr;
+}
+
+/* The screen that was active before `ours` comes back (or the home grid), so `ours` can be deleted. */
+void leave_screen(lv_obj_t *ours, lv_obj_t *&prev)
+{
+    if (lv_screen_active() == ours) {
+        if (prev && prev != ours && lv_obj_is_valid(prev)) lv_screen_load(prev);
+        else if (s_hooks.show_home) s_hooks.show_home();
+    }
+    prev = nullptr;
+}
+
+/* The screen that will come back after `ours` closes: the one active now, unless it is ours. */
+lv_obj_t *active_besides(lv_obj_t *ours)
+{
+    lv_obj_t *active = lv_screen_active();
+    return active != ours ? active : nullptr;
+}
+
+void close_switcher_screen()
+{
+    if (!s_switcher) return;
+    leave_screen(s_switcher->screen(), s_switcher_prev);
+    s_switcher.reset();
+    restore_keypad();
+    if (s_switcher_session) {
+        s_switcher_session = false;
+        if (!s_app_front) cp0_display_set_touch_swallow(2); /* until the finger in contact, if any, is lifted */
+    }
+}
+
+void show_switcher(const multitask::SwitcherInfo &info)
+{
+    if (!info.open) {
+        close_switcher_screen();
+        return;
+    }
+    if (!s_switcher) {
+        SwitcherEvents events;
+        events.pick = [](std::intptr_t id) {
+            if (s_sup) s_sup->switcher_pick(static_cast<AppId>(id));
+        };
+        events.close = [](std::intptr_t id) {
+            if (s_sup) s_sup->switcher_close(static_cast<AppId>(id));
+        };
+        events.home = [] {
+            if (s_sup) s_sup->switcher_home();
+        };
+        events.close_all = [] {
+            if (s_sup) s_sup->switcher_close_all();
+        };
+        events.cancel = [] {
+            if (s_sup) s_sup->switcher_cancel();
+        };
+        s_switcher.reset(new SwitcherScreen(std::move(events)));
+        s_switcher_prev = active_besides(s_switcher->screen());
+        lv_screen_load(s_switcher->screen()); /* while an app is still in front it is drawn when the launcher is */
+        detach_keypad();
+    }
+    std::vector<CardView> cards;
+    for (const multitask::SwitcherCard &c : info.cards) {
+        CardView v;
+        v.id = c.id;
+        v.name = c.name;
+        v.icon = native_ui::app_icon(c.key);
+        v.label = multitask::card_label(c.state, c.origin);
+        cards.push_back(std::move(v));
+    }
+    s_switcher->set_cards(cards);
+    if (info.selected >= 0) s_switcher->select(info.selected);
+    if (info.session != s_switcher_session) {
+        s_switcher_session = info.session;
+        if (!s_app_front) cp0_display_set_touch_swallow(info.session ? 1 : 2);
+    }
+}
+
+/* The sheet over the frozen app's frame: only its box is drawn (the native clip), the supervisor already wrote the
+ * frame back dimmed around it. */
+void show_sheet(AppId id, const std::string &name)
+{
+    if (id == multitask::kNoApp) {
+        if (!s_sheet) return;
+        cp0_display_set_native_clip(0, 0, 0, 0);
+        leave_screen(s_sheet->screen(), s_sheet_prev);
+        s_sheet.reset();
+        restore_keypad();
+        if (!s_app_front) { /* Close: the launcher takes the whole panel again (Keep: the app has it already) */
+            lv_obj_invalidate(lv_screen_active());
+            lv_obj_invalidate(lv_layer_top());
+            ui_screensaver_set_foreground(1);
+        }
+        return;
+    }
+    if (s_sheet) return;
+    s_sheet.reset(new LegacySheet(
+        name,
+        [] {
+            if (s_sup) s_sup->sheet_answer(true);
+        },
+        [] {
+            if (s_sup) s_sup->sheet_answer(false);
+        }));
+    s_sheet_prev = active_besides(s_sheet->screen());
+    const lv_area_t box = s_sheet->box();
+    cp0_display_set_native_clip(box.x1, box.y1, box.x2 - box.x1 + 1, box.y2 - box.y1 + 1);
+    lv_screen_load(s_sheet->screen());
+    detach_keypad();
+}
+
 /* The toast carries two things: the P-b stand-in for the switcher (one line of text while an Alt+Tab session runs,
  * touch ignored meanwhile; a session started inside an app asks for it before the app is hidden: it appears when the
  * launcher is in front) and the supervisor's notices, one at a time, each readable (NoticeQueue). */
 void refresh_toast()
 {
     const bool overlay_wanted = !s_app_front && !s_overlay_text.empty();
-    const multitask::NoticeQueue::Step step =
-        s_notices.tick(multitask::Supervisor::now_ms(), !s_app_front && !overlay_wanted);
+    /* P-d: notices wait while the switcher or the sheet is up (the toast would cover the bar; the sheet draws only its
+     * box) */
+    const multitask::NoticeQueue::Step step = s_notices.tick(
+        multitask::Supervisor::now_ms(), !s_app_front && !overlay_wanted && !s_switcher && !s_sheet);
     if (overlay_wanted) {
         if (!s_overlay || s_overlay_shown != s_overlay_text) {
             launcher_toast().show_persistent(s_overlay_text.c_str());
@@ -267,11 +438,16 @@ int touch_frame_cb(const cp0_touch_frame_t *frame, int64_t now_us)
         e1 = s_g1_on ? cp0_g1_tick(&s_g1, now_us) : cp0_g1_event_t{};
     }
     int swallow = 0;
+    /* a wrapped (stock) app in the compat window cannot be hidden nor frozen (D12): its toolbar's Esc held 3 s ends
+     * it; the gesture is only logged (and its fingers swallowed) */
+    const bool wrapped = s_switcher_ui && native_ui::external_app_running();
     if (e1.outcome != CP0_G1_NONE) {
         char line[192];
         cp0_g1_describe(&s_g1, &e1, line, sizeof(line));
-        s_sup->launcher_gesture("G1", line, e1.outcome == CP0_G1_FIRED);
-        swallow = e1.outcome == CP0_G1_FIRED;
+        const bool fired = e1.outcome == CP0_G1_FIRED;
+        s_sup->launcher_gesture("G1", std::string(line) + (fired && wrapped ? " in a wrapped app: nothing" : ""),
+                                fired && !wrapped);
+        swallow = fired;
     }
     if (e2.fired) {
         s_sup->launcher_gesture("G2", "G2 fired (status strip held " + std::to_string(e2.held_ms) + " ms)", true);
@@ -315,6 +491,7 @@ void process_events()
             /* also after a refused launch: undoes what the launch prepared (loading overlay, input group) */
             s_app_front = false;
             if (s_hooks.launcher_front) s_hooks.launcher_front(e.flag);
+            if (s_switcher || s_sheet) detach_keypad(); /* the hook gave the keypad the page's group back */
             hand_over_gestures();
             break;
         case UiEvent::Kind::Repaint:
@@ -329,8 +506,19 @@ void process_events()
         case UiEvent::Kind::Overlay:
             s_overlay_text = e.text;
             break;
+        case UiEvent::Kind::Switcher:
+            if (e.info) show_switcher(*e.info);
+            break;
+        case UiEvent::Kind::Sheet:
+            show_sheet(e.id, e.text);
+            break;
+        case UiEvent::Kind::Apps:
+            native_ui::set_resident_apps(e.keys);
+            break;
         }
     }
+    /* an Alt+Tab session on the switcher: touch ignored (as P-b's text), also once the launcher took the panel back */
+    if (s_switcher && s_switcher_session && !s_app_front) cp0_display_set_touch_swallow(1);
     refresh_toast();
     tune_bridge();
 }
@@ -352,9 +540,11 @@ int key_filter(const struct key_item *item)
     if (item && s_sup) {
         const int value = item->key_state == KBD_KEY_PRESSED ? 1 : item->key_state == KBD_KEY_RELEASED ? 0 : 2;
         multitask::SwitchResult r = s_filter_keys.key(item->key_code, value);
+        /* nothing to switch to, or (P-d) a wrapped app runs in the compat window (it cannot be hidden): the key belongs
+         * to the page / the app */
         if ((r.event == multitask::SwitchEvent::Start || r.event == multitask::SwitchEvent::StartReverse) &&
-            s_residents.load() == 0) {
-            s_filter_keys.reset(); /* nothing to switch to: the key belongs to the page */
+            (s_residents.load() == 0 || (s_switcher_ui && native_ui::external_app_running()))) {
+            s_filter_keys.reset();
             r = multitask::SwitchResult();
         }
         if (r.event != multitask::SwitchEvent::None && r.event != multitask::SwitchEvent::Home)
@@ -436,6 +626,15 @@ bool start(Hooks hooks)
     cp0_g1_init(&s_g1, &cfg.touch.params, cfg.touch.w, cfg.touch.h, cfg.touch.ppmm_x100);
     cp0_g2_init(&s_g2, &g2, cfg.touch.ppmm_x100);
     s_g1_on = cfg.touch.g1;
+    /* P-d: the switcher screen, the legacy sheet, the grid's dots and the first-run hint on 640x480 and larger; smaller
+     * canvases keep the P-b / P-c stand-ins */
+    s_switcher_ui = multitask::switcher_fits(cfg.touch.w, cfg.touch.h);
+    cfg.switcher_ui = s_switcher_ui;
+    if (s_switcher_ui) {
+        cfg.hint_text = multitask::first_run_hint(slots);
+        const char *home = std::getenv("HOME");
+        if (home && home[0]) cfg.hint_path = std::string(home) + "/.config/cardputerzero/multitask-hint-shown";
+    }
 
     s_fb.reset(new LauncherFb());
     s_input.reset(new LauncherInput());
@@ -477,6 +676,13 @@ bool start(Hooks hooks)
     else
         std::fprintf(stderr, "[mt] touch gestures (P-c): %s, %d slot(s): G1 off (needs 3), G2 status strip %d ms\n",
                      slots ? cp0_display_touch_path() : "no touch screen", slots, g2.hold_ms);
+    if (s_switcher_ui)
+        std::fprintf(stderr, "[mt] switcher screen (P-d): on (%dx%d); first-run hint \"%s\" %s\n", cfg.touch.w,
+                     cfg.touch.h, cfg.hint_text.c_str(),
+                     cfg.hint_path.empty() ? "(not remembered: no HOME)" : ("(" + cfg.hint_path + ")").c_str());
+    else
+        std::fprintf(stderr, "[mt] switcher screen (P-d): off (%dx%d is under 640x480: the P-b / P-c stand-ins)\n",
+                     cfg.touch.w, cfg.touch.h);
     /* screen.state says how many contacts the panel tracks (study 6.4; only with the flag on) */
     cp0_ui_state_set_touch_slots(slots);
     (void)cp0_ui_state_republish();
@@ -488,6 +694,12 @@ void stop()
 {
     cp0_display_set_touch_frame_cb(nullptr);
     if (s_sup) s_sup->stop();
+    close_switcher_screen();
+    if (s_sheet) {
+        cp0_display_set_native_clip(0, 0, 0, 0);
+        leave_screen(s_sheet->screen(), s_sheet_prev);
+        s_sheet.reset();
+    }
     cp0_lvgl_set_loop_hook(nullptr);
     if (cp0_keyboard_get_key_filter() == key_filter) cp0_keyboard_set_key_filter(s_prev_filter);
     s_prev_filter = nullptr;
@@ -517,6 +729,16 @@ lv_timer_t *bridge_timer()
 bool is_resident(const std::string &key)
 {
     return s_sup && s_sup->is_resident_key(key);
+}
+
+bool screen_up()
+{
+    return s_switcher || s_sheet;
+}
+
+bool sheet_up()
+{
+    return s_sheet != nullptr;
 }
 
 void launch(const std::string &name, const std::string &key, const std::string &command, bool keep_root,

@@ -72,6 +72,13 @@ public:
     virtual bool snapshot(std::vector<std::uint8_t> &out, int &page_y) = 0;
     /* 0 written and verified, 1 written but read back different, -1 failed. */
     virtual int restore(const std::vector<std::uint8_t> &in, int page_y) = 0;
+    /* P-d: the frame written back dimmed to the launcher's page (the background of the legacy sheet); 0 done, -1 not
+     * supported or failed (the sheet then stands over the frame as it is). */
+    virtual int backdrop(const std::vector<std::uint8_t> &frame)
+    {
+        (void)frame;
+        return -1;
+    }
 };
 
 struct DrainStats {
@@ -121,6 +128,25 @@ public:
     virtual bool poll(Listener listener, void *context) = 0;
 };
 
+/* Multitasking P-d: one card of the switcher screen (a resident app). */
+struct SwitcherCard {
+    AppId id = kNoApp;
+    std::string name;
+    std::string key;       /* the .desktop Exec line: the launcher finds the app's icon and tile with it */
+    State state = State::Gone;
+    bool origin = false;   /* the app that was in front when the switcher opened ("In front") */
+};
+
+/* What the switcher screen shows (UiPort::switcher). */
+struct SwitcherInfo {
+    bool open = false;               /* false: the screen goes */
+    bool app_next = false;           /* closing because an app takes the panel (the launcher shows nothing between) */
+    std::vector<SwitcherCard> cards; /* the resident apps, most recently in front first (at most the cap) */
+    int selected = -1;               /* switcher_model item (card, kItemHome, kItemCloseAll); -1 = keep the screen's */
+    bool session = false;            /* an Alt+Tab session drives the selection: the screen ignores touch meanwhile */
+    std::string source;              /* "G1", "G2", "app", "Alt+Tab" */
+};
+
 class UiPort {
 public:
     virtual ~UiPort() = default;
@@ -131,6 +157,16 @@ public:
     virtual void overlay(const std::string &text) = 0; /* the Alt+Tab text; "" hides it */
     virtual void esc_hint(bool visible) = 0;
     virtual void residents(int count) = 0;
+    /* P-d (SupervisorConfig::switcher_ui), each posted before the launcher_front() it goes with, so the launcher never
+     * paints its grid in between: the switcher screen (open, update, close); the legacy sheet for `id` (kNoApp: it
+     * goes); the resident apps whenever they or their states change (the home grid's dots). */
+    virtual void switcher(const SwitcherInfo &info) { (void)info; }
+    virtual void sheet(AppId id, const std::string &name)
+    {
+        (void)id;
+        (void)name;
+    }
+    virtual void apps(const std::vector<SwitcherCard> &residents) { (void)residents; }
 };
 
 /* Guardian (task 015 section 3): a small process forked from the launcher that, when the launcher dies without
@@ -178,6 +214,13 @@ struct SupervisorConfig {
     std::uint32_t show_ack_log_ms = 1000;
     int stop_wait_ms = 3000;       /* stop(): SIGTERM -> SIGKILL */
     bool guardian = true;          /* start() forks the guardian */
+    /* P-d: the switcher screen, the legacy sheet and the home grid's dots (canvases of 640x480 and more); false keeps
+     * the P-b / P-c stand-ins (the Alt+Tab text, a gesture = Home). */
+    bool switcher_ui = false;
+    /* P-d, D15: the first time an app is left open the hint_text notice shows, once: hint_path (a small file) remembers
+     * it was shown. "" = no hint. */
+    std::string hint_path;
+    std::string hint_text;
 };
 
 class Supervisor {
@@ -214,6 +257,13 @@ public:
     void launcher_gesture(const std::string &source, const std::string &line, bool fired);
     /* P-c: the touch screen for G1 while an app is in front (before start(); nullptr = none). */
     void set_touch_port(TouchPort *port) { touch_ = port; }
+    /* P-d: what the user did on the switcher screen and on the legacy sheet (the launcher's UI thread). */
+    void switcher_pick(AppId id);  /* a card tapped (or Enter on it): resume that app */
+    void switcher_close(AppId id); /* its X: close that app (the card goes) */
+    void switcher_close_all();     /* Close all: every resident app closes, the home grid shows */
+    void switcher_home();          /* Home: the launcher (the grid, or the page that was open) */
+    void switcher_cancel();        /* the header's Esc, Esc / Backspace: back to where the switcher was opened from */
+    void sheet_answer(bool keep);  /* Keep: the app is resumed as it was; Close: it is closed */
 
     /* ---- any thread ---- */
     int resident_count() const { return residents_.load(); }
@@ -249,7 +299,7 @@ private:
         bool show_waiting = false;
     };
     struct Request {
-        enum class Kind { Launch, Resume, Home, Close, CloseAll, Switch, Memory, Command, Gesture } kind = Kind::Home;
+        enum class Kind { Launch, Resume, Home, Close, CloseAll, Switch, Memory, Command, Gesture, Screen } kind = Kind::Home;
         AppSpec spec;
         AppId id = kNoApp;
         SwitchEvent event = SwitchEvent::None;
@@ -282,9 +332,19 @@ private:
     std::string session_text() const;
     std::string session_selection() const;
     void handle_command(const std::string &line);
-    /* The switcher (P-c stand-in; P-d draws the switcher screen here): G1, G2, the app's "switcher" message and the
-     * dev FIFO's g1 / g2 all come here. */
+    /* The switcher: G1, G2, the app's "switcher" message and the dev FIFO's g1 / g2 all come here. P-d: the switcher
+     * screen (a lifecycle app in front is hidden first, the launcher in front with an app resident shows it at once),
+     * the legacy sheet (a legacy app in front), or leaving them (a gesture while they are up); without switcher_ui the
+     * P-c stand-in (from an app = Home). */
     void open_switcher(const std::string &source);
+    /* P-d */
+    void screen_request(const Request &request);
+    SwitcherInfo switcher_info();
+    void post_switcher(bool opening = false);                  /* open (logged) or update, with the current cards */
+    void close_switcher(bool app_next);
+    void sync_screens();                                       /* the sheet's app went; the cards changed; no app left */
+    void show_hint();
+    void post_screen(const std::string &what, AppId id = kNoApp);
     void sync_touch();
     void poll_touch();
     void touch_event(const cp0_g1_event_t &event);
@@ -325,6 +385,18 @@ private:
     bool touch_open_ = false;
     AppId touch_failed_ = kNoApp; /* the app in front for which the reader could not open (not retried for it) */
     cp0_g1_t g1_{};
+    /* P-d: the switcher screen (wanted: shown as soon as the launcher is in front, after the hide of the app it was
+     * opened from) and the legacy sheet (the HELD app it asks about) */
+    struct SwitcherState {
+        bool wanted = false;
+        bool open = false;
+        AppId origin = kNoApp;
+        std::string source;
+    } switcher_;
+    AppId sheet_ = kNoApp;
+    bool sheet_posted_ = false;
+    std::string cards_sig_;  /* the resident apps and their states as last posted (UiPort::apps) */
+    bool hint_done_ = false; /* the first-run hint was shown (now or in an earlier run: hint_path exists) */
 
     mutable std::mutex mutex_;          /* requests_, status_text_, keys_resident_, log_sink_ */
     std::deque<Request> requests_;

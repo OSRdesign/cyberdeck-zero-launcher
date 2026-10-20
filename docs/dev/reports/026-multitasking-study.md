@@ -9,7 +9,9 @@ committed or deployed. Apps repo read at main 52fd1f2, plus the System Monitor b
 **Update 2026-10-20:** P-a measured (section 10); P-b, the launcher core, is built behind `APPLAUNCH_MULTITASK=1`
 on branch `multitasking-pb` (section 11, `docs/dev/tasks/015-multitasking-pb.md`), board tests pending. P-c, touch
 (the slot tracker, G1 at 1 s, G2), is built on branch `multitasking-pc` (section 12,
-`docs/dev/tasks/015-multitasking-pc.md`), board tests pending.
+`docs/dev/tasks/015-multitasking-pc.md`), board tests pending. **Update 2026-10-21:** P-b and P-c are merged; P-d,
+the switcher screen, the legacy sheet, the grid's dots and the first-run hint, is built on branch `multitasking-pd`
+(section 13, `docs/dev/tasks/015-multitasking-pd.md`), board tests pending.
 
 Markers: **V** = verified in code or measured on a board, **I** = inferred or taken from documentation or the web;
 needs a board. Owner decisions are numbered **D1-D15** (section 8). UI items are proposals for the owner to decide.
@@ -604,7 +606,7 @@ Per app:
 | **P-a Spike and measure** | (1) a raw multitouch recorder (a tiny C or Python evdev logger, read-only): 1-4 fingers, palm, grip, two-thumb OSK typing, on the deck GT911 and the 3A+ FT5x06; ghost rate, `TOUCH_MAJOR` of finger vs palm, how close 3 fingers can be on 57 mm. (2) Handoff prototype outside the launcher: run the template fullscreen, `SIGSTOP` the group, snapshot fb0, draw a test card, restore the snapshot, `SIGCONT`; look for tearing and missing repaint. (3) PSS/anon/swap of every app running and frozen (template, System Monitor, Serial Console, Mesh Hop, viz1090 + readsb). (4) viz1090: does readsb tolerate a stopped or slow viz1090 (TCP buffer, reconnect)? (5) Can a finger start a swipe at the deck's bottom edge in its case? (6) `oom_score_adj` raise and lower without privilege | D1, D2 agreed in principle | a data table; go/no-go on G1 and its thresholds; the handoff shows no flicker and no stale input | 3 |
 | **P-b Launcher core** | non-blocking fullscreen run (a "display suspended" mode: no flush, pointer released; today's `lv_timer_enable(false)` also stops `lv_async_call`); app registry, MRU, one instance; control socket and env; hide/show/freeze/thaw/close/close all; ack timeout -> not responding; memory rule and `oom_score_adj`; snapshot capture and restore; Alt+Tab and Super in the supervisor and in the launcher's key path; rewrite `test_external_framebuffer_ownership.py` | P-a passed | unit tests of the lifecycle state machine and the memory policy; host test with a fake protocol app on a file-backed framebuffer; `check-all` green; goldens unchanged | 6 |
 | **P-c Touch** (built 2026-10-20, section 12) | slot-aware multitouch tracker in `cp0_lvgl_dpi_scaled.c` (fixes the flattening; single pointer = the first slot); G1 recogniser (pure C, SDK-copyable for the shims); G2 on the strip; swallow after fire; `touch_slots` in `screen.state` | P-a data | table-driven tests (section 5.3) + replay of the P-a recordings; no change in the harness goldens | 4 |
-| **P-d Switcher and grid UI** | the owner's choices from section 6 | D6-D9, D15 decided | harness scenes at 640x480, 800x480, 720x720, 1280x720 (+ 480x320 best effort); contact sheet reviewed | 4 |
+| **P-d Switcher and grid UI** (built 2026-10-21, section 13) | the owner's choices from section 6 | D6-D9, D15 decided | harness scenes at 640x480, 800x480, 720x720, 1280x720 (+ 480x320 best effort); contact sheet reviewed | 4 |
 | **P-e Apps** | `_common` lifecycle (hidden flag in the `cp0_lvgl` flush, drain + `lv_indev_reset` on show, Tab-with-Alt, strip `switcher`); viz1090 shim; Mesh Hop platform; `.desktop` keys; APP-CONTRACT §13, APP-GUIDELINES (save state on exit, hardware release, background CPU budget) | P-b, P-c | headless tests per app; board protocol below | 5 |
 | P-f (optional) Terminal sessions | keep `UISTPage` + PTY alive while hidden; card from an LVGL snapshot | P-b | an SSH session survives a trip to another app | 3 |
 
@@ -818,3 +820,20 @@ decisions to confirm: `docs/dev/tasks/015-multitasking-pc.md`. Board protocol:
   `mta_analyse.py`.
 - Verified on the PC only; the board tests (real hands, viz1090's pinch, two-thumb typing, palms, both panels) are
   pending.
+
+## 13. P-d status (2026-10-21)
+
+Built on branch `multitasking-pd` (on `main` 8c08509, P-b and P-c merged), to the owner-approved mockup "Task
+switcher". Design as built, files, tests, deviations and the decisions to confirm:
+`docs/dev/tasks/015-multitasking-pd.md`. Board protocol: `docs/dev/tests/multitasking-pd-protocol.md`.
+
+- Done (all behind `APPLAUNCH_MULTITASK=1`, on canvases of 640x480 and more; smaller ones keep the P-b / P-c
+  stand-ins): the switcher "Open apps" (the shared header, a fixed 2x2 grid of cards with icon, name, state dot and a
+  7 mm X, "Room for one more", Home and Close all, the keyboard selection) from G1 / G2 in a lifecycle app, on the
+  launcher with an app resident, and Alt+Tab (P-b's session drives its selection); the legacy sheet "Close <app>?"
+  over the frozen app's dimmed last frame (D12: the app frozen with its group, Keep = the P-b resume, Close = Esc held
+  3 s after a SIGCONT); the green dot on resident apps' tiles (D8); the one-time hint (D15).
+- Where it differs from this study: no thumbnails (the mockup: name, icon, state only); the X's target 7 mm; no flick
+  (D9); no sheet for wrapped apps (their toolbar's Esc held 3 s ends them); the switcher opens on launcher pages too.
+- Verified on the PC only (unit tests, the host process suite with the fake app, render-harness scenes at 640x480,
+  800x480, 720x720, 1280x720 and 1024x600); the board tests are pending.
