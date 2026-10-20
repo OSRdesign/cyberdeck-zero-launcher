@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=MT NoEsc
+Exec=/usr/share/APPLaunch/bin/mt-fbhapp --tag noesc --no-esc --log /tmp/mt-fbhapp-noesc.log
+Terminal=false
+X-Fullscreen=true

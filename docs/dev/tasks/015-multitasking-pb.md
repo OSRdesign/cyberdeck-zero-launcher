@@ -48,12 +48,12 @@ launcher, nothing installed), or for the service with a user drop-in (`systemctl
 launcher process
  +- UI thread (LVGL)
  |   home grid, pages; launch_Exec(fullscreen) -> multitask_ui::launch_fullscreen()  (returns at once)
- |   bridge timer (20 ms): UI events from the supervisor -> display handoff, home, toasts, the Alt+Tab text
+ |   bridge (main-loop hook, woken by the supervisor; fallback timer): UI events -> display handoff, home, toasts
  |   key filter (launcher in front): Alt / Tab / Shift / Esc -> the Alt+Tab session (consumed while a session runs)
  |   display_handoff: enter_app_front() = pause every LVGL timer but the bridge + release the pointer
  |                    leave_app_front() = resume them + full repaint (cp0_display_resume)
  +- supervisor thread (multitask::Supervisor, no LVGL; replaces the runner loop for these apps)
- |   10 ms loop: control sockets, reaping (subreaper), Esc / Alt / Tab / Super from evdev while an app is in front,
+ |   poll() loop: control sockets, reaping (subreaper), Esc / Alt / Tab / Super from evdev while an app is in front,
  |   the Esc-hold policy, deadlines, MemAvailable every 2 s, the dev control FIFO
  |   pure models: multitask::Model (registry + state machine + memory rule), SwitchKeys (Alt+Tab / Super session)
  |   effects through ports: processes and sockets (Linux), framebuffer (cp0_display_*), input (grab / drain), UI
@@ -240,6 +240,7 @@ Everything in sections 2-11 is built as described; the differences are listed un
 | `projects/APPLaunch/main/ui/multitask/multitask_model.{hpp,cpp}` | new, pure: registry, state machine, MRU, cap, memory rule, oom tiers, pending target, derived outputs |
 | `.../multitask/switch_keys.{hpp,cpp}` | new, pure: Alt+Tab / Shift / Esc-cancel / Super-tap session |
 | `.../multitask/lifecycle_protocol.{hpp,cpp}` | new, pure: datagram format and parser, environment exports |
+| `.../multitask/notice_queue.{hpp,cpp}` | new, pure (pb.2): notices one at a time, each at least 2 s |
 | `.../multitask/supervisor.{hpp,cpp}` | new: the supervisor thread over ports, the Alt+Tab session controller, the dev FIFO, the status file |
 | `.../multitask/supervisor_linux.cpp` | new: spawn with a socketpair, signals, `/proc` members, wait for `T`, reaping, `oom_score_adj`, MemAvailable, drain through `pidfd_getfd`, the guardian |
 | `.../multitask/display_handoff.{hpp,cpp}` | new: display suspended mode on the LVGL thread (also compiled into the render harness) |
@@ -248,13 +249,14 @@ Everything in sections 2-11 is built as described; the differences are listed un
 | `projects/APPLaunch/main/ui/launcher_app.cpp`, `desktop_app_loader.cpp`, `desktop_entry.{h,cpp}` | `X-Background` parsed and carried to the launch |
 | `ext_components/cp0_lvgl/include/cp0_display.h`, `src/cp0/cp0_lvgl_dpi_scaled.c` | `cp0_display_suspend/resume/suspended`, `cp0_display_fb_page_bytes/snapshot/restore`, `cp0_display_set_touch_grab`; one lock around every framebuffer write |
 | `ext_components/cp0_lvgl/include/keyboard_input.h`, `src/cp0/cp0_lvgl_keyboard.c` | `cp0_keyboard_set_grab`: the libinput fds are recorded in `open_restricted` |
-| `ext_components/cp0_lvgl/src/cp0/cp0_esc_key_watch.{hpp,cpp}` | `Sources::poll(listener, context)`: every key event, the Esc state as before |
-| `projects/APPLaunch/tests/test_multitask_model.cpp`, `test_switch_keys.cpp`, `test_lifecycle_protocol.cpp` | new pure tests (ASan + UBSan) |
+| `ext_components/cp0_lvgl/src/cp0/cp0_esc_key_watch.{hpp,cpp}` | `Sources::poll(listener, context)`: every key event, the Esc state as before; `Sources::fds()` (pb.2) to poll them |
+| `ext_components/cp0_lvgl/include/cp0_lvgl_app_runner.hpp`, `src/cp0_lvgl_app_runner.cpp` | `cp0_lvgl_set_loop_hook()` (pb.2): a function called at every turn of the main loop (inert unless set) |
+| `projects/APPLaunch/tests/test_multitask_model.cpp`, `test_switch_keys.cpp`, `test_lifecycle_protocol.cpp`, `test_notice_queue.cpp` | new pure tests (ASan + UBSan) |
 | `projects/APPLaunch/tests/multitask/test_supervisor_host.cpp`, `run_supervisor_host.sh` | new host process tests (ASan + UBSan) |
 | `projects/APPLaunch/tests/test_desktop_entry.cpp`, `test_external_framebuffer_ownership.py`, `run_tests.sh` | `X-Background` cases; both fullscreen paths and the hand-overs; registration |
 | `ext_components/cp0_lvgl/tests/test_esc_key_watch.cpp` | the key listener |
 | `projects/APPLaunch/tests/render/{Makefile, src/harness_main.cpp, src/harness_launch.cpp, scenes/multitask_handoff.scene}` | `handoff` / `expect_fb` commands and the review-only scene |
-| `tools/multitasking-spike/src/fbhapp.c`, `desktop/*.desktop`, `README.md` | `work` counter, `h` = `home`, `--no-hup`, no 1 ms polling while hidden; the four test apps |
+| `tools/multitasking-spike/src/fbhapp.c`, `desktop/*.desktop`, `README.md` | `work` counter, `h` = `home`, `--no-hup`, no 1 ms polling while hidden; the five test apps (MT NoEsc in pb.2) |
 | `docs/APP-CONTRACT.md` | `APPLAUNCH_LIFECYCLE` / `APPLAUNCH_CONTROL_FD` in section 3, `X-Background` in section 6, section 13 (draft) |
 | `docs/dev/reports/026-multitasking-study.md` | sections 10 (P-a results) and 11 (P-b status) |
 | `docs/dev/tests/multitasking-pb-protocol.md` | the board protocol |
@@ -264,7 +266,7 @@ Everything in sections 2-11 is built as described; the differences are listed un
 | Suite | Before (main 798381c) | After |
 |---|---|---|
 | `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`) | 106 test programs, PASS | 106 programs (`test_esc_key_watch` has one more case), PASS |
-| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 56 compiled tests (+ model 102 checks, keys 71, protocol 32, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (98 checks, ASan + UBSan), PASS |
+| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 57 compiled tests (+ model 112 checks, keys 71, protocol 32, notice queue 29, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (106 checks, ASan + UBSan, with the loop-cost bound), PASS (pb.1: 56 tests, model 102, host 98) |
 | render harness | 40 scenes, 64 goldens (32 at 640x480, 32 at 480x320), 1459 screenshots | 41 scenes (+ `multitask_handoff`, review-only), **64 goldens byte-identical**, 1469 screenshots (+10: the new scene, 2 shots at 5 sizes); `compare`, `twice`, `header`, `contract` PASS |
 | `branding` | PASS | PASS |
 | P-a spike tests (`tools/multitasking-spike/run_tests.sh`, not in check-all) | 20 Python OK; host e2e 37 of 38 in 3 of 3 runs on this PC | 20 Python OK; host e2e 37 of 38 (passed 38 once in 3 runs). The failing case, fbhandoff's own guardian line `ended_group=1`, is timing-dependent and fails on `main` too: when fbhandoff is killed, the kernel sends SIGHUP + SIGCONT to the newly orphaned stopped group and the fake app quits before fbhandoff's guardian looks (the group is gone either way) |
@@ -280,6 +282,41 @@ floor, shutdown with nothing left stopped, and the guardian (both a frozen app t
 end within 4.5 s of a SIGKILL of the supervisor's process; without the guardian both survive, checked by hand). The
 render scene checks the display suspended mode with the real display backend: a toast and a forced refresh write no
 byte over the app's frame, the home grid comes back pixel-identical, the snapshot restores byte for byte.
+
+### Deck findings 2026-10-20 and build 0.8.0-pb.2
+
+The owner ran parts A-K of the protocol on the deck with build 0.8.0-pb.1 (staged launcher, flag on): all passed.
+The logs showed five things, fixed in pb.2:
+
+1. **Launcher CPU about 5 % with viz1090 in front.** Cause: the supervisor ticked every 10 ms (and rebuilt its status
+   text each time), and the 20 ms bridge timer kept the LVGL loop turning 50 times a second behind the app. On the PC
+   (host suite's loop-cost scenario, a legacy app in front, `-O2`): **95 wake-ups/s and 14.3 ms CPU/s** (1.4 % of an
+   x86 core; the deck's A53 is several times slower). Now the supervisor sleeps in `poll()` on everything that can
+   happen (requests, control sockets, the keyboards, the leaders' pidfds, the dev FIFO) and wakes on its own only for
+   what is due (deadlines, the Esc hold, MemAvailable every 2 s while an app is hidden, the keyboards re-checked once
+   a second); the status file and the resident list are rebuilt only after a change. The UI events reach the LVGL
+   thread through a new main-loop hook (`cp0_lvgl_set_loop_hook`, woken by `cp0_lvgl_wake()`); the bridge timer is a
+   fallback at 2 s behind an app (1 s on the launcher, 100 ms while notices show). After: **1.0 wake-up/s and
+   0.11-0.18 ms CPU/s** with an app in front, 0.3 wake-up/s with an app hidden; the LVGL loop 0.5 wake-up/s behind an
+   app (by its timer periods, not measured). The host suite asserts at most 5 wake-ups/s. The keyboard thread's own
+   paused loop (`usleep(50 ms)`, 20 wake-ups/s, also on the legacy path) is unchanged.
+2. **Restore 12-15 ms, drain 7-10 ms** (P-a: restore about 2 ms). The restore checked the whole 1.2 MB page by reading
+   it back from the framebuffer, an uncached mapping where reads are slow (the snapshot, a read of the same size,
+   takes 9-14 ms); P-a's 2 ms timed only the copy. The check now reads 9 rows (first, last and 7 between). The drain
+   found the app's processes by reading the `stat` of every process (about 125 on the deck; `wait_stopped` did the same
+   every millisecond): it now walks the launcher's descendants through `/proc/<pid>/task/<tid>/children`
+   (`CONFIG_PROC_CHILDREN=y` on the deck, read-only probe), with the full scan only as a fallback. Expected on the
+   deck: restore about 2 ms, drain 1-2 ms (not measurable on the PC: the test framebuffer is a cached file).
+3. **A notice erased by the next one** (`Closed MT Freeze (2 apps open)` then at once `MT Slow is not responding`):
+   `multitask::NoticeQueue` (pure, 29 checks) keeps each notice at least 2 s, shows the next one after that, hides
+   the last after 3 s, and shows again a notice an app covered before it could be read.
+4. **No app to test the 3 s Esc hold** (they all quit on the press): a fifth test tile, MT NoEsc (`--no-esc`), and
+   part J rewritten around it.
+5. **Alt+Tab steps not visible in the log**: `session: select <name>` for each Tab / Shift+Tab (the first included)
+   and `session: cancelled` for Esc with Alt held; the protocol lists the lines to expect for B5, D2 and D5.
+
+Found on the PC while measuring: a launch while the app in front was closing was refused with a misleading notice;
+it now waits for that app to end (model test).
 
 ### Verified on the PC only (needs the boards)
 
@@ -345,5 +382,6 @@ byte over the app's frame, the home grid comes back pixel-identical, the snapsho
 - **Helpers outside the app's process group** are not frozen or closed (D10: cgroup freezer later).
 - **viz1090's readsb link** after a freeze (P-a: dropped at about 15 s): app side.
 - The snapshot of each resident app costs one framebuffer page (1.2 MB on the deck, 4.8 MB at the cap).
-- The launcher keeps a 20 ms bridge timer while the flag is on, and the supervisor ticks every 10 ms while an app is
-  resident (500 ms idle otherwise).
+- Wake-ups with the flag on (pb.2): the supervisor about once a second while an app is in front (the keyboards are
+  re-checked), every 2 s while an app is hidden (MemAvailable), every 500 ms with nothing resident; the LVGL loop's
+  fallback timer every 2 s behind an app, 1 s on the launcher, 100 ms while notices show.
