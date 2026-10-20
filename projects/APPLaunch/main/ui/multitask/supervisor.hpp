@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Multitasking P-b supervisor (task 015 section 3): the loop that owns the resident fullscreen apps. It replaces the
- * blocking runner loop for the apps started under APPLAUNCH_MULTITASK=1 and runs on its own thread, so the launcher's
+ * blocking runner loop for the apps started with multitasking on and runs on its own thread, so the launcher's
  * UI thread is never blocked by an app:
  *   - requests from the UI thread (launch, resume, home, close, close all, Alt+Tab events) are queued;
  *   - it sleeps in poll() on what can happen (requests, control sockets with ack / home / switcher, the leaders'

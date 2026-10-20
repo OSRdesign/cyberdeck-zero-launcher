@@ -752,7 +752,7 @@ static void test_publish(void)
     CHECK(system(cmd) == 0);
 }
 
-/* Multitasking P-c: touch_slots= only once the launcher sets it (APPLAUNCH_MULTITASK=1), right after touch= */
+/* Multitasking P-c: touch_slots= only once the launcher sets it (multitasking on), right after touch= */
 static void test_touch_slots_line(void)
 {
     cp0_ui_metrics_t m = compute(640, 480, 0, 0);

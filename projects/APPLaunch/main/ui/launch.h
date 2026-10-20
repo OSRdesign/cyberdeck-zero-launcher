@@ -119,7 +119,7 @@ struct app
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root);
     // fullscreen: the app owns the whole panel while it runs (no scaled window, no toolbar)
-    // background: X-Background (task 015), used only with APPLAUNCH_MULTITASK=1
+    // background: X-Background (task 015), used only with multitasking on
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root,
         bool fullscreen, multitask::Background background = multitask::Background::None);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause,
@@ -161,7 +161,7 @@ private:
     void launch_Exec(const std::string &exec, bool keep_root = false, bool fullscreen = false,
                      const std::string &name = std::string(),
                      multitask::Background background = multitask::Background::None);
-    // Multitasking P-b (task 015, APPLAUNCH_MULTITASK=1): the non-blocking fullscreen path and the two hand-overs
+    // Multitasking P-b (task 015, multitasking on): the non-blocking fullscreen path and the two hand-overs
     // of the panel the supervisor drives (LVGL thread)
     void launch_fullscreen_supervised(const std::string &exec, bool keep_root, const std::string &name,
                                       multitask::Background background);

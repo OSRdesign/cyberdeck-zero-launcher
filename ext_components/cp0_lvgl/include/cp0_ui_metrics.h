@@ -226,7 +226,7 @@ int cp0_ui_state_republish(void);
 /* Device side (cp0_ui_state.c): installs the function cp0_ui_state_republish() calls. */
 void cp0_ui_state_set_republisher(int (*fn)(void));
 /* Multitasking P-c: from now on cp0_ui_state_format() writes touch_slots=slots after touch= (slots < 0, the start
- * value: no such line). The launcher sets it with APPLAUNCH_MULTITASK=1, then republishes; without the flag
+ * value: no such line). The launcher sets it with multitasking on, then republishes; with it off
  * screen.state is unchanged. */
 void cp0_ui_state_set_touch_slots(int slots);
 

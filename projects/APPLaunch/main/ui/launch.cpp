@@ -58,7 +58,7 @@ void Launch::bind_ui()
     if (!icon_poll_timer_) icon_poll_timer_ = lv_timer_create(icon_poll_cb, kIconPollPeriodMs, this);
     esc_ui_watchdog_.start();
     esc_hold_hint_controller().set_force_home_callback(esc_force_home_cb, this);
-    // Multitasking P-b (task 015): only with APPLAUNCH_MULTITASK=1; otherwise nothing of it exists
+    // Multitasking P-b (task 015): only with multitasking on; otherwise nothing of it exists
     if (multitask_ui::enabled()) {
         multitask_ui::Hooks hooks;
         hooks.app_front = [this] { mt_app_front(); };
@@ -200,7 +200,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
         }
         return;
     }
-    // Multitasking P-b (APPLAUNCH_MULTITASK=1): a full-screen app runs under the supervisor and this returns at once
+    // Multitasking P-b (multitasking on): a full-screen app runs under the supervisor and this returns at once
     if (fullscreen && multitask_ui::active()) {
         launch_fullscreen_supervised(exec, keep_root, name, background);
         return;

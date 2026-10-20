@@ -154,7 +154,8 @@ same log lines, `helper=1`); `--ack-delay-ms` and `--ignore-hide` do not apply t
 `mt-fbhapp-run.desktop` (`run`), `mt-fbhapp-slow.desktop` (`freeze`, `--ack-delay-ms 800`: answers too late, so the
 launcher marks it not responding), `mt-fbhapp-legacy.desktop` (no key: today's behaviour) and
 `mt-fbhapp-noesc.desktop` (no key, `--no-esc`: Esc does nothing in it, for the launcher's hold-Esc test). Each logs to
-`/tmp/mt-fbhapp-<tag>.log`. They only stay in the background under a launcher started with `APPLAUNCH_MULTITASK=1`;
+`/tmp/mt-fbhapp-<tag>.log`. They only stay in the background under a launcher with multitasking on (the default on
+640x480 and more since task 015 "default on"; `APPLAUNCH_MULTITASK=1` forces it, `=0` turns it off);
 the board protocol is `docs/dev/tests/multitasking-pb-protocol.md`.
 
 **Safety.** It refuses to start while the launcher (or another process) has the framebuffer open, exit status 3,

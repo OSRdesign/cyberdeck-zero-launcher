@@ -5,6 +5,9 @@
  */
 #include "switcher_model.hpp"
 
+#include <cstddef>
+#include <string>
+
 namespace multitask {
 
 CardLabel card_label(State state, bool origin)
@@ -91,6 +94,29 @@ int session_item(const std::vector<AppId> &cycle, int selected, const std::vecto
 bool switcher_fits(int w, int h)
 {
     return w >= 640 && h >= 480;
+}
+
+MultitaskFlag parse_multitask_flag(const char *value)
+{
+    if (!value) return MultitaskFlag::Default;
+    char low[8] = {};
+    std::size_t n = 0;
+    for (; value[n]; ++n) {
+        if (n + 1 >= sizeof(low)) return MultitaskFlag::Default; /* longer than any accepted word */
+        const char c = value[n];
+        low[n] = c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c;
+    }
+    const std::string v(low, n);
+    if (v == "1" || v == "true" || v == "on" || v == "yes") return MultitaskFlag::On;
+    if (v == "0" || v == "false" || v == "off" || v == "no") return MultitaskFlag::Off;
+    return MultitaskFlag::Default;
+}
+
+bool multitask_on(MultitaskFlag flag, int w, int h)
+{
+    if (flag == MultitaskFlag::On) return true;
+    if (flag == MultitaskFlag::Off) return false;
+    return w > 0 && h > 0 && switcher_fits(w, h);
 }
 
 const char *first_run_hint(int touch_slots)
