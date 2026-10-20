@@ -199,6 +199,37 @@ cp0_keyboard_input_context_t cp0_keyboard_get_input_context(void)
 /* ============================================================
  *  libinput open/close callbacks
  * ============================================================ */
+/* The keyboard fds libinput opened, for cp0_keyboard_set_grab() (multitasking P-b). */
+#define KBD_GRAB_MAX 32
+static pthread_mutex_t g_grab_mutex = PTHREAD_MUTEX_INITIALIZER;
+static int g_grab_fds[KBD_GRAB_MAX];
+static int g_grab_count;
+static int g_grab_wanted;
+
+static void grab_fd(int fd, int on)
+{
+#ifdef __linux__
+    if (ioctl(fd, EVIOCGRAB, on ? 1 : 0) < 0 && errno != EBUSY && errno != EINVAL)
+        fprintf(stderr, "[KBD] EVIOCGRAB %d fd %d: %s\n", on, fd, strerror(errno));
+#else
+    (void)fd;
+    (void)on;
+#endif
+}
+
+int cp0_keyboard_set_grab(int on)
+{
+    pthread_mutex_lock(&g_grab_mutex);
+    on = on != 0;
+    const int changed = on != g_grab_wanted;
+    g_grab_wanted = on;
+    if (changed)
+        for (int i = 0; i < g_grab_count; i++) grab_fd(g_grab_fds[i], on);
+    const int count = g_grab_count;
+    pthread_mutex_unlock(&g_grab_mutex);
+    return count;
+}
+
 static int open_restricted(const char *path, int flags, void *user_data) {
     (void)user_data;
     int fd = open(path, flags);
@@ -206,16 +237,26 @@ static int open_restricted(const char *path, int flags, void *user_data) {
         fprintf(stderr, "Failed to open %s: %s\n", path, strerror(errno));
         return -errno;
     }
-    /* Keyboard grabbing is intentionally disabled so other programs can read
-     * the same input device while APPLaunch is running.
-     *
-     * if (ioctl(fd, EVIOCGRAB, 1) < 0 && errno != EBUSY) {
-     *     fprintf(stderr, "[KBD] EVIOCGRAB %s failed: %s\n", path, strerror(errno));
-     * }
-     */
+    /* Keyboard grabbing is off by default so other programs can read the same input device while APPLaunch is
+     * running. Multitasking P-b grabs these fds only while the launcher is in front with an app hidden
+     * (cp0_keyboard_set_grab): the launcher still reads them, the hidden app gets nothing. */
+    pthread_mutex_lock(&g_grab_mutex);
+    if (g_grab_count < KBD_GRAB_MAX) g_grab_fds[g_grab_count++] = fd;
+    if (g_grab_wanted) grab_fd(fd, 1);
+    pthread_mutex_unlock(&g_grab_mutex);
     return fd;
 }
-static void close_restricted(int fd, void *user_data) { (void)user_data; close(fd); }
+static void close_restricted(int fd, void *user_data) {
+    (void)user_data;
+    pthread_mutex_lock(&g_grab_mutex);
+    for (int i = 0; i < g_grab_count; i++) {
+        if (g_grab_fds[i] != fd) continue;
+        g_grab_fds[i] = g_grab_fds[--g_grab_count];
+        break;
+    }
+    pthread_mutex_unlock(&g_grab_mutex);
+    close(fd); /* a grab ends with the fd */
+}
 static const struct libinput_interface interface = {
     .open_restricted  = open_restricted,
     .close_restricted = close_restricted,

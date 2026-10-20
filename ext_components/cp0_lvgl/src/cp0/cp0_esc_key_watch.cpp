@@ -49,7 +49,7 @@ void Sources::drop(std::size_t index)
     sources_[index] = Source();
 }
 
-int Sources::poll()
+int Sources::poll(KeyListener listener, void *context)
 {
     int changed = -1;
     for (std::size_t i = 0; i < kMax; ++i) {
@@ -58,6 +58,7 @@ int Sources::poll()
         struct input_event event;
         ssize_t got;
         while ((got = ::read(source.fd, &event, sizeof(event))) == static_cast<ssize_t>(sizeof(event))) {
+            if (event.type == EV_KEY && listener) listener(context, event.code, event.value);
             if (event.type != EV_KEY || event.code != KEY_ESC) continue;
             if (event.value == 1) source.esc_down = true;
             else if (event.value == 0) source.esc_down = false;

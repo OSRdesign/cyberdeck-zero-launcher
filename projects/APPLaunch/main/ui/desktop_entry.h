@@ -23,7 +23,7 @@ struct DesktopEntry
     int min_h = 0;
     // X-Background=run|freeze (app contract 1, task 015, APP-CONTRACT section 13): the value as written (trimmed);
     // multitask::parse_background() reads it. Empty = key absent (a legacy app). Used only with APPLAUNCH_MULTITASK=1.
-    std::string background;
+    std::string background = std::string();
 };
 
 // Parses an X-MinSize value: "WxH" (also 'X'), decimal, each 1..65535, spaces around the separator allowed.

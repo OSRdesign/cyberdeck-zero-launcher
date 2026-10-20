@@ -13,6 +13,8 @@
 
 #include "lvgl/lvgl.h"
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -90,6 +92,25 @@ cp0_display_mode_t cp0_display_get_mode(void);
 /* Switches the default display and forces a redraw of the newly visible one.
  * LVGL thread only. */
 void cp0_display_set_mode(cp0_display_mode_t mode);
+
+/* Multitasking P-b (task 015): the panel handed to a fullscreen app while the launcher keeps running.
+ *  - suspend (any thread): from its return on, no flush, blit or fill of either display writes the framebuffer
+ *    (they complete without drawing; one lock serialises them with this call), and the touch screen reads as
+ *    released (no click, no screensaver activity). Idempotent.
+ *  - resume (LVGL thread): writes are allowed again, the panel is panned back to page 0 if an app panned it, and
+ *    both displays' screens and layers are invalidated so the next refresh repaints everything.
+ *  - snapshot / restore (any thread): one framebuffer page (line length x height bytes, see page_bytes) copied
+ *    from the page shown now / written back to the page given (and panned to it), under the same lock. Restore
+ *    returns 0 when the page reads back identical, 1 when it differs (someone wrote meanwhile), -1 on error.
+ *  - touch grab (any thread): EVIOCGRAB on the launcher's own touch file descriptor (it keeps reading it; nobody
+ *    else gets the touches). 0 = done or already in that state, -1 = no touch device or the ioctl failed. */
+void cp0_display_suspend(void);
+void cp0_display_resume(void);
+int cp0_display_suspended(void);
+size_t cp0_display_fb_page_bytes(void);
+int cp0_display_fb_snapshot(void *dst, size_t len, int *page_y);
+int cp0_display_fb_restore(const void *src, size_t len, int page_y);
+int cp0_display_set_touch_grab(int on);
 
 #ifdef __cplusplus
 }

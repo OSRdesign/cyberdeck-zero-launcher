@@ -36,7 +36,11 @@ public:
     // Read every source. Returns -1 when no Esc press/release/loss happened, else the new "Esc held by any
     // source" state (0 or 1) to write to cp0_esc_state. A source that fails (ENODEV, HUP) is closed and its
     // Esc released.
-    int poll();
+    int poll() { return poll(nullptr, nullptr); }
+    // The same, and every key event read (EV_KEY: code, value 1 press / 0 release / 2 repeat) also goes to
+    // `listener` (multitasking P-b: Alt+Tab and Super while an app is in front).
+    using KeyListener = void (*)(void *context, int code, int value);
+    int poll(KeyListener listener, void *context);
 
     bool esc_held() const;
     std::size_t count() const;
