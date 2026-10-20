@@ -125,6 +125,7 @@ std::optional<DesktopEntry> parse_desktop_entry(std::string_view contents)
             entry.min_w = w;
             entry.min_h = h;
         }
+        else if (key == "X-Background") entry.background = std::move(value);
         else if (key == "Hidden" || key == "NoDisplay") hidden = hidden || parse_bool(value);
         else if (key == "Type") valid_type = value == "Application";
     }

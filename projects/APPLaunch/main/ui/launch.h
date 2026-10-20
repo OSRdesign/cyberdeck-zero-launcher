@@ -14,6 +14,7 @@
 #include "esc_ui_watchdog.h"
 #include "model/icon_file_signature.hpp"
 #include "model/launcher_navigation_model.hpp"
+#include "multitask/multitask_model.hpp"
 #include "terminal_help_factory.hpp"
 
 #include <cstddef>
@@ -118,8 +119,9 @@ struct app
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root);
     // fullscreen: the app owns the whole panel while it runs (no scaled window, no toolbar)
+    // background: X-Background (task 015), used only with APPLAUNCH_MULTITASK=1
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root,
-        bool fullscreen);
+        bool fullscreen, multitask::Background background = multitask::Background::None);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause,
         bool run_as_root, TerminalHelpFactory help_factory);
 
@@ -156,7 +158,16 @@ private:
     void abort_page_launch() noexcept;
     void launch_Exec_in_terminal(const std::string &exec, bool sysplause = true,
                                  TerminalHelpFactory help_factory = nullptr);
-    void launch_Exec(const std::string &exec, bool keep_root = false, bool fullscreen = false);
+    void launch_Exec(const std::string &exec, bool keep_root = false, bool fullscreen = false,
+                     const std::string &name = std::string(),
+                     multitask::Background background = multitask::Background::None);
+    // Multitasking P-b (task 015, APPLAUNCH_MULTITASK=1): the non-blocking fullscreen path and the two hand-overs
+    // of the panel the supervisor drives (LVGL thread)
+    void launch_fullscreen_supervised(const std::string &exec, bool keep_root, const std::string &name,
+                                      multitask::Background background);
+    void mt_app_front();
+    void mt_launcher_front(bool after_exit);
+    void mt_release_input_group();
     void applications_load();
     void refresh_home_carousel();
     void reload_home_icons();
@@ -181,6 +192,7 @@ private:
     bool bound_ = false;
     std::list<app> app_list;
     std::shared_ptr<void> app_Page;
+    lv_group_t *mt_saved_group_ = nullptr; /* the input group taken from the keypad while an app is in front */
 };
 
 template <class PageT>

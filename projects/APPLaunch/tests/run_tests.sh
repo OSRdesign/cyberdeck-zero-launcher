@@ -51,6 +51,39 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/desktop_entry.cpp" \
     -o "$build_dir/test_desktop_entry"
 "$build_dir/test_desktop_entry"
+# Multitasking P-b (task 015): the pure lifecycle model, the Alt+Tab key session and the control protocol, under
+# AddressSanitizer + UndefinedBehaviorSanitizer when the compiler has them (plain build otherwise, with a note)
+mt_san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+if ! printf 'int main(void){return 0;}\n' | ${CXX:-g++} -x c++ $mt_san - -o "$build_dir/mt_san_probe" 2>/dev/null; then
+    echo "NOTE multitask tests without sanitizers (the compiler has no ASan/UBSan runtime)"
+    mt_san=""
+fi
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_multitask_model.cpp" \
+    "$test_root/../main/ui/multitask/multitask_model.cpp" \
+    -o "$build_dir/test_multitask_model"
+"$build_dir/test_multitask_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_switch_keys.cpp" \
+    "$test_root/../main/ui/multitask/switch_keys.cpp" \
+    -o "$build_dir/test_switch_keys"
+"$build_dir/test_switch_keys"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_lifecycle_protocol.cpp" \
+    "$test_root/../main/ui/multitask/lifecycle_protocol.cpp" \
+    -o "$build_dir/test_lifecycle_protocol"
+"$build_dir/test_lifecycle_protocol"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror $mt_san \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_notice_queue.cpp" \
+    "$test_root/../main/ui/multitask/notice_queue.cpp" \
+    -o "$build_dir/test_notice_queue"
+"$build_dir/test_notice_queue"
+# ... and the host process tests: the real supervisor runs the spike's fake app on a file-backed framebuffer (~40 s)
+sh "$test_root/multitask/run_supervisor_host.sh"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../main/ui" \
     "$test_root/test_preinstalled_app_manifest.cpp" \

@@ -12,6 +12,8 @@
 #include "desktop_app_loader.hpp"
 #include "esc_hold_hint_controller.h"
 #include "native_ui.hpp"
+#include "multitask/display_handoff.hpp"
+#include "multitask/multitask_ui.hpp"
 #include "cp0_display.h"
 #include "ui.h"
 #include "generated/page_app.h"
@@ -56,6 +58,13 @@ void Launch::bind_ui()
     if (!icon_poll_timer_) icon_poll_timer_ = lv_timer_create(icon_poll_cb, kIconPollPeriodMs, this);
     esc_ui_watchdog_.start();
     esc_hold_hint_controller().set_force_home_callback(esc_force_home_cb, this);
+    // Multitasking P-b (task 015): only with APPLAUNCH_MULTITASK=1; otherwise nothing of it exists
+    if (multitask_ui::enabled()) {
+        multitask_ui::Hooks hooks;
+        hooks.app_front = [this] { mt_app_front(); };
+        hooks.launcher_front = [this](bool after_exit) { mt_launcher_front(after_exit); };
+        multitask_ui::start(std::move(hooks));
+    }
 }
 
 void Launch::launch_index(std::size_t index)
@@ -173,7 +182,8 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause,
     p->exec(exec);
 }
 
-void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscreen)
+void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscreen, const std::string &name,
+                         multitask::Background background)
 {
     // Pi port: run the stock (320x170 framebuffer) app in the scaled compat window. The UI stays
     // alive while it runs; this returns immediately and the callback brings the home grid back.
@@ -187,6 +197,11 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
             ui_screensaver_set_foreground(1);
             show_home();
         }
+        return;
+    }
+    // Multitasking P-b (APPLAUNCH_MULTITASK=1): a full-screen app runs under the supervisor and this returns at once
+    if (fullscreen && multitask_ui::active()) {
+        launch_fullscreen_supervised(exec, keep_root, name, background);
         return;
     }
     // external apps own the framebuffer; keep the compat chrome (a full-screen app on the Pi port
@@ -345,6 +360,7 @@ void Launch::icon_poll_cb(lv_timer_t *timer) noexcept
 
 Launch::~Launch()
 {
+    multitask_ui::stop();
     if (icon_poll_timer_) {
         lv_timer_delete(icon_poll_timer_);
         icon_poll_timer_ = nullptr;
@@ -383,4 +399,68 @@ void Launch::app_registry_changed_cb(void *user_data) noexcept
         self->applications_reload();
     } catch (...) {
     }
+}
+
+// ============================================================
+// Multitasking P-b (task 015): the non-blocking fullscreen path
+// ============================================================
+
+// The legacy path above, up to the hand-over, without blocking: the loading overlay is painted, then the supervisor
+// suspends the display (no launcher pixel after that), starts the app (or resumes it: one instance per Exec) and
+// this returns. mt_app_front() / mt_launcher_front() run on this thread when the panel changes hands.
+void Launch::launch_fullscreen_supervised(const std::string &exec, bool keep_root, const std::string &name,
+                                          multitask::Background background)
+{
+    SLOGI("Launching external app under the supervisor: %s (keep_root=%d, X-Background=%s)", exec.c_str(),
+          keep_root, multitask::background_name(background));
+    const bool resume = multitask_ui::is_resident(exec);
+    if (!resume) ui_loading::show("Loading..."); // a resumed app gets its own last frame back at once
+    lv_disp_t *disp = lv_disp_get_default();
+    ui_screensaver_set_foreground(0);
+    LVGL_RUN_FLAGE = 0;
+    mt_release_input_group();
+    lv_refr_now(disp);
+    // The app contract (cp0_app_contract.h) as in the legacy path; the lifecycle variables, when the app declares
+    // X-Background, are added by the supervisor.
+    const std::string command = app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen) + exec;
+    multitask_ui::launch(name.empty() ? exec : name, exec, command, keep_root, background);
+}
+
+void Launch::mt_release_input_group()
+{
+    lv_indev_t *indev = lv_indev_get_next(nullptr);
+    if (!indev) return;
+    if (lv_group_t *group = lv_indev_get_group(indev)) mt_saved_group_ = group;
+    lv_indev_set_group(indev, nullptr);
+}
+
+// An app takes the panel (a launch, a resume from Alt+Tab): the launcher stops drawing and goes quiet.
+void Launch::mt_app_front()
+{
+    ui_screensaver_set_foreground(0);
+    LVGL_RUN_FLAGE = 0;
+    mt_release_input_group();
+    display_handoff::enter_app_front(multitask_ui::bridge_timer());
+}
+
+// The launcher takes the panel back (the app in front exited, or was hidden): the legacy path's return sequence,
+// with the display handed back instead of the timers re-enabled. A built-in page that was open (Alt+Tab from a page)
+// comes back as it was; otherwise the home grid.
+void Launch::mt_launcher_front(bool after_exit)
+{
+    if (after_exit) (void)cp0_ui_state_republish();
+    display_handoff::leave_app_front();
+    lv_disp_t *disp = lv_disp_get_default();
+    lv_indev_t *indev = lv_indev_get_next(nullptr);
+    lv_group_t *group = (app_Page && mt_saved_group_) ? mt_saved_group_ : UILaunchPage::home_input_group();
+    if (indev) lv_indev_set_group(indev, group);
+    mt_saved_group_ = nullptr;
+    // the closing touch of the app must not click anything here
+    cp0_display_set_touch_swallow(2);
+    if (!app_Page) show_home();
+    ui_loading::hide();
+    lv_obj_invalidate(lv_screen_active());
+    lv_refr_now(disp);
+    LVGL_RUN_FLAGE = 1;
+    ui_screensaver_set_foreground(1);
 }

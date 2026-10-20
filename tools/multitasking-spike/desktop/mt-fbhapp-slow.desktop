@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=MT Slow
+Exec=/usr/share/APPLaunch/bin/mt-fbhapp --tag slow --ack-delay-ms 800 --log /tmp/mt-fbhapp-slow.log
+Terminal=false
+X-Fullscreen=true
+X-Background=freeze

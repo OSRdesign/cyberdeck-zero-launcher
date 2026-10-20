@@ -60,6 +60,15 @@ int main()
         "[Desktop Entry]\nName=A\nExec=a\nX-MinSize=640x480\nX-MinSize=640*480\n");
     assert(later_garbage && later_garbage->min_w == 0 && later_garbage->min_h == 0);
 
+    // X-Background (task 015): kept as written, trimmed; absent = empty
+    assert(defaults && defaults->background.empty());
+    const auto frozen = parse_desktop_entry("[Desktop Entry]\nName=A\nExec=a\nX-Fullscreen=true\nX-Background = freeze \n");
+    assert(frozen && frozen->background == "freeze" && frozen->fullscreen);
+    const auto running = parse_desktop_entry("[Desktop Entry]\nName=A\nExec=a\nX-Background=run\n");
+    assert(running && running->background == "run");
+    const auto other_group = parse_desktop_entry("[Desktop Entry]\nName=A\nExec=a\n[Extra]\nX-Background=run\n");
+    assert(other_group && other_group->background.empty());
+
     int w = 7;
     int h = 9;
     assert(parse_desktop_min_size("480x320", w, h) && w == 480 && h == 320);

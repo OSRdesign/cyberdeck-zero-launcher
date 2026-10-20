@@ -91,6 +91,10 @@ int cp0_keyboard_get_lvgl_keypad_intercept(void);
  * launcher turns it on before init_input(); the thread reads it when it starts. */
 void cp0_keyboard_set_read_all_keyboards(int enable);
 int cp0_keyboard_get_read_all_keyboards(void);
+/* Device builds, multitasking P-b (task 015): EVIOCGRAB on (1) or off (0) on every keyboard fd the keyboard thread
+ * has open, and on the ones it opens later while on. The thread keeps reading them; other readers (a hidden app) get
+ * nothing. Paused keyboards (keyboard_pause) have no fd open, so no grab. Any thread; returns the fds affected. */
+int cp0_keyboard_set_grab(int on);
 void cp0_keyboard_set_input_context(cp0_keyboard_input_context_t context);
 cp0_keyboard_input_context_t cp0_keyboard_get_input_context(void);
 const char *kbd_state_name(int state);

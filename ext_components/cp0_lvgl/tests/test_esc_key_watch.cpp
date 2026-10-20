@@ -177,6 +177,42 @@ void test_capacity()
     for (int fd : writers) ::close(fd);
 }
 
+// Multitasking P-b: every key event reaches the listener (Alt+Tab, Super), the Esc state works as before.
+struct Seen {
+    std::string log;
+};
+
+void listen(void *context, int code, int value)
+{
+    auto *seen = static_cast<Seen *>(context);
+    seen->log += std::to_string(code) + ":" + std::to_string(value) + " ";
+}
+
+void test_key_listener()
+{
+    const std::string node = make_fifo("listener");
+    const int writer = plug(node);
+    cp0_esc_key_watch::Sources sources;
+    assert(sources.open(node.c_str()));
+    Seen seen;
+    key(writer, KEY_LEFTALT, 1);
+    key(writer, KEY_TAB, 1);
+    key(writer, KEY_TAB, 0);
+    key(writer, KEY_LEFTALT, 0);
+    assert(sources.poll(listen, &seen) == -1); // no Esc change
+    assert(seen.log == "56:1 15:1 15:0 56:0 ");
+    int fds[4] = {-1, -1, -1, -1};
+    assert(sources.fds(fds, 4) == 1 && fds[0] >= 0); // pollable instead of a timer
+    assert(sources.fds(fds, 0) == 0);
+    seen.log.clear();
+    key(writer, KEY_ESC, 1);
+    assert(sources.poll(listen, &seen) == 1);
+    assert(seen.log == "1:1 ");
+    key(writer, KEY_ESC, 0);
+    assert(sources.poll() == 0); // the plain poll still works without a listener
+    ::close(writer);
+}
+
 } // namespace
 
 int main()
@@ -189,6 +225,7 @@ int main()
     test_same_node_read_once_and_missing_path();
     test_no_fd_leak();
     test_capacity();
+    test_key_listener();
     const std::string cleanup = "rm -rf '" + g_dir + "'";
     if (std::system(cleanup.c_str()) != 0) return 1;
     std::printf("test_esc_key_watch: OK\n");

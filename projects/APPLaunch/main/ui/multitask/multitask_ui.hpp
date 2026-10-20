@@ -1,0 +1,45 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Multitasking P-b in the launcher (task 015): the flag, the supervisor and its launcher ports (cp0_lvgl framebuffer,
+ * input grabs, the launcher's keyboard thread, the evdev keyboards), the bridge timer that carries the supervisor's
+ * UI events onto the LVGL thread, and the key filter for Alt+Tab while the launcher is in front.
+ *
+ * Off unless APPLAUNCH_MULTITASK=1 (and the Pi display backend, Linux): then nothing here runs and Launch keeps its
+ * blocking fullscreen path unchanged.
+ */
+#pragma once
+
+#include "lvgl/lvgl.h"
+#include "multitask_model.hpp"
+
+#include <functional>
+#include <string>
+
+namespace multitask_ui {
+
+struct Hooks {
+    /* LVGL thread: an app takes the panel (display_handoff::enter_app_front and the launcher's own state) */
+    std::function<void()> app_front;
+    /* LVGL thread: the launcher takes the panel back; after_exit = the app in front exited (republish screen.state) */
+    std::function<void(bool after_exit)> launcher_front;
+};
+
+/* APPLAUNCH_MULTITASK=1, the dpi-scaled display backend (native UI) and Linux. Read once. */
+bool enabled();
+/* LVGL thread, once (Launch::bind_ui): the supervisor thread, the bridge timer, the key filter. */
+bool start(Hooks hooks);
+/* start() succeeded: full-screen apps go through the supervisor. */
+bool active();
+/* Every resident app is closed (SIGCONT, SIGTERM, SIGKILL 3 s later), the thread ends, the filter is restored. */
+void stop();
+/* The timer display_handoff::enter_app_front() must keep running. */
+lv_timer_t *bridge_timer();
+/* Is the app with this Exec line resident (a tap resumes it)? Any thread. */
+bool is_resident(const std::string &key);
+/* Start, or resume, a fullscreen app. `key` is its .desktop Exec line (one instance per key), `command` the sh -c
+ * line with the app contract's exports in front. Returns at once; the hooks run when the panel changes hands. */
+void launch(const std::string &name, const std::string &key, const std::string &command, bool keep_root,
+            multitask::Background background);
+
+} // namespace multitask_ui

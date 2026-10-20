@@ -140,6 +140,20 @@ waited in the kernel queue (`stale=1` above 150 ms). It speaks the proposed prot
 input, `ack`; `show` -> drop pending input, repaint, `ack`; `close` -> exit) and can misbehave on purpose:
 `--ack-delay-ms`, `--ignore-hide`, `--draw-hidden`, `--no-drain`, `--no-contract`.
 
+Since P-b (task 015) `fbhapp` also shows `work`, one tick per 100 ms the process actually runs, hidden or not (no
+catch-up after a freeze: a `run` app's count grows while hidden, a frozen one's does not), and sends the protocol's
+`home` when `h` is pressed. A hidden app no longer polls every millisecond. `--no-hup` ignores SIGHUP (the
+launcher's guardian test: the kernel sends SIGHUP to a stopped process group left orphaned). The launcher's host process tests
+(`projects/APPLaunch/tests/multitask/run_supervisor_host.sh`) build and drive it.
+
+**Test apps for the launcher (P-b).** `desktop/` installs `fbhapp` (aarch64 build, copied as
+`/usr/share/APPLaunch/bin/mt-fbhapp`) five times: `mt-fbhapp-freeze.desktop` (`X-Background=freeze`),
+`mt-fbhapp-run.desktop` (`run`), `mt-fbhapp-slow.desktop` (`freeze`, `--ack-delay-ms 800`: answers too late, so the
+launcher marks it not responding), `mt-fbhapp-legacy.desktop` (no key: today's behaviour) and
+`mt-fbhapp-noesc.desktop` (no key, `--no-esc`: Esc does nothing in it, for the launcher's hold-Esc test). Each logs to
+`/tmp/mt-fbhapp-<tag>.log`. They only stay in the background under a launcher started with `APPLAUNCH_MULTITASK=1`;
+the board protocol is `docs/dev/tests/multitasking-pb-protocol.md`.
+
 **Safety.** It refuses to start while the launcher (or another process) has the framebuffer open, exit status 3,
 unless `--force` (both then draw) or `--stop-launcher` (`systemctl --user stop cyberdeckzero`, and `start` again at
 the end). Ctrl-C, SIGTERM and SIGHUP (the ssh session closed) end a cycle cleanly: the snapshot goes back, grabs are

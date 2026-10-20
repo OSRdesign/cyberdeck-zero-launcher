@@ -47,6 +47,7 @@
 #include <fcntl.h>
 #include <linux/fb.h>
 #include <linux/input.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -88,6 +89,25 @@ static bool fill_window_black_pending;
 static struct { volatile bool active; int x, y, w, h; } overlay; /* compat coordinates */
 static void fill_window_black(void);
 
+/* Display suspended (multitasking P-b, cp0_display.h): every write to the panel happens between fb_begin() and
+ * fb_end(); cp0_display_suspend() takes the same lock, so once it returns the launcher writes no pixel until
+ * cp0_display_resume(). Snapshot and restore of an app's page use the lock too. */
+static pthread_mutex_t fb_lock = PTHREAD_MUTEX_INITIALIZER;
+static volatile bool suspended;
+
+static bool fb_begin(void)
+{
+    pthread_mutex_lock(&fb_lock);
+    if (!suspended) return true;
+    pthread_mutex_unlock(&fb_lock);
+    return false;
+}
+
+static void fb_end(void)
+{
+    pthread_mutex_unlock(&fb_lock);
+}
+
 static int env_int(const char *name, int def)
 {
     const char *v = getenv(name);
@@ -118,6 +138,10 @@ static void flush_compat(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
     const int aw = lv_area_get_width(area);
     const int ah = lv_area_get_height(area);
     const int src_stride = aw * g.bpp;
+    if (!fb_begin()) {
+        lv_display_flush_ready(disp);
+        return;
+    }
     if (g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout && g.external && overlay.active) {
         /* the app's picture owns the window; only the overlay rectangle is drawn from LVGL */
         const int x1 = area->x1 > overlay.x ? area->x1 : overlay.x;
@@ -135,6 +159,7 @@ static void flush_compat(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
         cp0_fbo_blit_scaled(&g.out, g.ox + area->x1 * g.scale, g.oy + area->y1 * g.scale, aw, ah, px_map,
                             src_stride, g.scale, g.scratch, g.scratch_size);
     }
+    fb_end();
     lv_display_flush_ready(disp);
 }
 
@@ -145,11 +170,16 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
     const int h = lv_area_get_height(area);
     const bool compat = g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout;
 
+    if (!fb_begin()) {
+        lv_display_flush_ready(disp);
+        return;
+    }
     cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
     if (compat)
         cp0_fbo_blit_except(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp, g.ox, g.oy, g.ww, g.wh);
     else
         cp0_fbo_blit(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp);
+    fb_end();
     lv_display_flush_ready(disp);
 }
 
@@ -339,7 +369,7 @@ static void touch_update(void)
     /* One notification per new touch (the second pointer device sees no edge). */
     const bool edge = tc.pressed && !was_pressed;
     was_pressed = tc.pressed;
-    if (tc.pressed && activity_cb) activity_cb(edge ? 1 : 0);
+    if (tc.pressed && activity_cb && !suspended) activity_cb(edge ? 1 : 0);
     if (swallow_mode == 2 && !tc.pressed) swallow_mode = 0;
 }
 
@@ -350,7 +380,7 @@ static void touch_read_native(lv_indev_t *indev, lv_indev_data_t *data)
     touch_update();
     data->point.x = tc.X;
     data->point.y = tc.Y;
-    const bool hidden = (g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y)) || swallow_mode != 0;
+    const bool hidden = (g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y)) || swallow_mode != 0 || suspended;
     data->state = (tc.pressed && !hidden) ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
@@ -491,7 +521,7 @@ static void touch_read_compat(lv_indev_t *indev, lv_indev_data_t *data)
     (void)indev;
     touch_update();
     static int last_x, last_y;
-    if (swallow_mode != 0) {
+    if (swallow_mode != 0 || suspended) {
         lg.down = false;
         data->point.x = last_x;
         data->point.y = last_y;
@@ -606,8 +636,8 @@ void cp0_display_set_external(int on)
 }
 
 /* Scale one XRGB8888 frame into the compat window (integer upscale, same placement as the
- * compat display). */
-void cp0_display_external_blit(const void *xrgb8888, int width, int height, int stride_bytes)
+ * compat display). Called with fb_lock held (cp0_display_external_blit). */
+static void external_blit_locked(const void *xrgb8888, int width, int height, int stride_bytes)
 {
     if (!g.ready || !g.external || !xrgb8888 || width <= 0 || height <= 0) return;
     if (width > UI_W) width = UI_W;
@@ -650,6 +680,13 @@ void cp0_display_external_blit(const void *xrgb8888, int width, int height, int 
                              ov ? overlay.x : 0, ov ? overlay.y : 0, ov ? overlay.w : 0, ov ? overlay.h : 0,
                              g.scratch, g.scratch_size);
 }
+
+void cp0_display_external_blit(const void *xrgb8888, int width, int height, int stride_bytes)
+{
+    if (!fb_begin()) return;
+    external_blit_locked(xrgb8888, width, height, stride_bytes);
+    fb_end();
+}
 void cp0_display_set_touch_swallow(int mode) { swallow_mode = mode; }
 
 void cp0_display_set_blackout(int on)
@@ -690,7 +727,10 @@ int cp0_display_configure_compat(int scale, int x, int y)
         g.scratch_size = need;
     }
     const bool moved = g.ready && (scale != g.scale || x != g.ox || y != g.oy);
-    if (moved && g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout) fill_window_black();
+    if (moved && g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout && fb_begin()) {
+        fill_window_black();
+        fb_end();
+    }
     g.scale = scale;
     g.ox = x;
     g.oy = y;
@@ -713,7 +753,10 @@ void cp0_display_set_mode(cp0_display_mode_t mode)
     if (!g.ready || mode == g.mode) return;
     g.mode = mode;
     if (mode == CP0_DISPLAY_MODE_COMPAT) {
-        fill_window_black();
+        if (fb_begin()) {
+            fill_window_black();
+            fb_end();
+        }
         lv_display_set_default(g.compat);
         lv_obj_invalidate(lv_display_get_screen_active(g.compat));
         /* the native chrome (toolbar) is redrawn by its owner when it loads */
@@ -721,6 +764,112 @@ void cp0_display_set_mode(cp0_display_mode_t mode)
         lv_display_set_default(g.native);
         lv_obj_invalidate(lv_display_get_screen_active(g.native));
     }
+}
+
+/* ------------------------------------------------- multitasking P-b: suspend, snapshot, touch grab */
+
+/* Row offset of the page the panel shows now (0 when the driver does not say or it is out of the mapping). */
+static int shown_page_y(void)
+{
+    struct fb_var_screeninfo v;
+    if (ioctl(g.fd, FBIOGET_VSCREENINFO, &v) != 0) return 0;
+    const size_t page = (size_t)g.stride * (size_t)g.ph;
+    if ((size_t)v.yoffset * (size_t)g.stride + page > g.fb_size) return 0;
+    return (int)v.yoffset;
+}
+
+/* Pan the panel to page_y rows when it shows another page (fb_lock held). */
+static void pan_to(int page_y)
+{
+    struct fb_var_screeninfo v;
+    if (ioctl(g.fd, FBIOGET_VSCREENINFO, &v) != 0 || (int)v.yoffset == page_y) return;
+    v.xoffset = 0;
+    v.yoffset = (uint32_t)page_y;
+    if (ioctl(g.fd, FBIOPAN_DISPLAY, &v) != 0)
+        fprintf(stderr, "[dpi] pan to row %d failed: %s\n", page_y, strerror(errno));
+}
+
+void cp0_display_suspend(void)
+{
+    pthread_mutex_lock(&fb_lock);
+    suspended = true;
+    pthread_mutex_unlock(&fb_lock);
+}
+
+int cp0_display_suspended(void)
+{
+    return suspended ? 1 : 0;
+}
+
+void cp0_display_resume(void)
+{
+    pthread_mutex_lock(&fb_lock);
+    const bool was = suspended;
+    suspended = false;
+    if (was && g.ready) pan_to(0); /* the launcher draws page 0 */
+    pthread_mutex_unlock(&fb_lock);
+    if (!was || !g.ready) return;
+    lv_obj_invalidate(lv_display_get_screen_active(g.native));
+    lv_obj_invalidate(lv_display_get_layer_top(g.native));
+    lv_obj_invalidate(lv_display_get_layer_sys(g.native));
+    if (g.mode == CP0_DISPLAY_MODE_COMPAT) {
+        fill_window_black_pending = g.external;
+        lv_obj_invalidate(lv_display_get_screen_active(g.compat));
+        lv_obj_invalidate(lv_display_get_layer_top(g.compat));
+        lv_obj_invalidate(lv_display_get_layer_sys(g.compat));
+    }
+}
+
+size_t cp0_display_fb_page_bytes(void)
+{
+    return g.ready ? (size_t)g.stride * (size_t)g.ph : 0;
+}
+
+int cp0_display_fb_snapshot(void *dst, size_t len, int *page_y)
+{
+    const size_t page = cp0_display_fb_page_bytes();
+    if (!dst || page == 0 || len < page) return -1;
+    pthread_mutex_lock(&fb_lock);
+    const int y = shown_page_y();
+    memcpy(dst, g.fb + (size_t)y * (size_t)g.stride, page);
+    pthread_mutex_unlock(&fb_lock);
+    if (page_y) *page_y = y;
+    return 0;
+}
+
+int cp0_display_fb_restore(const void *src, size_t len, int page_y)
+{
+    const size_t page = cp0_display_fb_page_bytes();
+    if (!src || page == 0 || len < page) return -1;
+    if (page_y < 0 || (size_t)page_y * (size_t)g.stride + page > g.fb_size) page_y = 0;
+    uint8_t *dst = g.fb + (size_t)page_y * (size_t)g.stride;
+    pthread_mutex_lock(&fb_lock);
+    memcpy(dst, src, page);
+    /* Verified on 9 rows (first, last and 7 between) rather than the whole page: reading the framebuffer back is
+     * slow (an uncached mapping: about 10 ms for the deck's 1.2 MB, deck finding 2026-10-20), writing it is not. */
+    int same = 1;
+    for (int i = 0; i <= 8 && same; i++) {
+        const size_t row = (size_t)((g.ph - 1) * i / 8);
+        same = memcmp(dst + row * (size_t)g.stride, (const uint8_t *)src + row * (size_t)g.stride, (size_t)g.stride) == 0;
+    }
+    pan_to(page_y);
+    pthread_mutex_unlock(&fb_lock);
+    return same ? 0 : 1;
+}
+
+static int touch_grabbed;
+
+int cp0_display_set_touch_grab(int on)
+{
+    if (!touch_path[0]) return -1; /* no touch device open */
+    on = on != 0;
+    if (on == touch_grabbed) return 0;
+    if (ioctl(tc.fd, EVIOCGRAB, on ? 1 : 0) != 0) {
+        fprintf(stderr, "[dpi] touch EVIOCGRAB %d: %s\n", on, strerror(errno));
+        return -1;
+    }
+    touch_grabbed = on;
+    return 0;
 }
 
 static uint8_t fb_channel(uint32_t v)

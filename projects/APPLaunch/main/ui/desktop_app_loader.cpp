@@ -296,7 +296,8 @@ void launcher_append_desktop_apps(std::list<app> &apps)
 
             apps.emplace_back(candidate.entry.name, candidate.icon_path, candidate.entry.exec,
                               candidate.entry.terminal, candidate.entry.sysplause, false,
-                              candidate.entry.fullscreen);
+                              candidate.entry.fullscreen,
+                              multitask::parse_background(candidate.entry.background));
             ++appended;
         }
         launcher_app_registry_commit_dynamic_refresh();

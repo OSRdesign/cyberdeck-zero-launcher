@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=MT Legacy
+Exec=/usr/share/APPLaunch/bin/mt-fbhapp --tag legacy --log /tmp/mt-fbhapp-legacy.log
+Terminal=false
+X-Fullscreen=true

@@ -87,6 +87,7 @@ int main(int argc, char **argv)
     const char *fb_path = NULL, *fb_geom = NULL, *inputs = "auto", *log_path = NULL, *tag = "app";
     double fps = 20, duration = 0;
     int is_static = 0, ack_delay = 0, ignore_hide = 0, draw_hidden = 0, no_drain = 0, no_contract = 0, no_esc = 0;
+    int no_hup = 0;
     static const struct option opts[] = {
         {"fb", required_argument, 0, 'f'},       {"fb-geom", required_argument, 0, 'g'},
         {"input", required_argument, 0, 'i'},    {"log", required_argument, 0, 'l'},
@@ -95,6 +96,7 @@ int main(int argc, char **argv)
         {"draw-hidden", no_argument, 0, 'D'},    {"no-drain", no_argument, 0, 'N'},
         {"no-contract", no_argument, 0, 'C'},    {"duration", required_argument, 0, 'd'},
         {"tag", required_argument, 0, 't'},      {"no-esc", no_argument, 0, 'E'},
+        {"no-hup", no_argument, 0, 'H'},
         {"help", no_argument, 0, 'h'},           {0, 0, 0, 0}};
     int c;
     while ((c = getopt_long(argc, argv, "h", opts, NULL)) != -1) {
@@ -113,10 +115,11 @@ int main(int argc, char **argv)
         case 'd': duration = atof(optarg); break;
         case 't': tag = optarg; break;
         case 'E': no_esc = 1; break;
+        case 'H': no_hup = 1; break;
         default:
             printf("fbhapp [--fb PATH] [--fb-geom WxHxBPP] [--input auto|none|PATH,...] [--log FILE] [--fps N]\n"
                    "       [--static] [--ack-delay-ms N] [--ignore-hide] [--draw-hidden] [--no-drain] [--no-contract]\n"
-                   "       [--no-esc] [--duration S] [--tag NAME]\n"
+                   "       [--no-esc] [--no-hup] [--duration S] [--tag NAME]\n"
                    "A fake fullscreen app for fbhandoff (see the README). Esc quits; Enter changes the colour.\n");
             return c == 'h' ? 0 : 2;
         }
@@ -130,7 +133,8 @@ int main(int argc, char **argv)
     sa.sa_handler = on_quit;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
-    sigaction(SIGHUP, &sa, NULL);
+    if (no_hup) signal(SIGHUP, SIG_IGN); /* tests: survive the kernel's SIGHUP to an orphaned stopped group */
+    else sigaction(SIGHUP, &sa, NULL);
     sa.sa_handler = on_cont;
     sa.sa_flags = SA_RESTART;
     sigaction(SIGCONT, &sa, NULL);
@@ -185,14 +189,21 @@ int main(int argc, char **argv)
     uint8_t *back = malloc(len);
     if (!back) return 1;
     long frame = 0, keys = 0, enters = 0, touches = 0, stale = 0, ignored = 0;
+    /* "work": one tick per 100 ms the process actually runs, hidden or not (no catch-up after a freeze), so the
+     * screen tells a run app (kept working while hidden) from a frozen one (task 015 board tests) */
+    long work = 0;
     int hidden = 0, dirty = 1, pending_ack = -1;
-    double ack_due = 0, last_draw = 0, last_cont = -1e9;
+    double ack_due = 0, last_draw = 0, last_cont = -1e9, next_work = mta_mono_ms() + 100;
     const double period = fps > 0 ? 1000.0 / fps : 50.0;
     char last_ev[64] = "-";
 
     while (!g_quit) {
         const double now = mta_mono_ms();
         if (duration > 0 && now - g_t0 > duration * 1000) break;
+        if (now >= next_work) { /* a --static app shows the new count with its next change only */
+            ++work;
+            next_work = now + 100;
+        }
         if (g_cont) {
             g_cont = 0;
             last_cont = now;
@@ -219,6 +230,8 @@ int main(int argc, char **argv)
             fb_text(&fb, back, 10, 10 + 20 * sc, sc, line, white);
             snprintf(line, sizeof(line), "touch %ld stale %ld", touches, stale);
             fb_text(&fb, back, 10, 10 + 30 * sc, sc, line, stale ? yellow : white);
+            snprintf(line, sizeof(line), "work %ld", work);
+            fb_text(&fb, back, fb.w / 2, 10 + 10 * sc, sc, line, yellow);
             snprintf(line, sizeof(line), "last %s", last_ev);
             fb_text(&fb, back, 10, 10 + 40 * sc, sc > 2 ? sc - 1 : sc, line, white);
             if (!is_static) {
@@ -236,6 +249,8 @@ int main(int argc, char **argv)
         int np = nin;
         if (ctl >= 0) pfd[np++] = (struct pollfd){ctl, POLLIN, 0};
         int timeout = (int)(period - (mta_mono_ms() - last_draw));
+        if ((hidden && !draw_hidden) || (is_static && !dirty)) /* nothing to draw: wake for the next work tick */
+            timeout = (int)(next_work - mta_mono_ms());
         if (timeout < 1) timeout = 1;
         if (pending_ack >= 0) {
             const int t2 = (int)(ack_due - mta_mono_ms());
@@ -254,7 +269,7 @@ int main(int argc, char **argv)
                 int n = 0;
                 if (sscanf(msg, "hide %d", &n) == 1) {
                     hidden = 1;
-                    logf_("rec=hide n=%d", n);
+                    logf_("rec=hide n=%d work=%ld", n, work);
                     if (!ignore_hide) {
                         pending_ack = n;
                         ack_due = mta_mono_ms() + ack_delay;
@@ -276,7 +291,8 @@ int main(int argc, char **argv)
                     hidden = 0;
                     dirty = 1;
                     last_draw = 0;
-                    logf_("rec=show n=%d drained_events=%ld drained_presses=%ld drain=%d", n, ev, presses, !no_drain);
+                    logf_("rec=show n=%d drained_events=%ld drained_presses=%ld drain=%d work=%ld", n, ev, presses,
+                          !no_drain, work);
                     pending_ack = n;
                     ack_due = mta_mono_ms();
                 } else if (sscanf(msg, "close %d", &n) == 1) {
@@ -323,6 +339,10 @@ int main(int argc, char **argv)
                     ++keys;
                     snprintf(last_ev, sizeof(last_ev), "key %d%s", e.code, is_stale ? " STALE" : "");
                     if (e.code == KEY_ENTER || e.code == KEY_KPENTER) ++enters;
+                    if (e.code == KEY_H && ctl >= 0) { /* the app asks to leave (protocol "home") */
+                        if (send(ctl, "home", 4, MSG_NOSIGNAL) < 0) logf_("rec=error what=home msg=\"%s\"", strerror(errno));
+                        else logf_("rec=home-sent");
+                    }
                     if (e.code == KEY_ESC && !no_esc) {
                         logf_("rec=exit reason=esc stale=%d", is_stale);
                         g_quit = 1;
@@ -334,7 +354,7 @@ int main(int argc, char **argv)
             }
         }
     }
-    logf_("rec=end frames=%ld keys=%ld enters=%ld touches=%ld stale=%ld ignored_hidden=%ld", frame, keys, enters,
+    logf_("rec=end work=%ld frames=%ld keys=%ld enters=%ld touches=%ld stale=%ld ignored_hidden=%ld", work, frame, keys, enters,
           touches, stale, ignored);
     free(back);
     fb_close(&fb);

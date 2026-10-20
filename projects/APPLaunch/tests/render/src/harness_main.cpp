@@ -33,6 +33,7 @@
 #include "keyboard_input.h"
 
 #include "launch.h"
+#include "multitask/display_handoff.hpp"
 #include "launcher_media_osd.h"
 #include "launcher_toast.h"
 #include "ui_loading.h"
@@ -1282,6 +1283,58 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         if (changed)
             return fail(scene, line, "expect_same: " + std::to_string(changed) + " pixels differ from " + w[1]);
         std::printf("expect_same ok: %s\n", w[1].c_str());
+        return true;
+    }
+    if (cmd == "handoff" || cmd == "expect_fb") {
+        /* Multitasking P-b (task 015 section 5), the display suspended mode with the real display backend:
+         *   handoff enter      display_handoff::enter_app_front() (display suspended, timers paused)
+         *   handoff paint      an "app" draws its frame straight into the framebuffer (a fixed pattern)
+         *   handoff snapshot   cp0_display_fb_snapshot() of the page shown (must equal the painted frame)
+         *   handoff restore    cp0_display_fb_restore() of that snapshot (must read back identical)
+         *   handoff leave      display_handoff::leave_app_front(), then a refresh as the launcher does
+         *   expect_fb painted  after 500 ms of timers and a forced refresh, the framebuffer is still the app's frame
+         *   expect_fb paused   enter_app_front() paused at least one timer, and the display reports suspended */
+        static std::vector<uint8_t> painted, snapshot;
+        static int snapshot_page = 0;
+        size_t fb_size = 0;
+        int fb_stride = 0;
+        uint8_t *fb = harness_fb_memory(&fb_size, &fb_stride);
+        const size_t page = cp0_display_fb_page_bytes();
+        if (w.size() != 2 || !fb || page == 0 || page > fb_size) return fail(scene, line, "usage: handoff enter|paint|snapshot|restore|leave, expect_fb painted|paused");
+        const std::string &what = w[1];
+        if (cmd == "handoff" && what == "enter") {
+            display_handoff::enter_app_front(nullptr);
+        } else if (cmd == "handoff" && what == "paint") {
+            painted.resize(page);
+            for (size_t i = 0; i < page; ++i) painted[i] = static_cast<uint8_t>((i * 7 + i / 4093) & 0xFF);
+            std::memcpy(fb, painted.data(), page);
+        } else if (cmd == "handoff" && what == "snapshot") {
+            snapshot.assign(page, 0);
+            if (cp0_display_fb_snapshot(snapshot.data(), snapshot.size(), &snapshot_page) != 0)
+                return fail(scene, line, "handoff snapshot: failed");
+            if (snapshot != painted) return fail(scene, line, "handoff snapshot: differs from the painted frame");
+        } else if (cmd == "handoff" && what == "restore") {
+            const int rc = cp0_display_fb_restore(snapshot.data(), snapshot.size(), snapshot_page);
+            if (rc != 0) return fail(scene, line, "handoff restore: returned " + std::to_string(rc));
+        } else if (cmd == "handoff" && what == "leave") {
+            display_handoff::leave_app_front();
+            settle(500);
+            lv_refr_now(nullptr);
+        } else if (cmd == "expect_fb" && what == "painted") {
+            settle(500);
+            lv_refr_now(nullptr);
+            size_t changed = 0;
+            for (size_t i = 0; i < page && i < painted.size(); ++i)
+                if (fb[i] != painted[i]) ++changed;
+            if (painted.size() != page || changed)
+                return fail(scene, line, "expect_fb painted: " + std::to_string(changed) + " bytes written over the app");
+        } else if (cmd == "expect_fb" && what == "paused") {
+            if (!display_handoff::app_front() || display_handoff::paused_timers() == 0 || !cp0_display_suspended())
+                return fail(scene, line, "expect_fb paused: the launcher is not suspended");
+        } else {
+            return fail(scene, line, "unknown " + cmd + " " + what);
+        }
+        std::printf("%s %s ok\n", cmd.c_str(), what.c_str());
         return true;
     }
     if (cmd == "bt") {

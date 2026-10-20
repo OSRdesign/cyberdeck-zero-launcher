@@ -1,0 +1,29 @@
+# Multitasking P-b (task 015 section 5): the display suspended mode of the supervised fullscreen path, with the real
+# display backend. The launcher hands the panel to an app (display_handoff::enter_app_front), keeps its loop alive
+# but writes no pixel (a toast and a forced refresh draw nothing over the app's frame), takes the panel back with a
+# full repaint (identical to before), and puts the app's last frame back from a snapshot (cp0_display_fb_restore).
+# Review-only: the checks are the expect lines; the two shots are the home grid before and after.
+title multitask handoff
+review
+apps Settings Store CLI SSH Calculator
+clock 20:30
+home
+shot handoff_home
+handoff enter
+expect_fb paused
+handoff paint
+toast Never drawn while an app is in front
+expect_fb painted
+handoff snapshot
+toast off
+handoff leave
+expect_same handoff_home
+handoff enter
+handoff enter
+expect_fb paused
+handoff restore
+expect_fb painted
+handoff leave
+handoff leave
+expect_same handoff_home
+shot handoff_home_after
