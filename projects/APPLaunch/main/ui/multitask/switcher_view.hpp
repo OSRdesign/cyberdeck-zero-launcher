@@ -81,7 +81,8 @@ private:
     struct Slot {
         lv_obj_t *card = nullptr;   /* the card (a free slot: the dashed frame) */
         lv_obj_t *icon = nullptr;
-        lv_obj_t *name = nullptr;
+        lv_obj_t *name = nullptr;   /* the name's first line ... */
+        lv_obj_t *name2 = nullptr;  /* ... and its second (a long name; cut with dots after it) */
         lv_obj_t *dot = nullptr;
         lv_obj_t *state = nullptr;
         lv_obj_t *close = nullptr;  /* the X's touch target (TARGET square) */
@@ -100,6 +101,7 @@ private:
 
     void build_slot(int index);
     void fill_slot(int index);
+    void layout_text(Slot &slot, const std::string &name);
     void style_selection();
     void activate(int item);
 
@@ -114,6 +116,9 @@ private:
     int selected_ = 0;
     /* geometry (screen px) */
     int pad_ = 12, gap_ = 12, card_w_ = 0, card_h_ = 0, cards_y_ = 0, bar_y_ = 0, bar_h_ = 0, target_ = 0;
+    /* inside a card: the text column's left edge, line heights, the dot */
+    int inset_ = 0, text_x_ = 0, name_h_ = 0, state_h_ = 0, line_gap_ = 0, dot_ = 0;
+    const lv_font_t *name_font_ = nullptr;
 };
 
 class LegacySheet {

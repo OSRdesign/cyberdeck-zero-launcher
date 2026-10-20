@@ -120,6 +120,37 @@ uint32_t nav_alias(uint32_t key)
     }
 }
 
+int text_width(const std::string &text, const lv_font_t *font)
+{
+    lv_point_t size{};
+    lv_text_get_size(&size, text.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    return size.x;
+}
+
+/* A first line that fits in `width` and the rest: whole words when the first word fits, else the first word cut
+ * between characters (UTF-8), at least one character. */
+std::pair<std::string, std::string> split_line(const std::string &text, const lv_font_t *font, int width)
+{
+    if (text_width(text, font) <= width) return {text, std::string()};
+    std::size_t cut = std::string::npos;
+    for (std::size_t at = text.find(' '); at != std::string::npos; at = text.find(' ', at + 1)) {
+        if (text_width(text.substr(0, at), font) > width) break;
+        cut = at;
+    }
+    if (cut != std::string::npos && cut > 0) {
+        std::size_t rest = cut;
+        while (rest < text.size() && text[rest] == ' ') ++rest;
+        return {text.substr(0, cut), text.substr(rest)};
+    }
+    std::size_t chars = 0;
+    for (std::size_t i = 1; i <= text.size(); ++i) {
+        if (i < text.size() && (static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) continue; /* inside a character */
+        if (chars > 0 && text_width(text.substr(0, i), font) > width) break;
+        chars = i;
+    }
+    return {text.substr(0, chars), text.substr(chars)};
+}
+
 bool area_of(lv_obj_t *obj, lv_area_t *out)
 {
     if (!obj || !out || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return false;
@@ -216,43 +247,36 @@ void SwitcherScreen::build_slot(int index)
     lv_obj_set_user_data(s.card, reinterpret_cast<void *>(static_cast<intptr_t>(index)));
     lv_obj_add_event_cb(s.card, card_event_cb, LV_EVENT_CLICKED, this);
 
-    const int inset = mm(kInsetMmX10, 8);
-    const int icon = std::min(mm(kIconMmX10, 32), std::max(16, card_h_ - 2 * inset));
+    inset_ = mm(kInsetMmX10, 8);
+    const int icon = std::min(mm(kIconMmX10, 32), std::max(16, card_h_ - 2 * inset_));
     const int name_px = m.text_px[CP0_TEXT_BODY];
     const int state_px = m.text_px[CP0_TEXT_CAPTION];
-    const lv_font_t *name_font = text_font(name_px, true);
+    name_font_ = text_font(name_px, true);
     const lv_font_t *state_font = text_font(state_px, false);
-    const int name_h = lv_font_get_line_height(name_font);
-    const int state_h = lv_font_get_line_height(state_font);
-    const int line_gap = std::max(2, state_px / 4);
-    const int column_h = name_h + line_gap + state_h;
-    const int text_x = inset + icon + inset;
-    const int dot = std::max(6, state_px * 2 / 3);
-    const int name_y = (card_h_ - column_h) / 2;
-    const int state_y = name_y + name_h + line_gap;
-    /* a line beside the X's target ends at its left edge; a line under it (a tall card) runs to the card's inset */
-    const auto line_w = [&](int y) { return std::max(8, (y >= target_ ? card_w_ - inset : card_w_ - target_) - text_x); };
-    const int name_w = line_w(name_y);
-    const int state_w = line_w(state_y);
+    name_h_ = lv_font_get_line_height(name_font_);
+    state_h_ = lv_font_get_line_height(state_font);
+    line_gap_ = std::max(2, state_px / 4);
+    text_x_ = inset_ + icon + inset_;
+    dot_ = std::max(6, state_px * 2 / 3);
 
     s.icon = lv_image_create(s.card);
     lv_obj_remove_flag(s.icon, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(s.icon, icon, icon);
     lv_image_set_inner_align(s.icon, LV_IMAGE_ALIGN_STRETCH);
-    lv_obj_set_pos(s.icon, inset, (card_h_ - icon) / 2);
+    lv_obj_set_pos(s.icon, inset_, (card_h_ - icon) / 2);
 
-    s.name = lv_label_create(s.card);
-    lv_obj_remove_flag(s.name, LV_OBJ_FLAG_CLICKABLE);
-    lv_label_set_long_mode(s.name, LV_LABEL_LONG_MODE_DOTS);
-    lv_obj_remove_flag(s.name, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (cp0_ui_page.cpp's caption) */
-    lv_obj_set_style_text_font(s.name, name_font, 0);
-    lv_obj_set_style_text_color(s.name, lv_color_hex(kText), 0);
-    lv_obj_set_pos(s.name, text_x, name_y);
-    lv_obj_set_size(s.name, name_w, name_h);
+    /* the name on one or two lines and the state line: placed for each name by layout_text() */
+    for (lv_obj_t **line : {&s.name, &s.name2}) {
+        *line = lv_label_create(s.card);
+        lv_obj_remove_flag(*line, LV_OBJ_FLAG_CLICKABLE);
+        lv_label_set_long_mode(*line, LV_LABEL_LONG_MODE_DOTS);
+        lv_obj_remove_flag(*line, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (cp0_ui_page.cpp's caption) */
+        lv_obj_set_style_text_font(*line, name_font_, 0);
+        lv_obj_set_style_text_color(*line, lv_color_hex(kText), 0);
+    }
 
     s.dot = plain(s.card);
-    lv_obj_set_size(s.dot, dot, dot);
-    lv_obj_set_pos(s.dot, text_x, state_y + (state_h - dot) / 2);
+    lv_obj_set_size(s.dot, dot_, dot_);
     lv_obj_set_style_radius(s.dot, LV_RADIUS_CIRCLE, 0);
     lv_obj_set_style_bg_opa(s.dot, LV_OPA_COVER, 0);
 
@@ -262,8 +286,6 @@ void SwitcherScreen::build_slot(int index)
     lv_obj_remove_flag(s.state, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_text_font(s.state, state_font, 0);
     lv_obj_set_style_text_color(s.state, lv_color_hex(kMuted), 0);
-    lv_obj_set_pos(s.state, text_x + dot + dot * 2 / 3, state_y);
-    lv_obj_set_size(s.state, std::max(8, state_w - dot - dot * 2 / 3), state_h);
 
     /* the X: a TARGET square in the corner takes the touch; the key drawn inside it is the mockup's smaller one */
     s.close = plain(s.card);
@@ -327,6 +349,7 @@ void SwitcherScreen::fill_slot(int index)
     for (lv_obj_t *line : s.dashes) shown(line, !used);
     shown(s.room, !used);
     if (!used) {
+        shown(s.name2, false);
         lv_obj_remove_flag(s.card, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_set_style_bg_opa(s.card, LV_OPA_TRANSP, 0);
         lv_obj_set_style_border_width(s.card, 0, 0);
@@ -342,9 +365,48 @@ void SwitcherScreen::fill_slot(int index)
         if (c.icon.empty()) lv_image_set_src(s.icon, nullptr);
         else lv_image_set_src(s.icon, c.icon.c_str());
     }
-    lv_label_set_text(s.name, c.name.c_str());
+    layout_text(s, c.name);
     lv_label_set_text(s.state, c.label.text);
     lv_obj_set_style_bg_color(s.dot, lv_color_hex(tone_rgb(c.label.tone)), 0);
+}
+
+/* The name and the state line in the card's text column. A line beside the X's target ends at the target's left
+ * edge, a line under it runs to the card's inset. A name too long for one line wraps onto a second (words first; a
+ * first word longer than the line is cut between characters), placed under the target when the card has the room,
+ * and only that second line ends with dots. The state line follows. */
+void SwitcherScreen::layout_text(Slot &s, const std::string &name)
+{
+    const int beside = std::max(8, card_w_ - target_ - text_x_);
+    const int under = std::max(8, card_w_ - inset_ - text_x_);
+    const auto width_at = [&](int y) { return y >= target_ ? under : beside; };
+    const int one_h = name_h_ + line_gap_ + state_h_;
+    const int two_h = 2 * name_h_ + line_gap_ + state_h_;
+    int top = (card_h_ - one_h) / 2;
+    std::pair<std::string, std::string> lines{name, std::string()};
+    if (text_width(name, name_font_) > width_at(top)) {
+        top = (card_h_ - two_h) / 2;
+        if (top + name_h_ < target_ && target_ - name_h_ + two_h <= card_h_ - kBorder)
+            top = target_ - name_h_; /* the second line under the X, where it has the card's width */
+        top = std::max(kBorder, top);
+        lines = split_line(name, name_font_, width_at(top));
+    }
+    const bool two = !lines.second.empty();
+    lv_label_set_text(s.name, lines.first.c_str());
+    lv_obj_set_pos(s.name, text_x_, top);
+    lv_obj_set_size(s.name, width_at(top), name_h_);
+    if (two) {
+        lv_label_set_text(s.name2, lines.second.c_str());
+        lv_obj_set_pos(s.name2, text_x_, top + name_h_);
+        lv_obj_set_size(s.name2, width_at(top + name_h_), name_h_);
+        lv_obj_remove_flag(s.name2, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(s.name2, LV_OBJ_FLAG_HIDDEN);
+    }
+    const int state_y = top + (two ? 2 : 1) * name_h_ + line_gap_;
+    const int state_x = text_x_ + dot_ + dot_ * 2 / 3;
+    lv_obj_set_pos(s.dot, text_x_, state_y + (state_h_ - dot_) / 2);
+    lv_obj_set_pos(s.state, state_x, state_y);
+    lv_obj_set_size(s.state, std::max(8, width_at(state_y) - (state_x - text_x_)), state_h_);
 }
 
 void SwitcherScreen::set_cards(const std::vector<CardView> &cards)

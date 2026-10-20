@@ -1,7 +1,7 @@
 # 015 - Multitasking P-d: the switcher screen, the legacy app sheet, the grid's dots, the first-run hint
 
 Status: built 2026-10-21 on branch `multitasking-pd`, on `main` 8c08509 (P-b #63 and P-c #64 merged); verified on the
-PC (section 9); board tests pending. Test build 0.8.0-pd.1.
+PC (section 9); board tests pending. Test build 0.8.0-pd.2.
 Study: [`reports/026-multitasking-study.md`](../reports/026-multitasking-study.md) (sections 5.2, 6.1-6.3; owner
 decisions D6-D9, D12, D15). Builds on P-b ([`015-multitasking-pb.md`](015-multitasking-pb.md): lifecycle, hide /
 resume / close, Alt+Tab) and P-c ([`015-multitasking-pc.md`](015-multitasking-pc.md): G1, G2, the `open_switcher`
@@ -35,7 +35,8 @@ as it was behind it.
 +----------------------------------------------------------------+
 | Open apps                          [ Esc ]  BT |||  [20:30]    |  the shared page header (cp0::ui::Page + strip)
 |  +---------------------------+  +---------------------------+  |
-|  | [icon] Serial C...  [ X ] |  | [icon] Mesh Hop     [ X ] |  |  2x2 cards, 302x148, 12 px apart
+|  | [icon] Serial       [ X ] |  | [icon] Mesh Hop     [ X ] |  |  2x2 cards, 302x148, 12 px apart
+|  |        Console            |  |        * Running          |  |  a long name on two lines
 |  |        * In front         |  |        * Running          |  |  X: a 7 mm target (79 px) in the corner
 |  +===========================+  +---------------------------+  |  blue border = the selection
 |  +---------------------------+  + - - - - - - - - - - - - - +  |
@@ -58,8 +59,12 @@ Sizes (the mockup's px at 640x480 turned into the layout service's terms, so eve
 | icon | 5.7 mm | 64 | 52 | 57 | 38 | 66 |
 | name / state text | BODY bold / CAPTION, dot 2/3 of CAPTION | 24 / 18 | 22 / 18 | 24 / 20 | 22 / 18 | 26 / 20 |
 
-- A line beside the X's target ends at its left edge; a line below it (taller cards) runs to the card's inset: on the
-  deck the name is cut with dots ("Serial C...", as in the mockup) and the state never is ("Not responding").
+- The name takes up to two lines (`layout_text`): a line beside the X's target ends at the target's left edge, a line
+  below it runs to the card's inset. A name too long for one line wraps (whole words; a first word longer than the
+  line is cut between characters) and its second line is placed under the X when the card has the room, so it gets
+  the card's width; only that second line ends with dots ("An App With A Thirty ..." on the deck). Real names fit:
+  "Serial / Console", "System / Monitor", "Net / Toolbox", "RSS / Reader" on the deck, one line from 800x480 up. The
+  state line follows, never cut ("Not responding").
 - States (`card_label`): the app the switcher was opened from says **In front** (green) unless it stopped answering
   (**Not responding**, amber, wins); otherwise **Running** (green, `X-Background=run`), **Paused** (grey, frozen),
   **Not responding** (amber). Cards are in recently-used order (study 6.2): the app it was opened from first.
@@ -166,7 +171,7 @@ its parents); delete that file to see the hint again. No `HOME`: shown once per 
 
 1. **The X's touch target is 7 mm (79 px on the deck)**, not the mockup's 56 px (5 mm on the deck's 2.8" panel): the
    brief asks for at least 7 mm. The visible key inside it is TARGET minus SPACE_S on each side (63 px on the deck);
-   the name ends at the target's left edge.
+   text beside it ends at the target's left edge (a long name wraps onto a second line under it).
 2. **No sheet for wrapped (compat) apps** (the brief's example list names them). They run in the compat window with
    the launcher's toolbar, whose Esc held 3 s already ends them, so a touch-only user is not stuck; a sheet there needs
    the compat blit paused, the display mode switched, the external runner given a close request and the virtual
@@ -224,7 +229,7 @@ Status file: `switcher=open|off` and `sheet=<name>|-` (P-d only).
 | `projects/APPLaunch/tests/test_switcher_model.cpp`, `test_multitask_model.cpp`, `run_tests.sh` | the pure rules (64 checks); Held: hold, Keep, Close, killed while held, not picked by cap / memory / Close all (18 checks) |
 | `projects/APPLaunch/tests/multitask/test_supervisor_host.cpp`, `run_supervisor_host.sh` | five P-d scenarios (96 checks): G1 from an app, a card, X, Home, G2 on the launcher, Close all; cancel by Esc and G1; the legacy sheet (frozen, dimmed, Keep without stale input, G1 = Keep, Close); Alt+Tab on the screen; the hint once and remembered |
 | `projects/APPLaunch/tests/render/{Makefile, src/harness_main.cpp, src/harness_launch.cpp}` | the views compiled in; commands `switcher`, `sheet`, `dots`, `tapitem`, `expect_event`, `expect_targets`; tiles named `tile:NAME` (their Exec line) |
-| `projects/APPLaunch/tests/render/scenes/multitask_{switcher,sheet,home}.scene`, `golden/640x480/` (12 new) | the three scenes (section 9.2) and their 640x480 goldens |
+| `projects/APPLaunch/tests/render/scenes/multitask_{switcher,sheet,home}.scene`, `golden/640x480/` (13 new) | the three scenes (section 9.2) and their 640x480 goldens |
 | `docs/dev/tests/multitasking-pd-protocol.md` | the board protocol |
 | `docs/APP-CONTRACT.md` | section 13: the `switcher` message and the gestures as P-d does them (no protocol change) |
 | `projects/APPLaunch/tests/render/README.md` | the new commands and scenes |
@@ -236,13 +241,14 @@ Status file: `switcher=open|off` and `sheet=<name>|-` (P-d only).
 |---|---|---|
 | `cp0-unit` | PASS | PASS (unchanged tests) |
 | `app-unit` | model 112, keys 130, protocol 32, notice queue 29, host process suite 192 checks, PASS | model **130**, keys 130, protocol 32, notice queue 29, **switcher model 64** (new), host process suite **288** (+96, P-d), PASS |
-| render harness | 41 scenes, 64 goldens, 1469 screenshots; twice 1509 PNGs; header 288; contract 363 | 44 scenes (+3), **76 goldens identical: the 64 existing byte-identical + 12 new** (640x480 of the new scenes), 1535 screenshots; twice 1578 PNGs; header 293 (+5: the switcher's header against the grid's at 5 sizes); contract 363; PASS |
+| render harness | 41 scenes, 64 goldens, 1469 screenshots; twice 1509 PNGs; header 288; contract 363 | 44 scenes (+3), **77 goldens identical: the 64 existing byte-identical + 13 new** (640x480 of the new scenes), 1540 screenshots; twice 1583 PNGs; header 293 (+5: the switcher's header against the grid's at 5 sizes); contract 363; PASS |
 | `branding` | PASS | PASS |
 | launcher build (`tools/dev/wsl-build.sh`, aarch64) | OK | OK, no new warning |
 
 The three scenes, at 640x480, 800x480 (9.2 px/mm), 720x720, 1280x720 and 1024x600 (6.6 px/mm); 480x320 has no switcher:
 - `multitask_switcher`: 3 apps and a free slot (Serial Console In front), the keyboard selection (Right, Down to Close
-  all; Tab), a Not responding card, 4 apps, 1 app with a long name (cut). Checked: every touch target at least 7 mm,
+  all; Tab), a Not responding card, 4 apps, long names on two lines ("Serial Console", "System Monitor", "Net
+  Toolbox", a 30-character name), 1 app with a very long name. Checked: every touch target at least 7 mm,
   cards and bar inside the panel and apart (`expect_targets`), the header pixel-identical to the grid's, taps (a card,
   an X at the far corner of its 7 mm target outside the visible key, Home, Close all) and keys (Esc, Backspace, Enter)
   reach the right action (`expect_event`).
@@ -253,7 +259,7 @@ The three scenes, at 640x480, 800x480 (9.2 px/mm), 720x720, 1280x720 and 1024x60
   before), the keyboard-only hint.
 
 Shots looked at (all five sizes): `switcher_three`, `switcher_keys`, `switcher_tab`, `switcher_not_responding`,
-`switcher_four`, `switcher_one`, `sheet_viz1090`, `sheet_long_name`, `home_plain`, `home_dots_hint`,
+`switcher_four`, `switcher_names`, `switcher_one`, `sheet_viz1090`, `sheet_long_name`, `home_plain`, `home_dots_hint`,
 `home_dots_selected`, `home_hint_keyboard`.
 
 ### Verified on the PC only (needs the boards)

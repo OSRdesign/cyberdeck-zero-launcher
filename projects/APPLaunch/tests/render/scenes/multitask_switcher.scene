@@ -1,6 +1,6 @@
 # Multitasking P-d (task 015-pd): the switcher screen "Open apps" of the approved mockup, built as multitask_ui builds
 # it from the supervisor's report: the shared page header (title, Esc, status strip), a fixed 2x2 grid of cards (icon,
-# name cut with dots, the state with its dot, the X in the corner), a free slot "Room for one more", the bar Home |
+# name on up to two lines, the state with its dot, the X in the corner), a free slot "Room for one more", the bar Home |
 # Close all, the blue selection. Checked: every touch target at least 7 mm and nothing outside the panel
 # (expect_targets), the header against the home grid's, taps (a card, an X at the far corner of its 7 mm target, Home,
 # Close all) and keys (Esc, Backspace, arrows, Enter) reach the right action. The switcher exists from 640x480 up
@@ -8,7 +8,7 @@
 title multitask switcher
 sizes 640x480 800x480 720x720 1280x720 1024x600
 @1024x600 ppmm 660
-apps "Serial Console=cli_100.png" "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "System Monitor=game_100.png" "Spectrum Analyzer for the Software Defined Radio=tank_100.png" Settings
+apps "Serial Console=cli_100.png" "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "System Monitor=game_100.png" "Spectrum Analyzer for the Software Defined Radio=tank_100.png" "Net Toolbox=ssh_100.png" "An App With A Thirty Char Name=math_100.png" Settings
 clock 20:30
 wifi 70
 bt on
@@ -53,7 +53,12 @@ shot switcher_not_responding
 switcher "RSS Reader=front" "Mesh Hop=running" "Serial Console=nr" "System Monitor=paused"
 shot switcher_four
 expect_targets
-# one app with a long name (cut with dots), three free slots
+# long names wrap onto two lines (the second one ends with dots when even that is not enough)
+switcher "Serial Console=front" "System Monitor=running" "Net Toolbox=paused" "An App With A Thirty Char Name=nr"
+switcher select card0
+shot switcher_names
+expect_targets
+# one app with a long name (two lines, the second cut with dots), three free slots
 switcher "Spectrum Analyzer for the Software Defined Radio=front"
 shot switcher_one
 expect_targets

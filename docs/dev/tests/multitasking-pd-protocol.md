@@ -13,10 +13,10 @@ Watch the log in an ssh terminal on the PC (it only reads it):
 
 ## 0. Setup (Controller)
 
-Files: scratchpad `pkg-out\launcher-mtd\` (`INSTALL.txt`): the bundle `cyberdeckzero-launcher-0.8.0-pd.1-arm64.tar.gz`,
+Files: scratchpad `pkg-out\launcher-mtd\` (`INSTALL.txt`): the bundle `cyberdeckzero-launcher-0.8.0-pd.2-arm64.tar.gz`,
 `mt-fbhapp` and the five `mt-fbhapp-*.desktop` (unchanged since P-b; install them only if they are not there).
 
-    python tools/boards/board.py upload deck <path>/cyberdeckzero-launcher-0.8.0-pd.1-arm64.tar.gz
+    python tools/boards/board.py upload deck <path>/cyberdeckzero-launcher-0.8.0-pd.2-arm64.tar.gz
     rm -f ~/.config/cardputerzero/multitask-hint-shown            (on the deck: the hint shows again)
     python tools/boards/board.py test-start deck --env APPLAUNCH_MULTITASK=1
 
