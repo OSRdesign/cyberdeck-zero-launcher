@@ -409,7 +409,9 @@ consumed before the page, so a terminal does not get Meta-Tab).
 - Alt down, Tab -> the switcher opens with the second most recent card selected.
 - Tab again moves on; Shift+Tab moves back.
 - **Alt release** switches to the selected card; the header's Home is selectable too (= the grid).
-- Esc with Alt still held cancels: back to the app that was in front.
+- Esc or Backspace with Alt still held cancels: back to the app that was in front. (Backspace: owner decision
+  2026-10-20, P-b build pb.4; the deck's M4 keyboard sends no Esc while Alt is held. Backspace outside a session is
+  untouched.)
 - The Tab-held-3-s lock must ignore Tab while Alt is down.
 - In a fullscreen app the app also sees the Tab. `cp0_lvgl` drops Tab-with-Alt when `APPLAUNCH_LIFECYCLE=1`. Older
   apps move focus by one, a harmless side effect.

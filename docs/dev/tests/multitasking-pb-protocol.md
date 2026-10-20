@@ -24,6 +24,10 @@ added, and Alt+Tab logs each selection (`session: select <name>`) and a cancel (
 reads during an Alt+Tab session (`session key: ...`) so the log shows what the keyboard sends; nothing else changes.
 On the PC the cancel works with the deck's exact key order, with Esc autorepeat and with Esc from a second keyboard.
 
+**Build 0.8.0-pb.4** (owner decision after pb.3: the M4 sends no Esc while Alt is held): **Backspace with Alt held
+cancels an Alt+Tab session too**, exactly like Esc (D5). During a session Backspace, its repeats and its key-up are
+the session's; outside a session Backspace types as before. Esc keeps cancelling. Nothing else changes.
+
 | Part | Board | Time |
 |---|---|---|
 | 0. Setup | deck | 5 min (Controller) |
@@ -48,13 +52,13 @@ Rules:
 
 ## 0. Setup (Controller, once per board)
 
-Files (scratchpad `pkg-out\launcher-mtb\`): the bundle `cyberdeckzero-launcher-0.8.0-pb.3-arm64.tar.gz`, `mt-fbhapp`
+Files (scratchpad `pkg-out\launcher-mtb\`): the bundle `cyberdeckzero-launcher-0.8.0-pb.4-arm64.tar.gz`, `mt-fbhapp`
 (aarch64, static), `mt-fbhapp-*.desktop` (also in `tools/multitasking-spike/desktop/`). Nothing is installed over
 the released launcher: the bundle runs staged (`board.py test-start`) and `test-stop` brings the installed one back.
 
 1. Upload and stage the launcher (Windows, the repository's `tools/boards`, `PIPW` set):
 
-       python tools/boards/board.py upload deck C:/Users/osrde/AppData/Local/Temp/claude/C--CLAUDE-zero7/5aaea98f-a498-4726-8890-7bd33adbcf64/scratchpad/pkg-out/launcher-mtb/cyberdeckzero-launcher-0.8.0-pb.3-arm64.tar.gz
+       python tools/boards/board.py upload deck C:/Users/osrde/AppData/Local/Temp/claude/C--CLAUDE-zero7/5aaea98f-a498-4726-8890-7bd33adbcf64/scratchpad/pkg-out/launcher-mtb/cyberdeckzero-launcher-0.8.0-pb.4-arm64.tar.gz
 
 2. Copy `mt-fbhapp` and the five `.desktop` files to the board's home (scp or `deck.py put`), then on the board:
 
@@ -125,16 +129,17 @@ With **MT Freeze** and **MT Run** both resident (open and hide each once):
    `MT Freeze`); count them with `grep -c 'session: select' ~/applaunch-test/run.log` before and after.
 3. Select MT Freeze and **release Alt**: MT Freeze is in front, as it was. Log: `session ends: MT Freeze`.
 4. Alt+Tab and release at once (a quick tap): you are back in MT Run (the previous app).
-5. Alt+Tab, then **Esc while Alt is still held**: back to the app you started from. Log: `session: cancelled`, then
-   `session ends: <that app>`.
-   **pb.2 on the deck: this did not cancel** (the log showed `session: select Home`, then `session ends: Home`, no
-   `session: cancelled`). pb.3 logs every key the launcher reads during a session and for 2 s after it:
-   `grep 'session key' ~/applaunch-test/run.log`. Expected for this step, in order (the Alt press before the session
-   is not logged): `session key: Tab down -> start`, `session key: Tab up`, `session key: Esc down -> cancel`,
-   `session key: Esc up`,
-   `session key: Alt up (after the session)`. If the line after `Tab up` is not `Esc down -> cancel` (for example
-   `Tab down -> next`, or nothing at all), the keyboard does not send Esc while Alt is held: copy those lines into the
-   answer sheet. Try it once with the M4 and once with another keyboard (USB) if you have one.
+5. Alt+Tab, then **Backspace or Esc while Alt is still held** cancels: back to the app you started from. **On the M4
+   use Backspace** (it sends no Esc while Alt is held: pb.2 / pb.3 deck runs). Tap it, do not hold it. Log:
+   `session: cancelled`, then `session ends: <that app>`. The session's keys are logged during a session and for 2 s
+   after it: `grep 'session key' ~/applaunch-test/run.log`. Expected for this step, in order (the Alt press before the
+   session is not logged): `session key: Tab down -> start`, `session key: Tab up`,
+   `session key: BackSpace down -> cancel`, `session key: BackSpace up`, `session key: Alt up (after the session)`
+   (with Esc: `Esc down -> cancel`, `Esc up`). Also check: the Backspace did nothing in the app you returned to (MT
+   Run's `keys` count unchanged), and **Backspace outside a session still types** (in the CLI terminal, or MT Run's
+   `keys` grows by one per press). If the line after `Tab up` is not `BackSpace down -> cancel`, copy the
+   `session key` lines into the answer sheet. Esc with Alt held on another keyboard (USB), if you have one: the same
+   with `Esc down -> cancel`.
 6. From the **home grid**: Alt+Tab lists `Home` first; releasing on an app opens it. On the grid with no app resident,
    Alt+Tab does nothing (and a terminal page still receives Alt+Tab then).
 7. **Super** tapped alone inside MT Run: back to the grid. Super inside a launcher page (Settings): nothing.
@@ -211,7 +216,7 @@ or Bluetooth keyboard), E, I and K. The touch screen there is the FT5x06: in B3 
 | A2 | Flag on: today's apps (System Monitor, Serial Console, Mesh Hop, viz1090, LAN Scan, CLI) unchanged? launcher CPU with viz1090 in front (second `top` sample; pb.1: about 5 %)? | |
 | B | Freeze: picture back at once? `work` stopped while hidden? any stale key or touch acted on (`stale`, colour change, quit)? `ack_ms`, `snapshot_ms`, `restore_ms` (pb.1: 12-15), `drain_ms` (pb.1: 7-10), `drain ... keys=`? B5 counts +5? any flash? | |
 | C | Run: `work` grew while hidden? grid ever drawn over? | |
-| D | Alt+Tab / Shift+Tab / release / Esc cancel / quick tap / from the grid / Super: as described? one `session: select` per Tab, `session: cancelled` on Esc? D5: the `session key` lines (M4, and another keyboard if any)? Super key present on the M4? | |
+| D | Alt+Tab / Shift+Tab / release / Backspace (or Esc) cancel / quick tap / from the grid / Super: as described? one `session: select` per Tab, `session: cancelled` on Alt+Backspace (M4)? D5: `session key: BackSpace down -> cancel` present? the app's `keys` unchanged by the cancel? Backspace still types outside a session? Esc cancel on another keyboard, if any? Super key present on the M4? | |
 | E | Not responding: toast, resume OK? | |
 | F | Legacy: nothing happens on Super / Alt+Tab, Esc and hold Esc as today? | |
 | G | Cap: the right app closed, refusal message? both notices readable, one after the other? | |

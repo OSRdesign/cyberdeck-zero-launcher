@@ -71,7 +71,7 @@ Files (planned; section 12 lists what was built):
 | Where | What |
 |---|---|
 | `projects/APPLaunch/main/ui/multitask/multitask_model.{hpp,cpp}` | pure: types, config, registry, state machine, MRU, cap, memory rule, derived outputs (front, keyboard, grabs) |
-| `.../multitask/switch_keys.{hpp,cpp}` | pure: Alt+Tab / Super / Esc-cancel key session |
+| `.../multitask/switch_keys.{hpp,cpp}` | pure: Alt+Tab / Super / Esc- or Backspace-cancel key session |
 | `.../multitask/lifecycle_protocol.{hpp,cpp}` | pure: message format and parsing, environment names |
 | `.../multitask/supervisor.{hpp,cpp}` | the effect loop over ports (no LVGL; host-testable) |
 | `.../multitask/supervisor_linux.{hpp,cpp}` | Linux ports: spawn with a socketpair, signals, reaping, `/proc` members, drain through `pidfd_getfd`, `oom_score_adj`, MemAvailable, the guardian, the control FIFO |
@@ -197,7 +197,9 @@ drained). The contract asks a lifecycle app to treat every key as released on `s
   the cycle is the resident apps in recently-used order, then Home; the selection starts on the second entry. If an
   app is in front it is hidden at once, the launcher shows the home grid and a one-line text (the existing toast)
   lists the cycle with the selection in brackets: the P-b stand-in for the switcher. Tab moves on, Shift+Tab back,
-  **releasing Alt switches** to the selection, Esc with Alt held cancels (back to where the session started). A
+  **releasing Alt switches** to the selection, Esc or Backspace with Alt held cancels (back to where the session
+  started; Backspace since pb.4, owner decision 2026-10-20: the M4 keyboard sends no Esc while Alt is held). The
+  cancel key's repeats and release are the session's too; outside a session Backspace and Esc are untouched. A
   legacy app in front: nothing happens. In the launcher, Tab-with-Alt is consumed only while an app is resident.
 - **Super** (Left / Right Meta pressed and released alone) and `KEY_HOMEPAGE` = Home: hides the app in front (a
   lifecycle app). In the launcher Super does nothing (unchanged).
@@ -238,7 +240,7 @@ Everything in sections 2-11 is built as described; the differences are listed un
 | File | What changed |
 |---|---|
 | `projects/APPLaunch/main/ui/multitask/multitask_model.{hpp,cpp}` | new, pure: registry, state machine, MRU, cap, memory rule, oom tiers, pending target, derived outputs |
-| `.../multitask/switch_keys.{hpp,cpp}` | new, pure: Alt+Tab / Shift / Esc-cancel / Super-tap session |
+| `.../multitask/switch_keys.{hpp,cpp}` | new, pure: Alt+Tab / Shift / Esc- or Backspace-cancel / Super-tap session |
 | `.../multitask/lifecycle_protocol.{hpp,cpp}` | new, pure: datagram format and parser, environment exports |
 | `.../multitask/notice_queue.{hpp,cpp}` | new, pure (pb.2): notices one at a time, each at least 2 s |
 | `.../multitask/supervisor.{hpp,cpp}` | new: the supervisor thread over ports, the Alt+Tab session controller, the dev FIFO, the status file |
@@ -266,7 +268,7 @@ Everything in sections 2-11 is built as described; the differences are listed un
 | Suite | Before (main 798381c) | After |
 |---|---|---|
 | `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`) | 106 test programs, PASS | 106 programs (`test_esc_key_watch` has one more case), PASS |
-| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 57 compiled tests (+ model 112 checks, keys 89, protocol 32, notice queue 29, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (126 checks, ASan + UBSan, with the loop-cost bound and the deck-order cancel cases), PASS (pb.1: 56 tests, model 102, keys 71, host 98; pb.2: keys 71, host 106) |
+| `app-unit` (`projects/APPLaunch/tests/run_tests.sh`) | 53 compiled tests + 17 Python, PASS | 57 compiled tests (+ model 112 checks, keys 130, protocol 32, notice queue 29, under ASan + UBSan) + 17 Python (the ownership test rewritten) + the host process suite (156 checks, ASan + UBSan, with the loop-cost bound and the deck-order cancel cases by Esc and by Backspace), PASS (pb.1: 56 tests, model 102, keys 71, host 98; pb.2: keys 71, host 106; pb.3: keys 89, host 126) |
 | render harness | 40 scenes, 64 goldens (32 at 640x480, 32 at 480x320), 1459 screenshots | 41 scenes (+ `multitask_handoff`, review-only), **64 goldens byte-identical**, 1469 screenshots (+10: the new scene, 2 shots at 5 sizes); `compare`, `twice`, `header`, `contract` PASS |
 | `branding` | PASS | PASS |
 | P-a spike tests (`tools/multitasking-spike/run_tests.sh`, not in check-all) | 20 Python OK; host e2e 37 of 38 in 3 of 3 runs on this PC | 20 Python OK; host e2e 37 of 38 (passed 38 once in 3 runs). The failing case, fbhandoff's own guardian line `ended_group=1`, is timing-dependent and fails on `main` too: when fbhandoff is killed, the kernel sends SIGHUP + SIGCONT to the newly orphaned stopped group and the fake app quits before fbhandoff's guardian looks (the group is gone either way) |
@@ -332,6 +334,14 @@ with `-> start|next|prev|commit|cancel`), in the supervisor and in the launcher'
 says which lines to expect and what to report. No typed text is logged (only during sessions, and the keys there are
 the session's).
 
+**Owner decision after pb.3, build 0.8.0-pb.4.** The M4 keyboard sends no Esc while Alt is held, so **Backspace
+with Alt held cancels as well**, exactly like Esc: back to the app or page the session started from, `session:
+cancelled` and `session key: BackSpace down -> cancel` in the log. Its auto-repeats and its release are the
+session's (consumed: no app and no launcher page sees them), also when Alt is released first; Backspace outside a
+session is untouched (it still types in terminals and apps). Esc keeps cancelling. Tests: the pure key-session table
+(Backspace cancel, repeats, release after Alt, outside a session, Esc and Backspace in one session) and the host
+suite's deck-order cancel scenario, now run with each of the two keys in its five variants (50 checks).
+
 ### Verified on the PC only (needs the boards)
 
 - Real evdev: `EVIOCGRAB` on libinput's own fds and on the touch fd (and libinput's behaviour when its grabbed fds
@@ -374,8 +384,8 @@ the session's).
 3. Not responding apps can be resumed.
 4. At the cap with only `run` apps hidden: refuse the launch (until the P-d question).
 5. The Alt+Tab rules: the app is hidden at the first Tab; the cycle is resident apps in MRU order then Home; the
-   selection starts on the second entry (a quick Alt+Tab = the previous app); Shift+Tab back; Esc with Alt held
-   cancels; both Alt keys; Tab auto-repeat ignored.
+   selection starts on the second entry (a quick Alt+Tab = the previous app); Shift+Tab back; Esc or Backspace with
+   Alt held cancels (Backspace: decided by the owner 2026-10-20); both Alt keys; Tab auto-repeat ignored.
 6. Super does nothing in launcher pages; Alt+Tab passes through to pages (terminals) while nothing is resident.
 7. `switcher` = `home` until P-d.
 8. The stand-in notice wording: "X is not responding", "Closed X (4 apps open)", "Closed X: low memory (N MB free)",
