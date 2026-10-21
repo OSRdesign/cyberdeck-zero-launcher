@@ -534,6 +534,7 @@ for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backli
          cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules cyberdeckzero.desktop; do
     cp "$D/$f" "$BUN/payload/etc/"
 done
+chmod 755 "$BUN/payload/etc/"*      # as in the real bundle (built from a Windows checkout: drvfs files are rwx)
 echo png > "$BUN/payload/share/share/images/setting_100.png"
 echo ofl > "$BUN/payload/share/share/font/JetBrainsMono-OFL.txt"
 ( cd "$BUN/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$BUN/payload/share.manifest"
@@ -569,8 +570,21 @@ printf 'sudo %s\n' "$*" >> "$FAKE_CALLS"
 exec "$@"
 EOF
 printf '#!/bin/sh\necho "${FAKE_UNAME_M:-aarch64}"\n' > "$FAKEBIN/uname"
-printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 1\n' > "$FAKEBIN/apt-get"
-for c in loginctl udevadm usermod chown dpkg dtc groupadd; do
+printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit "${FAKE_APT_RC:-1}"\n' > "$FAKEBIN/apt-get"
+cat > "$FAKEBIN/dpkg" <<'EOF'
+#!/bin/sh
+# stand-in dpkg: logs the call; "-s PKG" answers "not installed" for the packages in FAKE_DPKG_MISSING
+printf 'dpkg %s\n' "$*" >> "$FAKE_CALLS"
+if [ "$1" = -s ]; then case " ${FAKE_DPKG_MISSING:-} " in *" $2 "*) exit 1 ;; esac; fi
+exit 0
+EOF
+cat > "$FAKEBIN/pkaction" <<'EOF'
+#!/bin/sh
+# stand-in pkaction: polkit answers unless FAKE_POLKIT=missing
+printf 'pkaction %s\n' "$*" >> "$FAKE_CALLS"
+[ "${FAKE_POLKIT:-ok}" = ok ]
+EOF
+for c in loginctl udevadm usermod chown dtc groupadd; do
     printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
 done
 chmod 755 "$FAKEBIN"/*
@@ -603,6 +617,8 @@ check "fake install, fresh: nothing to migrate" 'has "nothing to migrate" && ! c
 check "fake install, fresh: licences in /usr/share/doc/cyberdeckzero-launcher" '[ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSE" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSES/LVGL-MIT.txt" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/fonts/JetBrainsMono-OFL.txt" ]'
 check "fake install, fresh: board profile written, assets copied" '[ -f "$R/etc/applaunch/board.conf" ] && [ -f "$A/share/images/setting_100.png" ]'
 check "fake install, fresh: no apt-get, nothing written outside the fake root" '! called "apt-get" && [ ! -e /usr/share/doc/cyberdeckzero-launcher ] && [ ! -e /etc/systemd/system/cyberdeckzero-console.service ]'
+check "fake install, fresh: the user unit is 644 (systemd: not marked executable), no unit, rule or profile executable" '[ "$(stat -c %a "$H/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$H" -type f -perm /111)" ]'
+check "fake install, fresh: a Pi's packages (dtc, no polkitd or bluez), bluetooth.service left alone, polkit checked" 'called "dpkg -s device-tree-compiler" && ! called "dpkg -s polkitd" && ! called "dpkg -s bluez" && ! called "enable --now bluetooth.service" && called "pkaction --action-id org.freedesktop.login1.reboot" && has "polkit: running"'
 
 # appliance board installed with v0.6.0 (Pi 3A+): migrated
 R=$(root pi3a-luckfox35)
@@ -708,7 +724,7 @@ pc_root() {
     d="$TMP/$1"; rm -rf "$d"
     mkdir -p "$d/sys/class/dmi/id" "$d/sys/class/graphics/fb0" "$d/sys/class/drm/card1-eDP-1" \
         "$d/sys/class/drm/card1-HDMI-A-1" "$d/sys/class/backlight/acpi_video0" "$d/sys/class/backlight/intel_backlight" \
-        "$d/proc/1" "$d/boot/grub" "$d/etc/default"
+        "$d/proc/1" "$d/boot/grub" "$d/etc/default" "$d/etc/netplan"
     echo "Panasonic Corporation" > "$d/sys/class/dmi/id/sys_vendor"
     echo "${2:-FZM1-2}" > "$d/sys/class/dmi/id/product_name"
     echo "${3:-30}" > "$d/sys/class/dmi/id/chassis_type"
@@ -726,6 +742,7 @@ pc_root() {
     echo systemd > "$d/proc/1/comm"
     printf 'menuentry "Armbian" {\n\tlinux /boot/vmlinuz root=UUID=1234 quiet\n}\n' > "$d/boot/grub/grub.cfg"
     printf 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n' > "$d/etc/default/grub"
+    printf 'network:\n  version: 2\n  renderer: networkd\n  wifis:\n    wlan0:\n      dhcp4: true\n' > "$d/etc/netplan/20-wifi.yaml"
     echo "$d"
 }
 pcrun() { OUT=$(INSTALL_MACHINE=x86_64 SYSROOT="$R" sh "$INSTALL" "$@" 2>&1); RC=$?; }
@@ -736,6 +753,7 @@ check "pc dry-run: exit 0, board pc-fzm1-2, the DMI facts" '[ $RC = 0 ] && has "
 check "pc dry-run: appliance session, the user service and the console unit (fbcon vtcon1 unbound)" 'has "session: appliance" && has "cyberdeckzero-console.service frees the panel"'
 check "pc dry-run: no boot configuration (no config.txt, GRUB, kernel command line), no gpio rule" 'has "boot config: none on a PC (GRUB and the kernel command line are left alone)" && ! has "PWM backlight" && ! has "cmdline" && ! has "92-applaunch-backlight-gpio"'
 check "pc dry-run: the intel_backlight levels rule planned" 'has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of intel_backlight)"'
+check "pc dry-run: the PC's packages (polkitd, bluez; no dtc), bluetooth.service, NetworkManager left to the owner" 'has "packages (PC, when missing): libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez; bluetooth.service enabled" && has "network-manager is" && ! has "device-tree-compiler"'
 check "pc dry-run: nothing written" '[ ! -e "$R/etc/applaunch" ] && [ ! -e "$R/etc/udev" ]'
 pcrun --board-only
 P="$R/etc/applaunch/board.conf"
@@ -815,9 +833,41 @@ check "fake PC install: no boot file touched (GRUB, /etc/default/grub), no confi
 check "fake PC install: no device-tree-compiler asked for" '! called "dpkg -s device-tree-compiler"'
 check "fake PC install: user service, linger, console unit, getty@tty1 masked (as on the Pi appliance boards)" '[ -f "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && called "loginctl enable-linger $U" && called "systemctl enable --now cyberdeckzero-console.service" && called "systemctl mask getty@tty1.service"'
 check "fake PC install: the backlight rule, the groups" '[ -f "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" ] && called "usermod -aG input,video,netdev $U"'
-if command -v nmcli >/dev/null 2>&1 && command -v bluetoothctl >/dev/null 2>&1; then :; else
-    check "fake PC install: NetworkManager / BlueZ missing: a notice, not installed" 'has "NOTICE: " && has "not installed" && ! called "apt-get"'
+check "fake PC install: polkitd and bluez checked, bluetooth.service enabled and started, polkit answers" 'called "dpkg -s polkitd" && called "dpkg -s bluez" && called "systemctl enable --now bluetooth.service" && has "bluetooth.service enabled and started" && has "polkit: running" && ! has "WARNING: no polkit"'
+check "fake PC install: the user unit is 644, no unit, rule or profile executable" '[ "$(stat -c %a "$R$UHOME/.config/systemd/user/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$R$UHOME/.config" -type f -perm /111)" ]'
+check "fake PC install: network-manager never installed" '! called "apt-get install" && ! grep -q "network-manager" "$CALLS"'
+if getent group bluetooth >/dev/null 2>&1; then
+    check "fake PC install: the user joins the bluetooth group (BlueZ's D-Bus policy)" 'called "usermod -aG bluetooth $U"'
+else
+    check "fake PC install: no bluetooth group, no usermod for it" '! called "usermod -aG bluetooth"'
 fi
+if id -nG "$U" | tr " " "\n" | grep -qx sudo; then
+    check "fake PC install: the user is in the sudo group: no warning about the power / clock rule" '! has "is not in the sudo group"'
+else
+    check "fake PC install: the user is not in the sudo group: warned (the power / clock rule needs it)" 'has "is not in the sudo group"'
+fi
+if ! command -v nmcli >/dev/null 2>&1; then
+    check "fake PC install: NetworkManager missing: the notice names it, Settings > Wi-Fi, the netplan recipe and the roll-back" 'has "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager" && has "on the console" && has "sudo apt install network-manager" && has "echo '"'"'network: {version: 2, renderer: NetworkManager}'"'"' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml" && has "sudo netplan apply" && has "Roll back" && has "sudo rm /etc/netplan/90-applaunch-networkmanager.yaml"'
+fi
+# the packages missing: apt-get installs polkitd and bluez (never network-manager)
+R=$(pc_root pc-missing)
+FAKE_DPKG_MISSING="polkitd bluez"; FAKE_APT_RC=0; export FAKE_DPKG_MISSING FAKE_APT_RC
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_DPKG_MISSING FAKE_APT_RC
+check "fake PC install, polkitd and bluez missing: apt-get installs exactly them" '[ $RC = 0 ] && called "apt-get update" && called "apt-get install -y --no-install-recommends polkitd bluez"'
+# polkit does not answer: the install goes on, warned twice (after the rules, at the end)
+R=$(pc_root pc-nopolkit)
+FAKE_POLKIT=missing; export FAKE_POLKIT
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_POLKIT
+check "fake PC install without polkit: exit 0, Reboot / Shut down / the clock named in a WARNING, the fix given" '[ $RC = 0 ] && has "WARNING: polkit is not available" && has "WARNING: no polkit: Settings > Reboot / Shut down and the clock settings will not work. Fix: sudo apt install polkitd"'
+# NetworkManager there (an nmcli on PATH): no notice
+NMBIN="$TMP/fake-nm"; mkdir -p "$NMBIN"; printf '#!/bin/sh\nexit 0\n' > "$NMBIN/nmcli"; cp "$NMBIN/nmcli" "$NMBIN/bluetoothctl"; chmod 755 "$NMBIN"/*
+R=$(pc_root pc-nm)
+OPATH=$PATH; PATH="$NMBIN:$PATH"
+pcfull "$R" "$BUN64" x86_64
+PATH=$OPATH
+check "fake PC install with NetworkManager: no notice" '[ $RC = 0 ] && ! has "NOTICE: network-manager"'
 R=$(pc_root pc-wrongarch)
 pcfull "$R" "$BUNARM" x86_64
 check "the arm64 bundle on a PC: refused before any change, the right bundle named" '[ $RC = 1 ] && has "this bundle is for arm64, this system is amd64" && has "cyberdeckzero-launcher-<version>-amd64.tar.gz" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc/applaunch" ]'

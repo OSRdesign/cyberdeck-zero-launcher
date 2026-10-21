@@ -92,9 +92,31 @@ arm64 apps, which do not install on a PC).
   CPU (no AVX needed). systemd, logind, polkit, udev.
 - The DRM driver's framebuffer `/dev/fb0` (`CONFIG_DRM_FBDEV_EMULATION`, `CONFIG_FB_DEVICE`; i915 has it), a touch
   panel that reports as a direct touch device, a keyboard (USB or Bluetooth; the on-screen keyboard is the fallback).
-- **NetworkManager and BlueZ** for Settings > Wi-Fi and Bluetooth: install them yourself
-  (`sudo apt install network-manager bluez`). install.sh does not, and says so when they are missing. Moving a PC's
-  network from netplan / systemd-networkd to NetworkManager can cut an ssh session: do it on the console.
+- **polkit and BlueZ**: install.sh installs `polkitd` (logind and timedated ask polkit before Settings > Reboot, Shut
+  down or a clock change from the launcher's user service: without it they refuse, and the rules cannot apply) and
+  `bluez` (Settings > Bluetooth), starts `bluetooth.service`, adds the user to the `bluetooth` group, and checks that
+  polkit answers (a WARNING names what will not work otherwise). The power and clock rule allows the `sudo` group.
+- **NetworkManager** for Settings > Wi-Fi: install it yourself (see below). install.sh does not: it takes the network
+  over from netplan / systemd-networkd. The end of the install prints the recipe when `nmcli` is missing.
+
+**NetworkManager on a netplan system** (the FZ-M1's Armbian: systemd-networkd and a netplan Wi-Fi entry). On the
+console, not from an ssh session over Wi-Fi (the link drops while it switches):
+
+```
+sudo apt install network-manager
+sudo cp -a /etc/netplan /etc/netplan.bak-applaunch
+echo 'network: {version: 2, renderer: NetworkManager}' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml
+sudo chmod 600 /etc/netplan/90-applaunch-networkmanager.yaml
+sudo netplan apply
+nmcli device                    # the Wi-Fi interface "connected": Settings > Wi-Fi works
+```
+
+The netplan Wi-Fi entries then come up under NetworkManager (the last file's `renderer` wins). A Wi-Fi entry with its
+own `renderer: networkd` line keeps networkd: change that line too (the backup is in `/etc/netplan.bak-applaunch`).
+If the boot then waits about 2 minutes for the network (`systemd-networkd-wait-online`, nothing left for networkd to
+bring up): `sudo systemctl disable systemd-networkd-wait-online.service`. Roll back, on the console:
+`sudo rm /etc/netplan/90-applaunch-networkmanager.yaml && sudo apt remove network-manager && sudo netplan apply`
+(and `sudo systemctl enable systemd-networkd-wait-online.service` if you disabled it).
 
 **Get the bundle**: `cyberdeckzero-launcher-<version>-amd64.tar.gz` from the releases (from the first release after
 x-b), or build it natively on an x86_64 Linux or WSL box:
@@ -103,8 +125,9 @@ x-b), or build it natively on an x86_64 Linux or WSL box:
 libfreetype-dev`, and `libssl-dev` for the Store (the Settings > Apps engine). The layout is the arm64 bundle's.
 
 **Install**: unpack it on the PC and run `cd bundle && sudo ./install.sh`, as on a Pi. On a PC (x86_64, no device
-tree) it writes the `pc` profile (see [Boards](#boards)), installs `libinput10 libxkbcommon0 libfreetype6 curl` when
-missing and names any other library the launcher lacks, creates the `netdev` group if the distribution has none, and
+tree) it writes the `pc` profile (see [Boards](#boards)), installs `libinput10 libxkbcommon0 libfreetype6 curl polkitd
+bluez` when missing and names any other library the launcher lacks, creates the `netdev` group if the distribution has
+none, and
 installs the user service with lingering, the console unit (it unbinds the kernel's framebuffer console, `vtcon1` on
 the FZ-M1, as on the Pi boards) and the udev and PolicyKit rules. **No boot configuration is changed**: GRUB and the
 kernel command line stay as they are (the boot lines show, then the launcher). A PC that boots to a desktop (a display

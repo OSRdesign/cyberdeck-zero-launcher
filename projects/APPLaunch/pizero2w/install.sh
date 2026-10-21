@@ -29,8 +29,10 @@
 # Prerequisites that this script does NOT do:
 #   - Waveshare DPI panel overlays in config.txt (see config.txt.snippet and the Waveshare wiki);
 #   - pairing the Bluetooth keyboard (bluetoothctl);
-#   - on a PC: installing NetworkManager and BlueZ (Settings > Wi-Fi and Bluetooth need them; it says so when they
-#     are missing). A PC's boot configuration (GRUB, kernel command line) is never changed.
+#   - on a PC: installing NetworkManager (Settings > Wi-Fi needs it, but it takes the network over from netplan /
+#     systemd-networkd: the end of the install prints a recipe to run on the console). polkitd and BlueZ are installed
+#     on a PC (reboot / shutdown / the clock, and Settings > Bluetooth, need them). A PC's boot configuration (GRUB,
+#     kernel command line) is never changed.
 set -eu
 
 KEYBOARD_NAME="M4 Keyboard"
@@ -70,7 +72,7 @@ done
 # profile and the backlight udev rule are written under $SYSROOT/etc. Leave it unset on a real board.
 # INSTALL_FAKE_SYSTEM=1 (test hook, with SYSROOT) allows a whole install into $SYSROOT: every system path and the
 # user's home are taken under it, and the test puts stand-ins for systemctl, runuser, loginctl, udevadm, usermod,
-# dpkg, chown and uname first on PATH (tests/test-install-board.sh). Never set it on a real board.
+# dpkg, chown, uname and pkaction first on PATH (tests/test-install-board.sh). Never set it on a real board.
 # INSTALL_GLIBC_VERSION is a test hook too: it replaces the glibc version read from the system; INSTALL_MACHINE
 # replaces "uname -m" (aarch64, x86_64) for the board detection.
 SYSROOT=${SYSROOT:-}
@@ -316,6 +318,9 @@ pc_is_tablet() {
 }
 IS_PC=0
 PC_CONN=""; PC_MM=""; PC_MM_FROM=""; PC_LOGICAL=""
+# the packages of a PC: the launcher's libraries, polkitd (logind and timedated ask polkit before a reboot, a shutdown or
+# a clock change from the launcher's user service; Debian 13 and Ubuntu 24.04+ name it polkitd) and BlueZ
+PC_PKGS="libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez"
 if [ -z "$MODEL" ] && [ "$MACHINE" = x86_64 ]; then
     IS_PC=1
     if [ -z "$BOARD_ARG" ]; then
@@ -714,6 +719,10 @@ if [ "$DRY" = 1 ]; then
         echo "--- /etc/polkit-1/rules.d/$DESKTOP_RULES"
         render "$DESKTOP_RULES"
     elif [ "$BOARD_ONLY" = 0 ]; then
+        if [ "$IS_PC" = 1 ]; then
+            echo "packages (PC, when missing): $PC_PKGS; bluetooth.service enabled and started; network-manager is"
+            echo "  not installed (it takes the network over: the end of the install prints a recipe for the console)"
+        fi
         echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck): $USER_UNIT"
         echo "  for $TARGET_USER (lingering on), enabled and started"
         echo "console: $CONSOLE_UNIT frees the panel from the text console once the boot is done (the boot lines still show)"
@@ -737,13 +746,13 @@ if [ "$BOARD_ONLY" = 1 ]; then
     apply_profile
     if [ "$GPIO_BL" = 1 ]; then
         mkdir -p "$UDEV_DIR"
-        gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
+        gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"; chmod 644 "$UDEV_DIR/$GPIO_BL_RULE"
         echo "installed $UDEV_DIR/$GPIO_BL_RULE"
         [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
     fi
     if [ -n "$SYSFS_BL" ]; then
         mkdir -p "$UDEV_DIR"
-        sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"
+        sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"; chmod 644 "$UDEV_DIR/$SYSFS_BL_RULE"
         echo "installed $UDEV_DIR/$SYSFS_BL_RULE"
         [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
     fi
@@ -869,8 +878,11 @@ if [ -z "$SYSROOT" ] && grep -q -e "$OLD_USER_UNIT" -e "$OLD_DESKTOP_UNIT" /proc
 fi
 
 say "Installing packages"
-PKGS="libinput10 libxkbcommon0 libfreetype6 curl"
-[ "$IS_PC" = 1 ] || PKGS="$PKGS device-tree-compiler"   # the deck's backlight overlay; a PC needs no dtc
+if [ "$IS_PC" = 1 ]; then
+    PKGS=$PC_PKGS        # no dtc on a PC; polkitd and BlueZ, which the Pi images have already
+else
+    PKGS="libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler"
+fi
 MISSING=""
 for pkg in $PKGS; do
     dpkg -s "$pkg" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
@@ -882,20 +894,20 @@ if [ -n "$MISSING" ]; then
 else
     echo "all packages already present"
 fi
-# Settings > Wi-Fi and Bluetooth drive NetworkManager and BlueZ: not installed here (moving a PC's network from netplan
-# or networkd to NetworkManager can cut an ssh session: do it on the console)
-NOTE_PKGS=""
-command -v nmcli >/dev/null 2>&1 || NOTE_PKGS="network-manager"
-command -v bluetoothctl >/dev/null 2>&1 || NOTE_PKGS="${NOTE_PKGS:+$NOTE_PKGS }bluez"
-case "$NOTE_PKGS" in
-    "network-manager bluez") NOTE_WHAT="Settings > Wi-Fi and Bluetooth" ;;
-    network-manager) NOTE_WHAT="Settings > Wi-Fi" ;;
-    *) NOTE_WHAT="Settings > Bluetooth" ;;
-esac
-if [ -n "$NOTE_PKGS" ]; then
-    echo "NOTICE: $NOTE_PKGS not installed: $NOTE_WHAT will not work. Install it yourself (sudo apt install"
-    echo "        $NOTE_PKGS), from the console when NetworkManager is to take the network over."
+if [ "$IS_PC" = 1 ]; then
+    # BlueZ's daemon for Settings > Bluetooth (its package enables it on most distributions; an Armbian image may not)
+    if systemctl enable --now bluetooth.service >/dev/null 2>&1; then
+        echo "bluetooth.service enabled and started"
+    else
+        echo "WARNING: bluetooth.service could not be started: Settings > Bluetooth will not work (systemctl status bluetooth)" >&2
+    fi
 fi
+# NetworkManager (Settings > Wi-Fi) and, on a Pi image without it, BlueZ: not installed here; the end of the install
+# says what to do (NetworkManager takes the network over from netplan / networkd: on the console)
+NEED_NM=0
+command -v nmcli >/dev/null 2>&1 || NEED_NM=1
+NEED_BLUEZ=0
+command -v bluetoothctl >/dev/null 2>&1 || NEED_BLUEZ=1
 
 say "Installing the launcher into ${APP_ROOT#"$SYSROOT"}"
 mkdir -p "$APP_ROOT/bin" "$APP_ROOT/lib" "$APP_ROOT/applications"
@@ -945,12 +957,15 @@ cat > "$UDEV_DIR/99-bt-keyboard.rules" <<EOF
 # Stable name for the Bluetooth keyboard (it gets a new event node each time it reconnects).
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="$KEYBOARD_NAME", SYMLINK+="input/bt-keyboard"
 EOF
+chmod 644 "$UDEV_DIR/99-bt-keyboard.rules"
 if [ "$GPIO_BL" = 1 ]; then
     gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
+    chmod 644 "$UDEV_DIR/$GPIO_BL_RULE"
     echo "on/off GPIO backlight: /etc/udev/rules.d/$GPIO_BL_RULE"
 fi
 if [ -n "$SYSFS_BL" ]; then
     sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"
+    chmod 644 "$UDEV_DIR/$SYSFS_BL_RULE"
     echo "backlight levels ($SYSFS_BL): /etc/udev/rules.d/$SYSFS_BL_RULE"
 fi
 udevadm control --reload
@@ -958,11 +973,28 @@ udevadm trigger --subsystem-match=input --subsystem-match=misc --subsystem-match
 # netdev (the polkit rule for NetworkManager) is a Debian group that other distributions may not have
 if ! getent group netdev >/dev/null 2>&1; then groupadd -f netdev && echo "group netdev created (50-networkmanager-netdev.rules)"; fi
 usermod -aG input,video,netdev "$TARGET_USER"
+# BlueZ's D-Bus policy lets the bluetooth group (made by the bluez package) talk to it from a background session
+if getent group bluetooth >/dev/null 2>&1; then usermod -aG bluetooth "$TARGET_USER"; fi
 
 say "Installing PolicyKit rules (Wi-Fi, time settings, reboot/shutdown from the launcher)"
 mkdir -p "$POLKIT_DIR"
 install -m 644 "$PAYLOAD/etc/50-networkmanager-netdev.rules" "$POLKIT_DIR/50-networkmanager-netdev.rules"
 install -m 644 "$PAYLOAD/etc/51-launcher-time-power.rules" "$POLKIT_DIR/51-launcher-time-power.rules"
+# Reboot, shutdown and the clock from Settings go through logind / timedated, which ask polkit: without polkitd they
+# refuse the launcher's user service, and the rules above never apply
+POLKIT_OK=0
+if command -v pkaction >/dev/null 2>&1 && pkaction --action-id org.freedesktop.login1.reboot >/dev/null 2>&1; then
+    POLKIT_OK=1
+    echo "polkit: running (Settings > Reboot / Shut down and the date and time settings can work)"
+    # 51-launcher-time-power.rules allows the sudo group only
+    if ! id -nG "$TARGET_USER" 2>/dev/null | tr ' ' '\n' | grep -qx sudo; then
+        echo "WARNING: $TARGET_USER is not in the sudo group: 51-launcher-time-power.rules (reboot, shutdown, clock from" >&2
+        echo "         Settings) does not apply to it. Fix: sudo usermod -aG sudo $TARGET_USER" >&2
+    fi
+else
+    echo "WARNING: polkit is not available (no polkitd, or it does not answer): Settings > Reboot, Shut down and the" >&2
+    echo "         date and time settings will be refused. Install it: sudo apt install polkitd" >&2
+fi
 if [ "$SESSION" = desktop ]; then
     # the menu entry starts the launcher's unit as the user, without a password
     render "$DESKTOP_RULES" > "$POLKIT_DIR/$DESKTOP_RULES.tmp"
@@ -1007,7 +1039,8 @@ else
     systemctl enable --now "$CONSOLE_UNIT" || echo "($CONSOLE_UNIT did not start now; it runs at the next boot)"
 
     mkdir -p "$UNIT_DIR"
-    cp "$PAYLOAD/etc/$USER_UNIT" "$UNIT_DIR/$USER_UNIT"
+    # 644: the bundle's copy may carry an executable bit (systemd then warns "is marked executable")
+    install -m 644 "$PAYLOAD/etc/$USER_UNIT" "$UNIT_DIR/$USER_UNIT"
     chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config"
     loginctl enable-linger "$TARGET_USER"
 fi
@@ -1091,6 +1124,34 @@ say "Done"
 if [ "$SESSION" = desktop ]; then
     echo "Start the launcher from the desktop: applications menu > CyberdeckZero Launcher (or: systemctl start $DESKTOP_UNIT)."
     echo "The desktop stops while it runs; Settings > System > Quit to desktop brings it back."
+fi
+if [ "$POLKIT_OK" = 0 ]; then
+    echo "WARNING: no polkit: Settings > Reboot / Shut down and the clock settings will not work. Fix: sudo apt install polkitd"
+fi
+if [ "$NEED_BLUEZ" = 1 ]; then
+    echo "NOTICE: bluez is not installed: Settings > Bluetooth will not work. Fix: sudo apt install bluez"
+fi
+if [ "$NEED_NM" = 1 ]; then
+    echo "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager. install.sh does not install it,"
+    echo "        because it takes the network over (from netplan / systemd-networkd here). Do it on the console, not"
+    echo "        from an ssh session over Wi-Fi (the link drops while it switches):"
+    if [ -d "$SYSROOT/etc/netplan" ]; then
+        cat <<'EOF'
+          sudo apt install network-manager
+          sudo cp -a /etc/netplan /etc/netplan.bak-applaunch
+          echo 'network: {version: 2, renderer: NetworkManager}' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml
+          sudo chmod 600 /etc/netplan/90-applaunch-networkmanager.yaml
+          sudo netplan apply
+        Check: nmcli device (the Wi-Fi "connected"), then Settings > Wi-Fi. Roll back (on the console):
+          sudo rm /etc/netplan/90-applaunch-networkmanager.yaml
+          sudo apt remove network-manager
+          sudo netplan apply
+        Details (a Wi-Fi entry with its own "renderer: networkd", a slow boot): README.md, "Install on a PC (amd64)".
+EOF
+    else
+        echo "          sudo apt install network-manager"
+        echo "        and let NetworkManager manage the Wi-Fi interface (no other service for it: ifupdown, networkd)."
+    fi
 fi
 echo "Next: pair the keyboard if you have not yet (bluetoothctl: scan on / pair / trust / connect)."
 if [ "${REBOOT:-0}" = 1 ]; then
