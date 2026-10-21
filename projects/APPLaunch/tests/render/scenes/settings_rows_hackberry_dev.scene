@@ -1,0 +1,27 @@
+# Same Settings options on every board (pinned row lists).
+# The HackBerry CM5 in its desktop session, a development build.
+# expect_rows checks every row of the root menu and of System, in order: a row that appears, disappears or moves on
+# one board only fails here (docs/dev/native-settings-page-howto.md section 5: which rows show where, and why). The
+# root menu and System must stay the same on every board; only Keyboard test (development builds) and Quit to desktop
+# (desktop session) may differ. Review only: no golden.
+title settings rows hackberry-cm5 desktop development
+review
+sizes 720x720
+env APPLAUNCH_DEV 1
+env APPLAUNCH_BOARD hackberry-cm5
+env APPLAUNCH_SESSION desktop
+env APPLAUNCH_STD_KEYBOARD 1
+ppmm 670
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+# System: Up from Screen wraps to the last section
+key UP
+key ENTER
+wait 300
+expect_rows Storage Licenses About "Pointer navigation" "On-screen keyboard" "Keyboard test" "Quit to desktop" Reboot Shutdown

@@ -1,0 +1,41 @@
+# Same Settings options on every board (pinned row lists).
+# The HackBerry CM5 as it runs (board hackberry-cm5, its desktop unit's environment: APPLAUNCH_SESSION=desktop,
+# APPLAUNCH_STD_KEYBOARD=1; at 720x720 the density that matches a board capture, 6.7 px/mm), release.
+# expect_rows checks every row of the root menu and of System, in order: a row that appears, disappears or moves on
+# one board only fails here (docs/dev/native-settings-page-howto.md section 5: which rows show where, and why). The
+# root menu and System must stay the same on every board; only Keyboard test (development builds) and Quit to desktop
+# (desktop session) may differ. Review only: no golden.
+title settings rows hackberry-cm5 desktop
+review
+sizes 720x720 640x480
+env APPLAUNCH_DEV 0
+env APPLAUNCH_BOARD hackberry-cm5
+env APPLAUNCH_SESSION desktop
+env APPLAUNCH_STD_KEYBOARD 1
+@720x720 ppmm 670
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+# System: Up from Screen wraps to the last section
+key UP
+key ENTER
+wait 300
+expect_rows Storage Licenses About "Pointer navigation" "On-screen keyboard" "Quit to desktop" Reboot Shutdown
+# About on every board (also without a board profile): Storage, Licenses, About
+key DOWN
+key DOWN
+key ENTER
+wait 300
+shot settings_rows_hackberry_about
+expect_text Version
+expect_text 0.5.0
+# the board profile's label second
+# branding-allow-begin: the About page's disclaimer line (settings_about_help_model.cpp)
+expect_rows "CyberdeckZero Launcher" Board LVGL Version Build Channel Commit "Independent hobby project" "Not affiliated with M5Stack"
+# branding-allow-end
+key ESC

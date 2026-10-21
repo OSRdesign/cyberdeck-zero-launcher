@@ -101,4 +101,37 @@ development keyboard form (`settings_keyboard_page.cpp`).
 - Run `tools/dev/check-all.sh` (unit tests, render, compare, twice, header); the contact sheet of the scene is
   `out/sheets/<scene>.png` in the WSL build tree's `projects/APPLaunch/tests/render/`.
 
+## 5. Same options on every board (which rows show where)
+
+Rule: every board shows the same Settings rows. A row may differ only when its feature cannot work or means nothing
+there. All Pi boards and the PCs are one build profile (`APPLAUNCH_HW=pizero2w`, `settings_hw_profile.hpp`) and run
+the native Settings host. "Stock" means the upstream build (no `APPLAUNCH_HW`): the legacy 320x170 Settings,
+not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
+
+| Row | Condition | Where it shows today | Verdict |
+|---|---|---|---|
+| Screen > Brightness, DarkTime | none (Brightness options: levels, or On / Off on a gpio on/off backlight, `cp0_backlight_profile_kind()`) | every board | hardware-dependent (the options only) |
+| Wi-Fi (Enable, Networks, Join Hidden Network) | none | every board | aligned |
+| Bluetooth (Power, Alias, Discoverable, Named Only, Paired Devices, Scan) | none (no adapter: the pages say so) | every board | aligned |
+| Launcher (one toggle per configurable tile; Store when `APPLAUNCH_LAUNCHER_STORE_TOGGLE`) | `LAUNCHER_BUILD`; `APPLAUNCH_HIDE_TILES` sets defaults only | every board | aligned |
+| Touch | `APPLAUNCH_SETTINGS_TOUCH` (1 on our profile) | every board (stock: no) | aligned (stock has no touch panel) |
+| Apps | `APPLAUNCH_SETTINGS_APPS` (1 on our profile) | every board (stock: no, it has the Store) | aligned |
+| User, Date & Time (Info, Network Time, Set Manually) | none (Set Manually refuses while Network Time is on) | every board | aligned |
+| System > Software | `APPLAUNCH_SETTINGS_SOFTWARE_UPDATE` | stock only | hardware-dependent (stock update source) |
+| System > Storage, Licenses | none | every board | aligned |
+| System > About | none (its "Board:" line only with `APPLAUNCH_BOARD`) | every board | changed: was a board profile only |
+| System > Pointer navigation | native Settings host | every board (stock: no) | aligned |
+| System > On-screen keyboard | native Settings host | every board (stock: no, built-in keyboard) | aligned |
+| System > Keyboard test | `settings_ui::dev_pages()`: development channel or `APPLAUNCH_DEV=1` | development builds only | dev-only |
+| System > Quit to desktop | `APPLAUNCH_SESSION=desktop` (desktop unit), native host, `APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP` | desktop session only | hardware-dependent (meaningless without a desktop) |
+| System > Reboot | none | every board | aligned |
+| System > Shutdown | `APPLAUNCH_SETTINGS_SHUTDOWN` (1 on our profile, 0 stock) | every board (stock: no) | stock rule, needs owner decision for stock |
+| Speaker, Ethernet, ExtPort, Battery, Developer (ADB) | `APPLAUNCH_SETTINGS_*` (0 on our profile) | stock only | hardware-dependent (speaker, RJ45, M5IOE1 expander, bq27220 gauge, USB gadget) |
+
+The native host hides a node it has no widget for (`SettingsNodeKind::Custom`); none of our profile's nodes is one.
+System rows keep their order; rows counted from the end (Shutdown, Reboot, Quit to desktop, Keyboard test, On-screen
+keyboard) stay where they are, new rows go before them. The render scenes `settings_rows_*.scene` pin the root menu
+and System for the deck (no board), board profiles (pi3a-wsdsi43, hackberry-cm5 in its desktop session, pc-fzm1-2),
+development and release, at several sizes (`expect_rows`): a row added for one board only fails there.
+
 Definition of done for launcher UI tasks: `docs/dev/DEV-GUIDE.md`, "Build, test, deploy".

@@ -1289,6 +1289,33 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_text ok: %s\n", lv_label_get_text(label));
         return true;
     }
+    if (cmd == "expect_rows") {
+        /* expect_rows LABEL...: the list holding the visible row label LABEL (the first one) shows exactly these rows,
+         * in this order, nothing else: every row of the list, also those scrolled out of view (the native Settings
+         * roller builds one object per row, its label first; cp0_ui_roller_widget.cpp). Pins a section's row list:
+         * a row added, dropped or moved fails the scene. */
+        if (w.size() < 2) return fail(scene, line, "usage: expect_rows LABEL...");
+        const std::vector<std::string> want(w.begin() + 1, w.end());
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), want.front(), false);
+        lv_obj_t *row = label ? lv_obj_get_parent(label) : nullptr;
+        lv_obj_t *list = row ? lv_obj_get_parent(row) : nullptr;
+        if (!list) return fail(scene, line, "expect_rows: no visible row " + want.front());
+        std::vector<std::string> have;
+        const uint32_t count = lv_obj_get_child_count(list);
+        for (uint32_t i = 0; i < count; ++i) {
+            lv_obj_t *child = lv_obj_get_child(list, static_cast<int32_t>(i));
+            lv_obj_t *first = child ? lv_obj_get_child(child, 0) : nullptr;
+            const char *text = first && lv_obj_check_type(first, &lv_label_class) ? lv_label_get_text(first) : nullptr;
+            have.push_back(text ? text : "?");
+        }
+        std::string joined;
+        for (const std::string &s : have) joined += (joined.empty() ? "" : " | ") + s;
+        if (have != want) return fail(scene, line, "expect_rows: the list shows " + joined);
+        std::printf("expect_rows ok: %s\n", joined.c_str());
+        return true;
+    }
     if (cmd == "expect_color") {
         /* expect_color TEXT RRGGBB: a visible label of the native screen shows TEXT, its text colour is RRGGBB and the
          * screen as drawn has pixels of that colour (within the RGB565 rounding) inside the label's box: a colour change

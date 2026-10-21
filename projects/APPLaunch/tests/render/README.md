@@ -87,6 +87,7 @@ runs at those sizes only.
 | `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys, `SPACE` for the space bar; a label with `#` in quotes: `"#+="`), or on the text field under the field label LABEL |
 | `ptyout TEXT`, `ptyprompt TEXT`, `ptyexit`, `ptylog NAME` | the fake PTY of the terminal pages (`src/harness_services.cpp`, no process): what the program prints next (`\n` = CR LF, `\e` = Esc); the prompt the fake shell prints after Enter and ^C; the program exits; what the terminal did with the PTY (open, every write as bytes, resize, close) as `out/<WxH>/NAME.txt`. Writes are echoed as a cooked tty and a shell would (^C: "^C" and a new prompt, ^D: "exit" and the end) |
 | `listdemo compact\|comfortable ROWS [readonly] [separators] [wrap] [kinds] [empty TEXT...]`, `listdemo update` | a `cp0::ui::CompactList` page (Page scaffold, status strip, the list in the page body, an input group on the keypad) with demo rows: Compact = a system monitor (sections, value tones, long labels), Comfortable = 3 serial ports or a 12-row settings menu; `kinds`: a device page with every row affordance (Edit, Open, Info with a Normal and a Bad value, Action idle, one Unspecified, a long label and a long value beside a chevron, an Action running with a value last; Compact adds a section first); an activation writes "Activated LABEL" into the title. `update` refreshes the values in place (`set_rows`, same rows); `value\|row INDEX normal\|ok\|warn\|bad\|muted TEXT` sets one row's value and tone through `set_value` / `update_row`; `kind\|setkind INDEX unspecified\|info\|open\|edit\|action\|action-running` sets one row's affordance through `update_row` (`kind`) or the live refresh `set_rows` with the other rows unchanged (`setkind`) |
+| `expect_rows LABEL...` | fail the scene unless the list holding the visible row label LABEL (the first one: a native Settings roller, its rows scrolled out of view included) shows exactly these rows in this order |
 | `expect_color TEXT RRGGBB` | fail the scene unless a visible label shows TEXT with text colour RRGGBB and pixels of that colour are drawn in its box |
 | `expect_chevron LABEL yes\|no` | fail the scene unless the list row of the visible label LABEL shows a row-affordance chevron (`yes`: grey with pixels drawn, right of the row's texts and inside the row, its pixels centred on the row's middle within 1.5 px, a font larger than the label's, the row at the list's item height) or none (`no`) |
 | `expect_dot LABEL idle\|running\|no` | fail the scene unless the list row of the visible label LABEL shows the Action dot (`idle`: white, `running`: the accent blue; a circle of the list's dot size with its colour drawn, its pixels centred on the row's middle and in the chevron's slot within 1.5 px, right of the row's texts and inside the row, the row's value ending where a chevron row's value ends, the row at the list's item height) or none (`no`) |
@@ -131,11 +132,19 @@ NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the 
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 `settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
 review-only too.
+<<<<<<< HEAD
 `settings_native_timezone` (review-only, at 320x170, 480x320, 640x480 and 1280x800): Date & Time > Time zone from
 Etc/UTC, the row with its chevron, the regions, America's zones, a failed and a refused change, the change done (row and
 clocks), the picker reopened on the zone, Esc up one level, Network Time switched off without touching the zone, Info
 with the new offset, the home grid's clock, then Europe > Paris. `settings_native_timezone_missing` (review-only,
 480x320 and 640x480): the same page without timedated (zone Unknown, no list: only UTC, a failed change).
+=======
+`settings_rows_deck`, `settings_rows_deck_dev`, `settings_rows_pi3a`, `settings_rows_hackberry`,
+`settings_rows_hackberry_dev`, `settings_rows_pc` (review-only): the same Settings options on every board. Each pins
+the root menu and System with `expect_rows` (and the About page's lines: a "Board" line only with a board profile) for
+the deck without a board profile, pi3a-wsdsi43, hackberry-cm5 in its desktop session, pc-fzm1-2, release and
+development, at 480x320 to 1280x800 (`docs/dev/native-settings-page-howto.md` section 5).
+>>>>>>> 4a53d57 (Settings: pin the same options on every board (expect_rows scenes, audit))
 `ssh_native` (task 014 P4, review-only, `APPLAUNCH_OSK=force`): the native SSH form (labels beside the fields) with the
 keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
 (keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.
