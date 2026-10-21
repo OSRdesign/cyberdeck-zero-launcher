@@ -100,7 +100,7 @@ arm64 apps, which do not install on a PC).
   over from netplan / systemd-networkd. The end of the install prints the recipe when `nmcli` is missing.
 
 **NetworkManager on a netplan system** (the FZ-M1's Armbian: systemd-networkd and a netplan Wi-Fi entry). On the
-console, not from an ssh session over Wi-Fi (the link drops while it switches):
+console, not from an ssh session over Wi-Fi (the link drops while it switches, and at the reboot):
 
 ```
 sudo apt install network-manager
@@ -108,14 +108,22 @@ sudo cp -a /etc/netplan /etc/netplan.bak-applaunch
 echo 'network: {version: 2, renderer: NetworkManager}' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml
 sudo chmod 600 /etc/netplan/90-applaunch-networkmanager.yaml
 sudo netplan apply
-nmcli device                    # the Wi-Fi interface "connected": Settings > Wi-Fi works
+sudo reboot
+nmcli -t device status          # after the reboot: the Wi-Fi line ends in ":connected", not ":unavailable"
 ```
 
-The netplan Wi-Fi entries then come up under NetworkManager (the last file's `renderer` wins). A Wi-Fi entry with its
-own `renderer: networkd` line keeps networkd: change that line too (the backup is in `/etc/netplan.bak-applaunch`).
-If the boot then waits about 2 minutes for the network (`systemd-networkd-wait-online`, nothing left for networkd to
-bring up): `sudo systemctl disable systemd-networkd-wait-online.service`. Roll back, on the console:
-`sudo rm /etc/netplan/90-applaunch-networkmanager.yaml && sudo apt remove network-manager && sudo netplan apply`
+**Reboot after `netplan apply`** (measured on the FZ-M1): netplan's own Wi-Fi supplicant,
+`netplan-wpa-<interface>.service` (a `wpa_supplicant -c /run/netplan/wpa-<interface>.conf`), keeps running after
+the apply although its unit file is gone, and holds the interface. NetworkManager then logs "wpa_supplicant couldn't
+grab this interface", the device stays `unavailable` and Settings > Wi-Fi says "Wi-Fi service unavailable". The reboot
+ends it; without one, `sudo systemctl stop netplan-wpa-<interface>.service` on the console does too.
+
+The netplan Wi-Fi entries then come up under NetworkManager (`netplan-<interface>-<SSID>`; the last file's `renderer`
+wins). A Wi-Fi entry with its own `renderer: networkd` line keeps networkd: change that line too (the backup is in
+`/etc/netplan.bak-applaunch`). If the boot then waits about 2 minutes for the network (`systemd-networkd-wait-online`,
+nothing left for networkd to bring up): `sudo systemctl disable systemd-networkd-wait-online.service`. Roll back, on
+the console, with a reboot as well:
+`sudo rm /etc/netplan/90-applaunch-networkmanager.yaml && sudo apt remove network-manager && sudo netplan apply && sudo reboot`
 (and `sudo systemctl enable systemd-networkd-wait-online.service` if you disabled it).
 
 **Get the bundle**: `cyberdeckzero-launcher-<version>-amd64.tar.gz` from the releases (from the first release after

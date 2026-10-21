@@ -1142,15 +1142,25 @@ if [ "$NEED_NM" = 1 ]; then
           echo 'network: {version: 2, renderer: NetworkManager}' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml
           sudo chmod 600 /etc/netplan/90-applaunch-networkmanager.yaml
           sudo netplan apply
-        Check: nmcli device (the Wi-Fi "connected"), then Settings > Wi-Fi. Roll back (on the console):
+          sudo reboot
+        The reboot is needed: netplan's own Wi-Fi supplicant (netplan-wpa-<interface>.service, a wpa_supplicant
+        on /run/netplan/wpa-<interface>.conf) keeps running after "netplan apply" and holds the interface, so
+        NetworkManager cannot take it ("wpa_supplicant couldn't grab this interface", the device "unavailable",
+        Settings > Wi-Fi "Wi-Fi service unavailable"). Without a reboot, on the console:
+          sudo systemctl stop netplan-wpa-<interface>.service
+        An ssh session over Wi-Fi drops either way. Check after the reboot:
+          nmcli -t device status        (the Wi-Fi line ends in ":connected", not ":unavailable")
+        then Settings > Wi-Fi. Roll back (on the console, then reboot as well):
           sudo rm /etc/netplan/90-applaunch-networkmanager.yaml
           sudo apt remove network-manager
           sudo netplan apply
+          sudo reboot
         Details (a Wi-Fi entry with its own "renderer: networkd", a slow boot): README.md, "Install on a PC (amd64)".
 EOF
     else
         echo "          sudo apt install network-manager"
-        echo "        and let NetworkManager manage the Wi-Fi interface (no other service for it: ifupdown, networkd)."
+        echo "        and let NetworkManager manage the Wi-Fi interface (no other service for it: ifupdown, networkd,"
+        echo "        a wpa_supplicant of its own), then reboot. Check: nmcli -t device status (the Wi-Fi \":connected\")."
     fi
 fi
 echo "Next: pair the keyboard if you have not yet (bluetoothctl: scan on / pair / trust / connect)."

@@ -848,6 +848,7 @@ else
 fi
 if ! command -v nmcli >/dev/null 2>&1; then
     check "fake PC install: NetworkManager missing: the notice names it, Settings > Wi-Fi, the netplan recipe and the roll-back" 'has "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager" && has "on the console" && has "sudo apt install network-manager" && has "echo '"'"'network: {version: 2, renderer: NetworkManager}'"'"' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml" && has "sudo netplan apply" && has "Roll back" && has "sudo rm /etc/netplan/90-applaunch-networkmanager.yaml"'
+    check "fake PC install: the recipe reboots after netplan apply (netplan-wpa-<interface> holds the Wi-Fi), the check, the roll-back reboots too" 'has "          sudo reboot" && has "sudo systemctl stop netplan-wpa-<interface>.service" && has "nmcli -t device status" && has ":connected\", not \":unavailable\"" && has "An ssh session over Wi-Fi drops" && [ "$(printf "%s\n" "$OUT" | grep -c "^          sudo reboot$")" = 2 ]'
 fi
 # the packages missing: apt-get installs polkitd and bluez (never network-manager)
 R=$(pc_root pc-missing)
