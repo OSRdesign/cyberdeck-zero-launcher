@@ -2,7 +2,9 @@
 
 CyberdeckZero Launcher on Raspberry Pi boards with a touch panel and a keyboard. Supported boards: the **Pi Zero 2 W
 deck** (Waveshare 2.8" DPI touch LCD, 480x640 portrait used as 640x480 landscape, Bluetooth keyboard), the **Pi 3A+**
-with the Luckfox 3.5" SPI panel and the **HackBerry Pi CM5** (720x720). The port is selected at run time with
+with the Luckfox 3.5" SPI panel and the **HackBerry Pi CM5** (720x720). Since phase x-b of the x86 port (report 028)
+the same launcher also installs on **PCs** (x86_64, the amd64 bundle; the Panasonic FZ-M1 tablet first): see
+[Install on a PC](#install-on-a-pc-amd64). The port is selected at run time with
 `APPLAUNCH_DISPLAY=dpi-scaled` and at build time with `APPLAUNCH_HW=pizero2w`; the stock CardputerZero behaviour of the
 upstream code is unchanged when neither is set. See [`NAMING.md`](../../../NAMING.md) for the product and technical names.
 
@@ -19,7 +21,7 @@ locations did not (`/usr/share/APPLaunch`, `APPLAUNCH_*`, `~/.config/cardputerze
 | Desktop unit (desktop boards) | `cyberdeckzero-desktop.service` | `cyberdeckzero-desktop.service` |
 | PolicyKit rule (desktop boards) | renamed to match the desktop unit | `52-cyberdeckzero-desktop.rules` |
 | Menu entry (desktop boards) | `cyberdeckzero.desktop`, "CyberdeckZero Launcher" | `cyberdeckzero.desktop` |
-| Release asset | `cyberdeckzero-launcher-<version>-arm64.tar.gz` (the first release after the rename also carries it as `pizero2w-bundle.tar.gz`) | `pizero2w-bundle.tar.gz` |
+| Release asset | `cyberdeckzero-launcher-<version>-arm64.tar.gz` (the first release after the rename also carries it as `pizero2w-bundle.tar.gz`); PCs: `cyberdeckzero-launcher-<version>-amd64.tar.gz` | `pizero2w-bundle.tar.gz` |
 
 `install.sh` migrates a board installed with the old names: it disables and removes the old user unit (also when
 lingering keeps it running), removes the retired unit, rule and menu files, installs the new ones and keeps the old
@@ -38,7 +40,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings (native, full screen) takes taps and drags directly, and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
 | Settings | Hardware profile (`settings_hw_profile.hpp`) hides what a Pi lacks (speaker, Ethernet, ExtPort, battery, ADB, software update) and adds Shutdown; real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. |
-| Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present. Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
+| Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present (a keyboard listed in `APPLAUNCH_KBD_IGNORE` does not count); in a terminal it has an **Alt** key next to Ctrl (one-shot, double tap locks: Alt then Tab is Alt+Tab). Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
 | Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
 | Launcher | **Settings > Launcher** shows or hides the built-in tiles, the **Store** included (it needs a keyboard, so a touch-only board can hide it; shown by default, `APPLAUNCH_LAUNCHER_STORE_TOGGLE` in `settings_hw_profile.hpp`). Hiding the Store tile does not affect Settings > Apps. |
@@ -65,7 +67,8 @@ kept as `*.bak-applaunch`). On a board that boots to a desktop it installs the d
 [Desktop boards](#desktop-boards)). To take it all off again, see [Uninstall](#uninstall).
 
 It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
-for Debian 13 trixie. `sudo ./install.sh --dry-run` prints the detected board and what would be done.
+for Debian 13 trixie. It also refuses a bundle of the other architecture (it reads the launcher's ELF header: arm64 on
+a Pi, amd64 on a PC). `sudo ./install.sh --dry-run` prints the detected board and what would be done.
 
 **Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
 password). When that user has no app source yet (no `~/.local/share/cardputerzero-appstore/registries.json`, or one
@@ -76,6 +79,41 @@ a source you remove or switch off in Settings > Apps > Sources stays removed aft
 during the install, the source is added but not synced: Settings > Apps > Sources > Sync my sources (key `S`) fetches
 it. `--no-default-source` skips all of this. By hand, as the user (never with sudo):
 `sh default-sources.sh --dry-run` shows what it would do, `sh default-sources.sh` does it.
+
+## Install on a PC (amd64)
+
+Phase x-b of the x86 port (report 028, decisions X1-X15 of 2026-10-21): the same launcher, fbdev and LVGL with no
+display server, on an x86_64 PC with a built-in touch panel. Reference machine: the Panasonic FZ-M1 mk2 tablet
+(`pc-fzm1-2`, Armbian on Ubuntu 26.04). Apps from Settings > Apps come in phase x-c (until then its sources list
+arm64 apps, which do not install on a PC).
+
+**Requirements.**
+- glibc 2.38 or newer: Debian 13, Ubuntu 24.04 or 26.04, Armbian on them (not Debian 12 or Ubuntu 22.04). Any x86-64
+  CPU (no AVX needed). systemd, logind, polkit, udev.
+- The DRM driver's framebuffer `/dev/fb0` (`CONFIG_DRM_FBDEV_EMULATION`, `CONFIG_FB_DEVICE`; i915 has it), a touch
+  panel that reports as a direct touch device, a keyboard (USB or Bluetooth; the on-screen keyboard is the fallback).
+- **NetworkManager and BlueZ** for Settings > Wi-Fi and Bluetooth: install them yourself
+  (`sudo apt install network-manager bluez`). install.sh does not, and says so when they are missing. Moving a PC's
+  network from netplan / systemd-networkd to NetworkManager can cut an ssh session: do it on the console.
+
+**Get the bundle**: `cyberdeckzero-launcher-<version>-amd64.tar.gz` from the releases (from the first release after
+x-b), or build it natively on an x86_64 Linux or WSL box:
+`projects/APPLaunch/pizero2w/build.sh --arch amd64 [--with-store]` (or `tools/dev/wsl-build.sh --arch amd64
+--with-store`). It needs `gcc g++ pkg-config libinput-dev libxkbcommon-dev libudev-dev libdbus-1-dev libglib2.0-dev
+libfreetype-dev`, and `libssl-dev` for the Store (the Settings > Apps engine). The layout is the arm64 bundle's.
+
+**Install**: unpack it on the PC and run `cd bundle && sudo ./install.sh`, as on a Pi. On a PC (x86_64, no device
+tree) it writes the `pc` profile (see [Boards](#boards)), installs `libinput10 libxkbcommon0 libfreetype6 curl` when
+missing and names any other library the launcher lacks, creates the `netdev` group if the distribution has none, and
+installs the user service with lingering, the console unit (it unbinds the kernel's framebuffer console, `vtcon1` on
+the FZ-M1, as on the Pi boards) and the udev and PolicyKit rules. **No boot configuration is changed**: GRUB and the
+kernel command line stay as they are (the boot lines show, then the launcher). A PC that boots to a desktop (a display
+manager) gets the desktop variant, as a Pi does.
+
+**Known limits.** The FZ-M1's touch reports at most two contacts: the three-finger switcher gesture cannot fire there;
+use the clock long-press or Alt+Tab (the terminal's on-screen keyboard has Alt). No battery in the status strip yet
+(x-d). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
+Launcher shows it again if wanted.
 
 ## Multitasking
 
@@ -108,21 +146,23 @@ panel at 480x320, 320x170) it is off and the launcher behaves as before.
   `echo close-all > /run/user/$(id -u)/applaunch/multitask.ctl` closes every app the launcher keeps.
 - **Known limits:** the HackBerry CM5's touch reports at most two contacts, so there it is Alt+Tab only (which does
   nothing while an app without `X-Background` is in front), and its first-run hint still says "Hold three fingers".
+  The FZ-M1 tablet has the same two-contact limit (clock long-press or Alt+Tab).
   viz1090 does not support multitasking and can hang on three-finger touches (hold Esc 3 s closes it). Net Toolbox
   stays a legacy app.
 
 ## Boards
 
 `install.sh` detects the board from `/proc/device-tree/model`, the connected DRM connectors (`/sys/class/drm`) and
-the framebuffers (`/sys/class/graphics`):
+the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no device tree) and DMI (`/sys/class/dmi/id`):
 
 | Board | Detected by | Profile |
 | --- | --- | --- |
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
-| `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator; the only backlight device if that one is absent, none if there is none); config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
+| `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
 | `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer` |
 | `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
+| `pc-<model>`: a PC (amd64 bundle), e.g. `pc-fzm1-2` (Panasonic FZ-M1 mk2) | x86_64 with no device tree, a framebuffer (the DRM driver's, `*drmfb`, first); `<model>` is the DMI product name in lower case | `board.conf`: `APPLAUNCH_DISPLAY=dpi-scaled`, that framebuffer, `APPLAUNCH_LOGICAL` = its size, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_PANEL_MM` from the connected connector's EDID (eDP first; the detailed timing's mm, else the cm of the basic block), else a table of known models (FZM1-2: 150x93), else none (default density, large controls); touch `auto` / `buffer`; `APPLAUNCH_BACKLIGHT=sysfs:` the first backlight (`intel_backlight` first) and its udev rule; on a tablet (SMBIOS chassis 30 or 32, or a known tablet) `APPLAUNCH_KBD_IGNORE=bus:0011`; `APPLAUNCH_HIDE_TILES=app_Store`. No boot configuration (GRUB, kernel command line), no dtc |
 | anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report. A Pi 3A+ with both its panels connected is not guessed: choose with `--board`. With `--force`, the deck's PWM backlight overlay is added only on a model that is not one of the boards above (a Pi 3A+, Pi 5 or CM5 whose panel was not recognised keeps its config.txt) |
 
 **Waveshare 4.3" DSI panel (`pi3a-wsdsi43`):** set up `/boot/firmware/config.txt` yourself before the install;
@@ -155,8 +195,19 @@ APPLAUNCH_ROTATE=90                  # 0|90|180|270 clockwise pre-rotation into 
 APPLAUNCH_COMPAT_SCALE=1             # 1 or 2: scale of the 320x170 stock-app window (default 2)
 APPLAUNCH_TOUCH_DEV=auto             # auto = pick by capability, or /dev/input/eventN
 APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuffer; legacy = SWAP_XY/INVERT_* env (default legacy)
-APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> brightness | pwm
+APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> brightness levels
+APPLAUNCH_KBD_IGNORE=bus:0011        # keyboards that do not count as connected (names, bus:XXXX; drop:... = not read either)
+APPLAUNCH_HIDE_TILES=app_Store       # home tiles hidden by default (Settings > Launcher can show them)
 ```
+
+`APPLAUNCH_BACKLIGHT=sysfs:<dir>` (since x-b; before, it fell back to `/sys/class/backlight/backlight`) writes
+`<dir>/brightness` in levels from 0 to `<dir>/max_brightness`: the Settings slider (10 % steps, never under 10 %),
+the hotkeys, the screensaver's dim and the sleep / wake all use it. `APPLAUNCH_KBD_IGNORE` is a comma list of device
+names exactly as `/proc/bus/input/devices` prints them and `bus:XXXX` entries (hex: `bus:0011` = the i8042
+keyboard of a laptop or tablet). A listed keyboard is still read (its keys work: a tablet's buttons, a keyboard
+dock), but it does not count as "a keyboard is connected", so the on-screen keyboard shows when no other keyboard is
+there; an entry prefixed `drop:` (`drop:<name>`, `drop:bus:XXXX`) is not read at all (a barcode scanner that must
+not type into the launcher).
 
 The `pi3a-luckfox35` and `pi3a-wsdsi43` profiles also set `LV_LINUX_FBDEV_DEVICE` to the same framebuffer and
 `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y=0`, so the deck's touch axes from the service do not apply.
@@ -274,7 +325,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 
 | File | Purpose |
 | --- | --- |
-| `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host) / install it (Pi) / remove it again (Pi). |
+| `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host; `--arch arm64` by default, `--arch amd64` natively for PCs) / install it (Pi or PC) / remove it again. |
 | `default-sources.sh` | Adds the apps repo to Settings > Apps once for a user with no source yet (run by `install.sh` as that user; see "Default app source"). |
 | `cyberdeckzero.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
 | `cyberdeckzero-console`, `cyberdeckzero-console.service` | The text console helper (installed in `/usr/share/APPLaunch/bin`: `unbind`, `bind`, `status`, `restore-desktop UNIT`) and the appliance boards' boot-time unit that frees the panel from the console ([Text console](#text-console)). |
@@ -305,7 +356,7 @@ per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides th
 - Stock apps contain their own copy of the Cardputer's matrix keymap, so punctuation typed inside them may
   differ; the launcher's own pages are not affected.
 - The Pi Zero 2W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound.
-- There is no battery gauge or hardware RTC; the clock comes from Network Time.
+- There is no battery gauge or hardware RTC; the clock comes from Network Time. A PC's battery is not shown yet (x-d).
 - Entries hidden by the hardware profile are kept in the source and compiled out (`#if`), not deleted.
 
 ## Reverting the PWM backlight

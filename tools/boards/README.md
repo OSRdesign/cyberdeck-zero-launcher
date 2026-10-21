@@ -7,6 +7,7 @@ accepted too); it is never stored, never on a command line (sudo reads it on std
 
 ```
 python board.py upload     pi3a C:/path/cyberdeckzero-launcher-dev-arm64.tar.gz   # upload, unpack to /tmp/applaunch-bundle, stage ~/applaunch-test
+python board.py upload     fzm1 C:/path/cyberdeckzero-launcher-dev-amd64.tar.gz   # the PC tablet takes the amd64 bundle
 python board.py install    pi3a [--check] [--force]              # sudo install.sh --user <user> (--check = install.sh --dry-run)
 python board.py test-start pi5 --env APPLAUNCH_OSK=force
 python board.py grab       pi5 C:/tmp/pi5.png [--raw]            # framebuffer, turned the way the user sees it
@@ -21,6 +22,12 @@ python board.py status     deck
 | pi3a-dsi | 192.168.68.170 | service | /dev/fb0 800x480 RGB565 (Waveshare 4.3" DSI) | none |
 | pi5 | 192.168.68.175 | desktop | /dev/fb0 480x800 32 bpp | 90 deg CCW |
 | hackberry | 192.168.68.214 | desktop | /dev/fb0 720x720 32 bpp | none |
+| fzm1 | 192.168.68.183 | service, **amd64** | /dev/fb0 1280x800 32 bpp (Panasonic FZ-M1 mk2 tablet, i915) | none |
+
+- **arch** (`boards.json`, default `arm64`): the bundle a board takes. `upload` refuses a bundle of the other arch:
+  by its file name (`-arm64` / `-amd64`), by its launcher's ELF header when the tarball is on this machine, and on the
+  board (the payload's ELF header against `uname -m`) right after unpacking. `fzm1` is amd64; its `test_env` is
+  install.sh's pc profile. It boots to the text console with no display manager, so it is a service board.
 
 - **service** boards run the installed launcher as the user service `cyberdeckzero.service` (`APPLaunch.service` up to
   v0.6.0; install.sh migrates it). `test-start` stops it (and `APPLaunch.service` on a board not migrated yet) and
