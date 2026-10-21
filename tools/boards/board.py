@@ -9,7 +9,8 @@
                                                           run the bundle's install.sh (sudo) for the board's user
                                                           (--force is passed to install.sh: unknown board, edited profile)
     python board.py [--dry-run] test-start BOARD [--env K=V ...]
-                                                          run the staged test launcher (desktop boards: stop the display manager first)
+                                                          run the staged test launcher (desktop boards: stop the
+                                                          display manager first)
     python board.py [--dry-run] test-stop  BOARD          stop it, restore the desktop / the installed launcher, remove test files
     python board.py [--dry-run] grab       BOARD OUT.png  framebuffer screenshot, turned the way the user sees the panel
     python board.py [--dry-run] status     BOARD          launcher, services / desktop, text console, test files, board profile

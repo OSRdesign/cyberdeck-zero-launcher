@@ -2,7 +2,8 @@
 # PC test of install.sh's board detection and profile handling, and of uninstall.sh's plan, against the fake
 # /proc and /sys trees in fixtures/ (SYSROOT and UNINSTALL_ROOT test hooks), of default-sources.sh (the default
 # app source) against a temp state folder and a fake Store backend, and of a whole install, the migration from the
-# names of v0.6.0 and before, and a whole uninstall into a fake root (INSTALL_FAKE_SYSTEM=1, stand-ins for systemctl,
+# names of v0.6.0 and before, the switch between the appliance and the desktop variant (a desktop installed or removed
+# later), and a whole uninstall into a fake root (INSTALL_FAKE_SYSTEM=1, stand-ins for systemctl,
 # runuser, sudo and the other system commands first on PATH). Changes nothing outside a temp dir, needs no root and
 # no Pi. Run:   sh projects/APPLaunch/pizero2w/tests/test-install-board.sh
 set -u
