@@ -575,6 +575,14 @@ gzip -dc "$fx/mtrec-zero7-20261020-000730.csv.gz" | "$binary" - 640x480 0/0 0
 gzip -dc "$fx/mtrec-zero7-20261020-000753.csv.gz" | "$binary" - 640x480 8/10 0
 gzip -dc "$fx/mtrec-PI3A-20261020-002544.csv.gz" | "$binary" - 800x480 9/10 0
 
+# Multitasking P-e: the app side of the lifecycle protocol (parse, environment, hide / show / close over a socketpair,
+# the answer, the launcher going away, the key rule); AddressSanitizer + UndefinedBehaviorSanitizer as above
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $mt_san \
+    -I"$root/include" \
+    "$root/src/cp0_app_lifecycle.c" \
+    "$root/tests/test_app_lifecycle.c" -o "$binary"
+"$binary"
+
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/include" \
     "$root/src/cp0/cp0_input_state.c" \

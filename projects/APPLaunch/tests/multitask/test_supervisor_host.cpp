@@ -9,7 +9,8 @@
 // while hidden, the cap, the memory floor, Esc held 3 s, Alt+Tab from evdev, the dev FIFO, shutdown and the guardian.
 // P-c: a FIFO stands in for the touch screen (protocol B events, as the deck's Goodix sends them): the three-finger
 // hold G1 read passively while an app is in front, the switcher stand-in it runs, the false positives, the dev FIFO's
-// g1 / g2 and the launcher's own gestures.
+// g1 / g2 and the launcher's own gestures. P-e: the freeze, run and close scenarios again with fbhapp --helper, whose
+// control socket is driven by the toolkit's app-side helper (ext_components/cp0_lvgl cp0_app_lifecycle.c).
 //
 //   test_supervisor_host <fbhapp binary> <work dir>
 #include "multitask/supervisor.hpp"
@@ -477,15 +478,19 @@ int fired_held_ms(Rig &r)
 
 /* ---------------------------------------------------------------------------------------------- scenarios */
 
-void scenario_freeze_cycle()
+/* helper: "--helper" = fbhapp drives its control socket with the toolkit's app-side helper (cp0_app_lifecycle.c, P-e)
+ * instead of its own code; the same checks */
+void scenario_freeze_cycle(const std::string &helper = std::string())
 {
-    std::printf("== freeze: hide, ack, SIGSTOP, snapshot, no write while hidden, stale input drained, restore\n");
+    std::printf("== freeze%s: hide, ack, SIGSTOP, snapshot, no write while hidden, stale input drained, restore\n",
+                helper.empty() ? "" : " (app-side helper)");
     Rig r(SupervisorConfig(), "freeze");
     App a = make_app("frz");
-    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze, helper));
     check("app started and draws", r.pump(3000, [&] { return app_logged(a, "rec=start") && !r.fb.is_launcher_page() &&
                                                             r.fb.copy() != std::vector<uint8_t>(kLen, 0); }));
     check("control socket given (contract=1)", app_logged(a, "contract=1"));
+    if (!helper.empty()) check("the helper drives the socket", app_logged(a, "helper=1"));
     check("display suspended before the app ran", r.fb.suspended.load());
     const int pgid = r.pgid("frz");
     check("pgid known", pgid > 0, r.status());
@@ -528,12 +533,13 @@ void scenario_freeze_cycle()
     check("app ended at shutdown", app_logged(a, "rec=end"));
 }
 
-void scenario_run_mode()
+void scenario_run_mode(const std::string &helper = std::string())
 {
-    std::printf("== run: hidden running, not stopped, oom 700, keeps working, no draw while hidden\n");
+    std::printf("== run%s: hidden running, not stopped, oom 700, keeps working, no draw while hidden\n",
+                helper.empty() ? "" : " (app-side helper)");
     Rig r(SupervisorConfig(), "run");
     App a = make_app("run");
-    r.sup->launch(spec_for(a, r.fb.path, Background::Run));
+    r.sup->launch(spec_for(a, r.fb.path, Background::Run, helper));
     check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
     r.pump_for(200);
     const int pgid = r.pgid("run");
@@ -601,12 +607,13 @@ void scenario_slow_ack_not_responding()
     r.sup->stop();
 }
 
-void scenario_close_frozen()
+void scenario_close_frozen(const std::string &helper = std::string())
 {
-    std::printf("== close a frozen app: SIGCONT first, close message, graceful exit\n");
+    std::printf("== close a frozen app%s: SIGCONT first, close message, graceful exit\n",
+                helper.empty() ? "" : " (app-side helper)");
     Rig r(SupervisorConfig(), "close");
     App a = make_app("cls");
-    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze, helper));
     check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
     r.pump_for(150);
     r.sup->go_launcher();
@@ -1480,6 +1487,10 @@ int main(int argc, char **argv)
     scenario_draw_hidden_negative();
     scenario_slow_ack_not_responding();
     scenario_close_frozen();
+    /* P-e: the same three with the toolkit's app-side helper speaking the protocol */
+    scenario_freeze_cycle("--helper");
+    scenario_run_mode("--helper");
+    scenario_close_frozen("--helper");
     scenario_close_ignores_close_message();
     scenario_exit_and_kill_while_hidden();
     scenario_esc_hold();

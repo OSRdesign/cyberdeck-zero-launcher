@@ -718,6 +718,27 @@ int cp0_display_touch_sync(void)
 
 int cp0_display_touch_slots(void) { return touch_path[0] ? tc.slots : 0; }
 
+int cp0_display_touch_resync(void)
+{
+    if (!touch_path[0]) return 0;
+    (void)cp0_touch_reader_read(&tc.rd, NULL, NULL); /* what came while the app was hidden: dropped */
+    if (tc.rd.t.mt) {
+        cp0_touch_reader_resync(&tc.rd); /* the contacts down now: a lift during a grab or a drain was never seen */
+    } else {
+        /* a panel without slots: down or up from the key state (released when it cannot be read) */
+        unsigned long keys[(KEY_CNT + 8 * sizeof(unsigned long) - 1) / (8 * sizeof(unsigned long))];
+        memset(keys, 0, sizeof(keys));
+        const unsigned bits = 8 * sizeof(unsigned long);
+        tc.rd.t.ptr_pressed = ioctl(tc.fd, EVIOCGKEY(sizeof(keys)), keys) >= 0 &&
+                              ((keys[BTN_TOUCH / bits] >> (BTN_TOUCH % bits)) & 1ul) != 0;
+    }
+    tc.pressed = false;
+    was_pressed = false;
+    const int down = cp0_touch_slots_down(&tc.rd.t);
+    if (down > 0) swallow_mode = 2; /* the finger that brought the app back presses nothing until it is lifted */
+    return down;
+}
+
 void cp0_display_set_overlay_rect(int x, int y, int w, int h)
 {
     overlay.x = x;
