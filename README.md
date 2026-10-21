@@ -15,6 +15,8 @@ Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ wi
 backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
+Since v0.8.0 it also keeps apps open in the background, with a touch-first app switcher (see
+[Multitasking](#multitasking)).
 
 ## How it started
 
@@ -99,6 +101,29 @@ who learns a lot from open source:
 Thank you all for your contribution to open source, and for making it possible for hobbyists like me to build
 and tinker with things like this.
 <!-- branding-allow-end -->
+
+## Multitasking
+
+New in v0.8.0: a touch-first app switcher made for low-power boards. Up to 4 apps stay open; switching back to one
+puts its last picture back at once and it carries on where it was.
+
+- **Open the switcher ("Open apps"):** hold three fingers still on the screen for 1 s, anywhere, or long-press the
+  clock / status strip for 0.5 s. With a keyboard: Alt+Tab (release Alt to switch), and Super goes to the home grid.
+  The switcher shows a card per open app, **Home** and **Close all**.
+- **Apps that support it** declare `X-Background=run` (keeps working while hidden: Mesh Hop, Serial Console) or
+  `X-Background=freeze` (stopped while hidden, no CPU: RSS Reader, System Monitor) in their `.desktop` file
+  ([app contract, section 13](docs/APP-CONTRACT.md#13-lifecycle-hidden-and-resumed-multitasking); the toolkit helper
+  `cp0_app_lifecycle` in `cp0_lvgl` does the work). Apps that declare nothing are paused behind a **Close / Keep**
+  sheet instead.
+- A **green dot** on a home tile marks an app that is open in the background. When memory runs low the launcher
+  closes the least recently used hidden app, and hidden apps are the first the kernel may kill.
+- **Where it is on:** by default on screens of 640x480 and more (the deck, the Pi 3A+ DSI, the HackBerry CM5); off on
+  smaller ones (480x320, 320x170), where the launcher behaves as before. `APPLAUNCH_MULTITASK=0` in the launcher's
+  environment turns it off, `=1` forces it on (how: [Pi port README](projects/APPLaunch/pizero2w/README.md#multitasking)).
+- **Known limits:** the HackBerry CM5's touch reports at most two fingers, so there the switcher is Alt+Tab only, and
+  Alt+Tab does nothing while an app without `X-Background` is in front; its first-run hint still says "Hold three
+  fingers". viz1090 does not support multitasking and can hang on a three-finger touch (hold Esc 3 s closes it). Net
+  Toolbox stays a legacy app (Close / Keep sheet).
 
 ## Your own apps
 

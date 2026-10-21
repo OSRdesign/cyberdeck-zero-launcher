@@ -289,7 +289,8 @@ section L.
 
 ## 13. Lifecycle: hidden and resumed (multitasking)
 
-**Status: contract 1, additive** (no `v=` change, section 8; final since multitasking phase P-e). The launcher side is
+**Status: contract 1, additive** (no `v=` change, section 8; final since multitasking phase P-e; **shipped in launcher
+v0.8.0**). The launcher side is
 task 015 (`docs/dev/tasks/015-multitasking-pb.md`, `-pc.md`, `-pd.md`). Multitasking is **on by default** on logical
 canvases of 640x480 and more (the size the switcher was designed for) and off below them (480x320, the 320x480 SPI
 panel turned to 480x320, the 320x170 board: the launcher behaves as before multitasking). `APPLAUNCH_MULTITASK=0`
