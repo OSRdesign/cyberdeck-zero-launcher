@@ -22,9 +22,6 @@ projects/AppStore/**                      # M5Stack's CardputerZero Store (submo
 # --- Build files that name upstream download locations ---
 projects/APPLaunch/SConstruct             # arm64 sysroot archive downloaded from an upstream release (report 029)
 
-# --- Stock-profile code our boards cannot reach (report 025 section 4 item 8) ---
-ext_components/cp0_lvgl/src/sdl/**        # SDL simulator: window title, alias, stock binary/lock names
-
 # --- History: decisions, reports, tasks ---
 docs/dev/decisions.md
 docs/dev/reports/**

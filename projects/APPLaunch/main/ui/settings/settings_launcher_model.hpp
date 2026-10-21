@@ -23,14 +23,14 @@ struct AppEntry
 };
 
 // Settings and CLI never get a toggle. The Store is not listed here: its descriptor decides (configurable where the
-// hardware profile sets APPLAUNCH_LAUNCHER_STORE_TOGGLE, always on and not configurable on the stock CardputerZero).
+// hardware profile sets APPLAUNCH_LAUNCHER_STORE_TOGGLE, always on and not configurable in the default profile).
 inline bool is_protected_launcher_app(std::string_view config_key)
 {
     return config_key == "app_Setting" ||
            config_key == "app_CLI";
 }
 
-// The bundled Store is the stock one, unchanged: Settings > Launcher credits it in a read-only row right under its toggle
+// The bundled Store is the upstream one, unchanged: Settings > Launcher credits it in a read-only row right under its toggle
 // (only where the toggle exists, i.e. the Store row is listed). Same text as the Licenses page.
 inline constexpr const char *kStoreCredit = "CardputerZero Store by M5Stack";
 

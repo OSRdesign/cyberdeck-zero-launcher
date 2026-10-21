@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 #
 # Task 014 P3e: Settings > Launcher lists the Store on the Pi boards (it can be hidden: a touch-only board cannot use
-# it), the stock CardputerZero keeps it always on. The switch is APPLAUNCH_LAUNCHER_STORE_TOGGLE in
+# it), the default profile keeps it always on. The switch is APPLAUNCH_LAUNCHER_STORE_TOGGLE in
 # settings_hw_profile.hpp; the built-in app table and the render harness's copy of it must both follow it, and the
 # Settings > Launcher filter must not drop the Store by its key.
 
@@ -25,8 +25,8 @@ def macro_values(text: str) -> list:
     return re.findall(r"#define\s+" + MACRO + r"\s+(\d)", text)
 
 
-# Pi block first (#if defined(APPLAUNCH_HW_PIZERO2W)), then the stock block (#else)
-pi_block, stock_block = PROFILE.split("#else // stock CardputerZero", 1)
+# Pi block first (#if defined(APPLAUNCH_HW_PIZERO2W)), then the default block (#else)
+pi_block, stock_block = PROFILE.split("#else // default profile (no APPLAUNCH_HW)", 1)
 assert macro_values(pi_block) == ["1"], macro_values(pi_block)
 assert macro_values(stock_block) == ["0"], macro_values(stock_block)
 

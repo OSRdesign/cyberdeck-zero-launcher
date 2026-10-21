@@ -10,14 +10,16 @@
 #   A hit is allowed when, after removing the allowed tokens below from the line, no brand word remains:
 #     - SPDX-FileCopyrightText lines of M5Stack Technology CO LTD (MIT notice, must stay)
 #     - names inherited from upstream that stay (NAMING.md): cp0_ APPLaunch APPLAUNCH_ M5APPSTORE_
-#       .config/cardputerzero cardputerzero-appstore /proc/cardputerzero_hw_id /com/cardputerzero/applaunch
-#       M5CardputerZero-APPLaunch_fcntl.lock (lock file the stock apps share)
-#     - the Store and stock apps (M5Stack's code, unchanged): M5CardputerZero-AppStore (M5)CardputerZero-Calculator
-#       "CardputerZero Hub" cardputerzero.github.io cardputer-zero-repo
-#     - hardware names: M5IOE1 (I/O expander), tca8418_keypad_m5stack_keymap (stock keymap file)
-#     - "stock CardputerZero" (a reference to the upstream device profile)
+#       .config/cardputerzero cardputerzero-appstore /com/cardputerzero/applaunch
+#       M5CardputerZero-APPLaunch_fcntl.lock (lock file shared with legacy apps)
+#     - the bundled Store (M5Stack's code, unchanged): M5CardputerZero-AppStore, "CardputerZero Hub",
+#       cardputerzero.github.io cardputer-zero-repo
+#     - the keymap file name tca8418_keypad_m5stack_keymap (inherited keyboard path)
 #     - the approved credit and disclaimer phrases (report 025): "CardputerZero launcher by M5Stack",
 #       "M5Stack's CardputerZero Store", "CardputerZero Store by M5Stack", "endorsed by M5Stack"
+#   Since report 029 (2026-10-22) "stock CardputerZero", the stock Calculator's name, M5IOE1 and
+#   /proc/cardputerzero_hw_id are no longer allowed: the code that used them is gone, write "legacy app" or
+#   "default profile" instead.
 #   Also allowed: lines between a "branding-allow-begin" and a "branding-allow-end" marker in the same file (put
 #   them in a comment, e.g. <!-- branding-allow-begin: credits -->), for credits and derivation statements, and
 #   paths listed in the allow-list (default: branding-allow.txt next to this script): one git pathspec glob per
@@ -88,10 +90,10 @@ FNR == NR { inblock[$0] = 1; next }
     if (loc in inblock) next
     if (text ~ /SPDX-FileCopyrightText:.*M5Stack Technology CO LTD/) next
     t = tolower(text)
-    n = split("m5cardputerzero-appstore|m5cardputerzero-calculator|cardputerzero-calculator|m5cardputerzero-applaunch_fcntl.lock|" \
-              "m5appstore_|cardputerzero-appstore|.config/cardputerzero|/proc/cardputerzero_hw_id|" \
+    n = split("m5cardputerzero-appstore|m5cardputerzero-applaunch_fcntl.lock|" \
+              "m5appstore_|cardputerzero-appstore|.config/cardputerzero|" \
               "/com/cardputerzero/applaunch|cardputerzero hub|cardputerzero.github.io|cardputer-zero-repo|" \
-              "m5ioe1|tca8418_keypad_m5stack_keymap|stock cardputerzero|" \
+              "tca8418_keypad_m5stack_keymap|" \
               "cardputerzero launcher by m5stack|m5stack\047s cardputerzero store|cardputerzero store by m5stack|" \
               "endorsed by m5stack|applaunch_|applaunch|cp0_", tok, "|")
     for (k = 1; k <= n; k++)

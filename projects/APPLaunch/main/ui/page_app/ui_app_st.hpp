@@ -44,7 +44,7 @@
 //  resized to them; the full grid comes back when it goes. Its keys arrive as
 //  a physical keyboard's (LV_EVENT_KEYBOARD); Ctrl combinations come as the key
 //  code with KBD_MOD_CTRL and no text (STKeyEncoder writes the control byte).
-//  Stock CardputerZero and SDL have no such keyboard.
+//  Builds without the dpi-scaled backend (SDL) have no such keyboard.
 // ============================================================
 class UISTPage : public AppPage
 {

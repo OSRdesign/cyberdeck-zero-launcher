@@ -56,7 +56,7 @@ int main()
     assert(!settings_t12b::launcher::is_protected_launcher_app("app_Store"));
     assert(settings_t12b::launcher::is_protected_launcher_app("app_Setting"));
     assert(settings_t12b::launcher::is_protected_launcher_app("app_CLI"));
-    // The stock CardputerZero descriptor (not configurable, always on): no toggle, the tile always shows.
+    // The default-profile descriptor (not configurable, always on): no toggle, the tile always shows.
     const Descriptor stock_store[] = {{"Store", "app_Store", false, true, LauncherAppOrigin::Builtin}};
     assert(settings_t12b::launcher::configurable_entries(
                stock_store, 1, [](const Descriptor &descriptor) { return descriptor.always_on; })

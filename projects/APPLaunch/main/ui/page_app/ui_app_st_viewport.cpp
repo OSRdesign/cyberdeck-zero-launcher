@@ -16,7 +16,7 @@
  * keyboard service shows it only while the launcher's policy allows (launcher_osk: no physical keyboard, setting Auto,
  * no lock screen) and asks that policy again every 250 ms, so it goes when a keyboard appears and comes back when the
  * last one has gone. Its Tab types a tab character (a multi-line request); its Esc is the shell's Esc and, held, the
- * launcher's hold-Esc (it moves the Esc state like the toolbar's). Stock CardputerZero and SDL: nothing. */
+ * launcher's hold-Esc (it moves the Esc state like the toolbar's). Builds without the dpi-scaled backend (SDL): nothing. */
 void UISTPage::setup_keyboard()
 {
     if (keyboard_wanted_ || !native_ || !native_ui::enabled() || !terminal_container_) return;

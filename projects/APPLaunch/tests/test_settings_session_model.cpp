@@ -36,7 +36,7 @@ int main()
 
     // shown only when compiled in, on the native Settings, in the desktop unit's launcher
     assert(quit_to_desktop_shown(true, true, "desktop"));
-    assert(!quit_to_desktop_shown(false, true, "desktop")); // stock CardputerZero build
+    assert(!quit_to_desktop_shown(false, true, "desktop")); // default-profile build
     assert(!quit_to_desktop_shown(true, false, "desktop")); // legacy (compat) Settings
     assert(!quit_to_desktop_shown(true, true, nullptr));    // appliance boards: APPLaunch.service sets no session
     assert(!quit_to_desktop_shown(true, true, "appliance"));

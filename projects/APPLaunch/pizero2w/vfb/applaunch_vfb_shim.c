@@ -1,5 +1,5 @@
 /*
- * LD_PRELOAD shim: gives a stock CardputerZero framebuffer app a virtual 320x170 framebuffer.
+ * LD_PRELOAD shim: gives a legacy fullscreen (framebuffer) app a virtual 320x170 framebuffer.
  *
  * Intercepts open() of /dev/fb*, the fb ioctls and mmap() of that descriptor, and serves them
  * from a shared-memory file (see applaunch_vfb.h). The launcher scales that picture into its

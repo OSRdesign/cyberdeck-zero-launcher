@@ -3,8 +3,8 @@
 The native Settings host draws the existing Settings tree full screen with the shell's widgets whenever
 the dpi-scaled display backend exists, i.e. on every Pi board (`native_ui::enabled()`,
 `projects/APPLaunch/main/ui/settings/settings_native_mode.hpp`; since task 014 P3e there is no switch and no compat
-path). A page that has no native widget is hidden (`Custom`); stock CardputerZero, the SDL simulator and the emulator
-have no such backend and keep the legacy roller pages.
+path). A page that has no native widget is hidden (`Custom`); the SDL simulator has no such backend and keeps the
+legacy roller pages.
 Paths below are relative to `projects/APPLaunch/main/ui/settings/` unless they start with a repo folder. LVGL is 9.5.0.
 
 ## 1. How the host decides what a tree node becomes

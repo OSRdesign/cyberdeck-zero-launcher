@@ -45,7 +45,7 @@ void init_sdl_disp(void)
         return;
     }
 
-    lv_sdl_window_set_title(disp, getenv_default("LV_SDL_WINDOW_TITLE", "M5CardputerZero"));
+    lv_sdl_window_set_title(disp, getenv_default("LV_SDL_WINDOW_TITLE", "CyberdeckZero"));
     pthread_mutex_unlock(&init_mutex);
 }
 

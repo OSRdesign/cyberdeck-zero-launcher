@@ -79,7 +79,7 @@ void cp0_display_set_touch_mode(cp0_display_touch_mode_t mode, int center_y, int
  *    multi-touch panel, until every finger is lifted (multitasking P-c). */
 typedef void (*cp0_display_touch_activity_cb_t)(int press_edge);
 
-/* External (stock CardputerZero) apps draw to a virtual 320x170 framebuffer; while one runs the
+/* External legacy fullscreen apps draw to a virtual 320x170 framebuffer; while one runs the
  * compat display stops drawing and the launcher feeds the app's picture to the compat window with
  * cp0_display_external_blit() (XRGB8888, scaled up like the compat display). */
 void cp0_display_set_external(int on);

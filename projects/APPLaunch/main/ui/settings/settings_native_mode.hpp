@@ -5,8 +5,7 @@
  *
  * The native Settings host (full screen on the native display, touch native, roller look at every screen size;
  * settings_native_host.hpp) runs whenever the dpi-scaled display backend exists (native_ui::enabled(): the Pi boards).
- * There is no switch and no compat escape hatch. Without that backend (stock CardputerZero, the SDL simulator, the
- * emulator) the legacy roller pages in the 320x170 window are the only Settings.
+ * There is no switch and no compat escape hatch. Without that backend (the SDL simulator) the legacy roller pages in the 320x170 window are the only Settings.
  *
  * Every page of the Pi boards' tree is native. A page the native host has no widget for (a legacy "Custom" page of
  * another board: Speaker, Ethernet, Battery, ...) is hidden. Development-only pages (System > Keyboard test) show only

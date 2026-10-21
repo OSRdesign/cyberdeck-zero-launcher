@@ -6,7 +6,7 @@
  *
  * The rule is by DISPLAY, never by metrics alone (cp0_ui_metrics_get() falls back to the default display's metrics,
  * so a 320x170 window classifies as a computed Compact screen):
- *   - a display at most CP0_UI_OVERLAY_COMPAT_MAX_W wide (the stock-app compat window, stock CardputerZero, the SDL
+ *   - a display at most CP0_UI_OVERLAY_COMPAT_MAX_W wide (the legacy-app compat window, the SDL
  *     320x170 simulator) or a missing metrics pointer gets exactly the numbers the overlays always had;
  *   - the native display gets: the pinned DECK (640x480) and COMPACT (480x320) tables, which are today's rendering
  *     on those screens (today's numbers x 2 and x 3/2: the old "scaled by width / 320" rule), and for every other

@@ -97,7 +97,7 @@ extern "C" hal_bt_status_t hal_bt_get_status(void)
     hal_bt_status_t status{};
     status.powered = simulated_bt_powered.load(std::memory_order_acquire) ? 1 : 0;
     std::strncpy(status.address, "00:00:00:00:00:00", sizeof(status.address) - 1);
-    std::strncpy(status.alias, "CardputerZero", sizeof(status.alias) - 1);
+    std::strncpy(status.alias, "CyberdeckZero", sizeof(status.alias) - 1);
     return status;
 }
 

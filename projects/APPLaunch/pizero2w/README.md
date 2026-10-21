@@ -5,8 +5,8 @@ deck** (Waveshare 2.8" DPI touch LCD, 480x640 portrait used as 640x480 landscape
 with the Luckfox 3.5" SPI panel and the **HackBerry Pi CM5** (720x720). Since phase x-b of the x86 port (report 028)
 the same launcher also installs on **PCs** (x86_64, the amd64 bundle; the Panasonic FZ-M1 tablet first): see
 [Install on a PC](#install-on-a-pc-amd64). The port is selected at run time with
-`APPLAUNCH_DISPLAY=dpi-scaled` and at build time with `APPLAUNCH_HW=pizero2w`; the stock CardputerZero behaviour of the
-upstream code is unchanged when neither is set. See [`NAMING.md`](../../../NAMING.md) for the product and technical names.
+`APPLAUNCH_DISPLAY=dpi-scaled` and at build time with `APPLAUNCH_HW=pizero2w` (every bundle sets both); without them
+the code keeps the behaviour it was inherited with (the SDL simulator uses that). See [`NAMING.md`](../../../NAMING.md) for the product and technical names.
 
 ## Names and migration (v0.7.0)
 
@@ -32,19 +32,19 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 
 | Area | What it does |
 | --- | --- |
-| Display | Two LVGL displays share `/dev/fb0`: a **native 640x480** one (home grid, terminal, Calculator) and the stock **320x170** one drawn 2x into a window at the top (`cp0_lvgl_dpi_scaled.c`, `cp0_display.h`). |
+| Display | Two LVGL displays share `/dev/fb0`: a **native 640x480** one (home grid, terminal, Calculator) and the legacy **320x170** one drawn 2x into a window at the top (`cp0_lvgl_dpi_scaled.c`, `cp0_display.h`). |
 | Home | Touch-friendly app grid with clock, Wi-Fi bars and Bluetooth state (`native_ui.cpp`). |
 | Terminal | CLI, Python and SSH use a full-screen terminal with touch scrolling (`ui_app_st*.cpp`). |
-| Calculator | Native touch + keyboard calculator replaces the external Cardputer program. |
-| Stock apps | Apps from the Store run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
+| Calculator | Native touch + keyboard calculator (the only one: the external 320x170 calculator program of the inherited code is gone). |
+| Legacy apps | Fullscreen 320x170 framebuffer apps (from the Store) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings (native, full screen) takes taps and drags directly, and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
-| Settings | Hardware profile (`settings_hw_profile.hpp`) hides what a Pi lacks (speaker, Ethernet, ExtPort, battery, ADB, software update) and adds Shutdown; real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). |
+| Settings | Hardware profile (`settings_hw_profile.hpp`) hides what our boards lack (speaker, Ethernet, battery) and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). |
 | Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present (a keyboard listed in `APPLAUNCH_KBD_IGNORE` does not count); in a terminal it has an **Alt** key next to Ctrl (one-shot, double tap locks: Alt then Tab is Alt+Tab). Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
 | Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
 | Launcher | **Settings > Launcher** shows or hides the built-in tiles, the **Store** included (it needs a keyboard, so a touch-only board can hide it; shown by default, `APPLAUNCH_LAUNCHER_STORE_TOGGLE` in `settings_hw_profile.hpp`). Hiding the Store tile does not affect Settings > Apps. |
-| Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the Cardputer matrix keymap); the Bluetooth keyboard re-attaches after sleep. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
+| Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the inherited matrix keymap); the Bluetooth keyboard re-attaches after sleep. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
 | Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip or Alt+Tab open "Open apps", Super goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases of 640x480 and more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
 
 ## Install on a Pi
@@ -228,7 +228,7 @@ APPLAUNCH_BOARD=pi3a-luckfox35       # label, logged at start, shown in Settings
 APPLAUNCH_FB=/dev/fb1                # framebuffer device (default /dev/fb0); install.sh writes the detected one
 APPLAUNCH_LOGICAL=480x320            # landscape canvas the UI draws on (default 640x480)
 APPLAUNCH_ROTATE=90                  # 0|90|180|270 clockwise pre-rotation into the buffer (default 0)
-APPLAUNCH_COMPAT_SCALE=1             # 1 or 2: scale of the 320x170 stock-app window (default 2)
+APPLAUNCH_COMPAT_SCALE=1             # 1 or 2: scale of the 320x170 legacy-app window (default 2)
 APPLAUNCH_TOUCH_DEV=auto             # auto = pick by capability, or /dev/input/eventN
 APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuffer; legacy = SWAP_XY/INVERT_* env (default legacy)
 APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> brightness levels
@@ -470,7 +470,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
 | `90-backlight-unblank.rules` | The PWM backlight starts powered down: unblank it when it appears. |
-| `91-applaunch-vkbd.rules` | `uinput` permission and the `/dev/input/applaunch-vkbd` name used for stock apps. |
+| `91-applaunch-vkbd.rules` | `uinput` permission and the `/dev/input/applaunch-vkbd` name used for legacy apps. |
 | `93-applaunch-rfkill.rules` | `/dev/rfkill` writable by the `netdev` group, so Settings > Bluetooth can run `rfkill unblock bluetooth` as the launcher user. |
 | `50-networkmanager-netdev.rules`, `51-launcher-time-power.rules` | PolicyKit: Wi-Fi scan/connect, Network Time / clock, reboot / shutdown from a background session. |
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
@@ -490,7 +490,7 @@ per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides th
 
 ## Known limits
 
-- Stock apps contain their own copy of the Cardputer's matrix keymap, so punctuation typed inside them may
+- Legacy apps contain their own copy of the inherited matrix keymap, so punctuation typed inside them may
   differ; the launcher's own pages are not affected.
 - The Pi Zero 2W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound.
 - There is no battery gauge or hardware RTC; the clock comes from Network Time. A PC's battery is not shown yet (x-d).

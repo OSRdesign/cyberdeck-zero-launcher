@@ -26,7 +26,7 @@ longer to try the software. Sitting on my desk was the cyberdeck I built from th
 [My first cyberdeck build](https://www.reddit.com/r/cyberDeck/comments/1tng497/my_first_cyberdeck_build/)
 (a Raspberry Pi Zero 2W, a Waveshare 2.8" DPI touch LCD and a Bluetooth keyboard). So I opened Claude Code
 and asked it to adapt the CardputerZero launcher to that machine. The result ran on a Pi Zero 2W, with touch, a 2x
-upscaled window for the stock 320x170 apps, and has since grown into the launcher described above.
+upscaled window for the legacy 320x170 apps, and has since grown into the launcher described above.
 
 > **This is a hobby project and a derivative work.** Almost all of the code is the work of the CardputerZero
 > and M5Stack teams and of the open-source projects listed in the credits below. My changes are the Raspberry Pi

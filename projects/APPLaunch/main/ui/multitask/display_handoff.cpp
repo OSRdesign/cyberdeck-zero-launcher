@@ -8,7 +8,7 @@
 #include <cstddef>
 #include <vector>
 
-/* The Pi display backend (cp0_lvgl_dpi_scaled.c) has these; builds without it (stock CardputerZero, SDL) link
+/* The Pi display backend (cp0_lvgl_dpi_scaled.c) has these; builds without it (the SDL simulator) link
  * without them and simply do not suspend. */
 extern "C" {
 __attribute__((weak)) void cp0_display_suspend(void);
