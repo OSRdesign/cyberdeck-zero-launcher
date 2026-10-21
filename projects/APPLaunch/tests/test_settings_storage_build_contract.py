@@ -28,14 +28,9 @@ def test_storage_probe_macro_is_device_only():
     for target in (
         "APPLAUNCH_LINUX_CP0",
         "APPLAUNCH_LINUX_X86_CROSS_CP0",
-        "APPLAUNCH_MAC_CROSS_CP0",
-        "APPLAUNCH_WIN_X86_CROSS_CP0",
     ):
         assert target in block
-    assert (
-        "depends on APPLAUNCH_LINUX_CP0 || APPLAUNCH_LINUX_X86_CROSS_CP0 || "
-        "APPLAUNCH_MAC_CROSS_CP0 || APPLAUNCH_WIN_X86_CROSS_CP0"
-    ) in block
+    assert "depends on APPLAUNCH_LINUX_CP0 || APPLAUNCH_LINUX_X86_CROSS_CP0\n" in block
     assert "\n    default y\n" in block
     assert "APPLAUNCH_LINUX_X86_SDL2" not in block
     assert "APPLAUNCH_WIN_X86_SDL2" not in block
