@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: MIT
 """Deploy and test the launcher on the boards of boards.json over ssh (paramiko), from the Windows dev machine.
 
-    python board.py [--dry-run] upload     BOARD BUNDLE   upload the bundle tarball (cyberdeckzero-launcher-<version>-arm64
-                                                          .tar.gz, or its copy pizero2w-bundle.tar.gz), unpack it, stage
-                                                          the test launcher
+    python board.py [--dry-run] upload     BOARD BUNDLE   upload the bundle tarball of the board's arch (cyberdeckzero-
+                                                          launcher-<version>-<arch>.tar.gz; arm64: or its copy
+                                                          pizero2w-bundle.tar.gz), unpack it, stage the test launcher
     python board.py [--dry-run] install    BOARD [--check] [--install-arg ARG ...] [--force]
                                                           run the bundle's install.sh (sudo) for the board's user
                                                           (--force is passed to install.sh: unknown board, edited profile)
@@ -18,8 +18,13 @@ Password: the PW environment variable (PIPW, as docs/dev/deck/deck.py uses, is a
 a file, never put on a command line (sudo reads it on stdin: sudo -S) and never printed. --dry-run needs no password
 and no network: it prints every command it would run.
 
+Board arch (boards.json "arch", default arm64): the Pi boards are arm64, a PC (the FZ-M1 tablet) amd64. upload refuses a
+bundle of the other arch: by its name, by its launcher's ELF header when the tarball is here, and on the board against
+`uname -m` once unpacked.
+
 Board kinds (boards.json):
-  service  the launcher runs as the user service cyberdeckzero.service (the deck, the Pi 3A+). test-start stops the
+  service  the launcher runs as the user service cyberdeckzero.service (the deck, the Pi 3A+, the FZ-M1 tablet: it
+           boots to the text console, no display manager). test-start stops the
            service (and APPLaunch.service, its name up to v0.6.0, on a board not migrated yet) and runs the staged
            launcher from ~/applaunch-test (cwd there; the installed /usr/share/APPLaunch stays as it is); test-stop kills
            it, removes the test files and restarts the installed service detached (cyberdeckzero.service, else
@@ -47,6 +52,7 @@ import json
 import os
 import shlex
 import sys
+import tarfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -64,6 +70,8 @@ OLD_LAUNCHER_COMM = "M5CardputerZero"
 OLD_SERVICE = "APPLaunch.service"
 OLD_DESKTOP_UNIT = "applaunch-desktop.service"
 OLD_CONSOLE_UNIT = "applaunch-console.service"
+ARCHES = {"arm64": ("aarch64", 183), "amd64": ("x86_64", 62)}   # arch: uname -m, ELF e_machine
+LEGACY_BUNDLE = "pizero2w-bundle.tar.gz"                          # the arm64 bundle's copy under its earlier name
 
 
 class BoardError(Exception):
@@ -85,8 +93,11 @@ class Board:
         self.rotate = int(spec.get("rotate", 0))
         self.test_env = dict(spec.get("test_env", {}))
         self.quirks = set(spec.get("quirks", []))
+        self.arch = spec.get("arch", "arm64")
         if self.kind not in ("service", "desktop"):
             raise BoardError("%s: unknown kind %r (service|desktop)" % (name, self.kind))
+        if self.arch not in ARCHES:
+            raise BoardError("%s: unknown arch %r (%s)" % (name, self.arch, "|".join(sorted(ARCHES))))
 
     @property
     def home(self):
@@ -186,20 +197,65 @@ class Remote:
 
 
 # ---------------------------------------------------------------------------------------------------------- actions
+def bundle_name_arch(path):
+    """The arch a bundle's file name says: cyberdeckzero-launcher-<version>-<arch>.tar.gz (pizero2w-bundle.tar.gz:
+    arm64), None for another name."""
+    name = os.path.basename(path)
+    if name == LEGACY_BUNDLE:
+        return "arm64"
+    for arch in ARCHES:
+        if name.startswith("cyberdeckzero-launcher-") and name.endswith("-%s.tar.gz" % arch):
+            return arch
+    return None
+
+
+def bundle_elf_arch(path):
+    """The arch of the launcher binary inside a bundle tarball (its ELF e_machine), None when unreadable."""
+    try:
+        with tarfile.open(path, "r:gz") as tar:
+            member = tar.extractfile("bundle/payload/bin/" + BINARY)
+            head = member.read(20) if member else b""
+    except (OSError, KeyError, tarfile.TarError):
+        return None
+    if len(head) < 20 or head[:4] != b"\x7fELF":
+        return None
+    machine = head[18] | (head[19] << 8)
+    return next((arch for arch, (_, m) in ARCHES.items() if m == machine), None)
+
+
+def check_bundle_arch(board, bundle):
+    named = bundle_name_arch(bundle)
+    if named and named != board.arch:
+        raise BoardError("%s is an %s bundle, %s is %s: use cyberdeckzero-launcher-<version>-%s.tar.gz"
+                         % (os.path.basename(bundle), named, board.name, board.arch, board.arch))
+    if os.path.isfile(bundle):
+        inside = bundle_elf_arch(bundle)
+        if inside and inside != board.arch:
+            raise BoardError("%s holds an %s launcher, %s is %s" % (os.path.basename(bundle), inside, board.name,
+                                                                    board.arch))
+
+
 def do_upload(remote, board, args):
     bundle = args.bundle
     if not os.path.isfile(bundle):
         if not remote.dry_run:
             raise BoardError("no such bundle: %s" % bundle)
         print("(dry run: %s does not exist here)" % bundle)
+    check_bundle_arch(board, bundle)
     remote.put(bundle, REMOTE_TAR)
     t = board.test_dir
     payload = REMOTE_BUNDLE + "/bundle/payload"
-    # unpack for install.sh, and stage the test launcher (bin, lib, share) in ~/applaunch-test for test-start
+    machine, e_machine = ARCHES[board.arch]
+    # unpack for install.sh, check that the payload's launcher is the board's arch (ELF e_machine against uname -m),
+    # and stage the test launcher (bin, lib, share) in ~/applaunch-test for test-start
     return remote.run(
         "rm -rf {b} {t} && mkdir -p {b} {t}/bin {t}/lib && tar xzf {tar} -C {b} && "
+        "m=$(od -An -tu1 -j18 -N2 {p}/bin/{bin} | tr -s ' ') && "
+        "if [ \"$(uname -m)/$m\" = '{machine}/ {e_machine} 0' ]; then echo payload: {arch} launcher, $(uname -m) board; "
+        "else echo \"payload launcher (e_machine$m) is not for this $(uname -m) board\"; exit 1; fi && "
         "cp -a {p}/share/. {t}/ && cp {p}/bin/{bin} {t}/bin/ && cp {p}/lib/libapplaunch_vfb.so {t}/lib/ && "
-        "ls {b}/bundle && echo staged: {t}".format(b=REMOTE_BUNDLE, t=t, tar=REMOTE_TAR, p=payload, bin=BINARY),
+        "ls {b}/bundle && echo staged: {t}".format(b=REMOTE_BUNDLE, t=t, tar=REMOTE_TAR, p=payload, bin=BINARY,
+                                                   machine=machine, e_machine=e_machine, arch=board.arch),
         check=True)
 
 
@@ -364,8 +420,8 @@ def build_parser(board_names):
 
     p = sub.add_parser("upload", help="upload and unpack a bundle, stage the test launcher in ~/applaunch-test")
     board_arg(p)
-    p.add_argument("bundle", help="local bundle tarball, cyberdeckzero-launcher-<version>-arm64.tar.gz or "
-                   "pizero2w-bundle.tar.gz (C:/ style path on Windows)")
+    p.add_argument("bundle", help="local bundle tarball of the board's arch, cyberdeckzero-launcher-<version>-<arch>"
+                   ".tar.gz (arm64: or pizero2w-bundle.tar.gz; C:/ style path on Windows)")
     p = sub.add_parser("install", help="run the uploaded bundle's install.sh with sudo")
     board_arg(p)
     p.add_argument("--check", action="store_true", help="install.sh --dry-run: print what it would do")
@@ -404,7 +460,7 @@ def main(argv=None):
         board = Board(args.board, boards[args.board])
         remote = Remote(board, args.dry_run)
         if args.dry_run:
-            print("# dry run: %s (%s@%s, %s board)" % (board.name, board.user, board.host, board.kind))
+            print("# dry run: %s (%s@%s, %s board, %s)" % (board.name, board.user, board.host, board.kind, board.arch))
         return ACTIONS[args.action](remote, board, args) or 0
     except BoardError as error:
         print("board.py: %s" % error, file=sys.stderr)
