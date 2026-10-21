@@ -42,6 +42,9 @@
 #ifndef KEY_SLASH
 #define KEY_SLASH 53
 #endif
+#ifndef KEY_LEFTALT
+#define KEY_LEFTALT 56
+#endif
 
 static int imin(int a, int b) { return a < b ? a : b; }
 static int imax(int a, int b) { return a > b ? a : b; }
@@ -82,7 +85,7 @@ int cp0_ui_osk_field_reserve(const cp0_ui_metrics_t *m)
     return m->shell.bar_h + space_m + label_line + imax(2, space_m / 3) + m->tok[CP0_TOK_ROW_H] + space_m;
 }
 
-int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
+static int osk_layout(const cp0_ui_metrics_t *m, int alt, cp0_ui_osk_layout_t *out)
 {
     if (!m || !out || m->w <= 0 || m->h <= 0) return -1;
     cp0_ui_osk_layout_t l;
@@ -117,17 +120,37 @@ int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
     l.pad_w = 3 * l.key_w + 2 * l.gap;
     l.pad_x = (l.w - l.pad_w) / 2;
 
-    /* Esc, Tab, Ctrl: 9 mm (the OSK keeps its own size, not the 7 mm TARGET token), at least one key, at most two
-     * keys and the gap between them */
+    /* Esc, Tab, Ctrl (, Alt): 9 mm (the OSK keeps its own size, not the 7 mm TARGET token), at least one key, at most
+     * two keys and the gap between them */
+    const int util = alt ? 4 : 3;
+    l.alt = alt ? 1 : 0;
     l.util_key_w = imax(l.key_w, imin(cp0_ui_mm_px(m->ppmm_x100, 90, 48), 2 * l.key_w + l.gap));
-    if (3 * l.util_key_w + 2 * l.gap > l.row_w) l.util_key_w = l.key_w;
-    /* the four arrows (one key each) at the right, when they leave at least a gap after Ctrl */
-    l.arrows = 3 * l.util_key_w + 3 * l.gap + 4 * l.key_w + 3 * l.gap <= l.row_w;
+    if (util * l.util_key_w + (util - 1) * l.gap > l.row_w) l.util_key_w = l.key_w;
+    /* the four arrows (one key each) at the right, when they leave at least a gap after the last utility key */
+    l.arrows = util * l.util_key_w + util * l.gap + 4 * l.key_w + 3 * l.gap <= l.row_w;
+    if (!l.arrows && alt) {
+        /* a terminal keeps its arrows: narrower utility keys, never under one key */
+        const int fit = (l.row_w - 4 * l.key_w - 7 * l.gap) / 4;
+        if (fit >= l.key_w) {
+            l.util_key_w = fit;
+            l.arrows = 1;
+        }
+    }
 
     l.label_px = imax(12, even_px(imin(l.key_w, l.key_h) * CP0_UI_OSK_LABEL_PCT / 10));
     l.small_px = imax(12, even_px(l.label_px * CP0_UI_OSK_SMALL_PCT / 10));
     *out = l;
     return 0;
+}
+
+int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
+{
+    return osk_layout(m, 0, out);
+}
+
+int cp0_ui_osk_layout_alt(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
+{
+    return osk_layout(m, 1, out);
 }
 
 /* ------------------------------------------------------------------ pages */
@@ -144,6 +167,7 @@ static const cp0_ui_osk_key_t k_utility[] = {
     KEYK(CP0_UI_OSK_K_ESC, "Esc", KEY_ESC, 0),
     KEYK(CP0_UI_OSK_K_TAB, "Tab", KEY_TAB, 0),
     KEYK(CP0_UI_OSK_K_CTRL, "Ctrl", 0, 0),
+    KEYK(CP0_UI_OSK_K_ALT, "Alt", KEY_LEFTALT, 0), /* a terminal's keyboard only (l->alt) */
 };
 static const cp0_ui_osk_key_t k_arrows[] = {
     KEYK(CP0_UI_OSK_K_ARROW, NULL, KEY_LEFT, 10),
@@ -243,10 +267,10 @@ int cp0_ui_osk_place_keys(const cp0_ui_osk_layout_t *l, cp0_ui_osk_page_t page, 
     if (!keys) return -1;
     int n = 0;
 
-    /* row 0: Esc, Tab, Ctrl from the left of the key area, the arrows at its right */
+    /* row 0: Esc, Tab, Ctrl (, Alt) from the left of the key area, the arrows at its right */
     const int y0 = l->border + l->pad_y;
     int x = l->row_x;
-    for (int i = 0; i < 3 && n >= 0; ++i) {
+    for (int i = 0; i < (l->alt ? 4 : 3) && n >= 0; ++i) {
         n = put(out, max, n, &k_utility[i], 0, x, y0, l->util_key_w, l->util_h);
         x += l->util_key_w + l->gap;
     }
@@ -349,11 +373,26 @@ static int emit_pair(cp0_ui_osk_event_t *out, int max, int at, uint32_t code, ui
     return emit(out, max, at, code, KBD_KEY_RELEASED, mods, utf8);
 }
 
+/* Alt was used by a key: an armed Alt goes off, and its key's release goes out */
+static int alt_used(cp0_ui_osk_state_t *s, cp0_ui_osk_event_t *out, int max, int at)
+{
+    if (s->alt.state != CP0_UI_OSK_MOD_ARMED) return at;
+    cp0_ui_osk_mod_used(&s->alt);
+    return emit(out, max, at, KEY_LEFTALT, KBD_KEY_RELEASED, 0, NULL);
+}
+
+/* the modifiers a key carries: Alt on (a terminal's keyboard) */
+static uint32_t alt_mods(const cp0_ui_osk_state_t *s)
+{
+    return cp0_ui_osk_mod_on(&s->alt) ? KBD_MOD_ALT : 0;
+}
+
 static int release_held(cp0_ui_osk_state_t *s, cp0_ui_osk_event_t *out, int max, int at)
 {
     if (!s->held_code) return at;
     at = emit(out, max, at, s->held_code, KBD_KEY_RELEASED, s->held_mods, s->held_utf8);
     if (s->held_mods & KBD_MOD_CTRL) cp0_ui_osk_mod_used(&s->ctrl);
+    if (s->held_mods & KBD_MOD_ALT) at = alt_used(s, out, max, at);
     s->held_code = 0;
     s->held_mods = 0;
     s->held_utf8[0] = '\0';
@@ -371,9 +410,10 @@ static int char_events(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, cp0_ui_
     const int shift_on = cp0_ui_osk_mod_on(&s->shift);
     const int ctrl_on = cp0_ui_osk_mod_on(&s->ctrl) && k->code != 0; /* a key without a code types its text */
     int n = 0;
+    const uint32_t alt = k->code != 0 ? alt_mods(s) : 0; /* Alt applies to keys with a code, as Ctrl */
     if (ctrl_on) {
         /* Ctrl+C: the key code with CTRL, no text */
-        const uint32_t mods = KBD_MOD_CTRL | ((letter && shift_on) || k->shift ? KBD_MOD_SHIFT : 0);
+        const uint32_t mods = KBD_MOD_CTRL | alt | ((letter && shift_on) || k->shift ? KBD_MOD_SHIFT : 0);
         n = emit_pair(out, max, 0, k->code, mods, NULL);
         cp0_ui_osk_mod_used(&s->ctrl);
     } else {
@@ -384,9 +424,10 @@ static int char_events(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, cp0_ui_
             text[0] = (char)(text[0] - 'a' + 'A');
             mods = s->shift.state == CP0_UI_OSK_MOD_LOCKED ? KBD_MOD_CAPS : KBD_MOD_SHIFT;
         }
-        n = emit_pair(out, max, 0, k->code, mods, text);
+        n = emit_pair(out, max, 0, k->code, mods | alt, text); /* with Alt: the text too, as a physical Alt+key */
     }
     cp0_ui_osk_mod_used(&s->shift); /* one-shot: the next character key uses it */
+    if (alt) n = alt_used(s, out, max, n);
     return n;
 }
 
@@ -394,11 +435,12 @@ int cp0_ui_osk_key_down(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, cp0_ui
 {
     if (!s || !k || !cp0_ui_osk_is_hold_key(k)) return 0;
     int n = release_held(s, out, max, 0);
-    /* Esc stays exactly the toolbar's Esc: never combined with Ctrl */
+    /* Esc stays exactly the toolbar's Esc: never combined with Ctrl or Alt (while Alt is down it cancels an Alt+Tab
+     * session, Alt stays) */
     const int ctrl_on = k->kind != CP0_UI_OSK_K_ESC && cp0_ui_osk_mod_on(&s->ctrl);
     const char *control = cp0_keyboard_control_utf8(k->code);
     s->held_code = k->code;
-    s->held_mods = ctrl_on ? KBD_MOD_CTRL : 0;
+    s->held_mods = (ctrl_on ? KBD_MOD_CTRL : 0) | (k->kind != CP0_UI_OSK_K_ESC ? alt_mods(s) : 0);
     snprintf(s->held_utf8, sizeof(s->held_utf8), "%s", !ctrl_on && control ? control : "");
     return emit(out, max, n, s->held_code, KBD_KEY_PRESSED, s->held_mods, s->held_utf8);
 }
@@ -420,15 +462,21 @@ int cp0_ui_osk_key_up(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, uint64_t
     case CP0_UI_OSK_K_CHAR:
         n = char_events(s, k, out, max);
         break;
-    case CP0_UI_OSK_K_TAB:
-        /* a tab character only in a multi-line field; elsewhere the key code alone (next field) */
-        n = emit_pair(out, max, 0, KEY_TAB, ctrl_on ? KBD_MOD_CTRL : 0, !ctrl_on && s->multiline ? "\t" : NULL);
+    case CP0_UI_OSK_K_TAB: {
+        /* a tab character only in a multi-line field; elsewhere the key code alone (next field). With Alt: Alt+Tab,
+         * the code alone (the switcher reads the key codes: Alt's press, Tab, Alt's release) */
+        const uint32_t alt = alt_mods(s);
+        n = emit_pair(out, max, 0, KEY_TAB, (ctrl_on ? KBD_MOD_CTRL : 0) | alt,
+                      !ctrl_on && !alt && s->multiline ? "\t" : NULL);
         cp0_ui_osk_mod_used(&s->ctrl);
+        n = alt_used(s, out, max, n);
         break;
+    }
     case CP0_UI_OSK_K_ENTER:
-        n = emit_pair(out, max, 0, KEY_ENTER, ctrl_on ? KBD_MOD_CTRL : 0,
+        n = emit_pair(out, max, 0, KEY_ENTER, (ctrl_on ? KBD_MOD_CTRL : 0) | alt_mods(s),
                       ctrl_on ? NULL : cp0_keyboard_control_utf8(KEY_ENTER));
         cp0_ui_osk_mod_used(&s->ctrl);
+        n = alt_used(s, out, max, n);
         break;
     case CP0_UI_OSK_K_SHIFT:
         cp0_ui_osk_mod_tap(&s->shift, now_ms);
@@ -436,6 +484,15 @@ int cp0_ui_osk_key_up(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, uint64_t
     case CP0_UI_OSK_K_CTRL:
         cp0_ui_osk_mod_tap(&s->ctrl, now_ms);
         break;
+    case CP0_UI_OSK_K_ALT: {
+        /* a real key: Alt on = its press, Alt off = its release (armed -> locked sends nothing) */
+        const int was_on = cp0_ui_osk_mod_on(&s->alt);
+        cp0_ui_osk_mod_tap(&s->alt, now_ms);
+        const int on = cp0_ui_osk_mod_on(&s->alt);
+        if (on && !was_on) n = emit(out, max, 0, KEY_LEFTALT, KBD_KEY_PRESSED, KBD_MOD_ALT, NULL);
+        if (!on && was_on) n = emit(out, max, 0, KEY_LEFTALT, KBD_KEY_RELEASED, 0, NULL);
+        break;
+    }
     case CP0_UI_OSK_K_PAGE:
         s->page = k->target;
         break;
@@ -453,9 +510,11 @@ int cp0_ui_osk_key_cancel(cp0_ui_osk_state_t *s, cp0_ui_osk_event_t *out, int ma
 int cp0_ui_osk_release_all(cp0_ui_osk_state_t *s, cp0_ui_osk_event_t *out, int max)
 {
     if (!s) return 0;
-    const int n = release_held(s, out, max, 0);
+    int n = release_held(s, out, max, 0);
+    if (cp0_ui_osk_mod_on(&s->alt)) n = emit(out, max, n, KEY_LEFTALT, KBD_KEY_RELEASED, 0, NULL);
     cp0_ui_osk_mod_reset(&s->shift);
     cp0_ui_osk_mod_reset(&s->ctrl);
+    cp0_ui_osk_mod_reset(&s->alt);
     return n;
 }
 
