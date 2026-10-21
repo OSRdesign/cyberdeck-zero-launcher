@@ -21,7 +21,9 @@ without `X-Background` is frozen behind the legacy sheet).
 | a dot on the home tile of a resident app | the optional `[n]` count in the status strip (D8: no) |
 | the one-time hint (D15) | the switcher on canvases under 640x480 |
 
-Everything stays behind `APPLAUNCH_MULTITASK=1` (off by default: nothing of P-d exists or runs without it), and needs a
+Everything stays behind multitasking being on (built behind `APPLAUNCH_MULTITASK=1`; since task 015 "default on",
+2026-10-21, on by default on canvases of 640x480 and more and off below, `APPLAUNCH_MULTITASK=0` turns it off;
+nothing of P-d exists or runs with it off), and needs a
 canvas of at least 640x480 (the deck, the Pi 3A+ DSI at 800x480, the HackBerry at 720x720, 1024x600, 1280x720).
 Smaller canvases (480x320, the 320x480 SPI panel turned) keep the P-b / P-c behaviour exactly: the Alt+Tab text on the
 toast, G1 / G2 from an app = Home, on the launcher = nothing, no dot, no hint (`SupervisorConfig::switcher_ui = false`).

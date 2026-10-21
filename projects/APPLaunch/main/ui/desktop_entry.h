@@ -22,7 +22,7 @@ struct DesktopEntry
     int min_w = 0;
     int min_h = 0;
     // X-Background=run|freeze (app contract 1, task 015, APP-CONTRACT section 13): the value as written (trimmed);
-    // multitask::parse_background() reads it. Empty = key absent (a legacy app). Used only with APPLAUNCH_MULTITASK=1.
+    // multitask::parse_background() reads it. Empty = key absent (a legacy app). Used only with multitasking on.
     std::string background = std::string();
 };
 

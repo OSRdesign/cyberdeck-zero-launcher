@@ -51,7 +51,7 @@ void set_launching_app(const std::string &name);
 /* Rebuild the home grid from the launcher's app list. */
 void refresh_apps();
 
-/* Multitasking P-d (task 015-pd; only called with APPLAUNCH_MULTITASK=1): the apps left open, by their .desktop Exec
+/* Multitasking P-d (task 015-pd; only called with multitasking on): the apps left open, by their .desktop Exec
  * line. Their tiles get a small green dot at the top right (a ring of the tile's colour around it); the others none.
  * Never called: no dot object exists. LVGL thread. */
 void set_resident_apps(const std::vector<std::string> &exec_keys);

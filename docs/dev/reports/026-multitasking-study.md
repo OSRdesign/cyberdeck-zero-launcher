@@ -11,7 +11,14 @@ on branch `multitasking-pb` (section 11, `docs/dev/tasks/015-multitasking-pb.md`
 (the slot tracker, G1 at 1 s, G2), is built on branch `multitasking-pc` (section 12,
 `docs/dev/tasks/015-multitasking-pc.md`), board tests pending. **Update 2026-10-21:** P-b and P-c are merged; P-d,
 the switcher screen, the legacy sheet, the grid's dots and the first-run hint, is built on branch `multitasking-pd`
-(section 13, `docs/dev/tasks/015-multitasking-pd.md`), board tests pending.
+(section 13, `docs/dev/tasks/015-multitasking-pd.md`), board tests pending. **Update 2026-10-21, later:** multitasking
+is **on by default** since branch `multitasking-default-on`, on logical canvases of 640x480 and more (the size P-d was
+designed for) and off below them (480x320, the 320x480 SPI panel turned, the 320x170 board), one rule in
+`multitask::multitask_on()`. `APPLAUNCH_MULTITASK=0` (or `false`, `off`, `no`) turns it off, for the service with a
+user drop-in (`systemctl --user edit cyberdeckzero`, `Environment=APPLAUNCH_MULTITASK=0`); `=1` forces it on, also
+under 640x480. What the user sees with it on: a three-finger hold (or a long-press on the clock) opens "Open apps";
+an app that cannot stay in the background gets the "Close <app>?" sheet (Close / Keep); viz1090 can hang on
+three-finger touches (known, accepted by the owner: hold Esc 3 s closes it).
 
 Markers: **V** = verified in code or measured on a board, **I** = inferred or taken from documentation or the web;
 needs a board. Owner decisions are numbered **D1-D15** (section 8). UI items are proposals for the owner to decide.

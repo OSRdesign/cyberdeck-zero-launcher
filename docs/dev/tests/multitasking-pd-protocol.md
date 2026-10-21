@@ -4,7 +4,9 @@ Phase P-d ([`tasks/015-multitasking-pd.md`](../tasks/015-multitasking-pd.md)) dr
 three fingers 1 s in an app (G1) or long-press the clock (G2) and you get up to 4 cards (tap one to go there, its X
 closes it), Home and Close all. In an app that cannot stay in the background a sheet asks "Close <app>?". About 15
 minutes on the deck, touch only (a keyboard for step 6 if you like). The launcher runs staged, with
-`APPLAUNCH_MULTITASK=1`; nothing is installed over the released one.
+`APPLAUNCH_MULTITASK=1`; nothing is installed over the released one. **Since task 015 "default on" (2026-10-21)** a launcher of that change or later has multitasking **on by default**
+on canvases of 640x480 and more (the deck): "flag off" below means `--env APPLAUNCH_MULTITASK=0`, and
+`--env APPLAUNCH_MULTITASK=1` is then the same as no `--env` (it still forces it on, also under 640x480).
 
 Watch the log in an ssh terminal on the PC (it only reads it):
 

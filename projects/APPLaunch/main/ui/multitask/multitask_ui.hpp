@@ -7,8 +7,9 @@
  * screen and the legacy sheet (switcher_view.hpp) built and deleted on those events, the home grid's dots, the
  * first-run hint (canvases of 640x480 and more).
  *
- * Off unless APPLAUNCH_MULTITASK=1 (and the Pi display backend, Linux): then nothing here runs and Launch keeps its
- * blocking fullscreen path unchanged.
+ * On by default on canvases of 640x480 and more (the Pi display backend, Linux); APPLAUNCH_MULTITASK=0 (or
+ * false/off/no) turns it off, =1 (true/on/yes) forces it on also below 640x480 (multitask::multitask_on()). When it
+ * is off nothing here runs and Launch keeps its blocking fullscreen path unchanged.
  */
 #pragma once
 
@@ -29,7 +30,8 @@ struct Hooks {
     std::function<void()> show_home;
 };
 
-/* APPLAUNCH_MULTITASK=1, the dpi-scaled display backend (native UI) and Linux. Read once. */
+/* Linux, the dpi-scaled display backend (native UI) and multitask::multitask_on(APPLAUNCH_MULTITASK, the logical
+ * canvas). Read once. */
 bool enabled();
 /* LVGL thread, once (Launch::bind_ui): the supervisor thread, the bridge timer, the key filter. */
 bool start(Hooks hooks);

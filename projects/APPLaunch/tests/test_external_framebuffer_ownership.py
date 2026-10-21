@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: MIT
 #
 # Who owns the framebuffer around a full-screen app (study 026 section 1.6, rewritten for task 015).
-#  1. The legacy path (APPLAUNCH_MULTITASK unset, the default): paint, stop every timer, run the app blocking, timers
-#     back, home. No thread, no timer, no toast.
-#  2. The supervised path (APPLAUNCH_MULTITASK=1): taken only for full-screen apps with the flag on, before anything
+#  1. The legacy path (multitasking off: APPLAUNCH_MULTITASK=0, or a canvas under 640x480): paint, stop every timer,
+#     run the app blocking, timers back, home. No thread, no timer, no toast.
+#  2. The supervised path (multitasking on, the default): taken only for full-screen apps with it on, before anything
 #     of the legacy path happens; paints before handing over, never stops the LVGL timers wholesale (the main loop
 #     keeps serving the supervisor's bridge) and never blocks.
 #  3. The hand-overs: the app's turn pauses the timers and suspends the display; the launcher's turn gives the display

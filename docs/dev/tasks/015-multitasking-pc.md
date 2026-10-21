@@ -35,8 +35,9 @@ place P-d will draw the switcher (`Supervisor::open_switcher`):
 
 The **slot tracker** is always on (it replaces the touch reading of the display manager for every protocol B panel,
 flag or not) and is proven not to change single touch (section 3). **Everything else** (G1, G2, the passive reader,
-the swallow, `touch_slots`, the FIFO commands) exists only with `APPLAUNCH_MULTITASK=1`: without it no gesture is
-recognised, no frame callback is set, no clock is changed on the touch fd and `screen.state` is unchanged.
+the swallow, `touch_slots`, the FIFO commands) exists only with multitasking on (built behind `APPLAUNCH_MULTITASK=1`; since task 015 "default on",
+2026-10-21, on by default on canvases of 640x480 and more, `APPLAUNCH_MULTITASK=0` turns it off): without it no
+gesture is recognised, no frame callback is set, no clock is changed on the touch fd and `screen.state` is unchanged.
 
 ## 3. The slot tracker (`cp0_touch_slots.{h,c}`, `cp0_touch_reader.{h,c}`)
 

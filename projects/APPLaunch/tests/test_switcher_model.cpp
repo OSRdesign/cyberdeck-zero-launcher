@@ -139,6 +139,40 @@ void test_fits_and_hint()
     expect("hint no touch", first_run_hint(0), "Alt+Tab switches apps");
 }
 
+/* On by default where the switcher fits; APPLAUNCH_MULTITASK forces it either way */
+void test_default_on()
+{
+    const char *flag_name[] = {"default", "on", "off"};
+    struct {
+        const char *value;
+        MultitaskFlag want;
+    } parse[] = {
+        {nullptr, MultitaskFlag::Default}, {"", MultitaskFlag::Default},  {"1", MultitaskFlag::On},
+        {"true", MultitaskFlag::On},       {"ON", MultitaskFlag::On},     {"Yes", MultitaskFlag::On},
+        {"0", MultitaskFlag::Off},         {"FALSE", MultitaskFlag::Off}, {"off", MultitaskFlag::Off},
+        {"No", MultitaskFlag::Off},        {"2", MultitaskFlag::Default}, {"enabled", MultitaskFlag::Default},
+        {"yes ", MultitaskFlag::Default},  {"truetrue", MultitaskFlag::Default},
+    };
+    for (const auto &p : parse)
+        expect(std::string("parse '") + (p.value ? p.value : "(unset)") + "'",
+               flag_name[static_cast<int>(parse_multitask_flag(p.value))], flag_name[static_cast<int>(p.want)]);
+
+    const auto on = [](MultitaskFlag f, int w, int h) { return multitask_on(f, w, h) ? "on" : "off"; };
+    expect("default 640x480 (deck)", on(MultitaskFlag::Default, 640, 480), "on");
+    expect("default 800x480", on(MultitaskFlag::Default, 800, 480), "on");
+    expect("default 720x720", on(MultitaskFlag::Default, 720, 720), "on");
+    expect("default 1280x720", on(MultitaskFlag::Default, 1280, 720), "on");
+    expect("default 480x320 (Pi 3A+ SPI)", on(MultitaskFlag::Default, 480, 320), "off");
+    expect("default 320x480", on(MultitaskFlag::Default, 320, 480), "off");
+    expect("default 320x170", on(MultitaskFlag::Default, 320, 170), "off");
+    expect("default unknown canvas", on(MultitaskFlag::Default, 0, 0), "off");
+    expect("off 640x480", on(MultitaskFlag::Off, 640, 480), "off");
+    expect("off 1280x720", on(MultitaskFlag::Off, 1280, 720), "off");
+    expect("on 480x320", on(MultitaskFlag::On, 480, 320), "on");
+    expect("on 320x170", on(MultitaskFlag::On, 320, 170), "on");
+    expect("on unknown canvas", on(MultitaskFlag::On, 0, 0), "on");
+}
+
 } // namespace
 
 int main()
@@ -147,6 +181,7 @@ int main()
     test_moves();
     test_session_item();
     test_fits_and_hint();
+    test_default_on();
     if (g_failures) {
         std::printf("test_switcher_model: %d of %d checks failed\n", g_failures, g_checks);
         return 1;

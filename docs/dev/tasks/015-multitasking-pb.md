@@ -26,6 +26,13 @@ Super (D4). It is **feature-flagged and invisible by default**.
 
 ## 2. The flag: invisible by default
 
+**Since task 015 "default on" (2026-10-21) multitasking is on by default** on logical canvases of 640x480 and
+more and off below them (480x320, the 320x480 SPI panel turned to 480x320, the 320x170 board), one rule in
+`multitask::multitask_on()` (`switcher_model.cpp`). `APPLAUNCH_MULTITASK=0` (or `false`, `off`, `no`, any case) turns
+it off, `=1` (`true`, `on`, `yes`) forces it on, also under 640x480; for the service a user drop-in
+(`systemctl --user edit cyberdeckzero`, `Environment=APPLAUNCH_MULTITASK=0`). The text below describes P-b as it was
+built, behind `=1`.
+
 `APPLAUNCH_MULTITASK=1` in the launcher's environment turns P-b on (read once at start). Anything else, or the
 variable absent, keeps **every code path of today**: `Launch::launch_Exec()` takes the blocking fullscreen path
 unchanged (`lv_timer_enable(false)`, `ExecBlocking`, the 3.5 s watchdog untouched), no thread, timer, key filter or
@@ -221,7 +228,8 @@ drained). The contract asks a lifecycle app to treat every key as released on `s
 
 ## 11. Dev entry (no new visual design)
 
-- Flag `APPLAUNCH_MULTITASK=1`; `APPLAUNCH_MT_INPUT` as above; `APPLAUNCH_MT_CAP` (1..8, default 4) for tests.
+- Flag `APPLAUNCH_MULTITASK` (on by default on 640x480 and more since task 015 "default on"; `=0` off, `=1` forced
+  on); `APPLAUNCH_MT_INPUT` as above; `APPLAUNCH_MT_CAP` (1..8, default 4) for tests.
 - Log lines `[mt] ...` on stderr (journal / `run.log`): every transition with timings (`ack_ms`, `stop_ms`,
   `snapshot_ms`, `restore_ms`, `drained=`), every notice.
 - Status file `$XDG_RUNTIME_DIR/applaunch/multitask.status` (debug, not part of the contract): front, residents
@@ -378,7 +386,8 @@ suite's deck-order cancel scenario, now run with each of the two keys in its fiv
 
 ### Decisions for the owner to confirm
 
-1. The flag (`APPLAUNCH_MULTITASK=1`, off by default; set per run with `board.py test-start --env` or a user
+1. The flag (`APPLAUNCH_MULTITASK=1`, off by default (since task 015 "default on": on by default on 640x480 and
+   more, `=0` turns it off); set per run with `board.py test-start --env` or a user
    drop-in for the service; no Settings row).
 2. With the flag on, legacy fullscreen apps use the non-blocking path too.
 3. Not responding apps can be resumed.

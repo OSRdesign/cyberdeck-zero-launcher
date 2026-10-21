@@ -14,8 +14,11 @@ Wi-Fi and Bluetooth at the top right). It builds on P-b (Alt+Tab, hide and resum
 - What we measure: **does G1 fire when you mean it** (3 fingers), **never when you do not** (2-finger pinch, typing
   with two thumbs, a palm, a grip), and **do the fingers click nothing**.
 
-**Nothing changes unless the launcher runs with `APPLAUNCH_MULTITASK=1`**, except one thing that is always on: the
-launcher now follows **only the first finger** of a touch (part A checks that one finger behaves exactly as before).
+**Nothing changes unless the launcher runs with `APPLAUNCH_MULTITASK=1`** (the builds this protocol was written for),
+except one thing that is always on: the launcher now follows **only the first finger** of a touch (part A checks
+that one finger behaves exactly as before). **Since task 015 "default on" (2026-10-21)** a launcher of that change or later has multitasking **on by default**
+on canvases of 640x480 and more (the deck): "flag off" below means `--env APPLAUNCH_MULTITASK=0`, and
+`--env APPLAUNCH_MULTITASK=1` is then the same as no `--env` (it still forces it on, also under 640x480).
 
 No keyboard is needed for this protocol (the deck's Bluetooth keyboard may stay asleep): everything is touch, and
 the log is read in an ssh terminal on the PC.
@@ -85,7 +88,7 @@ unchanged), `mtplay` (part E). Nothing is installed over the released launcher: 
 
 ## A. Flag off: touch as before (deck, 5 minutes)
 
-`python tools/boards/board.py test-start deck` (no `--env`). `grep -c '\[mt\]' ~/applaunch-test/run.log` must print
+`python tools/boards/board.py test-start deck` (no `--env`; since "default on": `--env APPLAUNCH_MULTITASK=0`). `grep -c '\[mt\]' ~/applaunch-test/run.log` must print
 `0`, and `screen.state` must have **no** `touch_slots` line.
 1. One finger: tap tiles on the grid (each opens; Esc / hold Esc back), scroll a Settings list by dragging, type a few
    letters on the on-screen keyboard of a native page (Settings > Wi-Fi password, or the SSH page), long-press a

@@ -578,14 +578,24 @@ int env_int(const char *name, int fallback, int lo, int hi)
 
 } // namespace
 
+/* Why enabled() said yes, for start()'s log line. */
+static const char *s_on_reason = "";
+
 bool enabled()
 {
 #if defined(__linux__)
+    /* On by default; the rule (APPLAUNCH_MULTITASK=1 / =0 force it, else on where the switcher fits) is
+     * multitask::multitask_on(), the only place that decides. Read once, on the native UI only. */
     static const bool on = [] {
-        const char *v = std::getenv("APPLAUNCH_MULTITASK");
-        return v && std::strcmp(v, "1") == 0;
+        if (!native_ui::enabled()) return false;
+        const multitask::MultitaskFlag flag = multitask::parse_multitask_flag(std::getenv("APPLAUNCH_MULTITASK"));
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+        const int w = m ? m->w : 0, h = m ? m->h : 0;
+        /* off: no log line at all, as before (the protocols count `[mt]` lines) */
+        s_on_reason = flag == multitask::MultitaskFlag::On ? "APPLAUNCH_MULTITASK on" : "default";
+        return multitask::multitask_on(flag, w, h);
     }();
-    return on && native_ui::enabled();
+    return on;
 #else
     return false;
 #endif
@@ -660,7 +670,7 @@ bool start(Hooks hooks)
         stop();
         return false;
     }
-    std::fprintf(stderr, "[mt] multitasking P-b on (APPLAUNCH_MULTITASK=1): dev FIFO %s, status %s\n",
+    std::fprintf(stderr, "[mt] multitasking P-b on (%s): dev FIFO %s, status %s\n", s_on_reason,
                  cfg.control_fifo.empty() ? "-" : cfg.control_fifo.c_str(),
                  cfg.status_path.empty() ? "-" : cfg.status_path.c_str());
     const cp0_g1_params_t &p = cfg.touch.params;

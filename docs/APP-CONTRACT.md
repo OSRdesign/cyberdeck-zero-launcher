@@ -111,7 +111,7 @@ gen=33
 | `compat=x,y,w,h`, `scale` | the compat window and its integer scale |
 | `toolbar` | the compat toolbar's height (full width, at the bottom) |
 | `fb`, `bpp`, `touch` | the panel's framebuffer device, its depth in bits, the touch device (`""` / `0` = unknown) |
-| `touch_slots` | (multitasking, section 13) how many contacts the touch screen tracks: `0` no touch screen, `1` single touch (or a panel without slots), `N` multi-touch slots (the deck 5, the Pi 3A+ DSI 10); written after `touch=` by a launcher running with `APPLAUNCH_MULTITASK=1` only; absent = unknown |
+| `touch_slots` | (multitasking, section 13) how many contacts the touch screen tracks: `0` no touch screen, `1` single touch (or a panel without slots), `N` multi-touch slots (the deck 5, the Pi 3A+ DSI 10); written after `touch=` by a launcher with multitasking on only (section 13); absent = unknown |
 | `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 7 mm; the compact list row, `CP0_TOK_LIST_ROW_H`, is 5 mm and is not in `screen.state`; the toolbar, the native page header's Esc (`cp0_ui_toolbar_key_px`) and the on-screen keyboard keep their own 9 mm sizes) |
 | `text=title,heading,body,caption` | text sizes in px |
 | `kb_inset` | reserved, always `0` in contract 1 |
@@ -290,11 +290,15 @@ section L.
 ## 13. Lifecycle: hidden and resumed (multitasking)
 
 **Status: contract 1, additive** (no `v=` change, section 8; final since multitasking phase P-e). The launcher side is
-task 015 (`docs/dev/tasks/015-multitasking-pb.md`, `-pc.md`, `-pd.md`) and runs only with `APPLAUNCH_MULTITASK=1` in
-the launcher's environment; the app side is the toolkit's helper (below, phase P-e), which every native app of the
-apps repository gets through `apps/_common`. Design and owner decisions: `docs/dev/reports/026-multitasking-study.md`.
-An app that declares nothing behaves exactly as before, under any launcher; so does an app that declares
-`X-Background` when the launcher gives it no control socket (an older launcher, multitasking off, started by hand).
+task 015 (`docs/dev/tasks/015-multitasking-pb.md`, `-pc.md`, `-pd.md`). Multitasking is **on by default** on logical
+canvases of 640x480 and more (the size the switcher was designed for) and off below them (480x320, the 320x480 SPI
+panel turned to 480x320, the 320x170 board: the launcher behaves as before multitasking). `APPLAUNCH_MULTITASK=0`
+(or `false`, `off`, `no`) in the launcher's environment turns it off, `=1` (`true`, `on`, `yes`) forces it on, also
+on a smaller canvas; with it off nothing of this section happens. The app side is the toolkit's helper (below, phase
+P-e), which every native app of the apps repository gets through `apps/_common`. Design and owner decisions:
+`docs/dev/reports/026-multitasking-study.md`. An app that declares nothing behaves exactly as before, under any
+launcher; so does an app that declares `X-Background` when the launcher gives it no control socket (an older
+launcher, multitasking off, started by hand).
 
 ### Declaring it
 

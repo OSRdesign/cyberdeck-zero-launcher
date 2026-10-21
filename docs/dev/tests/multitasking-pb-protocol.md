@@ -4,7 +4,10 @@ Phase P-b of the multitasking study ([`reports/026-multitasking-study.md`](../re
 design as built: [`tasks/015-multitasking-pb.md`](../tasks/015-multitasking-pb.md)) adds the launcher core: apps
 that declare `X-Background=run|freeze` can be hidden and resumed, switched with **Alt+Tab** and **Super**. There is
 no switcher screen yet (P-d): while you hold Alt, a one-line text on the home grid lists the apps. Touch gestures are
-P-c. **Nothing changes unless the launcher runs with `APPLAUNCH_MULTITASK=1`.**
+P-c. **Nothing changes unless the launcher runs with `APPLAUNCH_MULTITASK=1`** (the builds this protocol was written
+for). **Since task 015 "default on" (2026-10-21)** a launcher of that change or later has multitasking **on by default**
+on canvases of 640x480 and more (the deck): "flag off" below means `--env APPLAUNCH_MULTITASK=0`, and
+`--env APPLAUNCH_MULTITASK=1` is then the same as no `--env` (it still forces it on, also under 640x480).
 
 No real app speaks the new protocol yet (that is P-e), so the tests use the fake app `mt-fbhapp` (the P-a spike's
 `fbhapp`) installed five times: **MT Freeze** (`X-Background=freeze`), **MT Run** (`run`), **MT Slow** (`freeze`,
@@ -67,16 +70,18 @@ the released launcher: the bundle runs staged (`board.py test-start`) and `test-
 
    Expected: five tiles MT Freeze, MT Run, MT Slow, MT Legacy, MT NoEsc (plain icons) once the launcher (re)starts.
    (Updating from pb.1: the same copy and install commands; only `mt-fbhapp-noesc.desktop` is new.)
-3. Start the test launcher **without** the flag first (part A1): `python tools/boards/board.py test-start deck`.
+3. Start the test launcher **without** the flag first (part A1): `python tools/boards/board.py test-start deck`
+   (since "default on": `test-start deck --env APPLAUNCH_MULTITASK=0`).
    Later with it: `python tools/boards/board.py test-start deck --env APPLAUNCH_MULTITASK=1` (test-start stops the
    running one first). Check: `grep '\[mt\]' ~/applaunch-test/run.log` shows
-   `multitasking P-b on (APPLAUNCH_MULTITASK=1)` and `supervisor started: cap 4, input grab+drain, guardian on`.
+   `multitasking P-b on (APPLAUNCH_MULTITASK=1)` (since "default on": `(APPLAUNCH_MULTITASK on)`, or `(default)`
+   without `--env`) and `supervisor started: cap 4, input grab+drain, guardian on`.
 4. At the very end: `python tools/boards/board.py test-stop deck`, then remove the test apps:
    `sudo rm /usr/share/APPLaunch/bin/mt-fbhapp /usr/share/APPLaunch/applications/mt-fbhapp-*.desktop`.
 
 ## A. Today's apps must not change (deck, 10 minutes)
 
-A1. **Flag off** (`test-start deck` without `--env`). `grep -c '\[mt\]' ~/applaunch-test/run.log` must print `0`.
+A1. **Flag off** (`test-start deck` without `--env`; since "default on": `--env APPLAUNCH_MULTITASK=0`). `grep -c '\[mt\]' ~/applaunch-test/run.log` must print `0`.
    1. Open **System Monitor**; use it; Esc back to its root, Esc again: it quits, the grid comes back clean (no
       leftover of the app), the tap that closed it opened nothing.
    2. Open it again and **hold Esc 3 s**: it closes (as today).
