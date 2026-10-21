@@ -47,10 +47,12 @@ tar xzf cyberdeckzero-launcher-0.8.0-arm64.tar.gz && cd bundle
 sudo ./install.sh --keyboard-name "<name from bluetoothctl devices>"
 ```
 
+<!-- branding-allow-begin: credit for the bundled Store -->
 **Upgrading from 0.7.0:** run the same command; settings, app sources and installed apps carry over. Then update the
 apps above in Settings > Apps to get them in the background. To preview: `sudo ./install.sh --dry-run`. To remove:
 `sudo ./uninstall.sh`. The bundle includes a prebuilt Store from CardputerZero/Store. Built from the `release-0.8.0`
 branch (main 8695c58 plus the release docs), version 0.8.0, channel `release`.
+<!-- branding-allow-end -->
 
 **Tested by the owner** (physical tests): _to be filled in before publishing._
 
