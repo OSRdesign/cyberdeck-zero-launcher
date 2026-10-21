@@ -1590,9 +1590,15 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         return true;
     }
     if (cmd == "tz") {
-        if (w.size() != 2) return fail(scene, line, "usage: tz ZONE");
+        if (w.size() != 2) return fail(scene, line, "usage: tz ZONE|none");
         std::lock_guard<std::mutex> lock(fx.tz_mutex);
-        fx.timezone = w[1];
+        fx.timezone = w[1] == "none" ? std::string() : w[1];
+        return true;
+    }
+    if (cmd == "tzlist") {
+        if (w.size() != 2 || (w[1] != "on" && w[1] != "off")) return fail(scene, line, "usage: tzlist on|off");
+        std::lock_guard<std::mutex> lock(fx.tz_mutex);
+        fx.timezone_list = w[1] == "on";
         return true;
     }
     if (cmd == "tzset") {

@@ -101,6 +101,11 @@ int cp0_timedate_set_timezone(const char *zone)
 /* a worker thread: fixtures/timezones.txt */
 char *cp0_timedate_list_timezones(void)
 {
+    {
+        harness::Fixtures &f = harness::fixtures();
+        std::lock_guard<std::mutex> lock(f.tz_mutex);
+        if (!f.timezone_list) return nullptr; /* "tzlist off" */
+    }
     std::ifstream file(harness::fixtures().fixture_root + "/timezones.txt", std::ios::binary);
     if (!file) return nullptr;
     const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
