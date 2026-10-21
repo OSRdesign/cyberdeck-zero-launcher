@@ -568,9 +568,9 @@ printf 'sudo %s\n' "$*" >> "$FAKE_CALLS"
 [ "$1" = -v ] && exit 0
 exec "$@"
 EOF
-printf '#!/bin/sh\necho aarch64\n' > "$FAKEBIN/uname"
+printf '#!/bin/sh\necho "${FAKE_UNAME_M:-aarch64}"\n' > "$FAKEBIN/uname"
 printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 1\n' > "$FAKEBIN/apt-get"
-for c in loginctl udevadm usermod chown dpkg dtc; do
+for c in loginctl udevadm usermod chown dpkg dtc groupadd; do
     printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
 done
 chmod 755 "$FAKEBIN"/*
@@ -691,6 +691,141 @@ check "fake DSI install: cmdline.txt gets the two console arguments only, backup
 check "fake DSI install: the hand-written profile kept, no gpio rule, reboot for the console settings only" '[ "$(cksum < "$R/etc/applaunch/board.conf")" = "$HAND" ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && has "edited by hand: kept" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ] && has "reboot now so the console settings apply" && ! has "PWM backlight and"'
 fullboot
 check "fake DSI install, second run: boot files unchanged, nothing to migrate" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && [ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && has "nothing to migrate" && ! has "reboot now"'
+
+# --- PC (amd64, report 028): the Panasonic FZ-M1 tablet as measured in x-a: DMI, the i915 framebuffer 1280x800, the
+# eDP connector with an EDID, intel_backlight (and an acpi_video0), a disconnected HDMI port; generated here (an EDID is
+# binary). pc_root NAME [PRODUCT] [CHASSIS]: the fake root; edid FILE W_MM H_MM W_CM H_CM: a 128-byte EDID blob.
+edid() {
+    LC_ALL=C awk -v w="$2" -v h="$3" -v wc="$4" -v hc="$5" 'BEGIN {
+        for (i = 0; i < 128; i++) b[i] = 0
+        for (i = 1; i < 7; i++) b[i] = 255
+        b[21] = wc; b[22] = hc
+        if (w > 0) { b[54] = 29; b[55] = 28 }
+        b[66] = w % 256; b[67] = h % 256; b[68] = int(w / 256) * 16 + int(h / 256)
+        for (i = 0; i < 128; i++) printf "%c", b[i] }' > "$1"
+}
+pc_root() {
+    d="$TMP/$1"; rm -rf "$d"
+    mkdir -p "$d/sys/class/dmi/id" "$d/sys/class/graphics/fb0" "$d/sys/class/drm/card1-eDP-1" \
+        "$d/sys/class/drm/card1-HDMI-A-1" "$d/sys/class/backlight/acpi_video0" "$d/sys/class/backlight/intel_backlight" \
+        "$d/proc/1" "$d/boot/grub" "$d/etc/default"
+    echo "Panasonic Corporation" > "$d/sys/class/dmi/id/sys_vendor"
+    echo "${2:-FZM1-2}" > "$d/sys/class/dmi/id/product_name"
+    echo "${3:-30}" > "$d/sys/class/dmi/id/chassis_type"
+    echo i915drmfb > "$d/sys/class/graphics/fb0/name"
+    echo 1280,800 > "$d/sys/class/graphics/fb0/virtual_size"
+    echo 32 > "$d/sys/class/graphics/fb0/bits_per_pixel"
+    echo connected > "$d/sys/class/drm/card1-eDP-1/status"
+    echo 1280x800 > "$d/sys/class/drm/card1-eDP-1/modes"
+    edid "$d/sys/class/drm/card1-eDP-1/edid" 152 94 15 9
+    echo disconnected > "$d/sys/class/drm/card1-HDMI-A-1/status"
+    : > "$d/sys/class/drm/card1-HDMI-A-1/edid"
+    echo 937 > "$d/sys/class/backlight/intel_backlight/max_brightness"
+    echo 400 > "$d/sys/class/backlight/intel_backlight/brightness"
+    echo 15 > "$d/sys/class/backlight/acpi_video0/max_brightness"
+    echo systemd > "$d/proc/1/comm"
+    printf 'menuentry "Armbian" {\n\tlinux /boot/vmlinuz root=UUID=1234 quiet\n}\n' > "$d/boot/grub/grub.cfg"
+    printf 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n' > "$d/etc/default/grub"
+    echo "$d"
+}
+pcrun() { OUT=$(INSTALL_MACHINE=x86_64 SYSROOT="$R" sh "$INSTALL" "$@" 2>&1); RC=$?; }
+R=$(pc_root pc)
+check "pc fixture: the EDID blob is 128 bytes with the EDID header" '[ "$(wc -c < "$R/sys/class/drm/card1-eDP-1/edid" | tr -d " ")" = 128 ] && [ "$(od -An -tx1 -N8 "$R/sys/class/drm/card1-eDP-1/edid" | tr -d " \n")" = 00ffffffffffff00 ]'
+pcrun --dry-run
+check "pc dry-run: exit 0, board pc-fzm1-2, the DMI facts" '[ $RC = 0 ] && has "board: pc-fzm1-2" && has "dmi: Panasonic Corporation / FZM1-2, chassis type 30, x86_64"'
+check "pc dry-run: appliance session, the user service and the console unit (fbcon vtcon1 unbound)" 'has "session: appliance" && has "cyberdeckzero-console.service frees the panel"'
+check "pc dry-run: no boot configuration (no config.txt, GRUB, kernel command line), no gpio rule" 'has "boot config: none on a PC (GRUB and the kernel command line are left alone)" && ! has "PWM backlight" && ! has "cmdline" && ! has "92-applaunch-backlight-gpio"'
+check "pc dry-run: the intel_backlight levels rule planned" 'has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of intel_backlight)"'
+check "pc dry-run: nothing written" '[ ! -e "$R/etc/applaunch" ] && [ ! -e "$R/etc/udev" ]'
+pcrun --board-only
+P="$R/etc/applaunch/board.conf"
+EXPECT='APPLAUNCH_BOARD=pc-fzm1-2
+APPLAUNCH_DISPLAY=dpi-scaled
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=1280x800
+APPLAUNCH_ROTATE=0
+APPLAUNCH_PANEL_MM=152x94
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+APPLAUNCH_KBD_IGNORE=bus:0011
+APPLAUNCH_HIDE_TILES=app_Store
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(grep -v '^#' "$P" 2>/dev/null)
+if [ "$GOT" = "$EXPECT" ]; then ok "pc profile: exact keys and values (EDID 152x94 mm, i8042 ignored for presence)"; else ko "pc profile: exact keys and values (EDID 152x94 mm, i8042 ignored for presence)" "$GOT"; fi
+check "pc profile: the mm source named" 'grep -qx "# panel size in mm, from the EDID of eDP-1: the layout.s density" "$P"'
+# shellcheck disable=SC1090
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_DISPLAY $APPLAUNCH_FB $APPLAUNCH_LOGICAL $APPLAUNCH_PANEL_MM $APPLAUNCH_KBD_IGNORE" ) )
+check "pc profile: valid sh syntax" '[ "$GOT" = "dpi-scaled /dev/fb0 1280x800 152x94 bus:0011" ]'
+check "pc profile: only KEY=VALUE or comment lines" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null'
+BLR="$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"
+check "pc board-only: intel_backlight rule (video group), no gpio rule" '[ -f "$BLR" ] && grep -q "KERNEL==\"intel_backlight\"" "$BLR" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+SUM1=$(cksum < "$P")
+pcrun --board-only
+check "pc second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ]'
+# the size when the EDID's detailed timing has none: the basic block (cm), else the known model, else nothing
+R=$(pc_root pc-cm); edid "$R/sys/class/drm/card1-eDP-1/edid" 0 0 15 9
+pcrun --dry-run
+check "pc, EDID with the size in cm only: 150x90" 'has "APPLAUNCH_PANEL_MM=150x90"'
+R=$(pc_root pc-noedid); : > "$R/sys/class/drm/card1-eDP-1/edid"
+pcrun --dry-run
+check "pc FZM1-2 without an EDID size: the known 150x93" 'has "APPLAUNCH_PANEL_MM=150x93" && has "from the known size of the FZM1-2"'
+R=$(pc_root pc-generic "Some Laptop 14" 10); edid "$R/sys/class/drm/card1-eDP-1/edid" 0 0 0 0
+pcrun --dry-run
+check "pc laptop, unknown size: no panel size, its keyboard counts, slug of the product" '[ $RC = 0 ] && has "board: pc-some-laptop-14" && ! has "APPLAUNCH_PANEL_MM=" && has "panel size unknown" && ! has "APPLAUNCH_KBD_IGNORE"'
+R=$(pc_root pc-detach "Tablet X" 32)
+pcrun --dry-run
+check "pc detachable (chassis 32): its built-in keyboard device does not count" 'has "APPLAUNCH_KBD_IGNORE=bus:0011"'
+R=$(pc_root pc-nobl); rm -rf "$R/sys/class/backlight"
+pcrun --dry-run
+check "pc without a backlight device: no APPLAUNCH_BACKLIGHT, no rule" '[ $RC = 0 ] && ! has "APPLAUNCH_BACKLIGHT=" && ! has "92-applaunch-backlight-sysfs"'
+R=$(pc_root pc-acpi); rm -rf "$R/sys/class/backlight/intel_backlight"
+pcrun --dry-run
+check "pc without intel_backlight: the first backlight there" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/acpi_video0"'
+R=$(pc_root pc-nofb); rm -rf "$R/sys/class/graphics/fb0"
+pcrun --dry-run
+check "pc without a framebuffer: unknown, said why, would stop, no boot configuration" '[ $RC = 0 ] && has "board: unknown" && has "PC (x86_64) without a framebuffer" && has "would stop here" && has "boot config: none on a PC"'
+R=$(pc_root pc-arm)
+OUT=$(INSTALL_MACHINE=aarch64 SYSROOT="$R" sh "$INSTALL" --dry-run 2>&1); RC=$?
+check "the PC's sys tree on an aarch64 system without a device tree: no pc profile" '[ $RC = 0 ] && has "board: unknown" && ! has "pc-fzm1-2"'
+
+# a whole fake install of the amd64 bundle on the tablet (x86_64): a fake launcher with an x86-64 ELF header
+elf() {  # elf FILE E_MACHINE: a fake binary whose ELF header names that machine (62 x86-64, 183 aarch64)
+    LC_ALL=C awk -v m="$2" 'BEGIN { printf "%c%c%c%c%c%c%c", 127, 69, 76, 70, 2, 1, 1
+        for (i = 7; i < 18; i++) printf "%c", 0
+        printf "%c%c", m, 0; printf "\necho launcher\n" }' > "$1"
+    chmod 755 "$1"
+}
+BUN64="$TMP/bundle-amd64"; rm -rf "$BUN64"; cp -R "$BUN" "$BUN64"; elf "$BUN64/payload/bin/cyberdeckzero" 62
+BUNARM="$TMP/bundle-arm64"; rm -rf "$BUNARM"; cp -R "$BUN" "$BUNARM"; elf "$BUNARM/payload/bin/cyberdeckzero" 183
+pcfull() {  # pcfull ROOT BUNDLE MACHINE [options]: install.sh as a real run would go (boot configuration on) into ROOT
+    r=$1; bun=$2; m=$3; shift 3
+    : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" FAKE_UNAME_M="$m" SYSROOT="$r" INSTALL_FAKE_SYSTEM=1 \
+          sh "$bun/install.sh" --user "$U" --no-default-source "$@" 2>&1); RC=$?
+}
+R=$(pc_root pc-full)
+BOOTSUM=$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)
+pcfull "$R" "$BUN64" x86_64
+check "fake PC install: exit 0, profile pc-fzm1-2" '[ $RC = 0 ] && has "profile pc-fzm1-2" && grep -qx "APPLAUNCH_BOARD=pc-fzm1-2" "$R/etc/applaunch/board.conf"'
+check "fake PC install: no boot file touched (GRUB, /etc/default/grub), no config.txt or cmdline.txt made, no dtc" '[ "$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)" = "$BOOTSUM" ] && [ ! -e "$R/boot/firmware" ] && [ -z "$(find "$R/boot" -name "*.txt*")" ] && ! called "dtc " && has "PC: GRUB and the kernel command line are left as they are"'
+check "fake PC install: no device-tree-compiler asked for" '! called "dpkg -s device-tree-compiler"'
+check "fake PC install: user service, linger, console unit, getty@tty1 masked (as on the Pi appliance boards)" '[ -f "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && called "loginctl enable-linger $U" && called "systemctl enable --now cyberdeckzero-console.service" && called "systemctl mask getty@tty1.service"'
+check "fake PC install: the backlight rule, the groups" '[ -f "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" ] && called "usermod -aG input,video,netdev $U"'
+if command -v nmcli >/dev/null 2>&1 && command -v bluetoothctl >/dev/null 2>&1; then :; else
+    check "fake PC install: NetworkManager / BlueZ missing: a notice, not installed" 'has "NOTICE: " && has "not installed" && ! called "apt-get"'
+fi
+R=$(pc_root pc-wrongarch)
+pcfull "$R" "$BUNARM" x86_64
+check "the arm64 bundle on a PC: refused before any change, the right bundle named" '[ $RC = 1 ] && has "this bundle is for arm64, this system is amd64" && has "cyberdeckzero-launcher-<version>-amd64.tar.gz" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc/applaunch" ]'
+R=$(root pi3a-luckfox35)
+pcfull "$R" "$BUN64" aarch64
+check "the amd64 bundle on a Pi: refused" '[ $RC = 1 ] && has "this bundle is for amd64, this system is arm64" && [ ! -e "$R/usr/share/APPLaunch" ]'
+pcfull "$R" "$BUNARM" aarch64 --no-boot-config
+check "the arm64 bundle on a Pi: accepted as before" '[ $RC = 0 ] && has "profile pi3a-luckfox35"'
 
 # --- default app source: install.sh's plan and option
 R=$(root zero2w)
