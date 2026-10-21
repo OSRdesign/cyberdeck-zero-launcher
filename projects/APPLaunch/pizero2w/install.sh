@@ -450,6 +450,17 @@ gpio_bl_rule() {
 SUBSYSTEM=="backlight", KERNEL=="backlight_gpio", ACTION=="add|change", RUN+="/bin/sh -c 'chgrp video /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power; chmod g+w /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power'"
 EOF
 }
+# The levels backlight of the profile (APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/<name>: the Pi 3A+ DSI
+# regulator, the PC's intel_backlight): its brightness file is root's only, the launcher runs as the user.
+SYSFS_BL_RULE="92-applaunch-backlight-sysfs.rules"
+SYSFS_BL=$(profile_body | sed -n 's|^APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/\([A-Za-z0-9._:-]*\)$|\1|p')
+sysfs_bl_rule() {
+    cat <<EOF
+# Backlight with brightness levels named in the board profile (APPLAUNCH_BACKLIGHT=sysfs:...): let the video group
+# set it. "change" too, so that "udevadm trigger" at install time applies it without a reboot.
+SUBSYSTEM=="backlight", KERNEL=="$SYSFS_BL", ACTION=="add|change", RUN+="/bin/sh -c 'chgrp video /sys/class/backlight/%k/brightness; chmod g+w /sys/class/backlight/%k/brightness'"
+EOF
+}
 
 # ---------------------------------------------------------------------------------------------------------
 # Desktop variant files: templates in the bundle (payload/etc/, or next to this script in the source tree) with
@@ -543,6 +554,7 @@ if [ "$DRY" = 1 ]; then
     echo "profile: $PROFILE_MSG"
     case "$PROFILE_ACTION" in write|replace) echo "--- $PROFILE"; profile_content ;; esac
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
+    if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
     if [ "$SESSION" = desktop ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
     elif [ "$DECK_BOOT" = 1 ]; then
@@ -595,6 +607,12 @@ if [ "$BOARD_ONLY" = 1 ]; then
         mkdir -p "$UDEV_DIR"
         gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
         echo "installed $UDEV_DIR/$GPIO_BL_RULE"
+        [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
+    fi
+    if [ -n "$SYSFS_BL" ]; then
+        mkdir -p "$UDEV_DIR"
+        sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"
+        echo "installed $UDEV_DIR/$SYSFS_BL_RULE"
         [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
     fi
     exit 0
@@ -756,6 +774,10 @@ EOF
 if [ "$GPIO_BL" = 1 ]; then
     gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
     echo "on/off GPIO backlight: /etc/udev/rules.d/$GPIO_BL_RULE"
+fi
+if [ -n "$SYSFS_BL" ]; then
+    sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"
+    echo "backlight levels ($SYSFS_BL): /etc/udev/rules.d/$SYSFS_BL_RULE"
 fi
 udevadm control --reload
 udevadm trigger --subsystem-match=input --subsystem-match=misc --subsystem-match=backlight || true

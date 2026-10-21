@@ -33,7 +33,7 @@ run --dry-run
 check "zero2w dry-run: exit 0" '[ $RC = 0 ]'
 check "zero2w dry-run: board zero2w" 'has "board: zero2w"'
 check "zero2w dry-run: no profile file" 'has "zero2w: no profile file"'
-check "zero2w dry-run: no gpio backlight rule" '! has "92-applaunch-backlight-gpio"'
+check "zero2w dry-run: no gpio backlight rule" '! has "92-applaunch-backlight-gpio" && ! has "92-applaunch-backlight-sysfs"'
 check "zero2w dry-run: PWM boot config as today" 'has "boot config: PWM backlight overlay"'
 check "zero2w dry-run: nothing written" '[ ! -e "$R/etc" ]'
 run --board-only
@@ -115,7 +115,9 @@ check "wsdsi43 dry-run: config.txt left alone, cmdline arguments only, no gpio r
 check "wsdsi43 dry-run: nothing written" '[ ! -e "$R/etc" ]'
 run --board-only
 P="$R/etc/applaunch/board.conf"
-check "wsdsi43 board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev" ]'
+check "wsdsi43 board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+BLR="$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"
+check "wsdsi43 board-only: udev rule lets the video group set the DSI backlight levels" '[ -f "$BLR" ] && grep -q "KERNEL==\"10-0045\"" "$BLR" && grep -q "chgrp video /sys/class/backlight/%k/brightness; chmod g+w /sys/class/backlight/%k/brightness" "$BLR"'
 EXPECT='APPLAUNCH_BOARD=pi3a-wsdsi43
 APPLAUNCH_FB=/dev/fb0
 APPLAUNCH_LOGICAL=800x480
@@ -164,10 +166,10 @@ check "wsdsi43 hand-written profile: kept byte for byte, no .bak" 'has "edited b
 # the backlight device: the regulator 10-0045, else the only one there, else none (no line)
 R=$(root pi3a-wsdsi43); mv "$R/sys/class/backlight/10-0045" "$R/sys/class/backlight/rpi_backlight"
 run --dry-run
-check "wsdsi43 with another single backlight device: that one" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/rpi_backlight"'
+check "wsdsi43 with another single backlight device: that one" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/rpi_backlight" && has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of rpi_backlight)"'
 rm -rf "$R/sys/class/backlight"
 run --dry-run
-check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT="'
+check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line, no backlight rule" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT=" && ! has "92-applaunch-backlight-sysfs"'
 # unambiguous against the SPI profile and against other DSI or HDMI set-ups
 R=$(root pi3a-wsdsi43); echo disconnected > "$R/sys/class/drm/card0-DSI-1/status"
 run --dry-run
@@ -257,6 +259,9 @@ OUT=$(HOME="$TMP/home" UNINSTALL_ROOT="$R" sh "$UNINSTALL" --dry-run --no-boot-c
 check "uninstall dry-run: exit 0" '[ $RC = 0 ]'
 check "uninstall dry-run: removes board.conf" 'has "rm -f $R/etc/applaunch/board.conf"'
 check "uninstall dry-run: removes the gpio rule" 'has "rm -f $R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules"'
+R=$(root pi3a-wsdsi43); run --board-only
+OUT=$(HOME="$TMP/home" UNINSTALL_ROOT="$R" sh "$UNINSTALL" --dry-run --no-boot-config 2>&1); RC=$?
+check "uninstall dry-run: removes the sysfs backlight rule" '[ $RC = 0 ] && has "rm -f $R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"'
 check "uninstall dry-run: changed nothing" '[ -f "$R/etc/applaunch/board.conf" ]'
 
 # --- appliance boards: the deck and the Pi 3A+ get the text console unit, nothing of the desktop variant
