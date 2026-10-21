@@ -43,6 +43,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
 | Launcher | **Settings > Launcher** shows or hides the built-in tiles, the **Store** included (it needs a keyboard, so a touch-only board can hide it; shown by default, `APPLAUNCH_LAUNCHER_STORE_TOGGLE` in `settings_hw_profile.hpp`). Hiding the Store tile does not affect Settings > Apps. |
 | Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the Cardputer matrix keymap); the Bluetooth keyboard re-attaches after sleep. |
+| Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip or Alt+Tab open "Open apps", Super goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases of 640x480 and more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
 
 ## Install on a Pi
 
@@ -75,6 +76,40 @@ a source you remove or switch off in Settings > Apps > Sources stays removed aft
 during the install, the source is added but not synced: Settings > Apps > Sources > Sync my sources (key `S`) fetches
 it. `--no-default-source` skips all of this. By hand, as the user (never with sudo):
 `sh default-sources.sh --dry-run` shows what it would do, `sh default-sources.sh` does it.
+
+## Multitasking
+
+New in v0.8.0 (task 015, `docs/dev/reports/026-multitasking-study.md`). Nothing to install or configure: it comes
+with the bundle and is **on by default** when the launcher's logical canvas is 640x480 or more (the deck, the Pi 3A+
+DSI at 800x480, the HackBerry CM5 at 720x720, the Pi 5 HyperPixel at 800x480). On smaller canvases (the Pi 3A+ SPI
+panel at 480x320, 320x170) it is off and the launcher behaves as before.
+
+- **Open apps:** three fingers held still for 1 s anywhere, a 0.5 s long-press on the clock / status strip, or Alt+Tab
+  on a keyboard (release Alt to switch); Super goes to the home grid. The switcher has a card per open app, Home and
+  Close all; a green dot on a home tile marks an app open in the background.
+- **Apps** declare `X-Background=run` or `=freeze` in their `.desktop` file (`docs/APP-CONTRACT.md` section 13; the app
+  side is `cp0_app_lifecycle` in `ext_components/cp0_lvgl`). An app that declares nothing is paused behind a
+  "Close <app>?" sheet (Close / Keep) instead of being kept.
+- **Limits it enforces:** 4 resident apps (a 5th launch closes the least recently used frozen one); while apps are
+  hidden, MemAvailable under 64 MB closes the least recently used frozen app and under 32 MB a running one too; hidden
+  apps get a higher `oom_score_adj` (700 running, 900 frozen). The app's last frame is saved and put back on resume.
+- **Turn it off** (or force it on with `=1`, also on a smaller canvas): `APPLAUNCH_MULTITASK=0` (or `false`, `off`,
+  `no`) in the launcher's environment. For the user service, a drop-in:
+
+  ```
+  mkdir -p ~/.config/systemd/user/cyberdeckzero.service.d
+  printf '[Service]\nEnvironment=APPLAUNCH_MULTITASK=0\n' > ~/.config/systemd/user/cyberdeckzero.service.d/multitask.conf
+  systemctl --user daemon-reload && systemctl --user restart cyberdeckzero.service
+  ```
+
+  On a desktop board, `sudo systemctl edit cyberdeckzero-desktop.service` with the same `[Service]` line. Delete the
+  drop-in (and reload, restart) to go back to the default.
+- **If an app is stuck:** hold Esc 3 s to close the app in front, or from ssh
+  `echo close-all > /run/user/$(id -u)/applaunch/multitask.ctl` closes every app the launcher keeps.
+- **Known limits:** the HackBerry CM5's touch reports at most two contacts, so there it is Alt+Tab only (which does
+  nothing while an app without `X-Background` is in front), and its first-run hint still says "Hold three fingers".
+  viz1090 does not support multitasking and can hang on three-finger touches (hold Esc 3 s closes it). Net Toolbox
+  stays a legacy app.
 
 ## Boards
 
@@ -259,7 +294,8 @@ and the backup files. After `--purge-config` a new install offers the default ap
 `cyberdeckzero.service` environment: `APPLAUNCH_DISPLAY=dpi-scaled`, `APPLAUNCH_ROTATE=0`,
 `LV_LINUX_KEYBOARD_DEVICE=/dev/input/bt-keyboard`, `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y` (touch panel
 orientation measured on this deck), `APPLAUNCH_STD_KEYBOARD=1`, optional `APPLAUNCH_FN_KEY=<evdev code>`,
-optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20).
+optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20), optional `APPLAUNCH_MULTITASK=0|1`
+([Multitasking](#multitasking); not set = on from 640x480).
 
 User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness,
 per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides the Store tile).
