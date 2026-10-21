@@ -6,7 +6,8 @@ you felt or saw) per line. Design and rules: `ext_components/cp0_lvgl/include/cp
 `docs/APP-CONTRACT.md` section 10b.
 
 What it does: with Settings > System > Pointer navigation **On**, pushing (sliding a finger on) the pad gives arrow keys,
-faster the harder / longer you push, one axis at a time; a click on the pad is **Enter**; a click held 0.6 s without
+faster the harder / longer you push, one axis at a time; a click of the pad's **button** is **Enter** (a quick tap on
+the surface is ignored, since 0.8.1); a click held 0.6 s without
 moving is the **options key** (Ctrl+O); the wheel of a USB mouse is Up / Down. Esc / back stays on the keyboard.
 
 Setup (Controller): install the bundle (see the build's README), start the launcher from the menu. For the log, add
@@ -46,6 +47,9 @@ start: `[PTR] reader ready: dead zone 3, ...`, `[PTR] pointer devices: ZitaoTech
     no app opens by accident (a press within 0.15 s of a push is part of the push).
 16. Pause half a second after a push, then click: it opens (the guard does not eat deliberate clicks).
 17. Rest the finger and click while it rests (drift): Enter, no arrow step.
+17b. Tap the pad's surface quickly (no button press) on a Home tile, several times: nothing opens. With the debug log:
+    `[PTR] ... tap ignored (N ms, under 260 ms)`, no `ENTER`. Then press the button normally: it opens. If a normal
+    button press gets lost, the log shows it as a tap: lower `APPLAUNCH_POINTER_MIN_CLICK_MS` (section I).
 
 ## E. With the keyboard
 18. Esc on the keyboard always goes back, also right after pointer steps; the 3 s Esc hold still returns Home from an
@@ -97,6 +101,7 @@ and prints the values in force.
 | `APPLAUNCH_POINTER_RELEASE_MS` | `50` | no report for this long = released. Raise it if steps stutter during a steady push |
 | `APPLAUNCH_POINTER_HOLD_MS` | `600` | click held this long = options |
 | `APPLAUNCH_POINTER_TAP_SLOP` | `24` | counts the finger may move (net) while the button is down and still click / hold |
+| `APPLAUNCH_POINTER_MIN_CLICK_MS` | per device: `260` on the HackBerry pad, `0` otherwise | a press released sooner is a tap of the pad's surface and is ignored (no Enter). Lower it if deliberate quick button clicks get lost, raise it if taps still select; `0` turns it off (every press clicks, as before 0.8.1). It applies to every pointer |
 | `APPLAUNCH_POINTER_CLICK_GUARD_MS` | `150` | a press this soon after a push is no click. Raise it if clicks happen by accident at the end of pushes, lower it if quick clicks get lost |
 | `APPLAUNCH_POINTER_SMOOTH_PCT` | `50` | weight of a new report in the smoothed level (higher reacts faster, lower filters noise more) |
 | `APPLAUNCH_POINTER_AXIS_SWITCH_PCT` | `200` | the other axis takes over above this % of the current one |

@@ -39,6 +39,7 @@ void cp0_ptr_nav_params_default(cp0_ptr_nav_params_t *p)
     p->tap_slop = CP0_PTR_NAV_TAP_SLOP;
     p->click_guard_ms = CP0_PTR_NAV_CLICK_GUARD_MS;
     p->wheel_max = CP0_PTR_NAV_WHEEL_MAX;
+    p->min_click_ms = CP0_PTR_NAV_MIN_CLICK_MS;
 }
 
 void cp0_ptr_nav_params_normalize(cp0_ptr_nav_params_t *p)
@@ -56,6 +57,7 @@ void cp0_ptr_nav_params_normalize(cp0_ptr_nav_params_t *p)
     p->tap_slop = clampi(p->tap_slop, 0, 100000);
     p->click_guard_ms = clampi(p->click_guard_ms, 0, 5000);
     p->wheel_max = clampi(p->wheel_max, 1, 100);
+    p->min_click_ms = clampi(p->min_click_ms, -1, p->hold_ms); /* -1 = auto; at hold_ms no click is left */
 }
 
 /* "123": 0 and the value, else -1 */
@@ -115,6 +117,7 @@ int cp0_ptr_nav_params_apply_env(cp0_ptr_nav_params_t *p, const char *(*get)(con
         {"APPLAUNCH_POINTER_HOLD_MS", offsetof(cp0_ptr_nav_params_t, hold_ms), 0},
         {"APPLAUNCH_POINTER_TAP_SLOP", offsetof(cp0_ptr_nav_params_t, tap_slop), 0},
         {"APPLAUNCH_POINTER_CLICK_GUARD_MS", offsetof(cp0_ptr_nav_params_t, click_guard_ms), 0},
+        {"APPLAUNCH_POINTER_MIN_CLICK_MS", offsetof(cp0_ptr_nav_params_t, min_click_ms), 0},
     };
     int taken = 0;
     for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
@@ -127,6 +130,41 @@ int cp0_ptr_nav_params_apply_env(cp0_ptr_nav_params_t *p, const char *(*get)(con
     }
     cp0_ptr_nav_params_normalize(p);
     return taken;
+}
+
+/* Pads whose firmware turns a tap on the surface into a BTN_LEFT press. Add a row for another such pad. */
+static const struct {
+    unsigned vendor, product;     /* USB ids (I: Vendor= Product= in /proc/bus/input/devices) */
+    const char *name_a, *name_b;  /* the kernel name contains both: the match when the ids are unknown */
+    int min_click_ms;
+} k_devices[] = {
+    /* ZitaoTech HACKBerryPiQ20 (HackBerry CM5 keyboard), its "Mouse" interface: taps 0.16-0.19 s, button >= 0.35 s */
+    {0x1209u, 0x0b20u, "HACKBerryPiQ20", "Mouse", CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY},
+};
+
+int cp0_ptr_nav_device_min_click_ms(unsigned vendor, unsigned product, const char *name)
+{
+    for (size_t i = 0; i < sizeof(k_devices) / sizeof(k_devices[0]); i++) {
+        if (vendor || product) {
+            if (vendor == k_devices[i].vendor && product == k_devices[i].product) return k_devices[i].min_click_ms;
+        } else if (name && strstr(name, k_devices[i].name_a) && strstr(name, k_devices[i].name_b)) {
+            return k_devices[i].min_click_ms;
+        }
+    }
+    return -1;
+}
+
+void cp0_ptr_nav_params_for_device(const cp0_ptr_nav_params_t *base, unsigned vendor, unsigned product,
+                                   const char *name, cp0_ptr_nav_params_t *out)
+{
+    if (!out) return;
+    if (base) *out = *base;
+    else cp0_ptr_nav_params_default(out);
+    if (out->min_click_ms < 0) {
+        const int table = cp0_ptr_nav_device_min_click_ms(vendor, product, name);
+        out->min_click_ms = table > 0 ? table : 0;
+    }
+    cp0_ptr_nav_params_normalize(out);
 }
 
 const char *cp0_ptr_key_name(cp0_ptr_key_t key)
@@ -293,7 +331,15 @@ static void press(cp0_ptr_nav_t *s)
 
 static void release(cp0_ptr_nav_t *s, sink_t *sink)
 {
-    if (!s->guarded && !s->drag && !s->hold_fired) emit(sink, CP0_PTR_KEY_ENTER);
+    if (!s->guarded && !s->drag && !s->hold_fired) {
+        const uint64_t held = s->now - s->press_at;
+        if (s->p.min_click_ms > 0 && held < (uint64_t)s->p.min_click_ms) { /* a firmware tap, not the button */
+            s->taps_ignored++;
+            s->last_tap_ms = (uint32_t)held;
+        } else {
+            emit(sink, CP0_PTR_KEY_ENTER);
+        }
+    }
     s->down = 0;
     s->guarded = 0;
     s->drag = 0;

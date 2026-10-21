@@ -4,8 +4,9 @@
  * 0.1-0.2 s peaking at 37-55; a hard push about 420 counts in 1.1 s peaking at 97; a tap 0.18 s; a hold 1.5-2 s with
  * 44 counts of drift in 4 s):
  *   dead zone, axis choice and its hysteresis, the step rate against time and level, the rate cap (also across
- *   pushes), release stops, tap / hold / drag / the click guard, the wheel, reset, the timer API, the environment
- *   overrides and the process-wide switch.
+ *   pushes), release stops, tap / hold / drag / the click guard, the tap filter (min_click_ms: the pad's firmware
+ *   tap of 0.16-0.19 s against its button's 0.35-0.43 s, measured 2026-10-22) and the per-device table, the wheel,
+ *   reset, the timer API, the environment overrides and the process-wide switch.
  */
 #include "cp0_pointer_nav.h"
 
@@ -446,6 +447,195 @@ static void test_no_click_while_pushing(void)
     CHECK(count(CP0_PTR_KEY_ENTER) == 1);
 }
 
+/* ------------------------------------------------------------------ tap filter (min_click_ms) */
+
+/* a press of `ms` with no motion report between (the pad sends few or none during a tap) */
+static void press_for(uint32_t ms)
+{
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    report_full(ms, 0, 0, 0, CP0_PTR_BUTTON_UP);
+}
+
+static void start_min_click(int min_click_ms)
+{
+    cp0_ptr_nav_params_t p;
+    cp0_ptr_nav_params_default(&p);
+    p.min_click_ms = min_click_ms;
+    start(&p);
+}
+
+static void test_min_click(void)
+{
+    /* the measured HackBerry taps (0.16-0.19 s) are ignored with 260 ms; the button (0.35-0.43 s) clicks */
+    static const uint32_t taps[] = {160, 170, 180, 190};
+    for (size_t i = 0; i < sizeof(taps) / sizeof(taps[0]); i++) {
+        start_min_click(260);
+        press_for(taps[i]);
+        idle(1000);
+        CHECK(N == 0);
+        CHECK(S.taps_ignored == 1 && S.last_tap_ms == taps[i]);
+        CHECK(cp0_ptr_nav_next_ms(&S) == -1);
+    }
+    static const uint32_t clicks[] = {350, 380, 430};
+    for (size_t i = 0; i < sizeof(clicks) / sizeof(clicks[0]); i++) {
+        start_min_click(260);
+        press_for(clicks[i]);
+        CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER && S.taps_ignored == 0);
+    }
+
+    /* the boundary: 255 ignored, 260 and 265 click */
+    start_min_click(260);
+    press_for(255);
+    CHECK(N == 0 && S.taps_ignored == 1);
+    start_min_click(260);
+    press_for(260);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER);
+    start_min_click(260);
+    press_for(265);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER);
+
+    /* a 0.18 s tap with resting-finger noise between press and release: still ignored */
+    start_min_click(260);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    for (int i = 0; i < 10; i++) report(noise(1), noise(1));
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_UP);
+    CHECK(N == 0 && S.taps_ignored == 1);
+
+    /* the hold is unaffected: options at hold_ms while down, nothing at the release */
+    start_min_click(260);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    const uint64_t pressed = S.now;
+    idle(2250);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_UP);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_OPTIONS && E[0].t == pressed + CP0_PTR_NAV_HOLD_MS);
+    CHECK(S.taps_ignored == 0);
+
+    /* 0 = off: a 120 ms USB mouse click and a 180 ms tap both click, exactly as before */
+    start_min_click(0);
+    press_for(120);
+    press_for(180);
+    CHECK(N == 2 && count(CP0_PTR_KEY_ENTER) == 2 && S.taps_ignored == 0);
+    /* auto (-1) left unresolved in the core: same as 0 */
+    start_min_click(-1);
+    press_for(80);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER);
+
+    /* taps after a push (the first measured tap came after 25 motion events): the push's steps stay, the taps add
+     * nothing, inside the click guard (guarded) and past it (too short) */
+    start_min_click(260);
+    for (int i = 0; i < 10; i++) report(0, 40);
+    const int steps = N;
+    CHECK(steps >= 1 && count(CP0_PTR_KEY_DOWN) == steps);
+    idle(100);
+    press_for(180);
+    idle(400);
+    press_for(180);
+    idle(500);
+    CHECK(N == steps && count(CP0_PTR_KEY_ENTER) == 0);
+    CHECK(S.taps_ignored == 1); /* the guarded one is the guard's, not the filter's */
+    /* then the button: a click */
+    press_for(380);
+    CHECK(count(CP0_PTR_KEY_ENTER) == 1);
+
+    /* a long press inside the click guard stays guarded (no click, no options) */
+    start_min_click(260);
+    for (int i = 0; i < 10; i++) report(0, 40);
+    const int steps2 = N;
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    report_full(400, 0, 0, 0, CP0_PTR_BUTTON_UP);
+    CHECK(N == steps2);
+
+    /* drags unchanged: a short one and a long one navigate and send nothing for the button */
+    start_min_click(260);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    for (int i = 0; i < 10; i++) report(0, 30);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_UP);
+    CHECK(count(CP0_PTR_KEY_ENTER) == 0 && count(CP0_PTR_KEY_OPTIONS) == 0 && count(CP0_PTR_KEY_DOWN) >= 1);
+    CHECK(S.taps_ignored == 0);
+    start_min_click(260);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    for (int i = 0; i < 60; i++) report(0, 30);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_UP);
+    CHECK(count(CP0_PTR_KEY_ENTER) == 0 && count(CP0_PTR_KEY_OPTIONS) == 0 && count(CP0_PTR_KEY_DOWN) >= 3);
+
+    /* small motion inside the slop during a real click: still Enter */
+    start_min_click(260);
+    report_full(REPORT_MS, 0, 0, 0, CP0_PTR_BUTTON_DOWN);
+    for (int i = 0; i < 4; i++) report(0, 4);
+    report_full(300, 0, 0, 0, CP0_PTR_BUTTON_UP);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER);
+}
+
+static const char *min_click_env_0(const char *name)
+{
+    return strcmp(name, "APPLAUNCH_POINTER_MIN_CLICK_MS") == 0 ? "0" : NULL;
+}
+
+static const char *min_click_env_300(const char *name)
+{
+    return strcmp(name, "APPLAUNCH_POINTER_MIN_CLICK_MS") == 0 ? "300" : NULL;
+}
+
+static const char *min_click_env_big(const char *name)
+{
+    return strcmp(name, "APPLAUNCH_POINTER_MIN_CLICK_MS") == 0 ? "5000" : NULL;
+}
+
+static void test_device_table(void)
+{
+    static const char *pad = "ZitaoTech HACKBerryPiQ20 Mouse";
+    static const char *mouse = "Logitech USB Optical Mouse";
+    /* the HackBerry pad, as in tests/fixtures/proc_bus_input_devices_all_boards.txt (I: Vendor=1209 Product=0b20) */
+    CHECK(cp0_ptr_nav_device_min_click_ms(0x1209, 0x0b20, pad) == CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY);
+    CHECK(cp0_ptr_nav_device_min_click_ms(0x1209, 0x0b20, NULL) == CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY);
+    /* ids unknown: the name decides */
+    CHECK(cp0_ptr_nav_device_min_click_ms(0, 0, pad) == CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY);
+    CHECK(cp0_ptr_nav_device_min_click_ms(0, 0, "ZitaoTech HACKBerryPiQ20") == -1);
+    CHECK(cp0_ptr_nav_device_min_click_ms(0, 0, NULL) == -1);
+    /* other devices are not in the table; known ids win over the name */
+    CHECK(cp0_ptr_nav_device_min_click_ms(0x046d, 0xc077, mouse) == -1);
+    CHECK(cp0_ptr_nav_device_min_click_ms(0x1209, 0x0b21, "Other Mouse") == -1);
+    CHECK(cp0_ptr_nav_device_min_click_ms(0x046d, 0xc077, pad) == -1);
+
+    /* the defaults resolve per device: 260 for the pad, 0 for a mouse */
+    cp0_ptr_nav_params_t base, own;
+    cp0_ptr_nav_params_default(&base);
+    CHECK(base.min_click_ms == -1);
+    cp0_ptr_nav_params_for_device(&base, 0x1209, 0x0b20, pad, &own);
+    CHECK(own.min_click_ms == 260 && own.hold_ms == base.hold_ms);
+    cp0_ptr_nav_params_for_device(&base, 0x046d, 0xc077, mouse, &own);
+    CHECK(own.min_click_ms == 0);
+    cp0_ptr_nav_params_for_device(NULL, 0, 0, NULL, &own);
+    CHECK(own.min_click_ms == 0);
+
+    /* the environment wins over the table: 0 turns it off for the pad, 300 applies to every device */
+    cp0_ptr_nav_params_default(&base);
+    CHECK(cp0_ptr_nav_params_apply_env(&base, min_click_env_0) == 1);
+    cp0_ptr_nav_params_for_device(&base, 0x1209, 0x0b20, pad, &own);
+    CHECK(own.min_click_ms == 0);
+    cp0_ptr_nav_params_default(&base);
+    CHECK(cp0_ptr_nav_params_apply_env(&base, min_click_env_300) == 1);
+    cp0_ptr_nav_params_for_device(&base, 0x046d, 0xc077, mouse, &own);
+    CHECK(own.min_click_ms == 300);
+    /* never above the hold time */
+    cp0_ptr_nav_params_default(&base);
+    CHECK(cp0_ptr_nav_params_apply_env(&base, min_click_env_big) == 1);
+    CHECK(base.min_click_ms == base.hold_ms);
+
+    /* end to end: the pad ignores a 180 ms tap and clicks at 350 ms; a mouse keeps its 120 ms click */
+    cp0_ptr_nav_params_default(&base);
+    cp0_ptr_nav_params_for_device(&base, 0x1209, 0x0b20, pad, &own);
+    start(&own);
+    press_for(180);
+    CHECK(N == 0);
+    press_for(350);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER);
+    cp0_ptr_nav_params_for_device(&base, 0x046d, 0xc077, mouse, &own);
+    start(&own);
+    press_for(120);
+    CHECK(N == 1 && E[0].key == CP0_PTR_KEY_ENTER);
+}
+
 /* ------------------------------------------------------------------ wheel */
 
 static void test_wheel(void)
@@ -608,6 +798,8 @@ int main(void)
     test_hold_is_options();
     test_motion_while_held();
     test_no_click_while_pushing();
+    test_min_click();
+    test_device_table();
     test_wheel();
     test_reset_and_timers();
     test_params();

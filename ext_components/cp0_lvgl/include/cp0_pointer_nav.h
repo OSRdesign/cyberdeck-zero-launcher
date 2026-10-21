@@ -29,6 +29,12 @@
  *     movement while it is down is a drag: no click, no options, and the motion navigates again. While it is down
  *     and not a drag, motion does not navigate (the finger rests on the pad). A press that comes within
  *     CP0_PTR_NAV_CLICK_GUARD_MS of motion above the dead zone belongs to the push: no click, no options.
+ *     A press released before min_click_ms is a firmware tap, not a click: ignored entirely (no Enter, no options;
+ *     the motion did what it did). min_click_ms is 0 (off) for every device except those in the per-device table
+ *     (cp0_ptr_nav_device_min_click_ms): the HackBerry pad turns a quick tap on its surface into a BTN_LEFT press of
+ *     0.16-0.19 s, its physical button gives 0.35 s and more, so it gets CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY (a USB
+ *     mouse clicks in 80-150 ms and keeps clicking as before). APPLAUNCH_POINTER_MIN_CLICK_MS sets it for every
+ *     device (0 = off).
  * PageUp / PageDown are part of the key vocabulary, but no rule produces them yet.
  */
 #ifndef CP0_POINTER_NAV_H
@@ -65,6 +71,10 @@ extern "C" {
 #define CP0_PTR_NAV_TAP_SLOP 24
 /* a press this soon after motion above the dead zone is part of the push: no click, no options */
 #define CP0_PTR_NAV_CLICK_GUARD_MS 150
+/* min_click_ms: -1 = auto, the per-device table decides (cp0_ptr_nav_params_for_device), else 0 (every click counts) */
+#define CP0_PTR_NAV_MIN_CLICK_MS (-1)
+/* the HackBerry pad: a tap on the surface is a 0.16-0.19 s press, the physical button 0.35 s and more */
+#define CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY 260
 /* at most this many wheel notches per report (more is a glitch) */
 #define CP0_PTR_NAV_WHEEL_MAX 8
 
@@ -98,6 +108,7 @@ typedef struct {
     int tap_slop;           /* counts */
     int click_guard_ms;
     int wheel_max;          /* notches per report */
+    int min_click_ms;       /* a shorter press is a tap: ignored; 0 = off; -1 = auto (the per-device table, else 0) */
 } cp0_ptr_nav_params_t;
 
 /* The defaults above. */
@@ -106,9 +117,17 @@ void cp0_ptr_nav_params_default(cp0_ptr_nav_params_t *p);
 void cp0_ptr_nav_params_normalize(cp0_ptr_nav_params_t *p);
 /* Overrides from the environment (`get` is getenv in the reader, a fake in the tests), then normalize:
  *   APPLAUNCH_POINTER_DEADZONE, _FULL_LEVEL, _TAP_SLOP (counts), _SLOW_RATE, _MAX_RATE (steps per second, "12" or
- *   "12.5"), _REPEAT_DELAY_MS, _RELEASE_MS, _HOLD_MS, _CLICK_GUARD_MS (ms), _SMOOTH_PCT, _AXIS_SWITCH_PCT (%).
+ *   "12.5"), _REPEAT_DELAY_MS, _RELEASE_MS, _HOLD_MS, _CLICK_GUARD_MS, _MIN_CLICK_MS (ms; _MIN_CLICK_MS=0 turns the
+ *   tap filter off even for a device of the table), _SMOOTH_PCT, _AXIS_SWITCH_PCT (%).
  * A malformed value is ignored. Returns how many values were taken. */
 int cp0_ptr_nav_params_apply_env(cp0_ptr_nav_params_t *p, const char *(*get)(const char *name));
+
+/* Per-device defaults: the min_click_ms of a device in the table, matched by its USB vendor:product (EVIOCGID), or by
+ * its kernel name when the ids are unknown (0); -1 when the device is not in the table. */
+int cp0_ptr_nav_device_min_click_ms(unsigned vendor, unsigned product, const char *name);
+/* The parameters of one device: a copy of `base` where an auto min_click_ms (-1) becomes the table's value, else 0. */
+void cp0_ptr_nav_params_for_device(const cp0_ptr_nav_params_t *base, unsigned vendor, unsigned product,
+                                   const char *name, cp0_ptr_nav_params_t *out);
 
 typedef enum {
     CP0_PTR_BUTTON_SAME = 0, /* no button change in this report */
@@ -147,6 +166,9 @@ typedef struct {
     int press_dx, press_dy;  /* motion summed since the press */
     int moved;               /* |press_dx| + |press_dy|: how far the finger went (net) */
     uint64_t press_at;
+    /* taps ignored (min_click_ms), for the debug log: the count and the length of the last one */
+    unsigned taps_ignored;
+    uint32_t last_tap_ms;
 } cp0_ptr_nav_t;
 
 /* params NULL = defaults (normalized copy kept in the state). */
