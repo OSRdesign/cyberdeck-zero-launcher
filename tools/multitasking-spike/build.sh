@@ -10,12 +10,14 @@
 #
 # The aarch64 binaries are static, so they do not depend on the boards' glibc (the WSL cross toolchain has 2.39;
 # the boards run Debian 13 with 2.41, uConsole-era bookworm would have 2.36). C11 + POSIX + Linux headers only; the
-# 5x7 font comes from tools/dev/app-contract-probe/font5x7.h.
+# 5x7 font comes from tools/dev/app-contract-probe/font5x7.h; fbhapp links the toolkit's app-side lifecycle helper
+# (ext_components/cp0_lvgl/src/cp0_app_lifecycle.c, multitasking P-e) for --helper.
 set -eu
 here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 src=$here/src
 font=$here/../dev/app-contract-probe
-flags="-std=c11 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-format-truncation -I$src -I$font"
+cp0=$here/../../ext_components/cp0_lvgl
+flags="-std=c11 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-format-truncation -I$src -I$font -I$cp0/include"
 common="$src/mta_util.c $src/evdev_util.c"
 
 build() { # dir compiler extra-flags
@@ -26,7 +28,7 @@ build() { # dir compiler extra-flags
     # shellcheck disable=SC2086
     $2 $flags $3 -o "$out/fbhandoff" "$src/fbhandoff.c" "$src/fb_util.c" $common -lm
     # shellcheck disable=SC2086
-    $2 $flags $3 -o "$out/fbhapp" "$src/fbhapp.c" "$src/fb_util.c" $common -lm
+    $2 $flags $3 -o "$out/fbhapp" "$src/fbhapp.c" "$src/fb_util.c" "$cp0/src/cp0_app_lifecycle.c" $common -lm
     # shellcheck disable=SC2086
     $2 $flags $3 -o "$out/mtplay" "$src/mtplay.c" $common -lm
     echo "built $out/mtrec $out/fbhandoff $out/fbhapp $out/mtplay"

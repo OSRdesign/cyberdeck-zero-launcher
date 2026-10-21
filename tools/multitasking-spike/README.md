@@ -145,7 +145,9 @@ Since P-b (task 015) `fbhapp` also shows `work`, one tick per 100 ms the process
 catch-up after a freeze: a `run` app's count grows while hidden, a frozen one's does not), and sends the protocol's
 `home` when `h` is pressed. A hidden app no longer polls every millisecond. `--no-hup` ignores SIGHUP (the
 launcher's guardian test: the kernel sends SIGHUP to a stopped process group left orphaned). The launcher's host process tests
-(`projects/APPLaunch/tests/multitask/run_supervisor_host.sh`) build and drive it.
+(`projects/APPLaunch/tests/multitask/run_supervisor_host.sh`) build and drive it. Since P-e `--helper` hands its control
+socket to the toolkit's app-side helper (`ext_components/cp0_lvgl` `cp0_app_lifecycle.c`, what the real apps run; the
+same log lines, `helper=1`); `--ack-delay-ms` and `--ignore-hide` do not apply then.
 
 **Test apps for the launcher (P-b).** `desktop/` installs `fbhapp` (aarch64 build, copied as
 `/usr/share/APPLaunch/bin/mt-fbhapp`) five times: `mt-fbhapp-freeze.desktop` (`X-Background=freeze`),

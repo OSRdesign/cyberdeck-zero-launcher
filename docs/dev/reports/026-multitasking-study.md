@@ -837,3 +837,25 @@ switcher". Design as built, files, tests, deviations and the decisions to confir
   (D9); no sheet for wrapped apps (their toolbar's Esc held 3 s ends them); the switcher opens on launcher pages too.
 - Verified on the PC only (unit tests, the host process suite with the fake app, render-harness scenes at 640x480,
   800x480, 720x720, 1280x720 and 1024x600); the board tests are pending.
+
+## 14. P-e status (2026-10-21)
+
+Built on branch `multitasking-pe` (on `main` dc43a6d) with the apps repository's branch of the same name. APP-CONTRACT
+section 13 is final (contract 1, additive). Board protocol: `docs/dev/tests/multitasking-pe-protocol.md`.
+
+- The toolkit's app side, no thread and no timer of its own: `cp0_app_lifecycle.{h,c}` (the protocol, plain C,
+  copy-ready) and `cp0_app_lifecycle_lvgl.{h,c}` + `src/cp0/cp0_app_lifecycle_device.cpp` (a `cp0_lvgl` app: hide =
+  `cp0_display_suspend`, invalidation off (nothing rendered), `lv_indev_reset`, `keyboard_pause` (libinput releases the
+  held keys: the Alt of Alt+Tab), key queue emptied; show = `keyboard_resume`, the new `cp0_display_touch_resync()` (queue dropped,
+  contacts read back, a finger still down presses nothing), queue emptied, invalidation on, everything invalidated,
+  `cp0_display_resume`; close = the app's normal exit; G2 on the app's strip sends `switcher`; a key filter drops keys
+  while hidden, Tab with Alt, and orphan releases after a show). Serviced from `cp0_lvgl_run`'s loop hook: an answer
+  takes at most one loop turn (33 ms).
+- The apps (`apps/_common` starts it): System Monitor, RSS Reader and the App Template `freeze`; Serial Console `run`
+  (a stopped tty overflows; the log never stops); Mesh Hop `run` (no page rebuilt and nothing read while hidden). Net
+  Toolbox stays without `X-Background` (a pause falsifies its measurements); viz1090 is out of scope (owner decision: no
+  multitasking for viz1090 on the Pi Zero 2 W).
+- Not done: the `home` message has no control in any app (D5: Esc at the root quits; `cdk::leave_to_home()` is there).
+- Verified on the PC only: `tests/test_app_lifecycle.c`, the host process suite with `fbhapp --helper` (freeze, run,
+  close through the helper against the real supervisor), each app's headless `lifecycle` scene and Mesh Hop's
+  simulator flow (a message received while hidden); the board tests are pending.

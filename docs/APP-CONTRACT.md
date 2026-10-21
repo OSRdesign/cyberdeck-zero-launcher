@@ -46,7 +46,7 @@ exits).
 | `APPLAUNCH_CANVAS=WxH` | `320x170` (the pixels the app draws) | the logical screen, e.g. `640x480` |
 | `APPLAUNCH_CANVAS_SCALE` | screen pixels per canvas pixel: `2` or `1` | `1` |
 | `APPLAUNCH_STATE_DIR` | the state directory (absent without `XDG_RUNTIME_DIR`) | same |
-| `APPLAUNCH_LIFECYCLE=1`, `APPLAUNCH_CONTROL_FD=<n>` | never | only for an app with `X-Background` and only from a launcher with multitasking on: the lifecycle control socket (section 13, draft) |
+| `APPLAUNCH_LIFECYCLE=1`, `APPLAUNCH_CONTROL_FD=<n>` | never | only for an app with `X-Background` and only from a launcher with multitasking on: the lifecycle control socket (section 13) |
 
 All coordinates are **logical**: landscape, before the panel's rotation. Compat apps also get the launcher's
 virtual-framebuffer setup (`APPLAUNCH_VFB`, `LD_PRELOAD`, `LV_LINUX_FBDEV_DEVICE=/dev/fb0`, `APPLAUNCH_FB=/dev/fb0`,
@@ -111,7 +111,7 @@ gen=33
 | `compat=x,y,w,h`, `scale` | the compat window and its integer scale |
 | `toolbar` | the compat toolbar's height (full width, at the bottom) |
 | `fb`, `bpp`, `touch` | the panel's framebuffer device, its depth in bits, the touch device (`""` / `0` = unknown) |
-| `touch_slots` | (draft, multitasking, section 13) how many contacts the touch screen tracks: `0` no touch screen, `1` single touch (or a panel without slots), `N` multi-touch slots (the deck 5, the Pi 3A+ DSI 10); written after `touch=` by a launcher running with `APPLAUNCH_MULTITASK=1` only; absent = unknown |
+| `touch_slots` | (multitasking, section 13) how many contacts the touch screen tracks: `0` no touch screen, `1` single touch (or a panel without slots), `N` multi-touch slots (the deck 5, the Pi 3A+ DSI 10); written after `touch=` by a launcher running with `APPLAUNCH_MULTITASK=1` only; absent = unknown |
 | `space=s,m,l`, `radius=s,m,l`, `header`, `row`, `target`, `dialog_max_w` | the launcher's design tokens in **screen** px (row 7 mm, target 7 mm; the compact list row, `CP0_TOK_LIST_ROW_H`, is 5 mm and is not in `screen.state`; the toolbar, the native page header's Esc (`cp0_ui_toolbar_key_px`) and the on-screen keyboard keep their own 9 mm sizes) |
 | `text=title,heading,body,caption` | text sizes in px |
 | `kb_inset` | reserved, always `0` in contract 1 |
@@ -151,7 +151,7 @@ A file without `vkb` (an older launcher) means `auto`; a file without `pointer` 
 | Key | Meaning |
 |---|---|
 | `X-Fullscreen=true` | fullscreen mode: the launcher stops drawing, the app owns the whole panel until it exits (the hold-Esc watchdog still applies). Without it the app is a compat app: 320x170 in the scaled window, toolbar below. |
-| `X-Background=run\|freeze` | **draft (section 13)**: the app may be hidden and resumed instead of owning the panel until it exits; `freeze` = stopped while hidden, `run` = keeps working while hidden. Absent or another value: today's behaviour. Only with `X-Fullscreen=true`, only under a launcher with multitasking on; an older launcher ignores it. |
+| `X-Background=run\|freeze` | (section 13) the app may be hidden and resumed instead of owning the panel until it exits; `freeze` = stopped while hidden, `run` = keeps working while hidden. Absent or another value: today's behaviour. Only with `X-Fullscreen=true`, only under a launcher with multitasking on; an older launcher ignores it. Declare it only in a build that answers the protocol (section 13, "The helper"). |
 | `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (stock CardputerZero, the SDL simulator) shows it. |
 
 **An older launcher ignores `X-MinSize`** (and every contract variable), so an app must still start on a screen that
@@ -194,6 +194,7 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 | `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
+| `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | the app side of the lifecycle protocol (section 13): `cp0_app_lifecycle_init()` from the environment, `_service()` (non-blocking, answers `ack <n>`), `_send()` (`home`, `switcher`), the key rule `_key_drop()` | libc + POSIX sockets |
 
 Build: compile the `.c` files with your app, `-I` the folders of the headers. Example of a complete user:
 `tools/dev/app-contract-probe/build.sh`.
@@ -286,13 +287,14 @@ against the render harness at six screen sizes with the environment the launcher
 every fact against the layout service. The board tests are in `docs/dev/tests/launcher-0.5.0-keyboard-tests.md`,
 section L.
 
-## 13. Lifecycle: hidden and resumed (draft, multitasking)
+## 13. Lifecycle: hidden and resumed (multitasking)
 
-**Status: draft, additive to contract 1** (no `v=` change, section 8). The launcher side is task 015
-(`docs/dev/tasks/015-multitasking-pb.md`, multitasking phase P-b) and runs only with `APPLAUNCH_MULTITASK=1` in the
-launcher's environment; the shared app side (`apps/_common`, the viz1090 shim, Mesh Hop) is phase P-e. Design and
-owner decisions: `docs/dev/reports/026-multitasking-study.md`. An app that declares nothing behaves exactly as
-before, under any launcher.
+**Status: contract 1, additive** (no `v=` change, section 8; final since multitasking phase P-e). The launcher side is
+task 015 (`docs/dev/tasks/015-multitasking-pb.md`, `-pc.md`, `-pd.md`) and runs only with `APPLAUNCH_MULTITASK=1` in
+the launcher's environment; the app side is the toolkit's helper (below, phase P-e), which every native app of the
+apps repository gets through `apps/_common`. Design and owner decisions: `docs/dev/reports/026-multitasking-study.md`.
+An app that declares nothing behaves exactly as before, under any launcher; so does an app that declares
+`X-Background` when the launcher gives it no control socket (an older launcher, multitasking off, started by hand).
 
 ### Declaring it
 
@@ -333,7 +335,9 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
 - **Answer `hide` in time.** No `ack <n>` within 300 ms: the launcher stops the whole process group with `SIGSTOP`
   and shows the app as *not responding*. It can still be resumed (its last frame is restored, its input emptied, the
   group continued) or closed. A `run` app that cannot stop drawing must not declare `run`.
-- **No framebuffer write while hidden.** The launcher draws the home grid (later the switcher) over your last frame.
+- **No framebuffer write while hidden.** The launcher draws the home grid or the switcher over your last frame.
+- **Alt+Tab and Super are the launcher's.** You see Alt go down and the Tab with it: do not act on Tab with Alt held
+  (the helper drops it), and do not give Super or three fingers held still a meaning of your own.
 - **On `show`:** read and drop whatever input is still pending (until `EAGAIN`), **treat every key as released and
   reset the modifiers** (re-read `EVIOCGKEY` if you track key state: the Alt+Tab that hid you showed you Alt going down
   but never up), reset the pointer state, repaint the whole screen, resume input, answer `ack <n>`.
@@ -347,8 +351,25 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
 - The launcher also protects you from stale input on its own (it grabs the touch screen and the keyboards while it
   is in front with apps hidden, and empties your evdev queues before every `show`), but an app must not rely on it:
   another launcher, or a board with a stricter `ptrace_scope`, may not.
+- **Save state on exit, and better as you go.** `close`, the memory rule, `SIGTERM` (Esc held 3 s) and the kernel's
+  OOM killer can all end a hidden app; only the first two give it time.
 
-### Gestures (draft, multitasking phase P-c)
+### The helper (SDK, phase P-e)
+
+`ext_components/cp0_lvgl` has the app side, in two layers:
+
+| Files | For | What it does |
+|---|---|---|
+| `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | any app (copy-ready, section 9: plain C, no LVGL) | reads the environment (the variable pair, an open socket), makes the socket non-blocking and close-on-exec; `cp0_app_lifecycle_service()` reads every waiting message without blocking, calls the app's `hide` / `show` / `close` function, then answers `ack <n>`; a `hide` while hidden or a `show` while visible is only answered; the launcher's end going away ends the lifecycle (and closes a hidden app: nobody can show it again); `cp0_app_lifecycle_send()` for `home` / `switcher`; the key rule below |
+| `include/cp0_app_lifecycle_lvgl.h`, `src/cp0_app_lifecycle_lvgl.c`, `src/cp0/cp0_app_lifecycle_device.cpp` | an app on `cp0_lvgl` | `cp0_app_lifecycle_device_start(on_close)` after the display exists: the service runs from `cp0_lvgl_run()`'s loop hook (no thread, no timer of its own: the loop turns at least every indev read period, 33 ms, which bounds the answer). **hide**: `cp0_display_suspend()` (no framebuffer write from its return; the touch screen reads released), invalidation off on every display (nothing is rendered while hidden; widgets may still change), `lv_indev_reset()` (the press in progress ends without a click), the keyboards let go (`keyboard_pause()`: libinput releases the keys still held, so Alt comes back up), the key queue emptied. **show**: the keyboards opened again, the touch screen's queue dropped and its contacts read back (`cp0_display_touch_resync()`: a finger still down presses nothing until lifted), the key queue emptied, the indevs reset, invalidation on again, every screen and layer invalidated, `cp0_display_resume()`: a full repaint. **close**: `on_close()`, the app's normal exit. **G2** in the app: one finger held 500 ms on its status strip sends `switcher`. A key filter drops every key while hidden, Tab with Alt held (the launcher's Alt+Tab must not also move the app's focus), and after a `show` the release or repeat of a key not pressed since (the Alt of the Alt+Tab that hid the app). |
+
+The native apps of the apps repository start it in `apps/_common/platform.cpp` and quit on `close` exactly as on Esc at
+their root (`cdk::request_quit`); `cdk::hidden()` tells a `run` app to skip its own rendering work. An app opts in with
+the `.desktop` key alone once it is built against a `cp0_lvgl` with the helper (and the apps' guidelines say what it
+must not do while hidden). Esc at an app's root still quits (D5); nothing in the helper adds a "minimise" control, but
+`cp0_app_lifecycle_lvgl_send("home")` is there for an app that wants one.
+
+### Gestures (multitasking phase P-c)
 
 - **Three fingers held still for 1 s anywhere** (G1) and **a long-press on the status strip** (G2) open the
   switcher (phase P-d): the app in front is hidden (`hide`), as Super does. An app without `X-Background` is frozen
@@ -360,13 +381,17 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
   the middle of a press; cancel it (no click) as the `hide` obligation says, and ignore the touches until `show`.
 - Do not give three or more fingers a meaning of your own (a four-finger contact cancels G1, but three fingers held
   still are the launcher's). One- and two-finger gestures (pinch, pan, two-thumb typing) stay the app's.
-- G2 in an app is the app's own: a long-press on its status strip sends `switcher` (the shared `cp0_lvgl` strip will
-  do it in phase P-e).
+- G2 in an app is the app's own: a long-press on its status strip sends `switcher` (an app on `cp0_lvgl` with the
+  helper does it for the strip of its active screen, `cp0::ui::StatusStrip`; an app that draws by itself checks its
+  own strip's rectangle with `cp0_gesture_g2.h`).
 - `touch_slots` in `screen.state` (section 4) says whether the panel can do G1 at all.
 
 ### Testing
 
-`tools/multitasking-spike/` has `fbhapp`, a fake fullscreen app that speaks this protocol (its README), and
-`desktop/` files that install it as `freeze`, `run`, slow-to-answer and legacy test apps, and `mtplay`, a scripted
-uinput touch screen (three-finger holds and the patterns that must not fire). The board test protocols are
-`docs/dev/tests/multitasking-pb-protocol.md` and `multitasking-pc-protocol.md`.
+`tools/multitasking-spike/` has `fbhapp`, a fake fullscreen app that speaks this protocol (its README; `--helper`
+makes it use the helper above), and `desktop/` files that install it as `freeze`, `run`, slow-to-answer and legacy
+test apps, and `mtplay`, a scripted uinput touch screen (three-finger holds and the patterns that must not fire). On
+the PC: `ext_components/cp0_lvgl/tests/test_app_lifecycle.c` (the helper), `projects/APPLaunch/tests/multitask/`
+(the real supervisor with `fbhapp`, with and without `--helper`) and, in the apps repository, each app's
+`tests/scenes/lifecycle.scene` (the headless harness plays the launcher). The board test protocols are
+`docs/dev/tests/multitasking-pb-protocol.md`, `-pc-`, `-pd-` and `multitasking-pe-protocol.md` (the real apps).

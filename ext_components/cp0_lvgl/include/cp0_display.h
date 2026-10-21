@@ -143,6 +143,11 @@ void cp0_display_set_touch_frame_cb(cp0_display_touch_frame_cb_t cb);
 /* LVGL thread: reads what the touch device queued (into the tracker; no frame to the callback) and returns how many
  * contacts are down now: when the launcher takes the panel back, its queue holds what happened meanwhile. */
 int cp0_display_touch_sync(void);
+/* Multitasking P-e (an app's show, cp0_app_lifecycle_lvgl.h), LVGL thread: drops what the touch device queued, reads
+ * back the contacts down now (EVIOCGMTSLOTS; BTN_TOUCH for a panel without slots), so a lift the app never saw (the
+ * launcher grabbed or drained the device meanwhile) does not leave a stuck contact, and when a finger is still down the
+ * pointer reads released until every finger is up (swallow mode 2). Returns the contacts down. */
+int cp0_display_touch_resync(void);
 void cp0_display_touch_map(int raw_x, int raw_y, int *x, int *y);
 const char *cp0_display_touch_path(void);
 int cp0_display_touch_slots(void);

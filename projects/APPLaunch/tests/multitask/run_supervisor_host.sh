@@ -14,9 +14,11 @@ trap 'rm -rf "$work"' EXIT INT TERM
 mkdir -p "$build"
 
 spike="$root/tools/multitasking-spike/src"
+# P-e: fbhapp --helper runs the toolkit's app-side lifecycle helper (cp0_app_lifecycle.c) against the real supervisor
 ${CC:-gcc} -std=c11 -O2 -Wall -Wextra -Werror -Wno-unused-parameter -Wno-format-truncation \
-    -I"$spike" -I"$root/tools/dev/app-contract-probe" \
-    -o "$build/fbhapp" "$spike/fbhapp.c" "$spike/fb_util.c" "$spike/mta_util.c" "$spike/evdev_util.c" -lm
+    -I"$spike" -I"$root/tools/dev/app-contract-probe" -I"$root/ext_components/cp0_lvgl/include" \
+    -o "$build/fbhapp" "$spike/fbhapp.c" "$spike/fb_util.c" "$spike/mta_util.c" "$spike/evdev_util.c" \
+    "$root/ext_components/cp0_lvgl/src/cp0_app_lifecycle.c" -lm
 
 san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
 if ! printf 'int main(void){return 0;}\n' | ${CXX:-g++} -x c++ $san - -o "$build/san_probe" 2>/dev/null; then
