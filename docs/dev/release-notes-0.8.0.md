@@ -14,8 +14,7 @@
   - **Low-power rules:** at most 4 resident apps (a 5th launch closes the least recently used frozen one); when free
     memory drops under 64 MB the launcher closes a frozen app, under 32 MB a running one too; hidden apps get a higher
     `oom_score_adj`, so the kernel kills them first under memory pressure.
-  - **On by default** on screens of 640x480 and more (the deck, the Pi 3A+ DSI 800x480, the HackBerry CM5 720x720,
-    the Pi 5 HyperPixel); **off** on smaller ones (480x320, 320x170), where the launcher behaves as before.
+  - **On by default** on screens of 640x480 and more (the deck, the Pi 3A+ DSI 800x480, and the HackBerry CM5 720x720); **off** on smaller ones (480x320, 320x170), where the launcher behaves as before.
 - **Apps updated for it** (published separately in the apps repository, update them in Settings > Apps):
   System Monitor 0.2.4 and RSS Reader 0.1.1 (`freeze`), Serial Console 0.4.3 and Mesh Hop 0.5.1 (`run`).
 - Also since v0.7.0: `cp0::ui::CompactList` for apps (#45), home tiles reload when an icon changes (#46), the status
@@ -54,7 +53,7 @@ apps above in Settings > Apps to get them in the background. To preview: `sudo .
 branch (main 8695c58 plus the release docs), version 0.8.0, channel `release`.
 <!-- branding-allow-end -->
 
-**Tested by the owner** (physical tests): _to be filled in before publishing._
+**Tested by the owner** (physical tests): the deck (640x480; touch gestures, Alt+Tab, Esc fallback, memory cap, all four apps in the background), the Pi 3A+ DSI (gesture and switcher, launcher build `0.8.0-on.1`) and the HackBerry CM5 (Alt+Tab; three fingers is impossible on its panel). The apps with the lifecycle helper were tested on the deck only.
 
 **Known limits**
 
