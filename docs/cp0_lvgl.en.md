@@ -1,7 +1,5 @@
 # cp0_lvgl Interface Reference
 
-Languages: [中文](cp0_lvgl.md) | English (this page) | [日本語](cp0_lvgl.ja.md)
-
 This document is the public contract for `ext_components/cp0_lvgl`. New pages and extension modules can use it as their first reference. When fixing a bug, changing behavior, or checking a platform difference, inspect the actual implementation under `src/` and the matching `*_contract.*` files. Device and SDL backends share signal names and argument formats, but their underlying capabilities can differ.
 
 ## Quick Start
@@ -297,6 +295,6 @@ Session commands are `BtSessionInit` (returns an id), `BtSessionDeinit id`, `BtS
 ## Change and Debug Rules
 
 1. Read this document and `include/signal_register_plan.h` before changing a call site.
-2. When changing an interface, update all three language documents, the matching contract, C wrapper, call sites, and tests.
+2. When changing an interface, update this document, the matching contract, C wrapper, call sites, and tests.
 3. For bug fixes, inspect the implementation and contract files; verify callback threads, initialization, teardown, background workers, and wire escaping.
 4. Run `ext_components/cp0_lvgl/tests/run_tests.sh`. Changes involving Linux commands, BlueZ, libcamera, framebuffer, or sudo also require target-platform validation.

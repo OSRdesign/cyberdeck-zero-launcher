@@ -1,20 +1,7 @@
 [submodule "SDK"]
 	path = SDK
 	url = https://github.com/m5stack/M5Stack_Linux_Libs.git
-[submodule "projects/CardputerZero-Emulator/lib/lvgl"]
-	path = projects/CardputerZero-Emulator/lib/lvgl
-	url = https://github.com/lvgl/lvgl.git
-	shallow = true
-[submodule "projects/Calculator"]
-	path = projects/Calculator
-	url = https://github.com/CardputerZero/Calculator.git
 [submodule "projects/AppStore"]
 	path = projects/AppStore
 	url = https://github.com/CardputerZero/Store.git
 	branch = main
-[submodule "projects/CameraApp/main_CameraApp"]
-	path = projects/CameraApp/main_CameraApp
-	url = https://github.com/CardputerZero/CameraApp.git
-[submodule "projects/Keyboard-Guide/main_Keyboard-Guide"]
-	path = projects/Keyboard-Guide/main_Keyboard-Guide
-	url = https://github.com/CardputerZero/Keyboard-Guide.git

@@ -142,10 +142,9 @@ if 'CONFIG_APPLAUNCH_CROSS' in os.environ:
     LDFLAGS += [rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"/"libstdc++.so.6"]
 
 
-# Host SDL2 builds (Linux x86_64 and Windows x86) need pkg-config flags
+# The host SDL2 build (Linux x86_64) needs pkg-config flags
 # for the APPLaunch sources and for LVGL's SDL/FreeType features.
-if ('CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ or
-        'CONFIG_APPLAUNCH_WIN_X86_SDL2' in os.environ):
+if 'CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ:
     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
     lvgl_component['REQUIREMENTS'] += pkg_config_ldflags("freetype2")
     DEFINITIONS += pkg_config_cflags("sdl2")
@@ -158,56 +157,6 @@ if 'CONFIG_APPLAUNCH_LINUX_CP0' in os.environ:
     # native build (amd64 PCs, report 028): no sysroot, LVGL's FreeType headers from the build box (pkg-config)
     if not os.environ.get('CONFIG_TOOLCHAIN_SYSROOT'):
         lvgl_component['DEFINITIONS'] += ['-D_REENTRANT'] + pkg_config_cflags("freetype2")
-
-if 'CONFIG_APPLAUNCH_MAC_CROSS_CP0' in os.environ:
-    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
-    lvgl_component['INCLUDE'] += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/freetype2', f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/include/libpng16']
-
-    REQUIREMENTS += ['cp0_lvgl']
-    REQUIREMENTS += ['input', 'xkbcommon', 'udev', 'freetype']
-    # add libcamera — note: pkg-config name is 'libcamera', not 'camera'.
-    # Linker still wants -lcamera but we need explicit cflags for the headers.
-    REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
-    try:
-        DEFINITIONS += subprocess.check_output(
-            ['pkg-config', '--cflags', 'libcamera'], text=True).split()
-    except Exception:
-        # Fallback: assume Debian's standard libcamera header layout under the
-        # configured sysroot. CONFIG_TOOLCHAIN_SYSROOT is empty for native builds.
-        _sr = os.environ.get('CONFIG_TOOLCHAIN_SYSROOT', '')
-        DEFINITIONS += [f'-I{_sr}/usr/include/libcamera']
-
-    LDFLAGS += [f'{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu/libstdc++.so.6',f'-Wl,-rpath-link,{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu',f'-B{os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", "")}/usr/lib/aarch64-linux-gnu']
-    DEFINITIONS += ['-Wno-format-truncation']
-# macOS
-if 'CONFIG_APPLAUNCH_DARWIN_SDL' in os.environ:
-    # macOS Use the SDL backend
-    REQUIREMENTS += ['cp0_lvgl']
-
-#     # nlohmann_json
-#     DEFINITIONS += pkg_config_cflags("nlohmann_json")
-
-#     # SDL2
-#     DEFINITIONS += pkg_config_cflags("sdl2")
-#     REQUIREMENTS += pkg_config_ldflags("sdl2")
-
-    # LVGL SDL driver also needs SDL2 headers/defines
-    lvgl_component['DEFINITIONS'] += pkg_config_cflags("sdl2")
-    lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
-
-#     # FreeType
-#     lvgl_component['DEFINITIONS'] += pkg_config_cflags("freetype2")
-#     REQUIREMENTS += pkg_config_ldflags("freetype2")
-
-if 'CONFIG_APPLAUNCH_WIN_X86_CROSS_CP0' in os.environ:
-    rootfs_lib_path = rootfs_path/"lib"/"aarch64-linux-gnu"
-    rootfs_usr_lib_path = rootfs_path/"usr"/"lib"/"aarch64-linux-gnu"
-
-    LDFLAGS += [rootfs_usr_lib_path/'libstdc++.so.6',
-                f'-Wl,-rpath-link,{rootfs_lib_path}',
-                f'-Wl,-rpath-link,{rootfs_usr_lib_path}',
-                f'-B{rootfs_usr_lib_path}']
-    DEFINITIONS += ['-Wno-format-truncation']
 
 # Stage the complete resource tree for the package.
 _static_source = os.path.abspath('../APPLaunch')

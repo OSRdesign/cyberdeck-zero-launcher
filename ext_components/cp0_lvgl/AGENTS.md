@@ -3,7 +3,6 @@
 ## Read First
 
 - Public interfaces, all `cp0_signal_*` commands, arguments, callback results, and thread rules: read [`docs/cp0_lvgl.en.md`](../../docs/cp0_lvgl.en.md).
-- Chinese and Japanese references: [`docs/cp0_lvgl.md`](../../docs/cp0_lvgl.md) and [`docs/cp0_lvgl.ja.md`](../../docs/cp0_lvgl.ja.md).
 - Authoritative signal signatures: `include/signal_register_plan.h`.
 - C ABI: `include/cp0_lvgl_app.h`; LVGL pages and runner: `include/cp0_lvgl_app_runner.hpp` and `include/ui_app_page.hpp`.
 - The README files are call-site references. When fixing a bug, changing behavior, or checking a platform difference, inspect the relevant implementation under `src/` and its `*_contract.*` files, then compare the device and SDL backends.
@@ -31,6 +30,6 @@ For command details, argument counts, return encoding, and platform differences,
 
   `def_hal_fun(void(std::list<std::string>, std::function<void(int, std::string)>), cp0_signal_xxx_api)`
 
-- When changing an argument or return format, update the English, Chinese, and Japanese documents in `docs/`, the corresponding contract, C wrappers, all call sites, and tests.
+- When changing an argument or return format, update `docs/cp0_lvgl.en.md`, the corresponding contract, C wrappers, all call sites, and tests.
 - Do not add new uses of deprecated `cp0_process_run_sudo` or `cp0_signal_process_api` `RunSudo`; use the asynchronous sudo signals.
 - Run `ext_components/cp0_lvgl/tests/run_tests.sh` for module regression. Changes involving Linux commands, BlueZ, libcamera, framebuffer, or sudo also require target-platform validation.
