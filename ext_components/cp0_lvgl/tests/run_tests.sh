@@ -523,13 +523,13 @@ TSAN_OPTIONS="halt_on_error=1" "$binary"
     -I"$root/include" \
     "$root/src/cp0/cp0_keyboard_presence.c" \
     "$root/tests/test_keyboard_presence.c" -o "$binary"
-"$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt"
+"$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt" "$root/tests/fixtures/proc_bus_input_devices_fzm1.txt"
 
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread -fsanitize=thread -g \
     -I"$root/include" \
     "$root/src/cp0/cp0_keyboard_presence.c" \
     "$root/tests/test_keyboard_presence.c" -o "$binary"
-TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt"
+TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt" "$root/tests/fixtures/proc_bus_input_devices_fzm1.txt"
 
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/src/cp0" \

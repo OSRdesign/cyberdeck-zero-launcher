@@ -567,11 +567,75 @@ static void test_pointer_watcher(void)
     CHECK(system(cmd) == 0);
 }
 
+/* The ignore list (APPLAUNCH_KBD_IGNORE, report 028 X5) against the FZ-M1 tablet (tests/fixtures/
+ * proc_bus_input_devices_fzm1.txt, modelled on the x-a probe): its built-in "AT Translated Set 2 keyboard" (i8042, bus
+ * 0011) is always there, plus a USB keyboard. Not keyboards: the power button, the ACPI video bus, the Sharp touch. */
+static void test_ignore_list(const char *fixture)
+{
+    /* entries: names exactly, bus:XXXX in hex, spaces around, drop: wins */
+    CHECK(cp0_kbd_presence_ignore_match(NULL, "AT Translated Set 2 keyboard", 0x11) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match("", "AT Translated Set 2 keyboard", 0x11) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match("bus:0011", "AT Translated Set 2 keyboard", 0x11) == CP0_KBD_IGNORE_PRESENCE);
+    CHECK(cp0_kbd_presence_ignore_match("bus:11", "x", 0x11) == CP0_KBD_IGNORE_PRESENCE);
+    CHECK(cp0_kbd_presence_ignore_match("bus:001E", "x", 0x1e) == CP0_KBD_IGNORE_PRESENCE);
+    CHECK(cp0_kbd_presence_ignore_match("bus:0011", "Logitech USB Keyboard", 0x03) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match("bus:", "x", 0) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match("bus:00zz", "x", 0) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match(" M4 Keyboard , bus:0011 ", "M4 Keyboard", 0x05) == CP0_KBD_IGNORE_PRESENCE);
+    CHECK(cp0_kbd_presence_ignore_match("M4", "M4 Keyboard", 0x05) == CP0_KBD_IGNORE_NO); /* whole names only */
+    CHECK(cp0_kbd_presence_ignore_match("m4 keyboard", "M4 Keyboard", 0x05) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match("drop:Barcode Scanner", "Barcode Scanner", 0x03) == CP0_KBD_IGNORE_DROP);
+    CHECK(cp0_kbd_presence_ignore_match("drop:bus:0003", "Barcode Scanner", 0x03) == CP0_KBD_IGNORE_DROP);
+    CHECK(cp0_kbd_presence_ignore_match("bus:0003,drop:Barcode Scanner", "Barcode Scanner", 0x03) ==
+          CP0_KBD_IGNORE_DROP);
+    CHECK(cp0_kbd_presence_ignore_match("drop:", "x", 0) == CP0_KBD_IGNORE_NO);
+    CHECK(cp0_kbd_presence_ignore_match(",,", "x", 0) == CP0_KBD_IGNORE_NO);
+
+    size_t len = 0;
+    const char *text = read_text(fixture, &len);
+    cp0_kbd_presence_list_t list, counted;
+    CHECK(cp0_kbd_presence_parse(text, len, 64, &list) == 2);
+    CHECK(strcmp(list.devices[0].name, "AT Translated Set 2 keyboard") == 0 && list.devices[0].bus == 0x0011);
+    CHECK(strcmp(list.devices[0].path, "/dev/input/event3") == 0);
+    CHECK(strcmp(list.devices[1].name, "Logitech USB Keyboard") == 0);
+    /* the pc profile's bus:0011: the USB keyboard counts, the built-in one does not; both stay in the read list */
+    CHECK(cp0_kbd_presence_counted(&list, "bus:0011", &counted) == 1);
+    CHECK(strcmp(counted.devices[0].name, "Logitech USB Keyboard") == 0);
+    CHECK(cp0_kbd_presence_counted(&list, NULL, &counted) == 2);
+    CHECK(cp0_kbd_presence_counted(&list, "AT Translated Set 2 keyboard", &counted) == 1);
+    /* the USB keyboard unplugged: nothing counts, so the on-screen keyboard shows; the i8042 keys are still read */
+    const char *usb = strstr(text, "I: Bus=0003");
+    CHECK(usb != NULL);
+    CHECK(cp0_kbd_presence_parse(text, (size_t)(usb - text), 64, &list) == 1);
+    CHECK(cp0_kbd_presence_counted(&list, "bus:0011", &counted) == 0);
+    CHECK(list.count == 1 && strcmp(list.devices[0].path, "/dev/input/event3") == 0);
+    CHECK(cp0_kbd_presence_counted(NULL, "bus:0011", &counted) == 0);
+
+    /* drop: in place, order kept */
+    CHECK(cp0_kbd_presence_parse(text, len, 64, &list) == 2);
+    CHECK(cp0_kbd_presence_drop(&list, "bus:0011") == 0 && list.count == 2);
+    CHECK(cp0_kbd_presence_drop(&list, "drop:bus:0011") == 1 && list.count == 1);
+    CHECK(strcmp(list.devices[0].name, "Logitech USB Keyboard") == 0);
+
+    /* the reader (and so the watcher) applies the environment's drop entries, never the plain ones */
+    cp0_kbd_presence_list_t read_list;
+    CHECK(setenv(CP0_KBD_IGNORE_ENV, "bus:0011", 1) == 0);
+    CHECK(cp0_kbd_presence_enumerate(fixture, 64, &read_list) == 2 && read_list.count == 2);
+    CHECK(setenv(CP0_KBD_IGNORE_ENV, "drop:AT Translated Set 2 keyboard", 1) == 0);
+    CHECK(cp0_kbd_presence_enumerate(fixture, 64, &read_list) == 1 && read_list.count == 1);
+    CHECK(strcmp(read_list.devices[0].name, "Logitech USB Keyboard") == 0);
+    CHECK(cp0_kbd_presence_enumerate_all(fixture, 64, NULL, NULL) == 1); /* counted right without a list */
+    CHECK(cp0_kbd_presence_enumerate("/nonexistent/devices", 64, &read_list) == -1 && read_list.count == 0);
+    CHECK(unsetenv(CP0_KBD_IGNORE_ENV) == 0);
+    CHECK(cp0_kbd_presence_enumerate(fixture, 64, &read_list) == 2);
+}
+
 int main(int argc, char **argv)
 {
-    CHECK(argc == 2); /* the fixture path */
+    CHECK(argc == 3); /* the fixture paths: every board, the FZ-M1 tablet */
     test_bitmap_decoder();
     test_fixture(argv[1]);
+    test_ignore_list(argv[2]);
     test_rule_edges();
     test_pointer_classifier();
     test_timer();

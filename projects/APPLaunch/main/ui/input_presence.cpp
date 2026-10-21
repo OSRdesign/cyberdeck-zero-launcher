@@ -83,11 +83,17 @@ void track_for_policy(const cp0_kbd_presence_list_t *list)
     s_known.store(true);
 }
 
-void on_keyboards(const cp0_kbd_presence_list_t *list, unsigned generation, void *)
+void on_keyboards(const cp0_kbd_presence_list_t *all, unsigned generation, void *)
 {
     std::lock_guard<std::mutex> lock(s_mutex);
     Publisher &p = s_publisher;
     if (p.published && generation == p.watcher_generation) return; // the same list twice (start-up)
+    // The board profile's APPLAUNCH_KBD_IGNORE (a tablet's built-in i8042 keyboard): read, but not counted as a
+    // connected keyboard, for the on-screen keyboard policy and the apps' input state (cp0_keyboard_presence.h)
+    const char *ignore = std::getenv(CP0_KBD_IGNORE_ENV);
+    cp0_kbd_presence_list_t counted;
+    cp0_kbd_presence_counted(all, ignore, &counted);
+    const cp0_kbd_presence_list_t *list = &counted;
     track_for_policy(list);
 
     cp0_input_state_t next = p.state;
@@ -105,13 +111,15 @@ void on_keyboards(const cp0_kbd_presence_list_t *list, unsigned generation, void
     char names[512];
     size_t used = 0;
     names[0] = '\0';
-    for (unsigned i = 0; i < list->count && used < sizeof(names); ++i) {
-        const int n = std::snprintf(names + used, sizeof(names) - used, "%s%s (%s)", i ? ", " : "",
-                                    list->devices[i].name, list->devices[i].path);
+    for (unsigned i = 0; i < all->count && used < sizeof(names); ++i) {
+        const bool counts = cp0_kbd_presence_ignore_match(ignore, all->devices[i].name, all->devices[i].bus) ==
+                            CP0_KBD_IGNORE_NO;
+        const int n = std::snprintf(names + used, sizeof(names) - used, "%s%s (%s)%s", i ? ", " : "",
+                                    all->devices[i].name, all->devices[i].path, counts ? "" : " [not counted]");
         if (n < 0) break;
         used += static_cast<size_t>(n);
     }
-    SLOGI("[KBD] keyboards=%u gen=%u: %s", next.keyboards, next.gen, list->count ? names : "none");
+    SLOGI("[KBD] keyboards=%u gen=%u: %s", next.keyboards, next.gen, all->count ? names : "none");
     write_locked(p);
 }
 
