@@ -5,12 +5,6 @@
 set -eu
 build_dir="${TMPDIR:-/tmp}/cp0-lvgl-tests"
 mkdir -p "$build_dir"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
-    "$(dirname "$0")/test_update_job.cpp" -o "$build_dir/test_update_job"
-"$build_dir/test_update_job"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
-    "$(dirname "$0")/test_launcher_updater.cpp" -o "$build_dir/test_launcher_updater"
-"$build_dir/test_launcher_updater"
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 binary="${TMPDIR:-/tmp}/cp0_lvgl_test_async_utils.$$"
@@ -202,31 +196,6 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" \
     "$root/tests/test_process_api_contract.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-    -I"$root/src/cp0" \
-    "$root/src/cp0/cp0_lora_runtime_policy.cpp" \
-    "$root/tests/test_lora_runtime_policy.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-    -I"$root/src/cp0" \
-    "$root/tests/test_lora_gpio_offset_policy.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
-    -I"$root/include" -I"$root/src" \
-    "$root/src/cp0_lora_contract.cpp" \
-    "$root/tests/test_lora_contract.cpp" -o "$binary"
-"$binary"
-
-"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
-    -I"$root/include" -I"$root/src" \
-    -I"$root/../../SDK/github_source/eventpp/include" \
-    "$root/src/cp0_lora_contract.cpp" \
-    "$root/src/sdl/sdl_lvgl_lara.cpp" \
-    "$root/tests/test_sdl_lora_registration.cpp" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \

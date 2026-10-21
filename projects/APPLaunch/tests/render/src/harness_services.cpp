@@ -609,10 +609,6 @@ void install_services()
         } else if (command == "BacklightWrite") {
             f.backlight = std::atoi(arg(args, 1).c_str());
             if (reply) reply(0, std::to_string(f.backlight));
-        } else if (command == "GpioGet") {
-            if (reply) reply(0, "1");
-        } else if (command == "GpioSet") {
-            if (reply) reply(0, "");
         } else {
             unknown("settings", args, reply);
         }

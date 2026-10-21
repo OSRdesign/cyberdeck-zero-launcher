@@ -12,25 +12,16 @@
 
 #if defined(APPLAUNCH_HW_PIZERO2W)
 
-// Raspberry Pi Zero 2W cyberdeck: no speaker, no wired Ethernet, no M5IOE1 expander,
-// no battery gauge, no ADB gadget mode, and software updates come from elsewhere.
+// Raspberry Pi Zero 2W cyberdeck (and the other boards of this port): no speaker, no wired Ethernet,
+// no battery gauge.
 #ifndef APPLAUNCH_SETTINGS_SPEAKER
 #define APPLAUNCH_SETTINGS_SPEAKER 0
 #endif
 #ifndef APPLAUNCH_SETTINGS_ETHERNET
 #define APPLAUNCH_SETTINGS_ETHERNET 0
 #endif
-#ifndef APPLAUNCH_SETTINGS_EXTPORT
-#define APPLAUNCH_SETTINGS_EXTPORT 0
-#endif
 #ifndef APPLAUNCH_SETTINGS_BATTERY
 #define APPLAUNCH_SETTINGS_BATTERY 0
-#endif
-#ifndef APPLAUNCH_SETTINGS_DEVELOPER
-#define APPLAUNCH_SETTINGS_DEVELOPER 0
-#endif
-#ifndef APPLAUNCH_SETTINGS_SOFTWARE_UPDATE
-#define APPLAUNCH_SETTINGS_SOFTWARE_UPDATE 0
 #endif
 #ifndef APPLAUNCH_SETTINGS_SHUTDOWN
 #define APPLAUNCH_SETTINGS_SHUTDOWN 1
@@ -39,11 +30,6 @@
 // (no sudo password, no `hwclock -w`). A manual time lasts until the next boot.
 #ifndef APPLAUNCH_SETTINGS_TIME_NO_SUDO
 #define APPLAUNCH_SETTINGS_TIME_NO_SUDO 1
-#endif
-// The stock Calculator is an external program that draws to a 320x170 framebuffer and is not
-// installed here: use the built-in native touch calculator page instead.
-#ifndef APPLAUNCH_APPS_NATIVE_CALCULATOR
-#define APPLAUNCH_APPS_NATIVE_CALCULATOR 1
 #endif
 // A standard keyboard has no Fn key: pages without text entry open their help with plain H, and the
 // SSH page (typing fields) uses F1.
@@ -100,26 +86,14 @@
 #ifndef APPLAUNCH_SETTINGS_ETHERNET
 #define APPLAUNCH_SETTINGS_ETHERNET 1
 #endif
-#ifndef APPLAUNCH_SETTINGS_EXTPORT
-#define APPLAUNCH_SETTINGS_EXTPORT 1
-#endif
 #ifndef APPLAUNCH_SETTINGS_BATTERY
 #define APPLAUNCH_SETTINGS_BATTERY 1
-#endif
-#ifndef APPLAUNCH_SETTINGS_DEVELOPER
-#define APPLAUNCH_SETTINGS_DEVELOPER 1
-#endif
-#ifndef APPLAUNCH_SETTINGS_SOFTWARE_UPDATE
-#define APPLAUNCH_SETTINGS_SOFTWARE_UPDATE 1
 #endif
 #ifndef APPLAUNCH_SETTINGS_SHUTDOWN
 #define APPLAUNCH_SETTINGS_SHUTDOWN 0 // the stock menu only offers Reboot
 #endif
 #ifndef APPLAUNCH_SETTINGS_TIME_NO_SUDO
 #define APPLAUNCH_SETTINGS_TIME_NO_SUDO 0 // stock: sudo coordinator + `hwclock -w`
-#endif
-#ifndef APPLAUNCH_APPS_NATIVE_CALCULATOR
-#define APPLAUNCH_APPS_NATIVE_CALCULATOR 0 // stock: external CardputerZero-Calculator
 #endif
 #ifndef APPLAUNCH_HELP_PLAIN_H
 #define APPLAUNCH_HELP_PLAIN_H 0 // stock: Fn+H is a hardware key code on the Cardputer keyboard

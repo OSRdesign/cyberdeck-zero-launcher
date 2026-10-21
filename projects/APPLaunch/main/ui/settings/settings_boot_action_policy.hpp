@@ -15,14 +15,12 @@ enum class Action {
     Reboot,
     Shutdown,
     FactoryReset,
-    RearmOobe,
 };
 
 enum class Operation {
     Reboot,
     Shutdown,
     RemoveLauncherSettings,
-    TouchOobeMarker,
 };
 
 struct Presentation

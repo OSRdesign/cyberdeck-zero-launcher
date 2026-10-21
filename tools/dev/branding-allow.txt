@@ -21,15 +21,9 @@ projects/AppStore/**                      # M5Stack's CardputerZero Store (submo
 
 # --- Build files that name upstream download locations ---
 projects/APPLaunch/SConstruct             # arm64 sysroot archive downloaded from an upstream release (report 029)
-ext_components/cp0_lvgl/tests/test_launcher_updater.cpp   # stock updater test data (m5stack1 revision)
-ext_components/cp0_lvgl/src/cp0/cp0_lvgl_osinfo.cpp   # stock updater URL (github.com/CardputerZero), off on Pi builds
 
 # --- Stock-profile code our boards cannot reach (report 025 section 4 item 8) ---
-projects/APPLaunch/main/ui/settings/settings_system_page.cpp      # "Device: M5CardputerZero" (stock profile only)
-projects/APPLaunch/main/ui/settings/settings_adb_guide_page.cpp   # ADB guide label (stock profile only)
 ext_components/cp0_lvgl/src/sdl/**        # SDL simulator: window title, alias, stock binary/lock names
-projects/APPLaunch/APPLaunch/adb/**       # stock USB ADB gadget (manufacturer/product strings); not in the Pi bundle
-ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp   # kCardputerZeroGpioMap: stock board GPIO map identifier
 
 # --- History: decisions, reports, tasks ---
 docs/dev/decisions.md

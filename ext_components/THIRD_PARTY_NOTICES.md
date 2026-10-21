@@ -7,7 +7,6 @@ the MIT license used for M5Stack-authored wrapper code.
 | Wrapper | Upstream source | License record |
 | --- | --- | --- |
 | `Miniaudio` | `https://github.com/mackron/miniaudio` | The complete public-domain/MIT-0 notice is embedded at the end of `Miniaudio/include/miniaudio.h`. |
-| `RadioLib` | `https://github.com/jgromes/RadioLib` | MIT text in `RadioLib/LICENSE`; SConstruct fetches a URL without pinning a commit. |
 | `Sigslot` | `https://github.com/palacaze/sigslot` | Fetched at the commit pinned by `Sigslot/SConstruct`; retain the upstream MIT notice. |
 
 Full notices are also retained in `Miniaudio/LICENSE` and `Sigslot/LICENSE`. SDK dependencies used by these components include
@@ -22,5 +21,5 @@ See [`../docs/OPEN_SOURCE_COMPONENTS.md`](../docs/OPEN_SOURCE_COMPONENTS.md)
 for the complete repository inventory, including SDK, LVGL, and system
 dependencies.
 
-The `SmoothUI` and `Spdlog` wrappers (MIT; no build of this project enabled them) were removed on 2026-10-22
-(report 029).
+The `SmoothUI` and `Spdlog` wrappers (MIT; no build of this project enabled them) and the `RadioLib` wrapper (MIT,
+only used by the removed LoRa service) were removed on 2026-10-22 (report 029).

@@ -73,18 +73,13 @@ int main()
         Operation::RemoveLauncherSettings,
         Operation::Reboot,
     };
-    const std::vector<Operation> oobe_plan = {
-        Operation::TouchOobeMarker,
-        Operation::Reboot,
-    };
     assert(settings_t12b::boot_actions::operation_plan(Action::FactoryReset) == factory_plan);
-    assert(settings_t12b::boot_actions::operation_plan(Action::RearmOobe) == oobe_plan);
     assert(settings_t12b::boot_actions::may_continue(Operation::RemoveLauncherSettings, true));
     assert(!settings_t12b::boot_actions::may_continue(Operation::RemoveLauncherSettings, false));
     assert(!settings_t12b::boot_actions::may_continue(Operation::Reboot, true));
     assert(std::string(settings_t12b::boot_actions::process_command(Operation::Reboot)) == "Reboot");
-    assert(std::string(settings_t12b::boot_actions::filesystem_alias(Operation::TouchOobeMarker)) ==
-           "oobe_marker");
+    assert(std::string(settings_t12b::boot_actions::filesystem_alias(Operation::RemoveLauncherSettings)) ==
+           "launcher_settings");
 
     const auto about = settings_t12b::about_help::about("1.2.3", "2026-08-24", "stable", "abc123");
     const auto credit = settings_t12b::about_help::credit();

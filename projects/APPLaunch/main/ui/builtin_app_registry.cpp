@@ -86,13 +86,8 @@ constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
     {{"IP Panel", "ip_panel_100.png", "app_IP_Panel", true, false},
      nullptr, false, true, false, append_page_app<UIIpPanelPage>},
 #endif
-#if APPLAUNCH_APPS_NATIVE_CALCULATOR
     {{"Calculator", "math_100.png", "app_Math", true, false},
      nullptr, false, true, false, append_page_app<UICalculatorPage>},
-#else
-    {{"Calculator", "math_100.png", "app_Math", true, false},
-     "@calculator_exec", false, true, false, nullptr},
-#endif
     {{"Snake", "game_100.png", "app_Game", true, false},
      nullptr, false, true, false, append_page_app<UIGamePage>},
     {{"Tank", "tank_100.png", "app_Tank", true, false},

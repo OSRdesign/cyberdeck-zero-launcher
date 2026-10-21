@@ -952,30 +952,7 @@ extern "C" void init_sudo_signals(void)
         const std::string command = args.front();
         const std::string value = args.size() > 1 ? *std::next(args.begin()) : std::string();
         std::list<std::string> argv;
-        if (command == "AdbSet") {
-            if (args.size() != 2 || (value != "0" && value != "1")) {
-                if (started) started(-EINVAL, 0);
-                return;
-            }
-            argv = {cp0_file_path("adb_helper"), "set", value};
-        } else if (command == "AdbAuthorize") {
-            if (value.size() < 680 || value.size() > 2048 || value.find('\n') != std::string::npos ||
-                value.find('\r') != std::string::npos) {
-                if (started) started(-EINVAL, 0);
-                return;
-            }
-            argv = {cp0_file_path("adb_helper"), "authorize", value};
-        } else if (command == "AdbRevoke") {
-            const bool valid = value.size() == 64 && std::all_of(value.begin(), value.end(),
-                [](unsigned char c) { return std::isdigit(c) || (c >= 'a' && c <= 'f'); });
-            if (!valid) {
-                if (started) started(-EINVAL, 0);
-                return;
-            }
-            argv = {cp0_file_path("adb_helper"), "revoke", value};
-        } else if (command == "AdbClearAuthorizations") {
-            argv = {cp0_file_path("adb_helper"), "clear-authorizations"};
-        } else if (command == "NtpSet") {
+        if (command == "NtpSet") {
             argv = {"timedatectl", "set-ntp", value == "1" ? "true" : "false"};
         } else if (command == "TimezoneSet") {
             // the zone goes as one argv element (no shell); a name that could be an option, a path step or anything

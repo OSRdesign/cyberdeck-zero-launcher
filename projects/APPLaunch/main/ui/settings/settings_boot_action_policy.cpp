@@ -12,7 +12,6 @@ namespace {
 constexpr Presentation kReboot{"Reboot", "Reboot?"};
 constexpr Presentation kShutdown{"Shutdown", "Shutdown?"};
 constexpr Presentation kFactoryReset{"Factory Reset", {}};
-constexpr Presentation kRearmOobe{"Run Setup Again", {}};
 
 } // namespace
 
@@ -25,8 +24,6 @@ const Presentation &presentation(Action action)
         return kShutdown;
     case Action::FactoryReset:
         return kFactoryReset;
-    case Action::RearmOobe:
-        return kRearmOobe;
     }
     return kReboot;
 }
@@ -40,8 +37,6 @@ std::vector<Operation> operation_plan(Action action)
         return {Operation::Shutdown};
     case Action::FactoryReset:
         return {Operation::RemoveLauncherSettings, Operation::Reboot};
-    case Action::RearmOobe:
-        return {Operation::TouchOobeMarker, Operation::Reboot};
     }
     return {};
 }
@@ -62,7 +57,6 @@ const char *process_command(Operation operation) noexcept
     case Operation::Shutdown:
         return "Shutdown";
     case Operation::RemoveLauncherSettings:
-    case Operation::TouchOobeMarker:
         return nullptr;
     }
     return nullptr;
@@ -73,8 +67,6 @@ const char *filesystem_alias(Operation operation) noexcept
     switch (operation) {
     case Operation::RemoveLauncherSettings:
         return "launcher_settings";
-    case Operation::TouchOobeMarker:
-        return "oobe_marker";
     case Operation::Reboot:
     case Operation::Shutdown:
         return nullptr;
