@@ -1,0 +1,36 @@
+# Same Settings options on every board (pinned row lists).
+# The deck (no board profile: APPLAUNCH_BOARD unset), a release build (APPLAUNCH_DEV 0).
+# expect_rows checks every row of the root menu and of System, in order: a row that appears, disappears or moves on
+# one board only fails here (docs/dev/native-settings-page-howto.md section 5: which rows show where, and why). The
+# root menu and System must stay the same on every board; only Keyboard test (development builds) and Quit to desktop
+# (desktop session) may differ. Review only: no golden.
+title settings rows deck release
+review
+sizes 640x480 720x720 1280x800
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+# System: Up from Screen wraps to the last section
+key UP
+key ENTER
+wait 300
+expect_rows Storage Licenses About "Pointer navigation" "On-screen keyboard" Reboot Shutdown
+# About on every board (also without a board profile): Storage, Licenses, About
+key DOWN
+key DOWN
+key ENTER
+wait 300
+shot settings_rows_deck_about
+expect_text Version
+expect_text 0.5.0
+# no board profile: no Board line
+# branding-allow-begin: the About page's disclaimer line (settings_about_help_model.cpp)
+expect_rows "CyberdeckZero Launcher" LVGL Version Build Channel Commit "Independent hobby project" "Not affiliated with M5Stack"
+# branding-allow-end
+key ESC

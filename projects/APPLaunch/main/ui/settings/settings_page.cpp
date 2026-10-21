@@ -892,14 +892,9 @@ void UISettingTreePage::create_page_detail()
                                SettingEntry{"Storage", settings_storage_page_factory, PageType::FullCustom});
         mode_tree.append_child(system,
                                SettingEntry{"Licenses", settings_credit_page_factory, PageType::FullCustom});
-        {
-            // Board profile label (APPLAUNCH_BOARD): only a board with a profile gets the About
-            // page, so the deck menu stays as it is.
-            const char *board = std::getenv("APPLAUNCH_BOARD");
-            if (board && board[0])
-                mode_tree.append_child(system,
-                                       SettingEntry{"About", settings_t12b_about_page_factory, PageType::FullCustom});
-        }
+        // About (version, build, channel, commit) on every board: its "Board:" line only when a board profile
+        // (APPLAUNCH_BOARD) is set (settings_about_content())
+        mode_tree.append_child(system, SettingEntry{"About", settings_t12b_about_page_factory, PageType::FullCustom});
         // the fallback on-screen keyboard's entries: native Settings only (the compat Settings stays as it is)
         // pointer navigation (a mouse or trackpoint as arrows / Enter): native Settings only, like the keyboard's;
         // before them, so the rows counted from the end of the section (Shutdown, Reboot, Keyboard test, On-screen
