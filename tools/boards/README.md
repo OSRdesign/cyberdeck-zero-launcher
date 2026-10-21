@@ -27,7 +27,8 @@ python board.py status     deck
 - **arch** (`boards.json`, default `arm64`): the bundle a board takes. `upload` refuses a bundle of the other arch:
   by its file name (`-arm64` / `-amd64`), by its launcher's ELF header when the tarball is on this machine, and on the
   board (the payload's ELF header against `uname -m`) right after unpacking. `fzm1` is amd64; its `test_env` is
-  install.sh's pc profile. It boots to the text console with no display manager, so it is a service board.
+  install.sh's pc profile. It boots to the text console with no display manager, so it is a service board (until a
+  desktop is installed on it: see below).
 
 - **service** boards run the installed launcher as the user service `cyberdeckzero.service` (`APPLaunch.service` up to
   v0.6.0; install.sh migrates it). `test-start` stops it (and `APPLaunch.service` on a board not migrated yet) and
@@ -36,13 +37,22 @@ python board.py status     deck
   `APPLaunch.service`; `setsid nohup systemctl --user restart ... &`). `status` also shows `cyberdeckzero-console.service`
   (and the earlier `applaunch-console.service`) and whether the framebuffer text console is bound (`bind=1`) or not
   (`bind=0`).
-- **desktop** boards (Raspberry Pi OS desktop: lightdm + labwc own the screen). `install` puts the desktop variant
+- **desktop** boards (a display manager owns the screen: Raspberry Pi OS desktop, lightdm + labwc; or a PC with a
+  desktop, lightdm + Xorg with XFCE). `install` puts the desktop variant
   there (install.sh detects the display manager: `cyberdeckzero-desktop.service`, the menu entry "CyberdeckZero
   Launcher", nothing starts at boot; see `projects/APPLaunch/pizero2w/README.md`, "Desktop boards"); no `--force`
   needed. `test-start` stops `cyberdeckzero-desktop.service` (and the earlier `applaunch-desktop.service`) if it runs,
-  stops lightdm, links `/usr/share/APPLaunch` to `~/applaunch-test` (only when nothing real is there, so not after an
-  install) and runs the staged launcher; `test-stop` removes that link, starts lightdm again and removes the test
-  files. `status` shows lightdm, the units and the text console.
+  stops the display manager, links `/usr/share/APPLaunch` to `~/applaunch-test` (only when nothing real is there, so
+  not after an install) and runs the staged launcher; `test-stop` removes that link, starts the display manager again
+  and removes the test files. `status` shows the display manager, the units, whether labwc or Xorg runs and the text
+  console. The display manager is `dm` in `boards.json` (the unit name without `.service`; default `lightdm`, so the
+  Pi 5 and HackBerry entries need none).
+- **A service board that gets a desktop** (the FZ-M1 after `sudo armbian-config` > Software > Desktops > XFCE): run
+  `install` again (install.sh switches to the desktop variant: the user service goes, the desktop unit and the menu
+  entry come; `install --check` shows the switch first), then set `"kind": "desktop"` for that board in `boards.json`
+  (add `"dm"` only when the display manager is not lightdm: `gdm3`, `sddm`). Until then `test-start` would stop a user
+  service that is no longer there and leave the desktop on the screen. Back to `"service"` when the desktop is removed
+  and `install` ran again (install.sh switches back).
 - `install --force` passes `--force` to install.sh (an unknown board without a profile, or replacing a hand-edited
   `/etc/applaunch/board.conf`). Other install.sh options: `--install-arg=--no-default-source` (with `=`).
 - **Pi 3A+:** a command string containing `environ` drops the ssh connection; `board.py` refuses to send one (quirk

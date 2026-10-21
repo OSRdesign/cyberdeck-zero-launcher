@@ -11,7 +11,11 @@
     "pi3a and pi3a-dsi are the same Pi 3A+ (same host) with one panel or the other: pi3a = Luckfox 3.5in SPI (install.sh profile pi3a-luckfox35),",
     "      pi3a-dsi = Waveshare 4.3in DSI (profile pi3a-wsdsi43; the panel mounted since 2026-10-13). Use the entry of the panel that is mounted.",
     "arch: the bundle the board takes (default arm64): fzm1 (Panasonic FZ-M1 mk2 tablet, x86_64, Armbian on Ubuntu 26.04, report 028) is amd64;",
-    "      its test_env is install.sh's pc profile (pc-fzm1-2). It boots to the text console with no display manager: a service board."
+    "      its test_env is install.sh's pc profile (pc-fzm1-2). It boots to the text console with no display manager: a service board.",
+    "dm (desktop boards, default lightdm): the display manager's unit without .service that test-start stops and test-stop starts again.",
+    "Flip a board to 'desktop' once it has a desktop AND install.sh ran again on it (it switches to the desktop variant: the user service",
+    "      is removed, cyberdeckzero-desktop.service and the menu entry installed): set kind to 'desktop' (fzm1 with Armbian's XFCE: lightdm,",
+    "      the default, so no dm needed). Back to 'service' when the desktop is removed and install.sh ran again."
   ],
   "boards": {
     "deck": {

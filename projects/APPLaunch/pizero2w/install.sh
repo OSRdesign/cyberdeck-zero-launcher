@@ -4,7 +4,8 @@
 # the board is detected and its profile written to /etc/applaunch/board.conf.
 # A board that boots to a desktop (a display manager such as lightdm is enabled or running) gets the desktop
 # variant: the launcher is started from the applications menu and gives the desktop back when it exits (README.md,
-# "Desktop boards"); the others run it at boot as the user service cyberdeckzero.service.
+# "Desktop boards"); the others run it at boot as the user service cyberdeckzero.service. Install or remove a desktop
+# later and run this script again: it switches between the two variants (the other one's units are taken off first).
 #
 # Run on the Pi, from the unpacked bundle (see build.sh):   sudo ./install.sh [options]
 # It is idempotent: running it again updates the files and leaves everything else as it is. Over an earlier install
@@ -45,7 +46,7 @@ BOARD_ARG=""
 DEFAULT_SOURCE=1
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
         --dry-run) DRY=1 ;;
     esac
 done
@@ -367,31 +368,75 @@ match_procs() {
       for (i = 1; i <= n; i++) if (c == a[i] || (length(c) == 15 && index(a[i], c) == 1)) hit[i] = 1 }
     END { out = ""; for (i = 1; i <= n; i++) if (hit[i]) out = out (out == "" ? "" : "+") a[i]; print out }'
 }
+# The default target the system boots to: the desktop variant leaves the boot to the display manager, which starts
+# only with graphical.target. Read only: the default.target link (systemctl set-default writes the one in /etc).
+boot_target() {
+    for f in "$SYSROOT/etc/systemd/system/default.target" "$SYSROOT/usr/lib/systemd/system/default.target" \
+             "$SYSROOT/lib/systemd/system/default.target"; do
+        if [ -L "$f" ]; then t=$(readlink "$f" 2>/dev/null || true); echo "${t##*/}"; return 0; fi
+    done
+}
+BOOT_TARGET=$(boot_target || true)
+# true when the unit $1 that display-manager.service points to ($2) is installed: a desktop removed with its display
+# manager (armbian-config's remove purges the packages) can leave the link behind, pointing nowhere
+dm_unit_installed() {
+    case "$2" in /*) [ -e "$SYSROOT$2" ] && return 0 ;; esac
+    for d in /etc/systemd/system /run/systemd/system /usr/lib/systemd/system /lib/systemd/system; do
+        [ -e "$SYSROOT$d/$1" ] && return 0
+    done
+    return 1
+}
 # SESSION: appliance | desktop. DM_UNIT: the display manager's unit (desktop only). SESSION_WHY: the evidence.
 SESSION=appliance
 DM_UNIT=""
 SESSION_WHY=""
 DM_LINK="$SYSROOT/etc/systemd/system/display-manager.service"
+DM_ENABLED=0                                    # 1: display-manager.service is there and names an installed unit
+[ ! -e "$DM_LINK" ] || [ -L "$DM_LINK" ] || DM_ENABLED=1
 DESK_PROCS=$(cat "$SYSROOT"/proc/[0-9]*/comm 2>/dev/null | match_procs "$DESKTOP_NAMES")
 if [ -L "$DM_LINK" ]; then
     # the display manager enabled for boot (Debian: an alias symlink to its unit)
-    DM_UNIT=$(readlink "$DM_LINK" 2>/dev/null || true)
-    DM_UNIT=${DM_UNIT##*/}
-    case "$DM_UNIT" in *?.service) SESSION_WHY="display manager $DM_UNIT enabled" ;; *) DM_UNIT="" ;; esac
+    dm_target=$(readlink "$DM_LINK" 2>/dev/null || true)
+    DM_UNIT=${dm_target##*/}
+    case "$DM_UNIT" in
+        *?.service)
+            if dm_unit_installed "$DM_UNIT" "$dm_target"; then DM_ENABLED=1; SESSION_WHY="display manager $DM_UNIT enabled"
+            else SESSION_WHY="display-manager.service points to $DM_UNIT, which is not installed (a removed desktop)"; DM_UNIT=""; fi ;;
+        *) DM_UNIT="" ;;
+    esac
 fi
 if [ -z "$DM_UNIT" ]; then
     for n in $DM_NAMES; do
         case "+$DESK_PROCS+" in *"+$n+"*) DM_UNIT="$n.service"; break ;; esac
     done
 fi
-if [ -n "$DM_UNIT" ] || [ -n "$DESK_PROCS" ] || [ -e "$DM_LINK" ]; then
+if [ -n "$DM_UNIT" ] || [ -n "$DESK_PROCS" ] || [ "$DM_ENABLED" = 1 ]; then
     SESSION=desktop
     if [ -z "$DM_UNIT" ]; then DM_UNIT=lightdm.service; SESSION_WHY="no display manager unit found: $DM_UNIT assumed"; fi
     [ -z "$DESK_PROCS" ] || SESSION_WHY="${SESSION_WHY:+$SESSION_WHY; }running: $DESK_PROCS"
 fi
+# A display manager enabled for boot that never starts (the system boots to multi-user.target: armbian-config's remove
+# sets it, so does a hand-made appliance) and does not run now: the launcher is what starts at boot
+if [ "$SESSION" = desktop ] && [ -z "$DESK_PROCS" ] && [ -n "$BOOT_TARGET" ] && [ "$BOOT_TARGET" != graphical.target ]; then
+    SESSION=appliance
+    SESSION_WHY="display manager $DM_UNIT enabled, but the system boots to $BOOT_TARGET, where it does not start: the launcher starts at boot (for the desktop variant: sudo systemctl set-default graphical.target, then install.sh again)"
+fi
+if [ "$SESSION" = appliance ]; then
+    SESSION_WHY="${SESSION_WHY:-no display manager enabled or running}"
+    case "$SESSION_WHY" in *"the launcher starts at boot"*) ;; *) SESSION_WHY="$SESSION_WHY: the launcher starts at boot" ;; esac
+fi
 # the deck's environment lives in its user service (it has no profile): no desktop variant for it
 DESKTOP_REFUSED=0
 if [ "$SESSION" = desktop ] && [ "$BOARD" = zero2w ]; then DESKTOP_REFUSED=1; fi
+# The desktop variant leaves the boot to the display manager: say so when it may not start at boot (found running only)
+DESKTOP_BOOT_WARN=""
+if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ]; then
+    if [ "$DM_ENABLED" = 0 ]; then
+        DESKTOP_BOOT_WARN="no display manager is enabled for boot (no /etc/systemd/system/display-manager.service): the desktop may not come up at boot, and the launcher no longer starts at boot either. Check: systemctl status display-manager"
+    elif [ -n "$BOOT_TARGET" ] && [ "$BOOT_TARGET" != graphical.target ]; then
+        DESKTOP_BOOT_WARN="the system boots to $BOOT_TARGET (systemctl get-default): $DM_UNIT does not start at boot, and the launcher no longer does either. Fix: sudo systemctl set-default graphical.target"
+    fi
+fi
 
 # The profile for the board ("" = no profile file: the deck keeps the service's own environment).
 # It is a systemd EnvironmentFile: its values override the Environment= lines of cyberdeckzero.service,
@@ -669,6 +714,62 @@ print_migration() {
     fi
 }
 
+# ---------------------------------------------------------------------------------------------------------
+# Switch between the two variants (README.md, "Switching between appliance and desktop"): a board installed as an
+# appliance that has a display manager now gets the desktop variant, and the other way round, at the next install.
+# The other variant's files are taken off first, so the launcher and the display manager never both start at boot;
+# /etc/applaunch/board.conf, the user's settings, app sources and installed apps are kept. Looked up under $SYSROOT.
+# ---------------------------------------------------------------------------------------------------------
+# the appliance variant's files of the user whose home is $1 ($SYSROOT included), one per line, without $SYSROOT
+appliance_files() {
+    for f in "$1/.config/systemd/user/$USER_UNIT" "$1/.config/systemd/user/default.target.wants/$USER_UNIT" \
+             "$SYSTEMD_DIR/$CONSOLE_UNIT" "$SYSTEMD_DIR/multi-user.target.wants/$CONSOLE_UNIT"; do
+        if present "$f"; then echo "${f#"$SYSROOT"}"; fi
+    done
+}
+# the desktop variant's files, one per line, without $SYSROOT
+desktop_files() {
+    for f in "$SYSTEMD_DIR/$DESKTOP_UNIT" "$DESKTOP_ENTRY" "$POLKIT_DIR/$DESKTOP_RULES"; do
+        if present "$f"; then echo "${f#"$SYSROOT"}"; fi
+    done
+}
+# SWITCH: to-desktop | to-appliance | "" (none); SWITCH_FOUND: the other variant's files. $1: the user's home.
+plan_switch() {
+    SWITCH=""; SWITCH_FOUND=""
+    if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ]; then
+        SWITCH_FOUND=$(appliance_files "$1")
+        [ -z "$SWITCH_FOUND" ] || SWITCH=to-desktop
+    elif [ "$SESSION" = appliance ]; then
+        SWITCH_FOUND=$(desktop_files)
+        [ -z "$SWITCH_FOUND" ] || SWITCH=to-appliance
+    fi
+}
+# The dry run's account of the switch. $1: the user.
+print_switch() {
+    case "$SWITCH" in
+        to-desktop)
+            echo "switch from the appliance variant to the desktop variant (a display manager is there now; done before the"
+            echo "desktop files are installed; /etc/applaunch/board.conf, the user's settings, app sources and installed apps are kept):"
+            echo "  - user service $USER_UNIT of $1: stopped if it runs (the launcher on the panel quits now, the install says"
+            echo "    so when it does), disabled and removed: the launcher and $DM_UNIT never both start at boot"
+            echo "  - $CONSOLE_UNIT: disabled and stopped (the text console is bound again), removed: the desktop unit"
+            echo "    frees the panel itself while the launcher runs"
+            echo "  - kept as they are: lingering of $1, getty@tty1 (the desktop owns its own VT)"
+            echo "  - the appliance files found:"
+            printf '%s\n' "$SWITCH_FOUND" | sed 's/^/      /'
+            echo "  - the desktop comes up at the next boot (sudo reboot), or at once with: sudo systemctl start $DM_UNIT"
+            ;;
+        to-appliance)
+            echo "switch from the desktop variant to the appliance variant (no display manager any more; done before the"
+            echo "appliance units are enabled; /etc/applaunch/board.conf, the user's settings, app sources and installed apps are kept):"
+            echo "  - $DESKTOP_UNIT, the menu entry and the polkit rule: removed (a launcher started from the menu that"
+            echo "    still runs is left running, not stopped: the appliance launcher then starts at the next boot)"
+            echo "  - the desktop files found:"
+            printf '%s\n' "$SWITCH_FOUND" | sed 's/^/      /'
+            ;;
+    esac
+}
+
 plan_profile
 if [ "$DRY" = 1 ]; then
     echo "DRY RUN: nothing will be changed."
@@ -680,12 +781,11 @@ if [ "$DRY" = 1 ]; then
         if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
         [ "$FORCE" = 1 ] || echo "install.sh would stop here (--force installs without a profile)."
     fi
+    echo "session: $SESSION ($SESSION_WHY)"
     if [ "$SESSION" = desktop ]; then
-        echo "session: desktop ($SESSION_WHY)"
         [ "$DESKTOP_REFUSED" = 0 ] || echo "The deck profile (zero2w) has no desktop variant: install.sh would stop here."
-    else
-        echo "session: appliance (no display manager: the launcher starts at boot)"
     fi
+    [ -z "$DESKTOP_BOOT_WARN" ] || echo "WARNING: $DESKTOP_BOOT_WARN"
     echo "profile: $PROFILE_MSG"
     case "$PROFILE_ACTION" in write|replace) echo "--- $PROFILE"; profile_content ;; esac
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
@@ -703,10 +803,16 @@ if [ "$DRY" = 1 ]; then
         TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
         DRY_HOME=$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6 || true)
         print_migration "$TARGET_USER" "$SYSROOT${DRY_HOME:-/home/$TARGET_USER}"
+        plan_switch "$SYSROOT${DRY_HOME:-/home/$TARGET_USER}"
+        print_switch "$TARGET_USER"
         echo "launcher files: /usr/share/APPLaunch/bin/$LAUNCHER_BIN and $CONSOLE_HELPER, the libraries and assets of the"
         echo "  bundle; licences and notices in /usr/share/doc/$DOC_NAME (replaced as a whole)"
     fi
     if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
+        if [ "$IS_PC" = 1 ]; then
+            echo "packages (PC, when missing): $PC_PKGS kbd (chvt, for the desktop unit); bluetooth.service enabled and"
+            echo "  started; network-manager is not installed by install.sh"
+        fi
         echo "then: packages, launcher files, udev and polkit rules, Network Time service, as for the deck; the desktop variant:"
         echo "  - no user service, no lingering, getty@tty1 left as it is, no boot configuration change"
         echo "  - /etc/systemd/system/$DESKTOP_UNIT for $TARGET_USER, not enabled (nothing starts at boot): starting it stops"
@@ -733,6 +839,7 @@ if [ "$DRY" = 1 ]; then
         else
             echo "default app source: skipped (--no-default-source)"
         fi
+        echo "later: if you install or remove a desktop (a display manager), run install.sh again: it switches the variant"
     fi
     exit 0
 fi
@@ -832,6 +939,54 @@ migrate_old() {
         echo "nothing to migrate (no unit, rule or menu entry of the earlier names)"
     fi
 }
+
+# The switch itself (see plan_switch, print_switch): before the new variant's units are installed or enabled.
+# Idempotent: once the other variant's files are gone, plan_switch finds nothing and this is not called again.
+SWITCH_KEPT_RUNNING=0
+switch_to_desktop() {
+    if present "$UNIT_DIR/$USER_UNIT" || present "$UNIT_DIR/default.target.wants/$USER_UNIT"; then
+        # said before it happens: the launcher on the panel quits now
+        if as_user systemctl --user is-active --quiet "$USER_UNIT" 2>/dev/null; then
+            echo "the launcher is running on the panel ($USER_UNIT): it is stopped now (the desktop variant starts it from the"
+            echo "applications menu)"
+        fi
+        as_user systemctl --user disable --now "$USER_UNIT" \
+            || echo "(the user's systemd did not answer: $USER_UNIT is not running; its files are removed)"
+        rm -f "$UNIT_DIR/$USER_UNIT" "$UNIT_DIR/default.target.wants/$USER_UNIT"
+        as_user systemctl --user daemon-reload 2>/dev/null || true
+        as_user systemctl --user reset-failed "$USER_UNIT" 2>/dev/null || true
+        echo "user service $USER_UNIT of $TARGET_USER: stopped, disabled and removed (it no longer starts at boot; lingering"
+        echo "stays on, harmless: loginctl disable-linger $TARGET_USER turns it off)"
+    fi
+    if present "$SYSTEMD_DIR/$CONSOLE_UNIT" || present "$SYSTEMD_DIR/multi-user.target.wants/$CONSOLE_UNIT"; then
+        # its ExecStop= binds the text console again; the desktop unit unbinds it while the launcher runs
+        systemctl disable --now "$CONSOLE_UNIT" || true
+        rm -f "$SYSTEMD_DIR/$CONSOLE_UNIT" "$SYSTEMD_DIR/multi-user.target.wants/$CONSOLE_UNIT"
+        echo "$CONSOLE_UNIT disabled, stopped (the text console is bound again) and removed: the desktop unit frees the"
+        echo "panel itself while the launcher runs"
+    fi
+    systemctl daemon-reload
+    systemctl reset-failed "$CONSOLE_UNIT" 2>/dev/null || true
+    echo "kept: ${PROFILE#"$SYSROOT"}, the user's settings, app sources and installed apps, lingering, getty@tty1 as it is"
+}
+switch_to_appliance() {
+    if present "$SYSTEMD_DIR/$DESKTOP_UNIT"; then
+        if systemctl is-active --quiet "$DESKTOP_UNIT"; then
+            # not stopped: its ExecStopPost= would start the display manager again if its unit is still there
+            SWITCH_KEPT_RUNNING=1
+            echo "the launcher started from the menu ($DESKTOP_UNIT) is running: it is left running, not stopped; the"
+            echo "appliance launcher starts at the next boot (reboot when the install is done, do not quit it to the desktop)"
+        fi
+        rm -f "$SYSTEMD_DIR/$DESKTOP_UNIT"
+        echo "$DESKTOP_UNIT removed"
+    fi
+    for f in "$DESKTOP_ENTRY" "$POLKIT_DIR/$DESKTOP_RULES"; do
+        if present "$f"; then rm -f "$f"; echo "removed ${f#"$SYSROOT"}"; fi
+    done
+    systemctl daemon-reload
+    [ "$SWITCH_KEPT_RUNNING" = 1 ] || systemctl reset-failed "$DESKTOP_UNIT" 2>/dev/null || true
+    echo "kept: ${PROFILE#"$SYSROOT"}, the user's settings, app sources and installed apps"
+}
 # Files earlier bundles installed and this one does not ship (RETIRED_FILES), then their folders when empty
 remove_retired() {
     for f in $(retired_present); do
@@ -857,7 +1012,14 @@ if [ "$SESSION" = desktop ]; then
         exit 1
     fi
     check_user_name "$TARGET_USER"
+else
+    echo "session: appliance ($SESSION_WHY)"
 fi
+plan_switch "$TARGET_HOME"
+case "$SWITCH" in
+    to-desktop) echo "variant: switching from the appliance variant to the desktop variant (a display manager is there now)" ;;
+    to-appliance) echo "variant: switching from the desktop variant to the appliance variant (no display manager any more)" ;;
+esac
 # The bundle's architecture (its launcher's ELF header) must be the system's: aarch64 = arm64, x86_64 = amd64
 case "$MACHINE" in
     aarch64) SYS_ARCH=arm64 ;;
@@ -876,10 +1038,19 @@ if [ -z "$SYSROOT" ] && grep -q -e "$OLD_USER_UNIT" -e "$OLD_DESKTOP_UNIT" /proc
     echo "stops it, which would end the install half way. Run it from an ssh session or a text console. Nothing was changed." >&2
     exit 1
 fi
+# The same for the switch to the desktop variant: it stops the appliance launcher (its Terminal app runs inside it)
+if [ -z "$SYSROOT" ] && [ "$SWITCH" = to-desktop ] && grep -q -F "/$USER_UNIT" /proc/self/cgroup 2>/dev/null; then
+    echo "this shell runs inside the launcher's service ($USER_UNIT, its Terminal app): the switch to the desktop variant" >&2
+    echo "stops it, which would end the install half way. Run it from an ssh session or a terminal on the desktop." >&2
+    echo "Nothing was changed." >&2
+    exit 1
+fi
 
 say "Installing packages"
 if [ "$IS_PC" = 1 ]; then
     PKGS=$PC_PKGS        # no dtc on a PC; polkitd and BlueZ, which the Pi images have already
+    # the desktop unit's chvt (a minimal Ubuntu or Armbian image may lack kbd; Raspberry Pi OS desktop has it)
+    if [ "$SESSION" = desktop ]; then PKGS="$PKGS kbd"; fi
 else
     PKGS="libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler"
 fi
@@ -1006,6 +1177,11 @@ fi
 # Before any new unit is installed or enabled: the earlier launcher is stopped first.
 say "Migrating an earlier install (the names of v0.6.0 and before)"
 migrate_old
+# Then the other variant's files, before this variant's units are installed or enabled (see plan_switch)
+case "$SWITCH" in
+    to-desktop) say "Switching from the appliance variant to the desktop variant"; switch_to_desktop ;;
+    to-appliance) say "Switching from the desktop variant to the appliance variant"; switch_to_appliance ;;
+esac
 
 say "Installing services"
 mkdir -p "$SYSTEMD_DIR"
@@ -1021,12 +1197,8 @@ if [ "$SESSION" = desktop ]; then
     mkdir -p "$MENU_DIR"
     install -m 644 "$PAYLOAD/etc/$DESKTOP_ENTRY_NAME" "$DESKTOP_ENTRY"
     echo "desktop: /etc/systemd/system/$DESKTOP_UNIT (stops $DM_UNIT while the launcher runs) and ${DESKTOP_ENTRY#"$SYSROOT"}"
-    # an appliance install of this release must not start a second launcher at boot under the desktop (the earlier
-    # names' user service is gone already: migrate_old)
-    if [ -f "$UNIT_DIR/$USER_UNIT" ]; then
-        as_user systemctl --user disable --now "$USER_UNIT" 2>/dev/null || true
-        echo "the user service $USER_UNIT of an earlier install is disabled (the menu entry starts the launcher now)"
-    fi
+    # (an appliance install's user service, which must not start a second launcher at boot under the desktop, is
+    # gone already: switch_to_desktop)
 else
     systemctl daemon-reload
     systemctl enable launcher-ntp-default.service
@@ -1115,16 +1287,32 @@ else
     as_user systemctl --user enable "$USER_UNIT"
     if [ "$OLD_STILL_ACTIVE" = 1 ]; then
         echo "not started now: $OLD_USER_UNIT still runs (see the warning above); $USER_UNIT starts at the next boot"
+    elif [ "$SWITCH_KEPT_RUNNING" = 1 ]; then
+        echo "not started now: the launcher started from the menu ($DESKTOP_UNIT) still runs; $USER_UNIT starts at the"
+        echo "next boot: sudo reboot"
     else
         as_user systemctl --user restart "$USER_UNIT" || echo "(could not start it now; it starts at the next boot)"
     fi
 fi
 
 say "Done"
+echo "session: $SESSION ($SESSION_WHY)"
+case "$SWITCH" in
+    to-desktop) echo "Switched from the appliance variant: the launcher no longer starts at boot, $DM_UNIT does." ;;
+    to-appliance) echo "Switched from the desktop variant: the menu entry is gone, the launcher starts at boot." ;;
+esac
 if [ "$SESSION" = desktop ]; then
+    if [ "$SWITCH" = to-desktop ] && ! systemctl is-active --quiet "$DM_UNIT"; then
+        echo "The desktop comes up at the next boot (sudo reboot), or at once with: sudo systemctl start $DM_UNIT"
+    fi
     echo "Start the launcher from the desktop: applications menu > CyberdeckZero Launcher (or: systemctl start $DESKTOP_UNIT)."
-    echo "The desktop stops while it runs; Settings > System > Quit to desktop brings it back."
+    echo "The desktop stops while it runs (its open programs are closed); Settings > System > Quit to desktop brings it back."
 fi
+if [ -n "$DESKTOP_BOOT_WARN" ]; then
+    echo "WARNING: $DESKTOP_BOOT_WARN"
+fi
+echo "If you install or remove a desktop (a display manager) later, run install.sh again: it switches between the"
+echo "appliance variant (the launcher at boot) and the desktop variant (the launcher from the applications menu)."
 if [ "$POLKIT_OK" = 0 ]; then
     echo "WARNING: no polkit: Settings > Reboot / Shut down and the clock settings will not work. Fix: sudo apt install polkitd"
 fi

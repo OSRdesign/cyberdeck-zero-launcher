@@ -64,7 +64,10 @@ and PolicyKit rules, the user service (with lingering, so it starts at boot), th
 service, masks the text console on tty1, frees the panel from the kernel text console once the boot is done
 (`cyberdeckzero-console.service`, see [Text console](#text-console)) and adds the PWM backlight overlay (original files are
 kept as `*.bak-applaunch`). On a board that boots to a desktop it installs the desktop variant instead (see
-[Desktop boards](#desktop-boards)). To take it all off again, see [Uninstall](#uninstall).
+[Desktop boards](#desktop-boards)). The end of the install names the session and why (`session: appliance (...)` or
+`session: desktop (...)`). **If you install or remove a desktop later, run `install.sh` again**: it switches between
+the two variants ([Switching between appliance and desktop](#switching-between-appliance-and-desktop)). To take it all
+off again, see [Uninstall](#uninstall).
 
 It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
 for Debian 13 trixie. It also refuses a bundle of the other architecture (it reads the launcher's ELF header: arm64 on
@@ -139,7 +142,9 @@ none, and
 installs the user service with lingering, the console unit (it unbinds the kernel's framebuffer console, `vtcon1` on
 the FZ-M1, as on the Pi boards) and the udev and PolicyKit rules. **No boot configuration is changed**: GRUB and the
 kernel command line stay as they are (the boot lines show, then the launcher). A PC that boots to a desktop (a display
-manager) gets the desktop variant, as a Pi does.
+manager) gets the desktop variant, as a Pi does, with the same `pc` profile; a desktop installed later on a PC installed
+as an appliance: run `install.sh` again (the FZ-M1 with Armbian's XFCE:
+[Desktop on the FZ-M1 tablet](#desktop-on-the-fz-m1-tablet-armbian-xfce)).
 
 **Known limits.** The FZ-M1's touch reports at most two contacts: the three-finger switcher gesture cannot fire there;
 use the clock long-press or Alt+Tab (the terminal's on-screen keyboard has Alt). No battery in the status strip yet
@@ -268,9 +273,11 @@ panel back to the console by hand.
 
 ## Desktop boards
 
-A board that boots to the Raspberry Pi OS desktop (the HackBerry CM5, the Pi 5: lightdm with labwc) keeps its desktop.
-`install.sh` sees it (a display manager enabled for boot: `/etc/systemd/system/display-manager.service`, or one of the
-desktop processes `tools/board-probe/probe-board.sh` looks for) and installs the desktop variant
+A board that boots to the Raspberry Pi OS desktop (the HackBerry CM5, the Pi 5: lightdm with labwc), or a PC with a
+desktop (the FZ-M1 tablet with XFCE: lightdm with Xorg), keeps its desktop.
+`install.sh` sees it (a display manager enabled for boot: `/etc/systemd/system/display-manager.service` naming an
+installed unit, with the system booting to `graphical.target`; or one of the desktop processes
+`tools/board-probe/probe-board.sh` looks for running now) and installs the desktop variant
 (`--dry-run` prints `session: desktop (...)` and the unit it would write):
 
 - no user service, no lingering, `getty@tty1` left as it is, no change to `config.txt` or `cmdline.txt`; the board
@@ -307,9 +314,108 @@ transaction itself. `restore-desktop` sees it (`systemctl is-system-running` ans
 job for one of those targets counts too) and does not start lightdm: the board powers off or reboots without the
 desktop coming back in between.
 
+**Open desktop programs are closed.** Starting the launcher stops the display manager, and with it X (or the
+compositor) and the user's desktop session: every open desktop program ends at once, without a prompt, and unsaved
+work in it is lost (save first). Programs started with `nohup` or as services keep running. When the launcher gives
+the desktop back, the display manager starts a new session (with autologin, the user is logged in again); the programs
+open before are not reopened.
+
 **Uninstall:** `./uninstall.sh` (from ssh) stops the unit if it runs (the desktop comes back), removes it, the menu
 entry and the PolicyKit rule (see [Uninstall](#uninstall)). The deck profile (`zero2w`) has no desktop variant: on a
 deck image with a desktop, `install.sh` stops and changes nothing.
+
+### Switching between appliance and desktop
+
+`install.sh` chooses the variant at every run. Install or remove a desktop (a display manager) later, then run
+`sudo ./install.sh` again (this bundle or a newer one); `sudo ./install.sh --dry-run` shows the switch first
+(`switch from the appliance variant to the desktop variant` and the files it found). Every install ends with
+`session: desktop (<reason>)` or `session: appliance (<reason>)` and the reminder to run it again after a desktop
+change.
+
+- **Appliance to desktop** (a display manager is enabled or running now): before the desktop files are written,
+  the user service `cyberdeckzero.service` is stopped (if the launcher runs on the panel the install says so first: it
+  quits now), disabled and removed, and `cyberdeckzero-console.service` is disabled, stopped (the text console is bound
+  again) and removed: the launcher and the display manager never both start at boot, and the desktop unit frees the
+  panel itself while the launcher runs. Then the desktop unit, the menu entry and the PolicyKit rule, as above.
+  Nothing is started: the desktop comes up at the next boot (or now: `sudo systemctl start lightdm`). Run it from ssh
+  or a terminal on the desktop; from the launcher's own Terminal app `install.sh` refuses (stopping the user service
+  would end it half way).
+- **Desktop to appliance** (no display manager any more: none enabled, its unit removed, or the system booting to
+  `multi-user.target`): the desktop unit, the menu entry and the PolicyKit rule are removed, then the appliance
+  variant is installed and started as on a fresh board (user service with lingering, console unit, `getty@tty1`
+  masked). A launcher started from the menu that still runs is left running (its exit would start the display manager
+  again if its unit is still there): the user service then starts at the next boot.
+- **Kept** either way: `/etc/applaunch/board.conf` (a PC's `pc-*` profile included, byte for byte), the user's
+  settings, app sources and installed apps, the boot configuration. Going to the desktop also keeps lingering (harmless;
+  `loginctl disable-linger <user>` turns it off) and `getty@tty1` as it is (masked by the appliance install: lightdm
+  uses VT 7; `uninstall.sh` unmasks it).
+- **Warnings:** a desktop found running while no display manager is enabled for boot, or while the system boots to
+  another target than `graphical.target`, is named with the fix (`sudo systemctl set-default graphical.target`): the
+  launcher no longer starts at boot, so the desktop must.
+- A second run finds nothing of the other variant and switches nothing. The deck (`zero2w`) has no desktop variant:
+  with a desktop there, `install.sh` stops before changing anything, as before.
+- `tools/boards/boards.json`: set the board's `kind` to `desktop` after the switch (`service` after the way back).
+
+### Desktop on the FZ-M1 tablet (Armbian XFCE)
+
+The tablet (`pc-fzm1-2`, Armbian 26.8 on Ubuntu 26.04, 3.8 GB RAM) installed as an appliance gets XFCE from Armbian's
+own tool, then `install.sh` again. What `armbian-config` > Software > Desktops > XFCE does (configng `module_desktops`,
+`xfce.yaml`, minimal tier), as far as the launcher is concerned:
+
+- installs `xfce4`, `xfce4-goodies`, `lightdm` with `slick-greeter`, `xserver-xorg` (an X11 session, no Wayland),
+  pulseaudio, blueman, `polkitd`; the lightdm package points `display-manager.service` to `lightdm.service`
+  (`/etc/X11/default-display-manager`), which install.sh reads. lightdm runs X on VT 7 (its default; Armbian's
+  `lightdm.conf.d` files do not change it);
+- sets netplan's renderer to NetworkManager (`/etc/netplan/00-default-use-network-manager.yaml`, removes
+  `10-dhcp-all-interfaces.yaml`, runs `netplan apply`, enables NetworkManager and systemd-resolved): the same renderer
+  as the tablet's own NetworkManager set-up, no conflict, but the Wi-Fi can reconnect once during the apply;
+- starts lightdm at once, sets `graphical.target`, and turns on autologin for the user who ran it with sudo
+  (`/etc/lightdm/lightdm.conf.d/22-armbian-autologin.conf`: `autologin-user=osrde`, `user-session=xfce`), so the
+  tablet boots into XFCE.
+
+Steps, from ssh as osrde, with this release's amd64 bundle unpacked in `~/bundle`:
+
+```
+systemctl --user stop cyberdeckzero.service  # the launcher quits now: no launcher hidden under the desktop (the panel keeps its last picture)
+sudo apt install tmux && tmux                # armbian-config goes on if the ssh link drops during the netplan apply (tmux attach)
+sudo armbian-config                          # Software > Desktops > XFCE (minimal tier); XFCE appears on the panel
+cd ~/bundle && sudo ./install.sh --dry-run   # session: desktop (display manager lightdm.service enabled; running: Xorg+lightdm), the switch
+sudo ./install.sh                            # user service and console unit off; desktop unit, menu entry, PolicyKit rule
+sudo reboot                                  # boots to XFCE, osrde logged in
+```
+
+Then on the tablet: Applications menu > Accessories > **CyberdeckZero Launcher**. XFCE ends (its open programs are
+closed, see above) and the launcher takes the panel; Settings > System > **Quit to desktop** brings XFCE back (a fresh
+session). On the way, as root, once lightdm has stopped: `cyberdeckzero-console unbind`, `chvt 7` (X switches back,
+when it stops, to the VT that was active when it started: VT 1 after the boot, whose login prompt the appliance install
+masked; VT 7 is free then, whichever VT X used), the launcher on `/dev/fb0` (i915's fbdev
+emulation shows it again once X has let go of the display), then `bind` and `systemctl --no-block start lightdm` at
+the exit. `chvt` comes from `kbd`, which install.sh adds on a PC with a desktop.
+
+Optional, in a terminal on the desktop (as osrde):
+
+- **On-screen keyboard for the desktop** (the launcher has its own): `sudo apt install onboard` (Ubuntu universe), then
+  Onboard's Preferences > General: "Auto-show when editing text" (it needs the accessibility bus:
+  `xfconf-query -c xfce4-session -p /general/StartAssistiveTechnologies -n -t bool -s true`, then log out and in), and
+  Settings > Session and Startup > Application Autostart: Onboard.
+- **Bigger touch targets** (1280x800 on 7"): `xfconf-query -c xsettings -p /Xft/DPI -n -t int -s 144` (text 1.5x),
+  `xfconf-query -c xsettings -p /Gtk/CursorThemeSize -n -t int -s 48`, `xfconf-query -c xfwm4 -p /general/theme -s
+  Default-xhdpi` (large window buttons), the panel: right-click > Panel > Panel Preferences > Row size 48, single-click
+  icons: `xfconf-query -c xfce4-desktop -p /desktop-icons/single-click -n -t bool -s true` (Thunar: Edit >
+  Preferences > Behavior > Single click).
+
+**Without armbian-config** (plain apt): `sudo apt install --no-install-recommends xserver-xorg lightdm
+lightdm-gtk-greeter xfce4 xfce4-terminal dbus-x11` (answer `lightdm` if a "Default display manager" question comes;
+`sudo dpkg-reconfigure lightdm` changes it later; keep one display manager: `readlink
+/etc/systemd/system/display-manager.service` must end in `lightdm.service`), `sudo systemctl set-default
+graphical.target`, autologin: `printf '[Seat:*]\nautologin-user=osrde\nautologin-user-timeout=0\nuser-session=xfce\n' |
+sudo tee /etc/lightdm/lightdm.conf.d/50-autologin.conf`, then `sudo ./install.sh` again and reboot.
+
+**Back to the appliance:** `sudo armbian-config` > Software > Desktops > remove XFCE (it purges the packages it installed,
+lightdm normally among them, removes the autologin file and sets `multi-user.target`; NetworkManager stays; it does not
+disable lightdm by name), then `sudo ./install.sh` again from ssh:
+it switches back (a `display-manager.service` link left pointing to the removed lightdm counts as no display manager),
+and the launcher starts at once and at every boot.
 
 ## Uninstall
 

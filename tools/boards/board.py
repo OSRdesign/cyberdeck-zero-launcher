@@ -9,7 +9,8 @@
                                                           run the bundle's install.sh (sudo) for the board's user
                                                           (--force is passed to install.sh: unknown board, edited profile)
     python board.py [--dry-run] test-start BOARD [--env K=V ...]
-                                                          run the staged test launcher (desktop boards: stop lightdm first)
+                                                          run the staged test launcher (desktop boards: stop the
+                                                          display manager first)
     python board.py [--dry-run] test-stop  BOARD          stop it, restore the desktop / the installed launcher, remove test files
     python board.py [--dry-run] grab       BOARD OUT.png  framebuffer screenshot, turned the way the user sees the panel
     python board.py [--dry-run] status     BOARD          launcher, services / desktop, text console, test files, board profile
@@ -29,11 +30,15 @@ Board kinds (boards.json):
            launcher from ~/applaunch-test (cwd there; the installed /usr/share/APPLaunch stays as it is); test-stop kills
            it, removes the test files and restarts the installed service detached (cyberdeckzero.service, else
            APPLaunch.service; setsid nohup systemctl --user restart ... &), so the ssh call returns at once.
-  desktop  Raspberry Pi OS desktop (lightdm + labwc owns the screen: Pi 5, HackBerry). install.sh installs the desktop
-           variant there (cyberdeckzero-desktop.service, started from the applications menu, gives the desktop back on
-           exit). test-start stops that unit (and applaunch-desktop.service, its name up to v0.6.0) if it runs, stops
-           lightdm, links /usr/share/APPLaunch -> ~/applaunch-test (only when nothing real is there) and runs the
-           staged launcher; test-stop removes the link (only ours), starts lightdm again and removes the test files.
+  desktop  a display manager owns the screen (Raspberry Pi OS desktop, lightdm + labwc: Pi 5, HackBerry; or a PC with a
+           desktop, e.g. the FZ-M1 with Armbian's XFCE: lightdm + Xorg). install.sh installs the desktop variant there
+           (cyberdeckzero-desktop.service, started from the applications menu, gives the desktop back on exit).
+           test-start stops that unit (and applaunch-desktop.service, its name up to v0.6.0) if it runs, stops the
+           display manager, links /usr/share/APPLaunch -> ~/applaunch-test (only when nothing real is there) and runs
+           the staged launcher; test-stop removes the link (only ours), starts the display manager again and removes the
+           test files. The display manager is boards.json "dm" (its unit name without .service; default lightdm).
+  A board installed as a service board that gets a desktop later: run install.sh again (it switches to the desktop
+  variant), then set its kind to "desktop" (and "dm" when it is not lightdm) in boards.json.
 
 Quirks encoded here:
   - Pi 3A+ (quirk no_environ): an ssh command string containing the word "environ" drops the connection. board.py
@@ -94,8 +99,12 @@ class Board:
         self.test_env = dict(spec.get("test_env", {}))
         self.quirks = set(spec.get("quirks", []))
         self.arch = spec.get("arch", "arm64")
+        self.dm = spec.get("dm", "lightdm")              # desktop boards: the display manager's unit, without .service
         if self.kind not in ("service", "desktop"):
             raise BoardError("%s: unknown kind %r (service|desktop)" % (name, self.kind))
+        if not self.dm or not all(c.isalnum() or c in "-_.@" for c in self.dm) or self.dm.endswith(".service"):
+            raise BoardError("%s: unusable dm %r (a unit name without .service, e.g. lightdm, gdm3, sddm)"
+                             % (name, self.dm))
         if self.arch not in ARCHES:
             raise BoardError("%s: unknown arch %r (%s)" % (name, self.arch, "|".join(sorted(ARCHES))))
 
@@ -311,14 +320,15 @@ def do_test_start(remote, board, args):
                    "systemctl --user is-active {svc} {old} || true".format(
                        svc=SERVICE, old=OLD_SERVICE, comm=LAUNCHER_COMM, old_comm=OLD_LAUNCHER_COMM))
     else:
-        # an installed launcher started from the menu goes first (its stop brings lightdm back, stopped just after)
+        # an installed launcher started from the menu goes first (its stop brings the display manager back, stopped
+        # just after)
         remote.run(
             "systemctl stop {unit} 2>/dev/null; systemctl stop {old_unit} 2>/dev/null; "
-            "pkill -x {comm}; pkill -x {old_comm}; systemctl stop lightdm; sleep 3; systemctl is-active lightdm; "
+            "pkill -x {comm}; pkill -x {old_comm}; systemctl stop {dm}; sleep 3; systemctl is-active {dm}; "
             "if [ -L /usr/share/APPLaunch ] || [ ! -e /usr/share/APPLaunch ]; then ln -sfn {t} /usr/share/APPLaunch; "
             "else echo '/usr/share/APPLaunch is a real directory: left alone'; fi; ls -ld /usr/share/APPLaunch".format(
                 unit=DESKTOP_UNIT, old_unit=OLD_DESKTOP_UNIT, comm=LAUNCHER_COMM, old_comm=OLD_LAUNCHER_COMM,
-                t=board.test_dir), sudo=True)
+                dm=board.dm, t=board.test_dir), sudo=True)
     return remote.run(launch)
 
 
@@ -337,8 +347,8 @@ def do_test_stop(remote, board, args):
                                                                 old_comm=OLD_LAUNCHER_COMM))
     status = remote.run(
         "pkill -x {comm}; sleep 1; if [ -L /usr/share/APPLaunch ] && [ \"$(readlink /usr/share/APPLaunch)\" = {t} ]; "
-        "then rm /usr/share/APPLaunch && echo link removed; fi; systemctl start lightdm; sleep 2; "
-        "systemctl is-active lightdm".format(comm=LAUNCHER_COMM, t=board.test_dir), sudo=True)
+        "then rm /usr/share/APPLaunch && echo link removed; fi; systemctl start {dm}; sleep 2; "
+        "systemctl is-active {dm}".format(comm=LAUNCHER_COMM, t=board.test_dir, dm=board.dm), sudo=True)
     remote.run(cleanup)
     return status
 
@@ -394,10 +404,11 @@ def do_status(remote, board, args):
                  "echo old-console-unit {old_con}: $(systemctl is-active {old_con}); {console}").format(
                      svc=SERVICE, con=CONSOLE_UNIT, old_svc=OLD_SERVICE, old_con=OLD_CONSOLE_UNIT, console=console)
     else:
-        extra = ("echo lightdm: $(systemctl is-active lightdm); echo {unit}: $(systemctl is-active {unit}); "
+        extra = ("echo {dm}: $(systemctl is-active {dm}); echo {unit}: $(systemctl is-active {unit}); "
                  "echo old {old_unit}: $(systemctl is-active {old_unit}); "
-                 "pgrep -x labwc > /dev/null && echo labwc-running || echo labwc-not-running; {console}").format(
-                     unit=DESKTOP_UNIT, old_unit=OLD_DESKTOP_UNIT, console=console)
+                 "pgrep -x labwc > /dev/null && echo labwc-running || echo labwc-not-running; "
+                 "pgrep -x Xorg > /dev/null && echo Xorg-running || echo Xorg-not-running; {console}").format(
+                     dm=board.dm, unit=DESKTOP_UNIT, old_unit=OLD_DESKTOP_UNIT, console=console)
     return remote.run(common + "; " + extra)
 
 
@@ -428,7 +439,7 @@ def build_parser(board_names):
     p.add_argument("--install-arg", action="append", metavar="ARG", help="extra install.sh option (repeatable)")
     p.add_argument("--force", action="store_true", help="install.sh --force (unknown board without a profile, "
                    "replace a hand-edited board.conf); desktop boards need no --force")
-    p = sub.add_parser("test-start", help="run the staged test launcher (desktop boards: stop lightdm first)")
+    p = sub.add_parser("test-start", help="run the staged test launcher (desktop boards: stop the display manager first)")
     board_arg(p)
     p.add_argument("--env", action="append", metavar="K=V", help="extra launcher environment (repeatable), e.g. "
                    "APPLAUNCH_DEV=1 APPLAUNCH_OSK=force")

@@ -132,19 +132,16 @@ NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the 
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 `settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
 review-only too.
-<<<<<<< HEAD
 `settings_native_timezone` (review-only, at 320x170, 480x320, 640x480 and 1280x800): Date & Time > Time zone from
 Etc/UTC, the row with its chevron, the regions, America's zones, a failed and a refused change, the change done (row and
 clocks), the picker reopened on the zone, Esc up one level, Network Time switched off without touching the zone, Info
 with the new offset, the home grid's clock, then Europe > Paris. `settings_native_timezone_missing` (review-only,
 480x320 and 640x480): the same page without timedated (zone Unknown, no list: only UTC, a failed change).
-=======
 `settings_rows_deck`, `settings_rows_deck_dev`, `settings_rows_pi3a`, `settings_rows_hackberry`,
 `settings_rows_hackberry_dev`, `settings_rows_pc` (review-only): the same Settings options on every board. Each pins
 the root menu and System with `expect_rows` (and the About page's lines: a "Board" line only with a board profile) for
 the deck without a board profile, pi3a-wsdsi43, hackberry-cm5 in its desktop session, pc-fzm1-2, release and
 development, at 480x320 to 1280x800 (`docs/dev/native-settings-page-howto.md` section 5).
->>>>>>> 4a53d57 (Settings: pin the same options on every board (expect_rows scenes, audit))
 `ssh_native` (task 014 P4, review-only, `APPLAUNCH_OSK=force`): the native SSH form (labels beside the fields) with the
 keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
 (keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.
