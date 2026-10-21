@@ -1,7 +1,11 @@
-# Desktop boards (Raspberry Pi OS desktop: a display manager such as lightdm, with labwc, owns the screen).
-# install.sh writes this file to /etc/systemd/system/cyberdeckzero-desktop.service, with the launcher's user (User=) and
-# the display manager's unit (e.g. lightdm.service: Conflicts=, After=, ExecStopPost=) filled in. It replaces
-# applaunch-desktop.service of v0.6.0 and earlier, which install.sh stops (if it runs) and removes first.
+# Desktop boards (Raspberry Pi OS desktop: a display manager such as lightdm, with labwc, owns the screen; or a PC with a
+# desktop, such as the FZ-M1 tablet with Armbian's XFCE: lightdm and Xorg). install.sh writes this file to
+# /etc/systemd/system/cyberdeckzero-desktop.service, with the launcher's user (User=) and the display manager's unit
+# (e.g. lightdm.service: Conflicts=, After=, ExecStopPost=) filled in. It replaces applaunch-desktop.service of v0.6.0
+# and earlier, which install.sh stops (if it runs) and removes first. A board installed as an appliance gets it when
+# install.sh runs again after a desktop was installed (its user service is then stopped, disabled and removed).
+# The launcher binary and the board profile are the board's own (arm64 or amd64 bundle, /etc/applaunch/board.conf):
+# nothing here names a board or an architecture; the profile's values override the Environment= lines below.
 #
 # The board boots to its desktop as usual. The user starts the launcher from the applications menu ("CyberdeckZero
 # Launcher": systemctl --no-block start cyberdeckzero-desktop.service, allowed without a password by
@@ -32,7 +36,9 @@ EnvironmentFile=-/etc/applaunch/board.conf
 WorkingDirectory=/usr/share/APPLaunch
 # As root ("+"), failure ignored ("-"): free the panel from the kernel text console (no VT repaint over the launcher),
 # and show VT 7, which has no login prompt: the keys typed in the launcher reach the active VT too (a VT switch that a
-# leftover process would hold up is given up after 5 s).
+# leftover process would hold up is given up after 5 s). lightdm runs X on VT 7 (its default minimum-vt) and X, when
+# it stops, switches back to the VT that was active when it started (VT 1 at boot, a login prompt unless getty@tty1
+# is masked): VT 7 is free again by then, whichever VT the display manager used. chvt is in the kbd package.
 ExecStartPre=-+/usr/share/APPLaunch/bin/cyberdeckzero-console unbind
 ExecStartPre=-+/usr/bin/timeout 5 /usr/bin/chvt 7
 ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero

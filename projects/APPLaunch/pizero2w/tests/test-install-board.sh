@@ -274,11 +274,12 @@ for B in zero2w pi3a-luckfox35; do
 done
 
 # --- desktop markers in a fake root: the display manager enabled for boot (Debian's alias link), running processes
-desktop() {  # desktop ROOT [DM_UNIT|-] [PROCESS ...]: "-" = no display-manager.service link
+desktop() {  # desktop ROOT [DM_UNIT|-] [PROCESS ...]: "-" = no display-manager.service link; the unit file is there
     d=$1; shift
     if [ "$1" != - ]; then
-        mkdir -p "$d/etc/systemd/system"
+        mkdir -p "$d/etc/systemd/system" "$d/lib/systemd/system"
         ln -sf "/lib/systemd/system/$1" "$d/etc/systemd/system/display-manager.service"
+        echo "[Unit]" > "$d/lib/systemd/system/$1"
     fi
     shift
     pid=700
@@ -667,6 +668,7 @@ check "fake desktop migration: the running earlier launcher stopped (desktop bac
 check "fake desktop migration: new unit, rule and menu entry, filled in" 'grep -qx "User=$U" "$R/etc/systemd/system/cyberdeckzero-desktop.service" && grep -q "\"cyberdeckzero-desktop.service\"" "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" && grep -qx "Name=CyberdeckZero Launcher" "$R/usr/share/applications/cyberdeckzero.desktop"'
 check "fake desktop migration: no user service, no console unit, not started" '[ ! -e "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && has "not started now" && ! called "start cyberdeckzero-desktop.service"'
 check "fake desktop migration: the earlier helper name links to the new one (ExecStopPost= of a loaded old unit)" '[ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ]'
+check "HackBerry desktop install: no variant switch, no user service touched, no kbd asked for (a Pi), the session named at the end" '! has "variant: switching" && ! has "== Switching" && ! called "systemctl --user" && ! called "dpkg -s kbd" && ! called "getty@tty1" && has "session: desktop (display manager lightdm.service enabled; running: labwc+lightdm)" && has "run install.sh again"'
 SNAP1=$(snapshot "$R")
 full "$R"
 check "fake desktop migration, second run: nothing to migrate, same tree" '[ $RC = 0 ] && has "nothing to migrate" && [ "$(snapshot "$R")" = "$SNAP1" ]'
@@ -877,6 +879,105 @@ pcfull "$R" "$BUN64" aarch64
 check "the amd64 bundle on a Pi: refused" '[ $RC = 1 ] && has "this bundle is for amd64, this system is arm64" && [ ! -e "$R/usr/share/APPLaunch" ]'
 pcfull "$R" "$BUNARM" aarch64 --no-boot-config
 check "the arm64 bundle on a Pi: accepted as before" '[ $RC = 0 ] && has "profile pi3a-luckfox35"'
+
+# --- switching between the variants: a desktop installed later on a board installed as an appliance, then install.sh
+# again, and back. The FZ-M1 tablet (pc profile, amd64) installed as an appliance, then XFCE as armbian-config sets it up
+# (lightdm enabled through display-manager.service, lightdm and Xorg running, graphical.target).
+R=$(pc_root pc-switch)
+H="$R$UHOME/.config/systemd/user"; P="$R/etc/applaunch/board.conf"; DU="$R/etc/systemd/system/cyberdeckzero-desktop.service"
+pcfull "$R" "$BUN64" x86_64
+check "switch: the appliance install first (user service, console unit, no switch)" '[ $RC = 0 ] && has "session: appliance (no display manager enabled or running: the launcher starts at boot)" && [ -f "$H/cyberdeckzero.service" ] && [ -f "$R/etc/systemd/system/cyberdeckzero-console.service" ] && ! has "variant: switching" && ! has "Switched from"'
+# the enablement links systemd would have made (the stand-in systemctl makes none)
+mkdir -p "$H/default.target.wants" "$R/etc/systemd/system/multi-user.target.wants"
+ln -sf ../cyberdeckzero.service "$H/default.target.wants/cyberdeckzero.service"
+ln -sf ../cyberdeckzero-console.service "$R/etc/systemd/system/multi-user.target.wants/cyberdeckzero-console.service"
+CONF_SUM=$(cksum < "$P"); BOOTSUM=$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)
+desktop "$R" lightdm.service lightdm Xorg xfce4-session
+ln -sf /lib/systemd/system/graphical.target "$R/etc/systemd/system/default.target"
+pcrun --dry-run --user "$U"
+check "switch dry-run: desktop session and its evidence" '[ $RC = 0 ] && has "session: desktop (display manager lightdm.service enabled; running: Xorg+lightdm)" && ! has "WARNING: the system boots"'
+check "switch dry-run: the switch planned, what it stops, disables and removes, what it keeps" 'has "switch from the appliance variant to the desktop variant" && has "user service cyberdeckzero.service of $U: stopped if it runs (the launcher on the panel quits now" && has "the launcher and lightdm.service never both start at boot" && has "cyberdeckzero-console.service: disabled and stopped (the text console is bound again), removed" && has "kept as they are: lingering of $U, getty@tty1" && has "sudo systemctl start lightdm.service"'
+check "switch dry-run: the appliance files found, by path" 'has "      $UHOME/.config/systemd/user/cyberdeckzero.service" && has "      $UHOME/.config/systemd/user/default.target.wants/cyberdeckzero.service" && has "      /etc/systemd/system/cyberdeckzero-console.service" && has "      /etc/systemd/system/multi-user.target.wants/cyberdeckzero-console.service"'
+check "switch dry-run: then the desktop variant, kbd for chvt, the unit for lightdm" 'has "/etc/systemd/system/cyberdeckzero-desktop.service for $U, not enabled" && has "polkitd bluez kbd (chvt, for the desktop unit)" && [ -n "$(unit_text | grep -x "Conflicts=lightdm.service")" ] && has "later: if you install or remove a desktop (a display manager), run install.sh again"'
+check "switch dry-run: nothing changed" '[ -f "$H/cyberdeckzero.service" ] && [ -f "$R/etc/systemd/system/cyberdeckzero-console.service" ] && [ ! -e "$DU" ] && [ "$(cksum < "$P")" = "$CONF_SUM" ]'
+# the launcher runs on the panel while the switch happens
+FAKE_USER_ACTIVE=cyberdeckzero.service; export FAKE_USER_ACTIVE
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_USER_ACTIVE
+check "switch to desktop: exit 0, the switch announced and done as a step" '[ $RC = 0 ] && has "variant: switching from the appliance variant to the desktop variant (a display manager is there now)" && has "== Switching from the appliance variant to the desktop variant"'
+check "switch to desktop: the running launcher is said to stop, then stopped and disabled through the user's systemd" 'has "the launcher is running on the panel (cyberdeckzero.service): it is stopped now" && called "systemctl --user disable --now cyberdeckzero.service"'
+check "switch to desktop: user service and its enablement link removed, lingering left as it is" '[ ! -e "$H/cyberdeckzero.service" ] && [ ! -L "$H/default.target.wants/cyberdeckzero.service" ] && ! called "loginctl" && has "lingering"'
+check "switch to desktop: console unit disabled and stopped, its file and link removed, not enabled again" 'called "systemctl disable --now cyberdeckzero-console.service" && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && [ ! -L "$R/etc/systemd/system/multi-user.target.wants/cyberdeckzero-console.service" ] && ! called "enable --now cyberdeckzero-console.service"'
+check "switch to desktop: the appliance units go before the services are installed" '[ "$(at "systemctl --user disable --now cyberdeckzero.service")" -gt 0 ] && [ "$(at "disable --now cyberdeckzero-console.service")" -lt "$(at "systemctl enable launcher-ntp-default.service")" ] && [ "$(at "systemctl --user disable --now cyberdeckzero.service")" -lt "$(at "systemctl enable launcher-ntp-default.service")" ]'
+check "switch to desktop: desktop unit for the user and lightdm, menu entry, polkit rule" 'grep -qx "User=$U" "$DU" && grep -qx "Conflicts=lightdm.service" "$DU" && grep -qx "After=lightdm.service" "$DU" && grep -qx "ExecStopPost=+/usr/share/APPLaunch/bin/cyberdeckzero-console restore-desktop lightdm.service" "$DU" && grep -qx "Name=CyberdeckZero Launcher" "$R/usr/share/applications/cyberdeckzero.desktop" && grep -q "subject.user == \"$U\"" "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules"'
+# the unit's own environment against the pc profile: no APPLAUNCH_BOARD of its own, no key with another value
+CLASH=$(sed -n 's/^Environment=\([A-Z_][A-Z0-9_]*\)=\(.*\)$/\1 \2/p' "$DU" | while read -r k v; do
+    b=$(sed -n "s/^$k=//p" "$P"); [ -z "$b" ] || [ "$b" = "$v" ] || echo "$k"; done)
+check "switch to desktop: the unit fits the pc profile (no APPLAUNCH_BOARD, no clashing value, the profile loaded, the binary by path)" '! grep -q "APPLAUNCH_BOARD" "$DU" && [ -z "$CLASH" ] && grep -qx "EnvironmentFile=-/etc/applaunch/board.conf" "$DU" && grep -qx "ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero" "$DU" && grep -qx "APPLAUNCH_KBD_IGNORE=bus:0011" "$P" && grep -qx "APPLAUNCH_DISPLAY=dpi-scaled" "$P"'
+check "switch to desktop: board.conf unchanged (no .bak), no boot file touched" '[ "$(cksum < "$P")" = "$CONF_SUM" ] && [ ! -e "$P.bak" ] && [ "$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)" = "$BOOTSUM" ] && [ ! -e "$R/boot/firmware" ]'
+check "switch to desktop: kbd checked (chvt), nothing started, getty@tty1 left alone" 'called "dpkg -s kbd" && ! called "start cyberdeckzero-desktop.service" && ! called "restart cyberdeckzero.service" && ! called "getty@tty1" && has "not started now (it would stop the desktop)"'
+check "switch to desktop: the end names the session, the switch, how the desktop comes up, the menu, and to run install.sh again" 'has "session: desktop (display manager lightdm.service enabled; running: Xorg+lightdm)" && has "Switched from the appliance variant: the launcher no longer starts at boot, lightdm.service does." && has "The desktop comes up at the next boot (sudo reboot), or at once with: sudo systemctl start lightdm.service" && has "its open programs are closed" && has "If you install or remove a desktop (a display manager) later, run install.sh again"'
+SNAP1=$(snapshot "$R")
+FAKE_ACTIVE=lightdm.service; export FAKE_ACTIVE
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_ACTIVE
+check "switch to desktop, second run: no switch, no appliance unit called, the same tree" '[ $RC = 0 ] && ! has "variant: switching" && ! has "== Switching" && ! called "cyberdeckzero.service" && ! called "cyberdeckzero-console.service" && ! called "systemctl --user" && [ "$(snapshot "$R")" = "$SNAP1" ]'
+check "switch to desktop, second run: the desktop running, no start hint" '! has "The desktop comes up at the next boot" && ! has "Switched from"'
+# the desktop removed again as armbian-config's remove does it: lightdm purged (display-manager.service may be left
+# pointing nowhere), multi-user.target, nothing of the desktop running: back to the appliance variant
+rm -f "$R/lib/systemd/system/lightdm.service"; rm -rf "$R"/proc/7[0-9][0-9]
+ln -sf /lib/systemd/system/multi-user.target "$R/etc/systemd/system/default.target"
+pcrun --dry-run --user "$U"
+check "switch back dry-run: appliance session (the link left by the removed lightdm named), the desktop files listed, nothing changed" '[ $RC = 0 ] && has "session: appliance (display-manager.service points to lightdm.service, which is not installed (a removed desktop): the launcher starts at boot)" && has "switch from the desktop variant to the appliance variant" && has "      /etc/systemd/system/cyberdeckzero-desktop.service" && has "      /usr/share/applications/cyberdeckzero.desktop" && has "      /etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" && [ -f "$DU" ] && ! has "WARNING"'
+# lightdm still installed and enabled but the system boots to multi-user.target: it never starts, the same switch
+echo "[Unit]" > "$R/lib/systemd/system/lightdm.service"
+pcrun --dry-run --user "$U"
+check "switch back dry-run, lightdm enabled but multi-user.target: appliance, said why and how to get the desktop" '[ $RC = 0 ] && has "session: appliance (display manager lightdm.service enabled, but the system boots to multi-user.target, where it does not start: the launcher starts at boot (for the desktop variant: sudo systemctl set-default graphical.target, then install.sh again))" && has "switch from the desktop variant to the appliance variant"'
+rm -f "$R/lib/systemd/system/lightdm.service"
+pcfull "$R" "$BUN64" x86_64
+check "switch to appliance: exit 0, announced, the desktop unit, menu entry and polkit rule removed" '[ $RC = 0 ] && has "variant: switching from the desktop variant to the appliance variant (no display manager any more)" && has "== Switching from the desktop variant to the appliance variant" && [ ! -e "$DU" ] && [ ! -e "$R/usr/share/applications/cyberdeckzero.desktop" ] && [ ! -e "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" ]'
+check "switch to appliance: user service enabled and started, lingering, console unit, getty@tty1 masked" '[ -f "$H/cyberdeckzero.service" ] && [ -f "$R/etc/systemd/system/cyberdeckzero-console.service" ] && called "systemctl --user enable cyberdeckzero.service" && called "systemctl --user restart cyberdeckzero.service" && called "loginctl enable-linger $U" && called "systemctl enable --now cyberdeckzero-console.service" && called "systemctl mask getty@tty1.service"'
+check "switch to appliance: the desktop files go before the console unit is enabled; the menu launcher was not running: not stopped" '[ "$(at "is-active --quiet cyberdeckzero-desktop.service")" -gt 0 ] && [ "$(at "is-active --quiet cyberdeckzero-desktop.service")" -lt "$(at "enable --now cyberdeckzero-console.service")" ] && ! called "stop cyberdeckzero-desktop.service"'
+check "switch to appliance: board.conf and the boot files unchanged, no kbd asked for" '[ "$(cksum < "$P")" = "$CONF_SUM" ] && [ ! -e "$P.bak" ] && [ "$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)" = "$BOOTSUM" ] && ! called "dpkg -s kbd"'
+check "switch to appliance: the end names the session and the switch, and to run install.sh again" 'has "session: appliance (display-manager.service points to lightdm.service, which is not installed" && has "Switched from the desktop variant: the menu entry is gone, the launcher starts at boot." && has "If you install or remove a desktop (a display manager) later, run install.sh again"'
+SNAP1=$(snapshot "$R")
+pcfull "$R" "$BUN64" x86_64
+check "switch to appliance, second run: no switch, the desktop unit not looked at, the same tree" '[ $RC = 0 ] && ! has "variant: switching" && ! has "== Switching" && ! called "cyberdeckzero-desktop.service" && [ "$(snapshot "$R")" = "$SNAP1" ]'
+# back to the appliance while the launcher started from the menu still runs: left running, the user service waits for
+# the next boot (no second launcher now, no display manager started by its exit)
+R=$(pc_root pc-switch-running); DU="$R/etc/systemd/system/cyberdeckzero-desktop.service"
+desktop "$R" lightdm.service lightdm Xorg
+pcfull "$R" "$BUN64" x86_64
+check "desktop install from the start on the tablet: no switch, no user service, no console unit" '[ $RC = 0 ] && ! has "variant: switching" && [ -f "$DU" ] && [ ! -e "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && ! called "systemctl --user"'
+# (armbian-config's disable: "systemctl disable display-manager", the alias link goes, graphical.target stays)
+rm -f "$R/etc/systemd/system/display-manager.service"; rm -rf "$R"/proc/7[0-9][0-9]
+FAKE_ACTIVE=cyberdeckzero-desktop.service; export FAKE_ACTIVE
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_ACTIVE
+check "switch to appliance with the menu launcher running: not stopped, said so, its files removed" '[ $RC = 0 ] && ! called "systemctl stop cyberdeckzero-desktop.service" && has "is running: it is left running, not stopped" && [ ! -e "$DU" ] && [ ! -e "$R/usr/share/applications/cyberdeckzero.desktop" ]'
+check "switch to appliance with the menu launcher running: user service enabled, not started, reboot asked" 'called "systemctl --user enable cyberdeckzero.service" && ! called "restart cyberdeckzero.service" && has "next boot: sudo reboot"'
+# the boot path of the desktop variant: the display manager must be enabled and the system must boot to graphical.target
+R=$(pc_root pc-multiuser)
+desktop "$R" lightdm.service lightdm
+ln -sf /lib/systemd/system/multi-user.target "$R/etc/systemd/system/default.target"
+pcrun --dry-run --user "$U"
+check "desktop booting to multi-user.target: warned, the fix given" '[ $RC = 0 ] && has "WARNING: the system boots to multi-user.target (systemctl get-default): lightdm.service does not start at boot" && has "sudo systemctl set-default graphical.target"'
+ln -sf /usr/lib/systemd/system/graphical.target "$R/etc/systemd/system/default.target"
+pcrun --dry-run --user "$U"
+check "desktop booting to graphical.target: no warning" '[ $RC = 0 ] && ! has "WARNING: the system boots" && ! has "no display manager is enabled for boot"'
+R=$(pc_root pc-noalias)
+desktop "$R" - lightdm Xorg
+pcrun --dry-run --user "$U"
+check "desktop running without display-manager.service: warned" 'has "session: desktop (running: Xorg+lightdm)" && has "WARNING: no display manager is enabled for boot"'
+# the deck installed as an appliance, then a desktop: still refused, before anything (no switch, nothing changed)
+R=$(root zero2w)
+full "$R"
+desktop "$R" lightdm.service lightdm
+SNAP1=$(snapshot "$R")
+full "$R"
+check "deck appliance with a desktop now: refused, nothing switched, nothing changed" '[ $RC = 1 ] && has "has no desktop variant" && ! has "variant: switching" && ! called "disable" && [ "$(snapshot "$R")" = "$SNAP1" ]'
+run --dry-run --user "$U"
+check "deck appliance with a desktop now, dry run: no switch planned" '[ $RC = 0 ] && has "has no desktop variant: install.sh would stop here" && ! has "switch from the appliance"'
 
 # --- default app source: install.sh's plan and option
 R=$(root zero2w)
