@@ -52,14 +52,18 @@ def test_native_probe_requires_linux_and_sd_sysfs_type():
         "defined(CONFIG_APPLAUNCH_TARGET_SD_MMC_STORAGE) && defined(__linux__)"
     ) == 2
     assert "defined(APPLAUNCH_TARGET_SD_MMC_STORAGE)" not in MODEL
-    assert 'std::ifstream mounts("/proc/self/mounts")' in MODEL
+    assert 'std::ifstream mounts(hook ? hook : "/proc/self/mounts")' in MODEL
     assert 'std::filesystem::path("/sys/class/block")' in MODEL
     assert 'if (type == "SD")' in MODEL
     assert 'if (type == "MMC")' in MODEL
 
 
 def test_storage_page_labels_available_capacity_as_available():
-    assert '"SD card"' in PAGE
+    # the SD card keeps its line (the model's device_line), a PC's disk is never called one (report 028, x-b)
+    assert 'case SettingsStorageKind::SdCard: label = "SD card"' in MODEL
+    assert "SettingsStorageModel::device_line(storage)" in PAGE
+    assert '"Storage information unavailable."' in PAGE
+    assert '"SD card information unavailable."' not in PAGE
     assert '"Total: " + SettingsStorageModel::format_bytes' in PAGE
     assert '"Available: " + SettingsStorageModel::format_bytes' in PAGE
     assert '"Free: " + SettingsStorageModel::format_bytes' not in PAGE
