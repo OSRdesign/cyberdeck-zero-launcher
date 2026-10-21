@@ -373,7 +373,10 @@ for f in cyberdeckzero.service cyberdeckzero-console cyberdeckzero-console.servi
     check "build.sh puts $f in the bundle" 'grep -q "$f" "$D/build.sh"'
 done
 check "build.sh leaves the stock start-up logo and the ADB helpers out" 'grep -q "rm -f \"\$OUT/payload/share/share/images/logo_lcd.png\"" "$D/build.sh" && grep -q "rm -rf \"\$OUT/payload/share/adb\"" "$D/build.sh"'
-check "build.sh names the tarball by version, with the earlier name as a copy" 'grep -q "TARBALL=\"cyberdeckzero-launcher-\$VERSION-arm64.tar.gz\"" "$D/build.sh" && grep -q "LEGACY_TARBALL=\"pizero2w-bundle.tar.gz\"" "$D/build.sh"'
+check "build.sh names the tarball by version and arch (arm64 by default), with the earlier name as a copy" 'grep -q "TARBALL=\"cyberdeckzero-launcher-\$VERSION-\$ARCH.tar.gz\"" "$D/build.sh" && grep -qx "ARCH=arm64" "$D/build.sh" && grep -q "LEGACY_TARBALL=\"pizero2w-bundle.tar.gz\"" "$D/build.sh"'
+check "build.sh: the earlier name is an arm64 copy only, amd64 builds natively with its own config" 'grep -qx "\[ \"\$ARCH\" = arm64 \] || LEGACY_NAME=0" "$D/build.sh" && grep -q "CONFIG=linux_x86_64_native_cp0_config_defaults.mk" "$D/build.sh" && [ -f "$D/../linux_x86_64_native_cp0_config_defaults.mk" ]'
+check "amd64 config: the device config without the NEON lines" '[ "$(sed "s/\r\$//" "$D/../config_defaults.mk" | grep -v -e "^#" -e "LV_DRAW_SW_ASM_NEON" -e "LV_USE_DRAW_SW_ASM")" = "$(sed "s/\r\$//" "$D/../linux_x86_64_native_cp0_config_defaults.mk" | grep -v "^#")" ] && grep -qx "CONFIG_APPLAUNCH_LINUX_CP0=y" "$D/../linux_x86_64_native_cp0_config_defaults.mk"'
+check "units: the dpi-scaled backend in both launcher units" 'grep -qx "Environment=APPLAUNCH_DISPLAY=dpi-scaled" "$D/cyberdeckzero.service" && grep -qx "Environment=APPLAUNCH_DISPLAY=dpi-scaled" "$D/cyberdeckzero-desktop.service"'
 check "cyberdeckzero-console: valid sh" 'sh -n "$D/cyberdeckzero-console"'
 
 # --- applaunch-console against a fake /sys/class/vtconsole and a fake systemctl

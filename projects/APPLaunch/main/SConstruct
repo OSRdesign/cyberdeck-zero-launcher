@@ -155,6 +155,9 @@ if ('CONFIG_APPLAUNCH_LINUX_X86_SDL2' in os.environ or
 if 'CONFIG_APPLAUNCH_LINUX_CP0' in os.environ:
     REQUIREMENTS += ['cp0_lvgl']
     REQUIREMENTS += ['input', 'xkbcommon', 'udev']
+    # native build (amd64 PCs, report 028): no sysroot, LVGL's FreeType headers from the build box (pkg-config)
+    if not os.environ.get('CONFIG_TOOLCHAIN_SYSROOT'):
+        lvgl_component['DEFINITIONS'] += ['-D_REENTRANT'] + pkg_config_cflags("freetype2")
 
 if 'CONFIG_APPLAUNCH_MAC_CROSS_CP0' in os.environ:
     lvgl_component['DEFINITIONS'] += ['-D_REENTRANT']
