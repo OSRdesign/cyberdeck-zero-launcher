@@ -1,6 +1,6 @@
 # Settings > System > Pointer navigation (pointer navigation spike): the System section with "Pointer navigation: Off"
 # (the default), its choice page (Off checked), On picked: back in System with "On" (the harness' config fake keeps
-# it), then the choice page again with On checked. Release build (APPLAUNCH_DEV 0, no About: no APPLAUNCH_BOARD).
+# it), then the choice page again with On checked. Release build (APPLAUNCH_DEV 0), no board profile.
 # Review only: no golden. No header check of the choice page: its title is cut with dots on the smaller screens (the
 # same as "On-screen keyboard"), and the check looks for the whole text.
 title settings pointer navigation
@@ -16,7 +16,8 @@ launch Settings
 # System: Up from Screen wraps to the last section
 key UP
 key ENTER
-# System (release): Storage, Licenses, Pointer navigation, On-screen keyboard, Reboot, Shutdown; Up wraps from the top
+# System (release): Storage, Licenses, About, Pointer navigation, On-screen keyboard, Reboot, Shutdown;
+# Up wraps from the top
 key UP
 key UP
 key UP
