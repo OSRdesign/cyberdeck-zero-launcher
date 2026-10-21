@@ -44,6 +44,7 @@ int64_t harness_wall_clock(void);
 
 #ifdef __cplusplus
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -110,7 +111,18 @@ struct Fixtures {
     int backlight_max = 255;
     int backlight = 200;
     unsigned keyboards = 0;            /* physical keyboards present (on-screen keyboard policy) */
-    bool ntp_on = false;               /* Network Time (NtpGet answers 1 when on, 0 off); scene command "ntp on|off" */
+    /* Network Time (NtpGet answers 1 when on, 0 off); scene command "ntp on|off"; the Network Time toggle sets it
+     * (cp0_timedate_set_ntp, a worker thread) */
+    std::atomic<bool> ntp_on{false};
+    /* Date & Time > Time zone: the zone in use (cp0_timedate_get_timezone; scene command "tz ZONE", "tz none": it
+     * cannot be read), what setting one answers ("tzset ok|fail|denied": 0 and the zone changes, -1, -13 PolicyKit
+     * refused), the list (cp0_timedate_list_timezones: fixtures/timezones.txt, a real `timedatectl list-timezones`;
+     * "tzlist off": none, as without timedated and zoneinfo files). A zone set becomes the process's TZ when the page
+     * reports the change (cp0_timedate_zone_changed), so the clocks follow it. */
+    std::mutex tz_mutex;
+    std::string timezone = "Etc/UTC";
+    int timezone_set_result = 0;
+    bool timezone_list = true;
     bool time_settable = false;        /* cp0_timedate_set_time (Date & Time > Set Manually > Save?) succeeds; "timeset ok|fail" */
     std::atomic<int64_t> time_set_epoch{-1}; /* the time it was last set to (LocalTime answers it from then on), -1: none */
 };

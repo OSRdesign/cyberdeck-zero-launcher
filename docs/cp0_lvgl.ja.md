@@ -164,7 +164,7 @@ Process のコマンドは `ExecBlocking executable keep_root`、`Spawn executab
 
 `cp0_signal_sudo_argv_async` は `(argv, auth_timeout_ms, exec_timeout_ms, complete, started)` を受け取ります。先に `started(ret, request_id)`、その後に `complete(result_code, exit_code)` が 1 回呼ばれます。`cp0_signal_sudo_cancel(request_id, done)` でキャンセルし、`done(0)` は受理を意味します。
 
-`cp0_signal_system_admin_async` は `AdbSet 0|1`、`AdbAuthorize public_key`（680..2048 byte、改行なし）、`AdbRevoke fingerprint`（64 桁の小文字 hex）、`AdbClearAuthorizations`、`NtpSet 0|1`、`TimeSet YYYY-MM-DD HH:MM:SS` のみを受け付けます。不正引数では `started(-EINVAL, 0)` だけが呼ばれ、complete は呼ばれません。画面を離れる時や timeout 時には request id をキャンセルしてください。
+`cp0_signal_system_admin_async` は `AdbSet 0|1`、`AdbAuthorize public_key`（680..2048 byte、改行なし）、`AdbRevoke fingerprint`（64 桁の小文字 hex）、`AdbClearAuthorizations`、`NtpSet 0|1`、`TimezoneSet zone`（`timedatectl set-timezone zone` を実行。zone は shell を通さず 1 つの引数として渡され、1..64 byte の `[A-Za-z0-9_+/-]` で `/` 区切りの各部分は英字で始まる必要があります：`cp0::tz::valid_name`、`include/cp0_timezone.hpp`）、`TimeSet YYYY-MM-DD HH:MM:SS` のみを受け付けます。不正引数では `started(-EINVAL, 0)` だけが呼ばれ、complete は呼ばれません。画面を離れる時や timeout 時には request id をキャンセルしてください。
 
 `cp0_signal_network()` と `cp0_signal_forkexec()` は plan に残る予約宣言ですが、現在の `cp0_lvgl` には登録実装がありません。呼び出す前に実装の存在を確認してください。
 

@@ -92,6 +92,8 @@ runs at those sizes only.
 | `expect_dot LABEL idle\|running\|no` | fail the scene unless the list row of the visible label LABEL shows the Action dot (`idle`: white, `running`: the accent blue; a circle of the list's dot size with its colour drawn, its pixels centred on the row's middle and in the chevron's slot within 1.5 px, right of the row's texts and inside the row, the row's value ending where a chevron row's value ends, the row at the list's item height) or none (`no`) |
 | `expect_same SHOT` | fail the scene unless the screen now is pixel-identical to the shot SHOT taken earlier in the scene at this size |
 | `keyboards N` | physical keyboards the on-screen keyboard policy sees (default 0; `harness_stubs.cpp` replaces the presence watcher) |
+| `ntp on\|off`, `timeset ok\|fail` | Date & Time: Network Time as NtpGet reports it (the Network Time toggle sets it too), whether Set Manually > Save? works (`harness_stubs.cpp`) |
+| `tz ZONE\|none`, `tzset ok\|fail\|denied`, `tzlist on\|off` | Date & Time > Time zone: the zone in use (default `Etc/UTC`; `none`: it cannot be read), what a change answers (done, failed, refused by PolicyKit: the page then tries the sudo path, which the harness does not have), the list (`fixtures/timezones.txt`, a real `timedatectl list-timezones`; `off`: none, as without timedated and zoneinfo files). A zone set becomes the process's `TZ` when the page reports the change, so the clocks follow it (`harness_stubs.cpp`) |
 | `toast TEXT` (`\n` = new line) / `toast off`, `screensaver` (+ `wait`) | launcher toast (persistent) / hide it; arm the clock screensaver |
 | `osd level TITLE PCT`, `osd mute on`/`off`, `loading TEXT` / `loading off`, `compatpage` | the media OSD of the brightness / volume keys (it hides itself after 1000 ms: a shot settles 700 ms after the command), the "Loading..." overlay, a compat page (the compat window is default, a flat placeholder screen, no external app) |
 | `wifinet SSID IP`, `expect_text [end] TEXT` | the connected network the Wi-Fi fixture reports; fail the scene unless a visible label shows TEXT whole (`end`: a label whose text ends with TEXT) in a box wide enough for it (not cut with dots), see `settings_native_wifi_status` |
@@ -129,6 +131,11 @@ NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the 
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
 `settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
 review-only too.
+`settings_native_timezone` (review-only, at 320x170, 480x320, 640x480 and 1280x800): Date & Time > Time zone from
+Etc/UTC, the row with its chevron, the regions, America's zones, a failed and a refused change, the change done (row and
+clocks), the picker reopened on the zone, Esc up one level, Network Time switched off without touching the zone, Info
+with the new offset, the home grid's clock, then Europe > Paris. `settings_native_timezone_missing` (review-only,
+480x320 and 640x480): the same page without timedated (zone Unknown, no list: only UTC, a failed change).
 `ssh_native` (task 014 P4, review-only, `APPLAUNCH_OSK=force`): the native SSH form (labels beside the fields) with the
 keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
 (keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.

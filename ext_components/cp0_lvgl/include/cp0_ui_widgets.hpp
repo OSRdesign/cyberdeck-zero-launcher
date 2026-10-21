@@ -10,7 +10,8 @@
  *           strip) and the area under it. The Esc button calls the page's back action directly: it never injects a
  *           key, so it can never leave a stuck Esc behind (report 022 section 2.2).
  *   Roller  today's centre-highlight roller, full height, width capped and centred. Rows:
- *             Nav     label, current value right-aligned in green (opens something)
+ *             Nav     label, current value right-aligned in green (opens something); opt-in (RowSpec::chevron) a grey
+ *                     chevron at the right edge, the value left of it
  *             Choice  label, blue check mark on the current value
  *             Toggle  label, switch
  *             Slider  label, slider, value text (Left / Right or a drag change it)
@@ -106,6 +107,9 @@ struct RowSpec {
     int bars = 0;        /* Network: signal bars lit, 0..4 */
     bool secured = false; /* Network: the lock */
     int value_rgb = -1;   /* Nav: the value's colour (0xRRGGBB, task 014 P3d: a state such as "failed"); -1 green */
+    bool chevron = false; /* Nav: a grey chevron at the right edge, the value just left of it (the row opens a picker or
+                           * a page: CompactList's Open / Edit look, cp0_ui_list.h). Opt-in: false draws the row as
+                           * before */
 };
 
 struct RollerEvents {
@@ -141,6 +145,7 @@ private:
         lv_obj_t *value = nullptr;  /* Nav / Slider / Info / Network value text, Choice check mark */
         lv_obj_t *control = nullptr; /* switch, slider, spinner (Busy) */
         lv_obj_t *check = nullptr;  /* Network: the connected check mark */
+        lv_obj_t *chevron = nullptr; /* Nav with RowSpec::chevron */
         lv_obj_t *lock = nullptr;   /* Network: the lock (shackle and body) */
         lv_obj_t *bars[4] = {};     /* Network: signal bars */
         int distance = -1;          /* styled for this distance from the centre (-1: not yet) */

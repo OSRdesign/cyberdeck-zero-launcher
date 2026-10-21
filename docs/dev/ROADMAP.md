@@ -16,6 +16,7 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 | 015 | **Multitasking** (keep apps open, switcher by three fingers, status strip long-press or Alt+Tab) | Controller + savvy workers | done (P-a to P-e, PRs #63 to #67, release v0.8.0) | `tasks/015-multitasking-pb.md`, `-pc.md`, `-pd.md`, `reports/026` |
 | - | **Dev tooling**: `tools/dev` (WSL build, check-all) and `tools/boards` (deploy, test, screenshot on the boards) | Controller | done (PR #30) | `docs/dev/DEV-GUIDE.md`, `tools/dev/README.md`, `tools/boards/README.md` |
 | 028 | **x86 (amd64) port** (decisions X1-X15 of 2026-10-21): x-a spike on the FZ-M1 done; **x-b launcher amd64** (native build `--arch amd64`, install.sh `pc` profile, `sysfs:` backlight also fixing the Pi 3A+ DSI, `APPLAUNCH_KBD_IGNORE`, terminal OSK Alt key, board `fzm1`, `tools/dev/x86-smoke.sh`); x-c apps amd64, x-d battery and release next | Controller + savvy workers | x-b verifying (draft PR) | `reports/028-x86-port.md` (PR #69) |
+| - | **Settings > Date & Time > Time zone**: a two-level picker (region, then city; UTC direct), independent of Network Time, through timedated (sudo prompt when PolicyKit refuses); the clocks follow at once. Owner report 2026-10-21: the x86 tablet was stuck on Etc/UTC | Controller + savvy worker | verifying (branch `settings-timezone`, draft PR #71, test bundles 0.8.1-tz.2 amd64 and arm64) | scene `settings_native_timezone`, `settings_native_timezone_page.hpp` |
 
 ## Next (ideas, order not fixed)
 

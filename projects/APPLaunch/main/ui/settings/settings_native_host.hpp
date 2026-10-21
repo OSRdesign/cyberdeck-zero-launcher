@@ -23,9 +23,10 @@
  *   Custom   a legacy page of another board with no native widget (no node of the Pi boards): hidden
  *   Native   a page built natively instead of the roller (settings_native_panel.hpp: the development Keyboard test
  *            form, task 014 P2b; the read-only pages About, User, Storage, Licenses, Date & Time > Info, P3a; the
- *            Wi-Fi page, P3b; Bluetooth Paired Devices, Scan, Alias, P3c; Apps, P3d). Esc first goes back inside the
- *            page (its dialog, its sub-list), then to the section; the page's row is redrawn when it closes (a renamed
- *            entry)
+ *            Wi-Fi page, P3b; Bluetooth Paired Devices, Scan, Alias, P3c; Apps, P3d; Date & Time > Time zone). Esc
+ *            first goes back inside the page (its dialog, its sub-list), then to the section; the page's row is
+ *            redrawn when it closes (a renamed entry, a new value). A row may show a value and a chevron
+ *            (settings_native_row_look: Time zone)
  * A value page may ask a question (SettingsChoiceObserver::choice_confirm: the manual time "Save?" before the factory
  * date): the host shows it as a cp0::ui::Dialog (Cancel / Confirm) over the list and gives the answer back; Esc and the
  * header's Esc cancel it, leaving the section answers "no".

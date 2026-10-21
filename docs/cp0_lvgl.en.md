@@ -76,7 +76,7 @@ the touch rule (a tap selects a row, a tap on the selected row activates it).
 
 | Use | When |
 | --- | --- |
-| `Roller` | Few big items you pick from: menus, Settings, choice lists, toggles and sliders. The selected row is centred under a fixed bar, the rows around it shrink and fade, orange chevrons show that more rows exist. |
+| `Roller` | Few big items you pick from: menus, Settings, choice lists, toggles and sliders. The selected row is centred under a fixed bar, the rows around it shrink and fade, orange chevrons show that more rows exist. A `Nav` row may opt in to `CompactList`'s grey row chevron (`RowSpec::chevron`: the value, then the chevron at the right edge; Settings > Date & Time > Time zone); a `Nav` value too long for its row ends with dots so the label keeps at least a third of it. |
 | `CompactList` | Data and app lists, especially 8 rows or more: process tables, logs, sensor readings, serial ports, a menu inside an app. Top-aligned (row 0 under the header, the highlight moves down; the list scrolls only to keep the highlight and one row of context in view), no scroll chevrons, a thin scrollbar at the right edge while scrolling (gone 1 s later, none when every row fits). |
 
 `CompactList` has two densities from the layout tokens: `ListDensity::Compact` (rows of the `CP0_TOK_LIST_ROW_H` token,
@@ -290,7 +290,7 @@ Session commands are `BtSessionInit` (returns an id), `BtSessionDeinit id`, `BtS
 
 `cp0_signal_sudo_argv_async` takes `(argv, auth_timeout_ms, exec_timeout_ms, complete, started)`. `started(ret, request_id)` arrives first; on success `ret == 0` and the id is nonzero. `complete(result_code, exit_code)` then arrives once. Cancel with `cp0_signal_sudo_cancel(request_id, done)`; `done(0)` means cancellation was accepted.
 
-`cp0_signal_system_admin_async` has the same signature but only accepts `AdbSet 0|1`, `AdbAuthorize public_key` (680..2048 bytes, no CR/LF), `AdbRevoke fingerprint` (64 lowercase hexadecimal characters), `AdbClearAuthorizations`, `NtpSet 0|1`, and `TimeSet YYYY-MM-DD HH:MM:SS`. Invalid arguments call only `started(-EINVAL, 0)` and do not produce a completion callback. Keep request ids and cancel them when a UI workflow leaves or times out.
+`cp0_signal_system_admin_async` has the same signature but only accepts `AdbSet 0|1`, `AdbAuthorize public_key` (680..2048 bytes, no CR/LF), `AdbRevoke fingerprint` (64 lowercase hexadecimal characters), `AdbClearAuthorizations`, `NtpSet 0|1`, `TimezoneSet zone` (runs `timedatectl set-timezone zone`, the zone one argument with no shell; 1..64 bytes of `[A-Za-z0-9_+/-]`, each `/`-separated part starting with a letter: `cp0::tz::valid_name`, `include/cp0_timezone.hpp`), and `TimeSet YYYY-MM-DD HH:MM:SS`. Invalid arguments call only `started(-EINVAL, 0)` and do not produce a completion callback. Keep request ids and cancel them when a UI workflow leaves or times out.
 
 `cp0_signal_network()` and `cp0_signal_forkexec()` are reserved plan declarations. The current `cp0_lvgl` sources do not register them, so confirm an implementation before calling.
 

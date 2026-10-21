@@ -326,6 +326,7 @@ int cp0_time_ntp_set(int enable);
 | `{"AdbRevoke","指纹"}` | 撤销 64 位十六进制指纹 |
 | `{"AdbClearAuthorizations"}` | 清理全部授权 |
 | `{"NtpSet","0|1"}` | 设置 NTP |
+| `{"TimezoneSet","时区"}` | 执行 `timedatectl set-timezone 时区`（时区作为单个参数，不经 shell）；时区须为 1..64 字节的 `[A-Za-z0-9_+/-]`，以 `/` 分隔的每段以字母开头（`cp0::tz::valid_name`，`include/cp0_timezone.hpp`） |
 | `{"TimeSet","YYYY-MM-DD HH:MM:SS"}` | 设置系统时间并写 RTC |
 
 参数校验失败只调用 `started(-EINVAL, 0)`，不会产生 complete 回调。UI 页面应保存 request id，并在离开页面或超时路径调用取消。

@@ -22,6 +22,7 @@
 #include "cp0_dispatch_shutdown_gate.hpp"
 #include "cp0_sudo_worker_registry.hpp"
 #include "cp0_sudo_c_api_boundary.hpp"
+#include "cp0_timezone.hpp"
 
 #include "lvgl/lvgl.h"
 
@@ -976,6 +977,14 @@ extern "C" void init_sudo_signals(void)
             argv = {cp0_file_path("adb_helper"), "clear-authorizations"};
         } else if (command == "NtpSet") {
             argv = {"timedatectl", "set-ntp", value == "1" ? "true" : "false"};
+        } else if (command == "TimezoneSet") {
+            // the zone goes as one argv element (no shell); a name that could be an option, a path step or anything
+            // but [A-Za-z0-9_+/-] never reaches timedatectl (cp0_timezone.hpp)
+            if (args.size() != 2 || !cp0::tz::valid_name(value)) {
+                if (started) started(-EINVAL, 0);
+                return;
+            }
+            argv = {"timedatectl", "set-timezone", value};
         } else if (command == "TimeSet") {
             const bool valid_shape = value.size() == 19 && value[4] == '-' && value[7] == '-' &&
                 value[10] == ' ' && value[13] == ':' && value[16] == ':';

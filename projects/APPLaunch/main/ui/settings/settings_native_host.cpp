@@ -303,6 +303,13 @@ cp0::ui::RowSpec SettingsNativeHost::row_spec(const Row &row) const
          * text alone across the row (not a value page whose binding failed: that one keeps the plain Nav look) */
         if (settings_node_kind(row.node) == SettingsNodeKind::Plain) spec.kind = cp0::ui::RowKind::Info;
         break;
+    case RowType::Native: {
+        /* a page that picks a value (Date & Time > Time zone) shows it, then a chevron; the others as before */
+        SettingsNativeRowLook look = settings_native_row_look(row.node);
+        spec.value = std::move(look.value);
+        spec.chevron = look.chevron;
+        break;
+    }
     default:
         break;
     }

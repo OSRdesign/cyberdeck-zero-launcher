@@ -13,6 +13,7 @@
 #include "settings_session.hpp"
 #include "settings_touch_page.hpp"
 #include "settings_native_apps_page.hpp"
+#include "settings_native_timezone_page.hpp"
 
 #include "cp0_backlight_profile.h"
 #include "cp0_lvgl_app.h"
@@ -646,12 +647,24 @@ SettingsNativePage settings_native_page(const NodeIter &node)
     if (factory_is(factory, bluetooth_alias_page_factory)) return SettingsNativePage::BluetoothAlias;
     // task 014 P3d: Apps (its Apps and Sources tabs, the sudo password through the shared prompt)
     if (factory_is(factory, settings_apps_page_factory)) return SettingsNativePage::Apps;
+    // Date & Time > Time zone: the zone picker
+    if (factory_is(factory, settings_timezone_page_factory)) return SettingsNativePage::TimeZone;
     // task 014 P3b: the Wi-Fi section is one native page (its Enable toggle, Networks and Join Hidden Network)
     if (factory_is(factory, roller_page_factory))
         for (auto child = node.begin(); child != node.end(); ++child)
             if (child->page_factory && factory_is(child->page_factory, wifi_scan_page3_factory))
                 return SettingsNativePage::Wifi;
     return SettingsNativePage::None;
+}
+
+SettingsNativeRowLook settings_native_row_look(const NodeIter &node)
+{
+    SettingsNativeRowLook look;
+    if (settings_native_page(node) == SettingsNativePage::TimeZone) {
+        look.value = settings_timezone_row_value();
+        look.chevron = true;
+    }
+    return look;
 }
 
 SettingsWifiSection settings_wifi_section(const NodeIter &wifi)
@@ -865,6 +878,8 @@ void UISettingTreePage::create_page_detail()
             mode_tree.append_child(write_rtc, SettingEntry{"Yes"});
             mode_tree.append_child(write_rtc, SettingEntry{"No"});
         }
+        // the time zone, independent of Network Time; native Settings only (its picker has no legacy page)
+        if (settings_ui::native_selected()) settings_timezone::append_entry(mode_tree, date_time);
     }
 
     {

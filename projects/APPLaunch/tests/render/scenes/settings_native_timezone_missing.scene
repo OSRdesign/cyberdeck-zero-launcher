@@ -1,0 +1,38 @@
+# Settings > Date & Time > Time zone on a system without timedated (and without zoneinfo files): the zone cannot be read
+# (the row says Unknown), the list cannot be loaded (red status line "Time zone list unavailable", only UTC is offered),
+# and a change fails with its reason; nothing else breaks and Esc leaves as usual. Review only: no golden.
+# Fixtures: `tz none`, `tzlist off`, `tzset fail` (src/harness_stubs.cpp).
+title settings native time zone without timedated
+review
+sizes 480x320 640x480
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-10-10
+wifi 70
+bt on
+ntp off
+tz none
+tzlist off
+tzset fail
+home
+header home
+launch Settings
+key UP
+key UP
+key ENTER
+wait 600
+# Info, Network Time, Set Manually, Time zone: Up from Info wraps to Time zone
+key UP
+wait 300
+shot tzm_row
+header tzm_row "Settings > Date & Time" "Date & Time" Time
+key ENTER
+wait 1200
+shot tzm_regions
+# UTC, the only entry: the change fails, the reason stays in the status line
+key ENTER
+wait 900
+shot tzm_failed
+key ESC
+wait 300
+shot tzm_back
