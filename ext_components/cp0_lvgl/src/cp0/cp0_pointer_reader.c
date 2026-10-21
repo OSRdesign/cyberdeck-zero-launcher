@@ -45,6 +45,7 @@ typedef struct {
     dev_t rdev;
     char path[CP0_KBD_PRESENCE_PATH_SIZE];
     char name[CP0_KBD_PRESENCE_NAME_SIZE];
+    unsigned vendor, product; /* EVIOCGID (0 when unknown): the per-device table of the core */
     int mono_clock;         /* event times are CLOCK_MONOTONIC (EVIOCSCLOCKID on this handle only) */
     int dropping;           /* SYN_DROPPED: events are skipped up to the next SYN_REPORT */
     uint64_t last_ms;       /* the core's clock, in monotonic ms */
@@ -232,9 +233,17 @@ static int source_open(ptr_source_t *sources, int slot, const cp0_kbd_presence_d
     snprintf(s->name, sizeof(s->name), "%s", device->name);
     int clock = CLOCK_MONOTONIC;
     s->mono_clock = ioctl(fd, EVIOCSCLOCKID, &clock) == 0;
-    cp0_ptr_nav_init(&s->nav, params);
+    struct input_id id;
+    if (ioctl(fd, EVIOCGID, &id) == 0) {
+        s->vendor = id.vendor;
+        s->product = id.product;
+    }
+    cp0_ptr_nav_params_t own;
+    cp0_ptr_nav_params_for_device(params, s->vendor, s->product, s->name, &own);
+    cp0_ptr_nav_init(&s->nav, &own);
     s->last_ms = mono_ms();
-    SLOGI("[PTR] reading %s (%s), no grab", s->path, s->name);
+    SLOGI("[PTR] reading %s (%s, %04x:%04x), no grab, min click %d ms", s->path, s->name, s->vendor, s->product,
+          s->nav.p.min_click_ms);
     return 0;
 }
 
@@ -304,8 +313,12 @@ static void frame_flush(ptr_source_t *s, uint64_t event_ms)
     if (!s->frame_used) return;
     const uint64_t t = s->mono_clock ? event_ms : mono_ms();
     cp0_ptr_key_t keys[CP0_PTR_NAV_MAX_KEYS];
+    const unsigned taps = s->nav.taps_ignored;
     const int n = cp0_ptr_nav_step(&s->nav, clamp_dt(t, s->last_ms), &s->frame, keys, CP0_PTR_NAV_MAX_KEYS);
     if (t > s->last_ms) s->last_ms = t;
+    if (s_debug && s->nav.taps_ignored != taps)
+        SLOGI("[PTR] %s: tap ignored (%u ms, under %d ms)", s->path, (unsigned)s->nav.last_tap_ms,
+              s->nav.p.min_click_ms);
     memset(&s->frame, 0, sizeof(s->frame));
     s->frame_used = 0;
     emit_keys(s, keys, n);
@@ -394,10 +407,12 @@ static void *reader_main(void *arg)
         return NULL;
     }
     SLOGI("[PTR] reader ready: dead zone %d, full level %d, %d.%d to %d.%d steps/s, repeat delay %d ms, release %d ms, "
-          "hold %d ms, tap slop %d, click guard %d ms (%d APPLAUNCH_POINTER_* override%s)%s",
+          "hold %d ms, tap slop %d, click guard %d ms, min click %s%d%s (%d APPLAUNCH_POINTER_* override%s)%s",
           params.dead_zone, params.full_level, params.slow_rate_x10 / 10, params.slow_rate_x10 % 10,
           params.max_rate_x10 / 10, params.max_rate_x10 % 10, params.repeat_delay_ms, params.release_ms,
-          params.hold_ms, params.tap_slop, params.click_guard_ms, overrides, overrides == 1 ? "" : "s",
+          params.hold_ms, params.tap_slop, params.click_guard_ms, params.min_click_ms < 0 ? "per device (" : "",
+          params.min_click_ms < 0 ? CP0_PTR_NAV_MIN_CLICK_MS_HACKBERRY : params.min_click_ms,
+          params.min_click_ms < 0 ? " ms HackBerry pad, else 0)" : " ms", overrides, overrides == 1 ? "" : "s",
           s_debug ? ", debug log" : "");
 
     ptr_source_t sources[PTR_MAX_SOURCES];

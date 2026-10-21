@@ -91,7 +91,9 @@ same queue: `src/cp0/cp0_pointer_reader.c` (a thread started by `init_input()`
 where every keyboard is read) reads the pointer devices that the presence
 watcher classifies (`cp0_keyboard_presence.h`), the pure core
 `src/cp0_pointer_nav.c` (`include/cp0_pointer_nav.h`) turns motion, wheel and
-BTN_LEFT into Up / Down / Left / Right, Enter and Ctrl+O, and
+BTN_LEFT into Up / Down / Left / Right, Enter and Ctrl+O (a press shorter
+than the device's `min_click_ms`, 260 ms for the HackBerry pad whose firmware
+turns a tap into a click, is ignored), and
 `cp0_keyboard_inject()` queues them as press + release. The launcher's setting
 is `projects/APPLaunch/main/ui/launcher_pointer.*` (config `pointer_nav`) and
 `settings/settings_pointer_page.*`; apps follow `input.state` `pointer=`.

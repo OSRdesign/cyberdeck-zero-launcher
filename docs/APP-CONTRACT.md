@@ -257,7 +257,10 @@ Up / Down, a click (button released within 0.6 s, without moving) into Enter, an
 into **Ctrl+O, the options key** (`KEY_O` with `KBD_MOD_CTRL`; Mesh Hop's chat options use it). A pointer is a device
 with `REL_X`, `REL_Y` and `BTN_LEFT` and no absolute axis or `BTN_TOUCH` (never a touch screen or a touchpad). The keys
 arrive like a physical keyboard's (press + release, `keysym` 0), so an app needs no code for them; an app that has an
-options menu should open it on Ctrl+O. While a text field edits (`KBD_INPUT_CONTEXT_TEXT`) Left / Right and Ctrl+O are
+options menu should open it on Ctrl+O. On the HackBerry's pad a quick tap on the surface (which its firmware reports as
+a short click, 0.16-0.19 s) does not select: only the pad's physical button clicks (a press of 0.26 s or more; a
+per-device default, `APPLAUNCH_POINTER_MIN_CLICK_MS` changes it for every pointer, `0` turns it off). Other mice click
+as before. While a text field edits (`KBD_INPUT_CONTEXT_TEXT`) Left / Right and Ctrl+O are
 not sent (the caret, a terminal's control character); Up / Down and Enter are.
 
 An app that links `cp0_lvgl` and reads every keyboard (`cp0_keyboard_set_read_all_keyboards(1)`, as
