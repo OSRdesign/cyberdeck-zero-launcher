@@ -1,0 +1,164 @@
+# Settings > Date & Time > Time zone (the zone picker), in a release build (APPLAUNCH_DEV=0). The board starts on
+# Etc/UTC (an OS installed without a zone) with Network Time on. Date & Time lists Time zone last, its zone in green
+# and a chevron; the picker's level 1 lists the regions (a chevron each) and UTC (checked: in use); America opens its
+# zones without the region ("Argentina/Buenos_Aires"); a refused change (timedated fails, then PolicyKit refuses and
+# this process has no sudo service) says why in the status line and stays; the change done goes back to Date & Time,
+# whose row shows the new zone, and the status clock moves at once (20:30 UTC -> 17:30); opened again, America shows
+# its city and the zone is checked and centred; Esc goes up one level, then out; Network Time is still on and toggles
+# off without touching the zone; Date & Time > Info shows the new offset; the home grid's clock is in the new zone;
+# then Europe > Paris from the home grid again (a short name: whole on the row; the clock at 22:30). A long name ends
+# with dots on the row where it does not fit (the label keeps at least a third of it); the picker shows it whole.
+# Review only: no golden; the headers before the change are checked against the home grid's (run.sh header; after
+# it the clock differs on purpose). Fixtures: `tz ZONE`, `tzset ok|fail|denied`, fixtures/timezones.txt
+# (src/harness_stubs.cpp).
+title settings native time zone
+review
+sizes 320x170 480x320 640x480 1280x800
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-10-10
+wifi 70
+bt on
+ntp on
+tz Etc/UTC
+tzset ok
+home
+header home
+shot tz_home_utc
+launch Settings
+# root: Up from Screen wraps to System, Up again is Date & Time
+key UP
+key UP
+key ENTER
+wait 600
+# Info, Network Time, Set Manually, Time zone: Up from Info wraps to Time zone
+key UP
+wait 300
+shot tz_row
+@480x320,640x480,1280x800 header tz_row "Settings > Date & Time" "Date & Time" Time
+key ENTER
+wait 1200
+shot tz_regions
+@480x320,640x480,1280x800 header tz_regions "Settings > Date & Time > Time zone" "Date & Time > Time zone" "Time zone"
+# Down from UTC wraps to Africa, then America
+key DOWN
+key DOWN
+wait 300
+shot tz_regions_america
+key ENTER
+wait 600
+shot tz_america
+@480x320,640x480,1280x800 header tz_america "Settings > Date & Time > Time zone > America" "Date & Time > Time zone > America" "Time zone > America" America
+# Adak, Anchorage, Anguilla, Antigua, Araguaina, Argentina/Buenos_Aires
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+wait 300
+shot tz_buenos_aires
+# timedated fails: the reason, the list stays
+tzset fail
+key ENTER
+wait 900
+shot tz_failed
+# PolicyKit refuses: the sudo path, absent in the harness, is refused too
+tzset denied
+key ENTER
+wait 900
+shot tz_denied
+# done: back on Date & Time with the new zone, the status clock at 17:30
+tzset ok
+key ENTER
+wait 900
+shot tz_applied
+# again: America selected with its city, then the zone checked and centred
+key ENTER
+wait 1200
+shot tz_regions_again
+key ENTER
+wait 600
+shot tz_america_again
+# Esc: up one level, then back to Date & Time
+key ESC
+wait 300
+shot tz_back_regions
+key ESC
+wait 300
+shot tz_back_section
+# Network Time is still on; switched off, the zone stays
+key UP
+key UP
+key ENTER
+wait 900
+shot tz_ntp_off
+# Date & Time > Info: the new local time and offset
+key UP
+key ENTER
+wait 1200
+shot tz_info
+# home: the status clock in the new zone
+key ESC
+key ESC
+key ESC
+wait 900
+shot tz_home_after
+# again from the home grid: the common case, Europe > Paris (the 37th zone of Europe); the clock moves to 22:30
+launch Settings
+key UP
+key UP
+key ENTER
+wait 600
+key UP
+key ENTER
+wait 1200
+# America (selected) .. Antarctica, Arctic, Asia, Atlantic, Australia, Europe
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 600
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+wait 300
+shot tz_paris
+key ENTER
+wait 900
+shot tz_paris_row

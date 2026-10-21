@@ -482,6 +482,11 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
     -I"$root/src" "$root/tests/test_sudo_c_api_boundary.cpp" -o "$binary"
 "$binary"
 
+# time zone names (Settings > Date & Time > Time zone, the sudo admin command TimezoneSet)
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/include" "$root/src/cp0_timezone.cpp" "$root/tests/test_timezone.cpp" -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$root/include" -I"$root/src" "$root/src/cp0_process_runner.cpp" \
     "$root/tests/test_process_runner.cpp" -o "$binary"

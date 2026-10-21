@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 
 #include "settings_tree_types.hpp"
 #include "ui_app_page.hpp"
@@ -73,8 +74,17 @@ enum class SettingsNativePage {
     BluetoothScan,
     BluetoothAlias,
     Apps,
+    TimeZone, // Date & Time > Time zone: the zone picker (settings_native_timezone_page.hpp)
 };
 SettingsNativePage settings_native_page(const NodeIter &node);
+
+// What a Native row shows at its right, decided here next to the tree: Date & Time > Time zone shows the zone in use
+// and a chevron (it opens a picker); every other Native row nothing (as before).
+struct SettingsNativeRowLook {
+    std::string value;
+    bool chevron = false;
+};
+SettingsNativeRowLook settings_native_row_look(const NodeIter &node);
 
 // The entries of the Wi-Fi section the native Wi-Fi page uses: the Enable toggle (its API: the radio state) and Join
 // Hidden Network (present on this board: the page offers the hidden-network form, with the entry's label).

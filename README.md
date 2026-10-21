@@ -11,8 +11,8 @@
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
 machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
 Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
-(800x480) or a 3.5" SPI panel (480x320) and a HackBerry CM5 (720x720). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings, a PWM
-backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
+(800x480) or a 3.5" SPI panel (480x320) and a HackBerry CM5 (720x720). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
+time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
 Since v0.8.0 it also keeps apps open in the background, with a touch-first app switcher (see

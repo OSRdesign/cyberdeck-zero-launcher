@@ -10,6 +10,7 @@
 #include "settings_native_apps_page.hpp"
 #include "settings_native_bluetooth_page.hpp"
 #include "settings_native_info_page.hpp"
+#include "settings_native_timezone_page.hpp"
 #include "settings_native_wifi_page.hpp"
 #include "settings_page.hpp"
 
@@ -33,6 +34,8 @@ std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter
         return settings_bluetooth_panel_create(settings_native_page(node), node, context);
     case SettingsNativePage::Apps:
         return settings_apps_panel_create(context);
+    case SettingsNativePage::TimeZone:
+        return settings_timezone_panel_create(context);
     case SettingsNativePage::None:
         break;
     }

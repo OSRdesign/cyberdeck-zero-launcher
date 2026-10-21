@@ -95,6 +95,53 @@ const lv_font_t *row_font(int px, bool bold)
     return cp0_fonts().get(bold ? "Montserrat-Bold.ttf" : "Montserrat-Medium.ttf", static_cast<uint16_t>(px));
 }
 
+/* A Nav row's chevron (RowSpec::chevron): CompactList's Open / Edit chevron (cp0_ui_list.h: U+203A of Montserrat
+ * Medium, the label grey, CHEVRON_PCT of the label size, its box CHEVRON_W_PCT of that), sized for the centre row's
+ * text like the Network glyphs (the row fades away from the centre). */
+cp0_ui_list_layout_t chevron_metrics(const cp0_ui_roller_page_t &l)
+{
+    cp0_ui_list_layout_t metrics{};
+    metrics.text_px = l.text_px;
+    return metrics;
+}
+
+int chevron_w(const cp0_ui_roller_page_t &l)
+{
+    const cp0_ui_list_layout_t metrics = chevron_metrics(l);
+    return cp0_ui_list_chevron_w(&metrics);
+}
+
+/* The glyph right-aligned in its box, the box's right edge `inset` from the row's right edge, its ink centred on the
+ * row's middle; not clickable (a tap reaches the row). */
+lv_obj_t *make_chevron(lv_obj_t *row, const cp0_ui_roller_page_t &l)
+{
+    const cp0_ui_list_layout_t metrics = chevron_metrics(l);
+    const lv_font_t *font = row_font(cp0_ui_list_chevron_px(&metrics), false);
+    const int box_w = cp0_ui_list_chevron_w(&metrics);
+    const char *text = CP0_UI_LIST_CHEVRON_TEXT;
+    int line_h = l.row_h, ink_top = 0, ink_h = l.row_h;
+    if (font) {
+        lv_font_glyph_dsc_t glyph{};
+        if (!lv_font_get_glyph_dsc(font, &glyph, CP0_UI_LIST_CHEVRON_CODEPOINT, 0)) {
+            text = CP0_UI_LIST_CHEVRON_FALLBACK; /* a font without U+203A */
+            lv_font_get_glyph_dsc(font, &glyph, static_cast<uint32_t>(CP0_UI_LIST_CHEVRON_FALLBACK[0]), 0);
+        }
+        line_h = lv_font_get_line_height(font);
+        ink_top = (line_h - font->base_line) - glyph.box_h - glyph.ofs_y;
+        ink_h = glyph.box_h;
+    }
+    lv_obj_t *chevron = lv_label_create(row);
+    lv_obj_remove_flag(chevron, LV_OBJ_FLAG_CLICKABLE);
+    lv_label_set_long_mode(chevron, LV_LABEL_LONG_MODE_CLIP);
+    lv_label_set_text(chevron, text);
+    if (font) lv_obj_set_style_text_font(chevron, font, 0);
+    lv_obj_set_style_text_color(chevron, lv_color_hex(CP0_UI_LIST_CHEVRON_RGB), 0);
+    lv_obj_set_style_text_align(chevron, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_size(chevron, box_w, line_h);
+    lv_obj_set_pos(chevron, l.roller_w - l.inset - box_w, cp0_ui_list_chevron_y(l.row_h, ink_top, ink_h));
+    return chevron;
+}
+
 } // namespace
 
 Roller::Roller(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, RollerEvents events)
@@ -303,6 +350,11 @@ void Roller::fill_row(Row &row)
         lv_label_set_text(row.value, row.spec.value.c_str());
         lv_obj_set_style_text_color(
             row.value, lv_color_hex(row.spec.value_rgb >= 0 ? static_cast<uint32_t>(row.spec.value_rgb) : kValue), 0);
+        if (row.spec.chevron && !row.chevron) row.chevron = make_chevron(row.obj, layout_);
+        if (row.chevron) {
+            if (row.spec.chevron) lv_obj_remove_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(row.chevron, LV_OBJ_FLAG_HIDDEN);
+        }
         break;
     case RowKind::Slider:
     case RowKind::Info:
@@ -371,11 +423,28 @@ void Roller::style_row(int index, bool force)
     }
     int right = 0; /* room taken at the right of the row */
     switch (row.spec.kind) {
-    case RowKind::Nav:
+    case RowKind::Nav: {
+        /* with a chevron the value ends a gap left of its box (CompactList's Edit row) */
+        const int slot = row.spec.chevron ? chevron_w(layout_) + layout_.gap : 0;
         lv_obj_set_style_text_font(row.value, value_font, 0);
-        right = text_width(row.spec.value.c_str(), value_font);
-        lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -inset, 0);
+        int value_w = text_width(row.spec.value.c_str(), value_font);
+        /* a value too long for the row (a time zone on a small screen) ends with dots, so that the label keeps its
+         * whole width or at least a third of the row; a value that fits is drawn as before */
+        const int content = layout_.roller_w - 2 * inset - slot;
+        const int label_min = std::min(text_width(row.spec.label.c_str(), font), content / 3);
+        const int cap = std::max(0, content - layout_.gap - label_min);
+        if (value_w > cap) {
+            lv_label_set_long_mode(row.value, LV_LABEL_LONG_MODE_DOTS);
+            lv_obj_remove_flag(row.value, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see row.label) */
+            lv_obj_set_size(row.value, cap, lv_font_get_line_height(value_font));
+            value_w = cap;
+        } else {
+            lv_obj_set_size(row.value, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        }
+        right = value_w + slot;
+        lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -(inset + slot), 0);
         break;
+    }
     case RowKind::Choice: {
         const lv_font_t *symbol = cp0_ui_font_px(value_px);
         lv_obj_set_style_text_font(row.value, symbol, 0);

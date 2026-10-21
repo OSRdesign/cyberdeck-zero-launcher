@@ -1589,6 +1589,19 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         fx.time_settable = w[1] == "ok";
         return true;
     }
+    if (cmd == "tz") {
+        if (w.size() != 2) return fail(scene, line, "usage: tz ZONE");
+        std::lock_guard<std::mutex> lock(fx.tz_mutex);
+        fx.timezone = w[1];
+        return true;
+    }
+    if (cmd == "tzset") {
+        if (w.size() != 2 || (w[1] != "ok" && w[1] != "fail" && w[1] != "denied"))
+            return fail(scene, line, "usage: tzset ok|fail|denied");
+        std::lock_guard<std::mutex> lock(fx.tz_mutex);
+        fx.timezone_set_result = w[1] == "ok" ? 0 : w[1] == "fail" ? -1 : -13;
+        return true;
+    }
     if (cmd == "keyboards") {
         if (w.size() != 2) return fail(scene, line, "usage: keyboards N");
         fx.keyboards = static_cast<unsigned>(std::max(0, to_int(w[1])));

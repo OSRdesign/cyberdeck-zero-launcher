@@ -26,6 +26,9 @@ own page factory and API, in this order:
 `User`, `Storage`, `Licenses`, `DateTimeInfo`), using `factory_is(factory, fn)`. The Wi-Fi section is matched as a
 `roller_page_factory` node whose children contain `wifi_scan_page3_factory`: a whole section can become one page.
 `settings_native_panel_create()` (`settings_native_panel.cpp`) switches on that value and calls the page's builder.
+A Native row that picks a value can show it, then a chevron (`settings_native_row_look()`, same file; today only
+`TimeZone`, Date & Time > Time zone, `settings_native_timezone_page.cpp`, a two-level picker on a `Roller`); the other
+Native rows show their label alone.
 The host itself (`settings_native_host.hpp/.cpp`) shows the panel instead of its roller in `open_native()`.
 
 ## 2. Steps for a new page
@@ -69,7 +72,7 @@ unit-tested on the PC. No widget takes pixel sizes from the page.
 | Widget | C++ (`cp0_ui_widgets.hpp`, source) | Layout header (pure C), test |
 | --- | --- | --- |
 | Page scaffold: title, status line `set_caption`, on-screen Esc, `body()` for forms | `Page` | `cp0_ui_roller.h` (`cp0_ui_roller_page_t`) |
-| Roller list (all row kinds) | `Roller`, `RowSpec`, `RollerEvents` (`src/cp0_ui_roller_widget.cpp`) | `cp0_ui_roller.h`, `tests/test_ui_roller.c` |
+| Roller list (all row kinds; a `Nav` row may opt in to a chevron, `RowSpec::chevron`) | `Roller`, `RowSpec`, `RollerEvents` (`src/cp0_ui_roller_widget.cpp`) | `cp0_ui_roller.h`, `tests/test_ui_roller.c` |
 | InfoRow / InfoTable (key left, value right) | `InfoTable`, `InfoItem` (`src/cp0_ui_info_widget.cpp`); `settings_info::items_of()` turns "Key: value" lines into items (`settings_native_info_page.hpp`) | `cp0_ui_info.h`, `tests/test_ui_info.c` |
 | Long text | `TextBlock` | - |
 | Apps' list: top-aligned, Compact (dense data) or Comfortable (roller-height rows), sections, value tones, row affordances (Info / Open / Edit / Action / ActionRunning, opt-in per row), live refresh, read-only, empty state; no scroll chevrons (when to use it instead of the Roller: `docs/cp0_lvgl.en.md`, "Lists: Roller or CompactList") | `CompactList`, `ListRow`, `RowAffordance`, `CompactListEvents`, `CompactListOptions` (`src/cp0_ui_list_widget.cpp`) | `cp0_ui_list.h`, `tests/test_ui_list.c` |

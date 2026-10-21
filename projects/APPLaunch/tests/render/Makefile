@@ -74,6 +74,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_dialog.c \
     $(CP0)/src/cp0_ui_dialog_widget.cpp \
     $(CP0)/src/cp0_sudo_prompt_ui.cpp \
+    $(CP0)/src/cp0_timezone.cpp \
     $(CP0)/src/cp0_keyboard_inject_key.c \
     $(CP0)/src/cp0_pointer_nav.c \
     $(CP0)/src/cp0_touch_slots.c \

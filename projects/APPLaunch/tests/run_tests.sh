@@ -218,6 +218,14 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_settings_timezone_model.cpp" \
+    "$settings_ui_root/settings_timezone_model.cpp" \
+    "$test_root/../../../ext_components/cp0_lvgl/src/cp0_timezone.cpp" \
+    -o "$build_dir/test_settings_timezone_model"
+"$build_dir/test_settings_timezone_model"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_settings_bluetooth_model.cpp" \
     "$settings_ui_root/settings_bluetooth_model.cpp" \
     -o "$build_dir/test_settings_bluetooth_model"

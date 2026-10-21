@@ -9,11 +9,17 @@
 #include "app_registry.h"
 #include "cp0_lvgl_app.h"
 #include "cp0_timedate_client.hpp"
+#include "cp0_timezone.hpp"
 #include "input_presence.hpp"
 #include "settings/settings_hw_profile.hpp"
 
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <ctime>
+#include <fstream>
+#include <iterator>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -62,9 +68,57 @@ extern "C" int cp0_sudo_run_argv_async_ex(const char *const *, cp0_sudo_callback
     return -1;
 }
 
-int cp0_timedate_set_ntp(int)
+/* The Network Time toggle (a worker thread): always works; NtpGet answers the new state. */
+int cp0_timedate_set_ntp(int enabled)
 {
-    return -1;
+    harness::fixtures().ntp_on = enabled != 0;
+    return 0;
+}
+
+/* ------------------------------------------------------------------ Date & Time > Time zone (fixtures, harness.h) */
+
+int cp0_timedate_get_timezone(char *zone, int size)
+{
+    if (!zone || size <= 0) return -22;
+    harness::Fixtures &f = harness::fixtures();
+    std::lock_guard<std::mutex> lock(f.tz_mutex);
+    if (f.timezone.empty()) return -1;
+    if (f.timezone.size() + 1 > static_cast<std::size_t>(size)) return -34;
+    std::memcpy(zone, f.timezone.c_str(), f.timezone.size() + 1);
+    return 0;
+}
+
+/* a worker thread: the scene's "tzset ok|fail|denied" */
+int cp0_timedate_set_timezone(const char *zone)
+{
+    if (!zone || !cp0::tz::valid_name(zone)) return -22;
+    harness::Fixtures &f = harness::fixtures();
+    std::lock_guard<std::mutex> lock(f.tz_mutex);
+    if (f.timezone_set_result == 0) f.timezone = zone;
+    return f.timezone_set_result;
+}
+
+/* a worker thread: fixtures/timezones.txt */
+char *cp0_timedate_list_timezones(void)
+{
+    std::ifstream file(harness::fixtures().fixture_root + "/timezones.txt", std::ios::binary);
+    if (!file) return nullptr;
+    const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    return strdup(text.c_str());
+}
+
+/* the LVGL thread, after a change: the process's local time follows the fixture's zone (the harness runs with TZ set,
+ * UTC by default; the host's zoneinfo files give the offsets) */
+void cp0_timedate_zone_changed(void)
+{
+    harness::Fixtures &f = harness::fixtures();
+    std::string zone;
+    {
+        std::lock_guard<std::mutex> lock(f.tz_mutex);
+        zone = f.timezone;
+    }
+    setenv("TZ", zone.c_str(), 1);
+    tzset();
 }
 
 /* ------------------------------------------------------------------ on-screen keyboard policy inputs (launcher_osk) */
