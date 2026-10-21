@@ -4,7 +4,11 @@
  *                          (/sys/class/backlight/backlight on the deck)
  *   gpio:<sysfs dir>       on/off only, e.g. gpio:/sys/class/backlight/backlight_gpio
  *                          (writes <dir>/brightness = 0 or <dir>/max_brightness)
- * Other values (sysfs:<dir>, pwm) are not supported yet and fall back to the default.
+ *   sysfs:<sysfs dir>      brightness levels in that directory, e.g. sysfs:/sys/class/backlight/intel_backlight
+ *                          or sysfs:/sys/class/backlight/10-0045 (writes <dir>/brightness = 0 .. max_brightness)
+ * Other values (pwm) are not supported yet and fall back to the default.
+ * The settings service (BacklightRead/Max/Write) uses the same directory for the gpio and sysfs kinds, so every
+ * brightness client (Settings, hotkeys, screensaver dim, sleep, startup restore) follows the profile.
  * Writing needs permission on <dir>/brightness; when it is missing the calls just fail (-1).
  */
 #pragma once
@@ -16,20 +20,22 @@ extern "C" {
 typedef enum {
     CP0_BACKLIGHT_KIND_DEFAULT = 0,    /* brightness levels (today's behaviour) */
     CP0_BACKLIGHT_KIND_GPIO_ONOFF = 1, /* on/off only */
+    CP0_BACKLIGHT_KIND_SYSFS = 2,      /* brightness levels in a sysfs backlight directory */
 } cp0_backlight_kind_t;
 
 cp0_backlight_kind_t cp0_backlight_profile_kind(void);
-/* The sysfs directory of a gpio backlight, "" for the default kind. */
+/* The sysfs directory of a gpio or sysfs backlight, "" for the default kind. */
 const char *cp0_backlight_profile_dir(void);
 /* 1 on, 0 off, -1 unknown. */
 int cp0_backlight_profile_is_on(void);
-/* 0 done, -1 failed. The default kind writes 0 or its maximum brightness. */
+/* 0 done, -1 failed. The default and sysfs kinds write 0 or their maximum brightness. */
 int cp0_backlight_profile_set_on(int on);
 /* Current level (gpio: 0 or max), -1 unknown. */
 int cp0_backlight_profile_get_brightness(void);
-/* Maximum level (gpio: max_brightness, normally 1). */
+/* Maximum level (gpio: max_brightness, normally 1; sysfs: max_brightness, 100 when unreadable). */
 int cp0_backlight_profile_get_max(void);
-/* Default kind: the level (clamped). Gpio: > 0 = on, 0 = off. Returns the level set, -1 on failure. */
+/* Default and sysfs kinds: the level (clamped to 0..max). Gpio: > 0 = on, 0 = off. Returns the level set, -1 on
+ * failure. */
 int cp0_backlight_profile_set_brightness(int value);
 
 #ifdef __cplusplus

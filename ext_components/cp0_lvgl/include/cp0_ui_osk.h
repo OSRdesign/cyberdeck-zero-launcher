@@ -12,13 +12,19 @@
  *             height, the keys grow to reach it (not limited by the token; key width unchanged), and the room above
  *             always keeps the header and one field with its label (cp0_ui_osk_field_reserve). The utility row is
  *             80 % of a letter row; the key area is centred (it only matters once the 10 mm cap applies, Large).
- *   pages     rows from the top: (0) utility row Esc, Tab, Ctrl and, when the width allows, the four arrows at the
- *             right; (1) q..p; (2) a..l; (3) Shift z..m Backspace; (4) 123, ',', space, '.', Enter. The 123 page has
+ *   pages     rows from the top: (0) utility row Esc, Tab, Ctrl (and Alt on a terminal's keyboard) and, when the width
+ *             allows, the four arrows at the right; (1) q..p; (2) a..l; (3) Shift z..m Backspace; (4) 123, ',', space,
+ *             '.', Enter. The 123 page has
  *             1..0 on row 1 and symbols below, '#+=' a second symbol page, 'abc' goes back. A Number field gets the
  *             number pad (1-9, Backspace 0 Enter; 3 key widths, centred) under the same utility row.
- *   modifiers one-shot Shift and Ctrl: a tap arms (highlighted), a second tap within CP0_UI_OSK_DOUBLE_TAP_MS locks
- *             (Caps lock / Ctrl lock), a tap on a locked modifier turns it off; the next character key uses and
- *             drops an armed modifier.
+ *   modifiers one-shot Shift, Ctrl and Alt: a tap arms (highlighted), a second tap within CP0_UI_OSK_DOUBLE_TAP_MS
+ *             locks (Caps lock / Ctrl lock / Alt lock), a tap on a locked modifier turns it off; the next character
+ *             key uses and drops an armed modifier.
+ *   Alt       (report 028 X4) only on the keyboard of a terminal (a multi-line field: cp0_ui_osk_layout_alt), for
+ *             Alt+Tab (the app switcher) and Alt shortcuts without a physical keyboard. It is a real key: Alt on sends
+ *             KEY_LEFTALT's press, Alt off its release (so Alt, Tab = a quick Alt+Tab; Alt locked, Tab, Tab, Alt = an
+ *             Alt+Tab session), and the keys in between carry KBD_MOD_ALT with their usual text. Esc neither carries
+ *             nor drops it (it cancels an Alt+Tab session).
  *   events    what a key injects (press + release key_items, cp0_keyboard_inject_key): a character carries its Linux
  *             KEY_* code (US layout), its UTF-8 text and KBD_MOD_SHIFT when the US layout needs Shift (KBD_MOD_CAPS for
  *             a letter under Caps lock); with Ctrl on, any key with a code is sent as that code with KBD_MOD_CTRL and
@@ -86,6 +92,7 @@ typedef struct {
     int util_h;        /* utility row height */
     int util_key_w;    /* Esc, Tab, Ctrl: the TARGET token, at least one key, at most two keys and a gap */
     int arrows;        /* 1: the four arrow keys (one key wide each) at the right of the utility row */
+    int alt;           /* 1: Alt after Ctrl in the utility row (a terminal's keyboard, cp0_ui_osk_layout_alt) */
     int row_x, row_w;  /* key area: 10 keys and 9 gaps, centred on the screen */
     int pad_x, pad_w;  /* number pad: 3 keys and 2 gaps, centred */
     int label_px;      /* key labels (even px) */
@@ -104,6 +111,9 @@ int cp0_ui_osk_field_reserve(const cp0_ui_metrics_t *m);
 
 /* The keyboard layout for the metrics m. Returns 0, or -1 (out untouched) when m is NULL or the screen is empty. */
 int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);
+/* The same for a terminal's keyboard: Alt after Ctrl. The utility keys keep their width when the arrows still fit,
+ * else they narrow (never under one key) so that the arrows stay; with no room even then, no arrows (as without Alt). */
+int cp0_ui_osk_layout_alt(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);
 
 /* ------------------------------------------------------------------ pages and keys */
 
@@ -125,6 +135,7 @@ typedef enum {
     CP0_UI_OSK_K_ESC,
     CP0_UI_OSK_K_TAB,
     CP0_UI_OSK_K_ARROW,    /* code KEY_LEFT / KEY_UP / KEY_DOWN / KEY_RIGHT */
+    CP0_UI_OSK_K_ALT,      /* code KEY_LEFTALT (a terminal's keyboard) */
 } cp0_ui_osk_kind_t;
 
 typedef struct {
@@ -174,12 +185,12 @@ typedef struct {
     char utf8[16];
 } cp0_ui_osk_event_t;
 
-#define CP0_UI_OSK_MAX_EVENTS 4
+#define CP0_UI_OSK_MAX_EVENTS 4 /* a key's press and release, an owed release, Alt's release */
 
 typedef struct {
     cp0_ui_osk_page_t page; /* page shown */
     cp0_ui_osk_page_t home; /* LETTERS, or NUMPAD for a Number field */
-    cp0_ui_osk_mod_t shift, ctrl;
+    cp0_ui_osk_mod_t shift, ctrl, alt;
     int multiline;
     uint32_t held_code;     /* a hold key whose release is owed (0: none) ... */
     uint32_t held_mods;     /* ... and the modifiers it was pressed with */
@@ -193,12 +204,14 @@ int cp0_ui_osk_key_down(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, cp0_ui
 /* It stays down (long-press repeat): a hold key sends KBD_KEY_REPEATED. */
 int cp0_ui_osk_key_repeat(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, cp0_ui_osk_event_t *out, int max);
 /* It came up on the key: a hold key sends its release; any other key acts now (a click): a character, Tab or Enter
- * sends press + release, Shift / Ctrl change state, a page key switches the page. */
+ * sends press + release, Shift / Ctrl / Alt change state (Alt: its key's press or release), a page key switches the
+ * page. */
 int cp0_ui_osk_key_up(cp0_ui_osk_state_t *s, const cp0_ui_osk_key_t *k, uint64_t now_ms, cp0_ui_osk_event_t *out,
                       int max);
 /* The press was lost (finger slid off, key deleted): only the release a hold key owes. */
 int cp0_ui_osk_key_cancel(cp0_ui_osk_state_t *s, cp0_ui_osk_event_t *out, int max);
-/* The keyboard goes away (hidden, destroyed, a physical keyboard appeared): the owed release, modifiers off. */
+/* The keyboard goes away (hidden, destroyed, a physical keyboard appeared): the owed releases (a hold key, Alt),
+ * modifiers off. */
 int cp0_ui_osk_release_all(cp0_ui_osk_state_t *s, cp0_ui_osk_event_t *out, int max);
 
 /* ------------------------------------------------------------------ policy */

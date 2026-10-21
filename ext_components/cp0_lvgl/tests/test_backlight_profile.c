@@ -1,8 +1,9 @@
 /*
  * Unit test of the board-profile backlight (src/cp0_backlight_profile.c): default kind delegates
  * to cp0_backlight_read/max/write, gpio:<dir> switches <dir>/brightness between 0 and
- * max_brightness, unwritable files fail without crashing. The profile is read once per process,
- * so each environment runs in its own child.
+ * max_brightness, sysfs:<dir> writes levels 0..max_brightness (clamped) into <dir>/brightness,
+ * unwritable files fail without crashing. The profile is read once per process, so each
+ * environment runs in its own child.
  */
 #define _POSIX_C_SOURCE 200809L
 
@@ -100,6 +101,53 @@ static void child_gpio(const char *dir)
     _exit(0);
 }
 
+/* sysfs:<dir> (the Pi 3A+ DSI regulator 10-0045, max 255; the tablet's intel_backlight, max 937): levels */
+static void child_sysfs(const char *dir)
+{
+    char spec[600];
+    snprintf(spec, sizeof(spec), "sysfs:%s//", dir); /* trailing slashes are trimmed */
+    setenv("APPLAUNCH_BACKLIGHT", spec, 1);
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_SYSFS);
+    CHECK(strcmp(cp0_backlight_profile_dir(), dir) == 0);
+    CHECK(cp0_backlight_profile_get_max() == 937);
+    CHECK(cp0_backlight_profile_get_brightness() == 400);
+    CHECK(cp0_backlight_profile_is_on() == 1);
+    CHECK(cp0_backlight_profile_set_brightness(94) == 94); /* the 10 % step of the Settings slider */
+    CHECK(read_file_int(dir, "brightness") == 94);
+    CHECK(cp0_backlight_profile_get_brightness() == 94);
+    CHECK(cp0_backlight_profile_set_brightness(5000) == 937); /* clamped to max_brightness */
+    CHECK(read_file_int(dir, "brightness") == 937);
+    CHECK(cp0_backlight_profile_set_brightness(-3) == 0); /* clamped to 0: off */
+    CHECK(read_file_int(dir, "brightness") == 0);
+    CHECK(cp0_backlight_profile_is_on() == 0);
+    CHECK(cp0_backlight_profile_set_on(1) == 0); /* wake: full level */
+    CHECK(read_file_int(dir, "brightness") == 937);
+    CHECK(cp0_backlight_profile_set_on(0) == 0); /* sleep */
+    CHECK(read_file_int(dir, "brightness") == 0);
+    CHECK(stub_level == 37); /* the default path was not touched */
+    if (geteuid() != 0) {
+        char path[512];
+        snprintf(path, sizeof(path), "%s/brightness", dir);
+        CHECK(chmod(path, 0444) == 0);
+        CHECK(cp0_backlight_profile_set_brightness(300) == -1); /* not writable: fails quietly */
+        CHECK(read_file_int(dir, "brightness") == 0);
+        CHECK(chmod(path, 0644) == 0);
+    }
+    _exit(0);
+}
+
+static void child_sysfs_missing(void)
+{
+    setenv("APPLAUNCH_BACKLIGHT", "sysfs:/nonexistent/intel_backlight", 1);
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_SYSFS);
+    CHECK(cp0_backlight_profile_get_max() == 100); /* unreadable: the settings service's default range */
+    CHECK(cp0_backlight_profile_get_brightness() == -1);
+    CHECK(cp0_backlight_profile_is_on() == -1);
+    CHECK(cp0_backlight_profile_set_brightness(50) == -1);
+    CHECK(stub_level == 37);
+    _exit(0);
+}
+
 static void child_gpio_missing(void)
 {
     setenv("APPLAUNCH_BACKLIGHT", "gpio:/nonexistent/backlight_gpio", 1);
@@ -126,6 +174,12 @@ static void missing_adapter(const char *unused)
     child_gpio_missing();
 }
 
+static void sysfs_missing_adapter(const char *unused)
+{
+    (void)unused;
+    child_sysfs_missing();
+}
+
 int main(void)
 {
     const char *tmp = getenv("TMPDIR");
@@ -141,10 +195,17 @@ int main(void)
     int failed = 0;
     failed += run(child_default, NULL);
     failed += run(child_default, "pwm");
-    failed += run(child_default, "sysfs:/sys/class/backlight/backlight");
     failed += run(child_default, "gpio:");
+    failed += run(child_default, "sysfs:");
+    failed += run(child_default, "levels:/sys/class/backlight/backlight");
     failed += run(child_gpio, dir);
     failed += run(missing_adapter, NULL);
+
+    /* the same mock directory as an intel_backlight: max 937, lit at 400 */
+    write_file(dir, "max_brightness", "937\n");
+    write_file(dir, "brightness", "400\n");
+    failed += run(child_sysfs, dir);
+    failed += run(sysfs_missing_adapter, NULL);
 
     char path[600];
     snprintf(path, sizeof(path), "%s/brightness", dir);

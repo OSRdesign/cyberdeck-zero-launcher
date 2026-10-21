@@ -794,6 +794,8 @@ void boot(Run &run)
     setenv("APPLAUNCH_FB", HARNESS_FB_PATH, 1);
     setenv("APPLAUNCH_TOUCH_DEV", HARNESS_TOUCH_PATH, 1);
     setenv("APPLAUNCH_TOUCH_ORIENT", "buffer", 1);
+    /* Settings > Storage reads no mount table here: never the host's disk (its free space would change the shots) */
+    setenv("APPLAUNCH_STORAGE_MOUNTS", "/nonexistent/harness-mounts", 1);
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
     /* screen.state lands next to the shots, never in the real runtime directory */
     const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";

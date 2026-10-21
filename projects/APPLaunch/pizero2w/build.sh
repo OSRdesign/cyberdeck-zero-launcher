@@ -1,47 +1,77 @@
 #!/bin/sh
-# Build the Raspberry Pi port (CyberdeckZero Launcher) and assemble an install bundle.
+# Build CyberdeckZero Launcher for the Raspberry Pi boards (arm64) or for PCs (amd64) and assemble an install bundle.
 #
 # Run on a Linux x86_64 host (or WSL) from anywhere inside the repository:
-#     projects/APPLaunch/pizero2w/build.sh [--with-store] [--no-legacy-name]
-# Output: projects/APPLaunch/pizero2w/bundle/  and  cyberdeckzero-launcher-<version>-arm64.tar.gz next to this script
-# (<version>: APPLAUNCH_VERSION, default "dev"), plus a copy of that file named pizero2w-bundle.tar.gz, the quick-start
-# name of the releases before the rename (wanted for the first release after it only: --no-legacy-name, or
-# LEGACY_BUNDLE_NAME=0 in the environment, leaves it out).
-# Copy the tarball to the Pi, unpack it and run  sudo ./install.sh   (to remove it again: ./uninstall.sh)
+#     projects/APPLaunch/pizero2w/build.sh [--arch arm64|amd64] [--with-store] [--no-legacy-name]
+# Output: projects/APPLaunch/pizero2w/bundle/  and  cyberdeckzero-launcher-<version>-<arch>.tar.gz next to this script
+# (<version>: APPLAUNCH_VERSION, default "dev"; <arch>: arm64 by default), plus, for arm64, a copy of that file named
+# pizero2w-bundle.tar.gz, the quick-start name of the releases before the rename (wanted for the first release after it
+# only: --no-legacy-name, or LEGACY_BUNDLE_NAME=0 in the environment, leaves it out).
+# Copy the tarball to the board, unpack it and run  sudo ./install.sh   (to remove it again: ./uninstall.sh)
 #
-# Needs: git, python3 (venv), an aarch64 cross toolchain (apt install gcc-aarch64-linux-gnu
-# g++-aarch64-linux-gnu pkg-config libffi-dev libfreetype6-dev), and network access for the first
-# build (the SDK downloads LVGL and prebuilt libraries). --with-store also builds the Store
-# (projects/AppStore submodule).
+# Needs: git, python3 (venv), network access for the first build (the SDK downloads LVGL and prebuilt libraries), and
+#   arm64 (default): an aarch64 cross toolchain (apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu pkg-config
+#     libffi-dev libfreetype6-dev);
+#   amd64 (a native build on an x86_64 host, report 028): gcc, g++, pkg-config and the -dev packages (apt install
+#     libinput-dev libxkbcommon-dev libudev-dev libdbus-1-dev libglib2.0-dev libfreetype-dev, and libssl-dev for the
+#     Store). Its binaries need glibc 2.38 or newer, like the arm64 ones.
+# --with-store also builds the Store (projects/AppStore submodule; amd64: with its own cross config minus NEON).
 set -eu
 
 WITH_STORE=0
 LEGACY_NAME=${LEGACY_BUNDLE_NAME:-1}
-for arg in "$@"; do
-    case "$arg" in
+ARCH=arm64
+while [ $# -gt 0 ]; do
+    case "$1" in
         --with-store) WITH_STORE=1 ;;
         --no-legacy-name) LEGACY_NAME=0 ;;
-        -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
-        *) echo "unknown option: $arg (see --help)" >&2; exit 2 ;;
+        --arch) [ $# -ge 2 ] || { echo "--arch needs arm64 or amd64" >&2; exit 2; }; ARCH=$2; shift ;;
+        --arch=*) ARCH=${1#--arch=} ;;
+        -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
+        *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
     esac
+    shift
 done
+case "$ARCH" in
+    arm64|amd64) ;;
+    *) echo "--arch $ARCH: arm64 or amd64" >&2; exit 2 ;;
+esac
 
 # The version goes into the tarball's name (and, through SConstruct, into About: a semantic version there).
 VERSION=${APPLAUNCH_VERSION:-dev}
 case "$VERSION" in
     ""|*[!A-Za-z0-9.+-]*) echo "APPLAUNCH_VERSION \"$VERSION\": letters, digits, '.', '+' and '-' only" >&2; exit 2 ;;
 esac
-TARBALL="cyberdeckzero-launcher-$VERSION-arm64.tar.gz"
-LEGACY_TARBALL="pizero2w-bundle.tar.gz"
+TARBALL="cyberdeckzero-launcher-$VERSION-$ARCH.tar.gz"
+LEGACY_TARBALL="pizero2w-bundle.tar.gz"   # arm64 only
+[ "$ARCH" = arm64 ] || LEGACY_NAME=0
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(cd "$HERE/../../.." && pwd)
 OUT="$HERE/bundle"
 
-command -v aarch64-linux-gnu-gcc >/dev/null 2>&1 || {
-    echo "aarch64-linux-gnu-gcc not found: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu" >&2
-    exit 1
-}
+if [ "$ARCH" = arm64 ]; then
+    command -v aarch64-linux-gnu-gcc >/dev/null 2>&1 || {
+        echo "aarch64-linux-gnu-gcc not found: sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu" >&2
+        exit 1
+    }
+    CONFIG=linux_x86_cross_cp0_config_defaults.mk
+    VFB_CC=aarch64-linux-gnu-gcc
+else
+    # amd64 is a native build: the host's gcc and -dev packages (found by pkg-config)
+    [ "$(uname -m)" = x86_64 ] || { echo "--arch amd64 builds natively: run it on an x86_64 host" >&2; exit 1; }
+    MODS="libinput xkbcommon libudev dbus-1 gio-2.0 freetype2"
+    [ "$WITH_STORE" = 1 ] && MODS="$MODS openssl"
+    # shellcheck disable=SC2086
+    if ! command -v gcc >/dev/null 2>&1 || ! command -v g++ >/dev/null 2>&1 || ! command -v pkg-config >/dev/null 2>&1 \
+            || ! pkg-config --exists $MODS; then
+        echo "amd64 build: gcc, g++, pkg-config and the -dev packages are needed (pkg-config: $MODS):" >&2
+        echo "  sudo apt install gcc g++ pkg-config libinput-dev libxkbcommon-dev libudev-dev libdbus-1-dev libglib2.0-dev libfreetype-dev libssl-dev" >&2
+        exit 1
+    fi
+    CONFIG=linux_x86_64_native_cp0_config_defaults.mk
+    VFB_CC=${CC:-gcc}
+fi
 
 # Python tooling in a private venv (SCons and the SDK's helpers)
 VENV="${VENV:-$REPO/.venv-pizero2w}"   # set VENV to reuse an existing virtualenv
@@ -58,7 +88,7 @@ fi
 
 export APPLAUNCH_HW=pizero2w                      # selects the Pi hardware profile (settings_hw_profile.hpp)
 export CONFIG_REPO_AUTOMATION=y                   # download SDK components without asking
-export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
+export CONFIG_DEFAULT_FILE=$CONFIG
 # A bundle is a release build unless the caller sets the channel: development-only pages (System > Keyboard test) stay
 # hidden on devices, and About / System > Channel reads "release". tools/dev/wsl-build.sh passes "development".
 export APPLAUNCH_CHANNEL="${APPLAUNCH_CHANNEL:-release}"
@@ -68,11 +98,24 @@ echo "== building the launcher"
 
 if [ "$WITH_STORE" = 1 ]; then
     echo "== building the Store"
-    ( cd "$REPO/projects/AppStore" && scons -j"$(nproc)" )
+    if [ "$ARCH" = arm64 ]; then
+        ( cd "$REPO/projects/AppStore" && scons -j"$(nproc)" )
+    else
+        # The Store is the upstream submodule, unchanged: its own cross config without the aarch64 toolchain and the
+        # NEON lines, written next to its build output (no "cross" in the name: no sysroot)
+        mkdir -p "$REPO/projects/AppStore/build"
+        STORE_CONFIG="$REPO/projects/AppStore/build/amd64_native_config_defaults.mk"
+        sed 's/\r$//' "$REPO/projects/AppStore/linux_x86_cross_cp0_config_defaults.mk" \
+            | grep -v -e '^CONFIG_TOOLCHAIN_PREFIX=' -e 'LV_DRAW_SW_ASM_NEON' -e 'LV_USE_DRAW_SW_ASM' > "$STORE_CONFIG"
+        # its SConstruct takes FreeType's headers from the cross sysroot only: the build box's, as toolchain flags
+        FT_FLAGS=$(pkg-config --cflags freetype2)
+        ( cd "$REPO/projects/AppStore" && CONFIG_DEFAULT_FILE="$STORE_CONFIG" \
+            CONFIG_TOOLCHAIN_FLAGS="${CONFIG_TOOLCHAIN_FLAGS:+$CONFIG_TOOLCHAIN_FLAGS }$FT_FLAGS" scons -j"$(nproc)" )
+    fi
 fi
 
-echo "== building the framebuffer shim"
-( cd "$HERE/vfb" && CC=aarch64-linux-gnu-gcc ./build.sh )
+echo "== building the framebuffer shim ($ARCH)"
+( cd "$HERE/vfb" && CC=$VFB_CC ./build.sh )
 
 echo "== assembling the bundle"
 rm -rf "$OUT"
@@ -130,8 +173,9 @@ chmod -R u=rwX,go=rX "$DOC"
 cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/default-sources.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
 chmod +x "$OUT/install.sh" "$OUT/uninstall.sh" "$OUT/default-sources.sh"
 
-# one tarball per build: no stale file of another version (or of the earlier name) next to it
-rm -f "$HERE"/cyberdeckzero-launcher-*-arm64.tar.gz "$HERE/$LEGACY_TARBALL"
+# one tarball per build and arch: no stale file of another version (or of the earlier name) next to it
+rm -f "$HERE"/cyberdeckzero-launcher-*-"$ARCH".tar.gz
+if [ "$ARCH" = arm64 ]; then rm -f "$HERE/$LEGACY_TARBALL"; fi
 tar -C "$HERE" -czf "$HERE/$TARBALL" bundle
 echo "== done: $HERE/$TARBALL"
 if [ "$LEGACY_NAME" = 1 ]; then

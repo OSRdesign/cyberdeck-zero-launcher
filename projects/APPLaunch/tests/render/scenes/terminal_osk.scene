@@ -11,6 +11,8 @@
 #   term_typed     "ls -la | grep a" typed, back on the letters
 #   term_ctrl      Ctrl armed (one-shot)
 #   term_ctrl_c    Ctrl then c: ^C (0x03) reached the shell, a new prompt; Ctrl is off again
+#   term_alt       Alt armed (one-shot; the terminal's keyboard only, report 028 X4: Alt+Tab without a keyboard)
+#   term_alt_b     Alt then b: "b" reached the shell (with Alt, as a physical Alt+b); Alt is off again
 #   term_restored  a physical keyboard is back: the on-screen keyboard goes, the lines come back, the PTY full size
 #   term_exit      the on-screen keyboard back up; Tab, Up, Esc tapped (bytes in the log), then Ctrl+D: the shell
 #                  exits, "Press any key to exit" with the keyboard still up (two taps on a key go home)
@@ -61,6 +63,10 @@ tapkey Ctrl
 shot term_ctrl
 tapkey c
 shot term_ctrl_c
+tapkey Alt
+shot term_alt
+tapkey b
+shot term_alt_b
 keyboards 1
 wait 600
 shot term_restored

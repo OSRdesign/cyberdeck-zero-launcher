@@ -16,19 +16,26 @@ static struct {
 } bl;
 static pthread_once_t bl_once = PTHREAD_ONCE_INIT;
 
+/* "<prefix><dir>" with a non-empty dir that fits: the dir (trailing slashes trimmed) and the kind */
+static int take_dir(const char *spec, const char *prefix, cp0_backlight_kind_t kind)
+{
+    const size_t len = strlen(prefix);
+    if (strncmp(spec, prefix, len) != 0 || !spec[len] || strlen(spec + len) >= sizeof(bl.dir)) return 0;
+    snprintf(bl.dir, sizeof(bl.dir), "%s", spec + len);
+    size_t n = strlen(bl.dir);
+    while (n > 1 && bl.dir[n - 1] == '/') bl.dir[--n] = '\0';
+    bl.kind = kind;
+    return 1;
+}
+
 static void bl_init(void)
 {
     const char *spec = getenv("APPLAUNCH_BACKLIGHT");
     bl.kind = CP0_BACKLIGHT_KIND_DEFAULT;
     bl.dir[0] = '\0';
     if (!spec || !spec[0]) return;
-    if (strncmp(spec, "gpio:", 5) == 0 && spec[5] && strlen(spec + 5) < sizeof(bl.dir)) {
-        snprintf(bl.dir, sizeof(bl.dir), "%s", spec + 5);
-        size_t n = strlen(bl.dir);
-        while (n > 1 && bl.dir[n - 1] == '/') bl.dir[--n] = '\0';
-        bl.kind = CP0_BACKLIGHT_KIND_GPIO_ONOFF;
-        return;
-    }
+    if (take_dir(spec, "gpio:", CP0_BACKLIGHT_KIND_GPIO_ONOFF)) return;
+    if (take_dir(spec, "sysfs:", CP0_BACKLIGHT_KIND_SYSFS)) return;
     fprintf(stderr, "[display-profile] APPLAUNCH_BACKLIGHT=%s is not supported yet: default backlight\n", spec);
 }
 
@@ -79,7 +86,8 @@ int cp0_backlight_profile_get_max(void)
     bl_ready();
     if (bl.kind == CP0_BACKLIGHT_KIND_DEFAULT) return cp0_backlight_max();
     int v = 0;
-    return read_int("max_brightness", &v) == 0 && v > 0 ? v : 1;
+    if (read_int("max_brightness", &v) == 0 && v > 0) return v;
+    return bl.kind == CP0_BACKLIGHT_KIND_GPIO_ONOFF ? 1 : 100; /* the settings service's fallbacks */
 }
 
 int cp0_backlight_profile_get_brightness(void)
@@ -101,7 +109,9 @@ int cp0_backlight_profile_set_brightness(int value)
     bl_ready();
     if (value < 0) value = 0;
     if (bl.kind == CP0_BACKLIGHT_KIND_DEFAULT) return cp0_backlight_write(value);
-    const int level = value > 0 ? cp0_backlight_profile_get_max() : 0;
+    const int max = cp0_backlight_profile_get_max();
+    int level = value > max ? max : value;          /* sysfs: a level, clamped */
+    if (bl.kind == CP0_BACKLIGHT_KIND_GPIO_ONOFF) level = value > 0 ? max : 0;
     return write_int("brightness", level) == 0 ? level : -1;
 }
 

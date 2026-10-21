@@ -151,6 +151,7 @@ void OnScreenKeyboard::style_key(Key &key)
     uint32_t bg = CP0_UI_OSK_KEY_RGB, pressed = CP0_UI_OSK_KEY_PRESSED_RGB, text = CP0_UI_OSK_LABEL_RGB;
     const cp0_ui_osk_mod_t *mod = k->kind == CP0_UI_OSK_K_SHIFT  ? &state_.shift
                                   : k->kind == CP0_UI_OSK_K_CTRL ? &state_.ctrl
+                                  : k->kind == CP0_UI_OSK_K_ALT  ? &state_.alt
                                                                  : nullptr;
     if (k->kind == CP0_UI_OSK_K_ENTER) {
         bg = CP0_UI_OSK_ENTER_RGB;
@@ -193,7 +194,7 @@ void OnScreenKeyboard::style_key(Key &key)
         label = arrow_symbol(k->code);
         font = cp0_ui_font_px(layout_.small_px);
         break;
-    default: /* Esc, Tab, Ctrl, 123 / abc / #+= */
+    default: /* Esc, Tab, Ctrl, Alt, 123 / abc / #+= */
         font = text_font(layout_.small_px);
         break;
     }
@@ -228,7 +229,7 @@ void OnScreenKeyboard::on_key_event(int index, lv_event_code_t code)
     const cp0_ui_osk_key_t *k = keys_[static_cast<size_t>(index)].place.key;
     const bool hold = cp0_ui_osk_is_hold_key(k) != 0;
     const cp0_ui_osk_page_t page = state_.page;
-    const cp0_ui_osk_mod_state_t shift = state_.shift.state, ctrl = state_.ctrl.state;
+    const cp0_ui_osk_mod_state_t shift = state_.shift.state, ctrl = state_.ctrl.state, alt = state_.alt.state;
     cp0_ui_osk_event_t events[CP0_UI_OSK_MAX_EVENTS];
     int count = 0;
     switch (code) {
@@ -256,7 +257,7 @@ void OnScreenKeyboard::on_key_event(int index, lv_event_code_t code)
     if (state_.page != page) {
         // a page key: the keys change on the next cycle (this key is still processing its click)
         if (!rebuild_armed_) rebuild_armed_ = lv_async_call(rebuild_cb, this) == LV_RESULT_OK;
-    } else if (state_.shift.state != shift || state_.ctrl.state != ctrl) {
+    } else if (state_.shift.state != shift || state_.ctrl.state != ctrl || state_.alt.state != alt) {
         restyle();
     }
 }
@@ -325,18 +326,21 @@ void hide_now(bool release)
 }
 
 /* The keyboard's layout for the display the field is on: the layout service's metrics when they are that display's
- * (the native one), else the same density on that display's size. */
-bool layout_for(lv_obj_t *field, cp0_ui_osk_layout_t &out)
+ * (the native one), else the same density on that display's size. A multi-line field (the terminal) gets Alt. */
+bool layout_for(lv_obj_t *field, bool multiline, cp0_ui_osk_layout_t &out)
 {
     lv_display_t *display = lv_obj_get_display(field);
     if (!display) return false;
     const int w = static_cast<int>(lv_display_get_horizontal_resolution(display));
     const int h = static_cast<int>(lv_display_get_vertical_resolution(display));
     const cp0_ui_metrics_t *m = cp0_ui_metrics_get();
-    if (m->w == w && m->h == h) return cp0_ui_osk_layout(m, &out) == 0;
+    auto layout = [&](const cp0_ui_metrics_t *metrics) {
+        return (multiline ? cp0_ui_osk_layout_alt(metrics, &out) : cp0_ui_osk_layout(metrics, &out)) == 0;
+    };
+    if (m->w == w && m->h == h) return layout(m);
     cp0_ui_metrics_t other;
     if (cp0_ui_metrics_compute(w, h, 0, m->ppmm_x100, m->density_src, 0, &other) != 0) return false;
-    return cp0_ui_osk_layout(&other, &out) == 0;
+    return layout(&other);
 }
 
 void poll_cb(lv_timer_t *);
@@ -354,7 +358,7 @@ void apply()
                            !s.keyboard->root() || lv_obj_get_parent(s.keyboard->root()) != layer))
             s.keyboard.reset(); /* another kind of field, or another display: built again below */
         cp0_ui_osk_layout_t layout;
-        if (!s.keyboard && layer && layout_for(s.owner, layout)) {
+        if (!s.keyboard && layer && layout_for(s.owner, s.multiline, layout)) {
             s.keyboard = std::make_unique<OnScreenKeyboard>(layer, layout, s.type, s.multiline);
             lv_obj_move_foreground(s.keyboard->root());
         }

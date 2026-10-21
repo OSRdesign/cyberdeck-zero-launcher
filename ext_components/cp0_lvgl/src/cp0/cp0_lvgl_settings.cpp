@@ -438,9 +438,9 @@ private:
                    : default_value;
     }
 
-    /* Board profile (cp0_backlight_profile.h): a gpio on/off backlight lives in its own sysfs
-     * directory; the default stays today's /sys/class/backlight/backlight. Every brightness
-     * client (Settings, hotkeys, screensaver, startup restore) goes through these three calls. */
+    /* Board profile (cp0_backlight_profile.h): a gpio on/off or a sysfs (levels) backlight lives in
+     * its own sysfs directory; the default stays today's /sys/class/backlight/backlight. Every
+     * brightness client (Settings, hotkeys, screensaver, startup restore) goes through these three calls. */
     static bool backlight_onoff()
     {
         return cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF;
@@ -448,7 +448,7 @@ private:
 
     static std::string backlight_file(const char *name)
     {
-        if (backlight_onoff())
+        if (cp0_backlight_profile_kind() != CP0_BACKLIGHT_KIND_DEFAULT)
             return std::string(cp0_backlight_profile_dir()) + "/" + name;
         return std::string("/sys/class/backlight/backlight/") + name;
     }

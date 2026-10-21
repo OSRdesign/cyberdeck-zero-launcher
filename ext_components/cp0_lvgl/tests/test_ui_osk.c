@@ -2,7 +2,8 @@
  * Unit test of the on-screen keyboard core (src/cp0_ui_osk.c, task 014 P2b): the layout from the tokens at the five
  * target sizes (key pitch, 10 mm cap and centring, key height from the 6.5 mm token under the class height cap,
  * utility row, number pad), the key placement of every page, the one-shot / lock state machine of Shift and Ctrl,
- * the key event sequences (characters, Ctrl+C, Tab, Enter, hold keys and their owed release), the presence policy
+ * the key event sequences (characters, Ctrl+C, Tab, Enter, hold keys and their owed release), the terminal's Alt key
+ * (its layout at the target sizes and the FZ-M1's, Alt+Tab and Alt+key sequences, report 028 X4), the presence policy
  * gate (keyboards present, asleep Bluetooth keyboard, grace, Off setting, lock, desktop, APPLAUNCH_OSK) and the dialog
  * placement above the keyboard.
  */
@@ -565,10 +566,180 @@ static void test_dialog(void)
     CHECK_EQ(cp0_ui_osk_dialog_y(320, 40, 400, 50), 40);
 }
 
+/* The terminal's keyboard (cp0_ui_osk_layout_alt): Alt after Ctrl; the arrows stay where they fit with narrower
+ * utility keys; the text fields' keyboard (cp0_ui_osk_layout) has no Alt and is unchanged. */
+static void test_alt_layout(void)
+{
+    const int sizes[][3] = {{480, 320, 0}, {640, 480, 1130}, {800, 480, 920}, {720, 720, 1000}, {1280, 720, 1160},
+                            {1280, 800, 847} /* the FZ-M1 tablet (report 028, x-a) */};
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
+        const cp0_ui_metrics_t m = metrics(sizes[i][0], sizes[i][1], sizes[i][2] ? sizes[i][2] : ppmm_pi3a());
+        cp0_ui_osk_layout_t plain, alt;
+        CHECK_EQ(cp0_ui_osk_layout(&m, &plain), 0);
+        CHECK_EQ(cp0_ui_osk_layout_alt(&m, &alt), 0);
+        CHECK_EQ(plain.alt, 0);
+        CHECK_EQ(alt.alt, 1);
+        /* only the utility row differs */
+        CHECK_EQ(alt.height, plain.height);
+        CHECK_EQ(alt.key_w, plain.key_w);
+        CHECK_EQ(alt.row_x, plain.row_x);
+        CHECK(alt.util_key_w >= alt.key_w && alt.util_key_w <= plain.util_key_w);
+        cp0_ui_osk_place_t p[CP0_UI_OSK_MAX_KEYS], q[CP0_UI_OSK_MAX_KEYS];
+        const int n = cp0_ui_osk_place_keys(&alt, CP0_UI_OSK_PAGE_LETTERS, p, CP0_UI_OSK_MAX_KEYS);
+        const int np = cp0_ui_osk_place_keys(&plain, CP0_UI_OSK_PAGE_LETTERS, q, CP0_UI_OSK_MAX_KEYS);
+        CHECK_EQ(n, np + 1 + (alt.arrows - plain.arrows) * 4);
+        CHECK(p[2].key->kind == CP0_UI_OSK_K_CTRL && p[3].key->kind == CP0_UI_OSK_K_ALT);
+        CHECK(strcmp(p[3].key->label, "Alt") == 0);
+        CHECK_EQ(p[3].x, p[2].x + p[2].w + alt.gap);
+        /* row 0 inside the key area, no overlap, the arrows ending at its right edge */
+        int row0 = 0;
+        for (int k = 0; k < n && p[k].row == 0; ++k) {
+            row0++;
+            CHECK(p[k].x >= alt.row_x && p[k].x + p[k].w <= alt.row_x + alt.row_w);
+            if (k > 0) CHECK(p[k].x >= p[k - 1].x + p[k - 1].w + alt.gap);
+        }
+        CHECK_EQ(row0, 4 + 4 * alt.arrows);
+        if (alt.arrows) CHECK_EQ(p[7].x + p[7].w, alt.row_x + alt.row_w);
+        /* the target sizes keep their arrows (the deck's, 640x480: 4 utility keys narrowed from 102 px) */
+        CHECK_EQ(alt.arrows, plain.arrows);
+        /* the other rows are the text fields' */
+        for (int k = 0; k < np; ++k) {
+            if (q[k].row == 0) continue;
+            const int j = k + (n - np);
+            CHECK(q[k].x == p[j].x && q[k].y == p[j].y && q[k].w == p[j].w && q[k].key == p[j].key);
+        }
+    }
+    /* the deck: the arrows stay, the utility keys narrower than their 9 mm (still wider than a letter key) */
+    const cp0_ui_metrics_t deck = metrics(640, 480, 1130);
+    cp0_ui_osk_layout_t l;
+    cp0_ui_osk_layout_alt(&deck, &l);
+    CHECK(l.arrows && l.util_key_w > l.key_w && l.util_key_w < 102);
+    /* the FZ-M1: room for 9 mm utility keys and the arrows */
+    const cp0_ui_metrics_t tablet = metrics(1280, 800, 847);
+    cp0_ui_osk_layout_t lp;
+    cp0_ui_osk_layout(&tablet, &lp);
+    cp0_ui_osk_layout_alt(&tablet, &l);
+    CHECK(l.arrows && l.util_key_w == lp.util_key_w);
+    CHECK_EQ(cp0_ui_osk_layout_alt(NULL, &l), -1);
+}
+
+static int is_alt(const cp0_ui_osk_event_t *e, int state)
+{
+    return e->code == KEY_LEFTALT && e->state == state && e->utf8[0] == '\0';
+}
+
+static void test_alt_events(void)
+{
+    /* Alt is on the terminal's keyboard only */
+    const cp0_ui_metrics_t m = metrics(640, 480, 1130);
+    cp0_ui_osk_layout_t l;
+    cp0_ui_osk_place_t places[CP0_UI_OSK_MAX_KEYS];
+    cp0_ui_osk_layout(&m, &l);
+    int count = cp0_ui_osk_place_keys(&l, CP0_UI_OSK_PAGE_LETTERS, places, CP0_UI_OSK_MAX_KEYS);
+    CHECK(find_key(places, count, CP0_UI_OSK_K_ALT, KEY_LEFTALT, NULL) == NULL);
+    cp0_ui_osk_layout_alt(&m, &l);
+    count = cp0_ui_osk_place_keys(&l, CP0_UI_OSK_PAGE_LETTERS, places, CP0_UI_OSK_MAX_KEYS);
+    const cp0_ui_osk_place_t *alt_place = find_key(places, count, CP0_UI_OSK_K_ALT, KEY_LEFTALT, NULL);
+    CHECK(alt_place != NULL);
+    const cp0_ui_osk_key_t *alt = alt_place ? alt_place->key : NULL;
+    const cp0_ui_osk_key_t *tab = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_TAB, KEY_TAB, NULL);
+    const cp0_ui_osk_key_t *b = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_CHAR, KEY_B, NULL);
+    const cp0_ui_osk_key_t *c = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_CHAR, KEY_C, NULL);
+    const cp0_ui_osk_key_t *ctrl = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_CTRL, 0, NULL);
+    const cp0_ui_osk_key_t *esc = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_ESC, KEY_ESC, NULL);
+    const cp0_ui_osk_key_t *left = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_ARROW, KEY_LEFT, NULL);
+    const cp0_ui_osk_key_t *enter = key_of(CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_K_ENTER, KEY_ENTER, NULL);
+    if (!alt || !tab || !b || !c || !ctrl || !esc || !left || !enter) return;
+    cp0_ui_osk_state_t s;
+    cp0_ui_osk_event_t e[CP0_UI_OSK_MAX_EVENTS];
+    cp0_ui_osk_state_init(&s, 0, 1); /* the terminal: multi-line */
+
+    /* a quick Alt+Tab: Alt's press when armed, then Tab (code only, ALT), then Alt's release (it was used) */
+    int n = cp0_ui_osk_key_up(&s, alt, 1000, e, 4);
+    CHECK_EQ(n, 1);
+    CHECK(is_alt(&e[0], KBD_KEY_PRESSED) && e[0].mods == KBD_MOD_ALT);
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_ARMED);
+    n = cp0_ui_osk_key_up(&s, tab, 2000, e, 4);
+    CHECK_EQ(n, 3);
+    CHECK(e[0].code == KEY_TAB && e[0].state == KBD_KEY_PRESSED && e[0].mods == KBD_MOD_ALT && e[0].utf8[0] == '\0');
+    CHECK(e[1].code == KEY_TAB && e[1].state == KBD_KEY_RELEASED && e[1].mods == KBD_MOD_ALT);
+    CHECK(is_alt(&e[2], KBD_KEY_RELEASED));
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_OFF);
+
+    /* an Alt+Tab session: Alt locked (double tap: one press), Tab, Tab, then Alt off (its release commits) */
+    n = cp0_ui_osk_key_up(&s, alt, 3000, e, 4);
+    CHECK(n == 1 && is_alt(&e[0], KBD_KEY_PRESSED));
+    n = cp0_ui_osk_key_up(&s, alt, 3100, e, 4);
+    CHECK_EQ(n, 0);
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_LOCKED);
+    CHECK_EQ(cp0_ui_osk_key_up(&s, tab, 3500, e, 4), 2);
+    CHECK_EQ(cp0_ui_osk_key_up(&s, tab, 3600, e, 4), 2);
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_LOCKED);
+    /* Esc while Alt is down: the toolbar's Esc (cancels the session), Alt stays */
+    n = cp0_ui_osk_key_down(&s, esc, e, 4);
+    CHECK(n == 1 && e[0].code == KEY_ESC && e[0].mods == 0);
+    n = cp0_ui_osk_key_up(&s, esc, 3700, e, 4);
+    CHECK(n == 1 && e[0].code == KEY_ESC && e[0].state == KBD_KEY_RELEASED);
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_LOCKED);
+    n = cp0_ui_osk_key_up(&s, alt, 4000, e, 4);
+    CHECK(n == 1 && is_alt(&e[0], KBD_KEY_RELEASED));
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_OFF);
+
+    /* armed, then tapped again too late: off, its release */
+    cp0_ui_osk_key_up(&s, alt, 5000, e, 4);
+    n = cp0_ui_osk_key_up(&s, alt, 6000, e, 4);
+    CHECK(n == 1 && is_alt(&e[0], KBD_KEY_RELEASED));
+
+    /* Alt+b: the key with ALT and its text, as a physical Alt+key; Alt released after it */
+    cp0_ui_osk_key_up(&s, alt, 7000, e, 4);
+    n = cp0_ui_osk_key_up(&s, b, 7500, e, 4);
+    CHECK_EQ(n, 3);
+    CHECK(e[0].code == KEY_B && e[0].mods == KBD_MOD_ALT && strcmp(e[0].utf8, "b") == 0);
+    CHECK(is_alt(&e[2], KBD_KEY_RELEASED));
+
+    /* Ctrl+Alt+c: the code with both, no text; both one-shots used */
+    cp0_ui_osk_key_up(&s, ctrl, 8000, e, 4);
+    cp0_ui_osk_key_up(&s, alt, 8100, e, 4);
+    n = cp0_ui_osk_key_up(&s, c, 8200, e, 4);
+    CHECK_EQ(n, 3);
+    CHECK(e[0].code == KEY_C && e[0].mods == (KBD_MOD_CTRL | KBD_MOD_ALT) && e[0].utf8[0] == '\0');
+    CHECK(is_alt(&e[2], KBD_KEY_RELEASED));
+    CHECK(!cp0_ui_osk_mod_on(&s.ctrl) && !cp0_ui_osk_mod_on(&s.alt));
+
+    /* Alt + a hold key (an arrow): pressed with ALT, Alt released after its release */
+    cp0_ui_osk_key_up(&s, alt, 9000, e, 4);
+    n = cp0_ui_osk_key_down(&s, left, e, 4);
+    CHECK(n == 1 && e[0].code == KEY_LEFT && e[0].mods == KBD_MOD_ALT);
+    n = cp0_ui_osk_key_up(&s, left, 9100, e, 4);
+    CHECK(n == 2 && e[0].code == KEY_LEFT && e[0].state == KBD_KEY_RELEASED && is_alt(&e[1], KBD_KEY_RELEASED));
+
+    /* Alt + Enter carries ALT and its control text; Alt released */
+    cp0_ui_osk_key_up(&s, alt, 10000, e, 4);
+    n = cp0_ui_osk_key_up(&s, enter, 10100, e, 4);
+    CHECK(n == 3 && e[0].code == KEY_ENTER && e[0].mods == KBD_MOD_ALT && strcmp(e[0].utf8, "\r") == 0);
+
+    /* the keyboard goes away with Alt locked and an arrow held: both releases owed go out */
+    cp0_ui_osk_key_up(&s, alt, 11000, e, 4);
+    cp0_ui_osk_key_up(&s, alt, 11100, e, 4);
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_LOCKED);
+    cp0_ui_osk_key_down(&s, left, e, 4);
+    n = cp0_ui_osk_release_all(&s, e, 4);
+    CHECK(n == 2 && e[0].code == KEY_LEFT && e[0].state == KBD_KEY_RELEASED && is_alt(&e[1], KBD_KEY_RELEASED));
+    CHECK_EQ(s.alt.state, CP0_UI_OSK_MOD_OFF);
+    CHECK_EQ(cp0_ui_osk_release_all(&s, e, 4), 0);
+
+    /* a text field's Tab (no Alt) is unchanged: the code alone, no tab character in a single-line field */
+    cp0_ui_osk_state_init(&s, 0, 0);
+    n = cp0_ui_osk_key_up(&s, tab, 12000, e, 4);
+    CHECK(n == 2 && e[0].mods == 0 && e[0].utf8[0] == '\0');
+}
+
 int main(void)
 {
     test_layout_sizes();
     test_place_keys();
+    test_alt_layout();
+    test_alt_events();
     test_modifiers();
     test_events();
     test_policy();

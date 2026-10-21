@@ -284,7 +284,7 @@ case "$ASSETS_SOURCE" in
 esac
 echo "  - files of earlier bundles no longer shipped: $(echo $RETIRED_FILES | sed 's/ /, /g') (those there)"
 echo "  - licences and notices $DOC_DIR"
-echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 93-applaunch-rfkill, 99-bt-keyboard"
+echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 92-applaunch-backlight-sysfs, 93-applaunch-rfkill, 99-bt-keyboard"
 echo "  - board profile $PROFILE (and $PROFILE_DIR if it is then empty)"
 echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${DESKTOP_RULES%.rules}, ${OLD_DESKTOP_RULES%.rules}"
 if [ "$BOOT_CONFIG" = 1 ]; then
@@ -410,7 +410,7 @@ fi
 
 say "Removing udev and polkit rules"
 UDEV_CHANGED=0
-for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlight-gpio.rules 93-applaunch-rfkill.rules 99-bt-keyboard.rules; do
+for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlight-gpio.rules 92-applaunch-backlight-sysfs.rules 93-applaunch-rfkill.rules 99-bt-keyboard.rules; do
     exists "$UDEV_DIR/$f" && UDEV_CHANGED=1
     rm_sys "$UDEV_DIR/$f"
 done

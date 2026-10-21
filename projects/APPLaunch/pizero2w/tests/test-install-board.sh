@@ -33,7 +33,7 @@ run --dry-run
 check "zero2w dry-run: exit 0" '[ $RC = 0 ]'
 check "zero2w dry-run: board zero2w" 'has "board: zero2w"'
 check "zero2w dry-run: no profile file" 'has "zero2w: no profile file"'
-check "zero2w dry-run: no gpio backlight rule" '! has "92-applaunch-backlight-gpio"'
+check "zero2w dry-run: no gpio backlight rule" '! has "92-applaunch-backlight-gpio" && ! has "92-applaunch-backlight-sysfs"'
 check "zero2w dry-run: PWM boot config as today" 'has "boot config: PWM backlight overlay"'
 check "zero2w dry-run: nothing written" '[ ! -e "$R/etc" ]'
 run --board-only
@@ -115,7 +115,9 @@ check "wsdsi43 dry-run: config.txt left alone, cmdline arguments only, no gpio r
 check "wsdsi43 dry-run: nothing written" '[ ! -e "$R/etc" ]'
 run --board-only
 P="$R/etc/applaunch/board.conf"
-check "wsdsi43 board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev" ]'
+check "wsdsi43 board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+BLR="$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"
+check "wsdsi43 board-only: udev rule lets the video group set the DSI backlight levels" '[ -f "$BLR" ] && grep -q "KERNEL==\"10-0045\"" "$BLR" && grep -q "chgrp video /sys/class/backlight/%k/brightness; chmod g+w /sys/class/backlight/%k/brightness" "$BLR"'
 EXPECT='APPLAUNCH_BOARD=pi3a-wsdsi43
 APPLAUNCH_FB=/dev/fb0
 APPLAUNCH_LOGICAL=800x480
@@ -164,10 +166,10 @@ check "wsdsi43 hand-written profile: kept byte for byte, no .bak" 'has "edited b
 # the backlight device: the regulator 10-0045, else the only one there, else none (no line)
 R=$(root pi3a-wsdsi43); mv "$R/sys/class/backlight/10-0045" "$R/sys/class/backlight/rpi_backlight"
 run --dry-run
-check "wsdsi43 with another single backlight device: that one" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/rpi_backlight"'
+check "wsdsi43 with another single backlight device: that one" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/rpi_backlight" && has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of rpi_backlight)"'
 rm -rf "$R/sys/class/backlight"
 run --dry-run
-check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT="'
+check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line, no backlight rule" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT=" && ! has "92-applaunch-backlight-sysfs"'
 # unambiguous against the SPI profile and against other DSI or HDMI set-ups
 R=$(root pi3a-wsdsi43); echo disconnected > "$R/sys/class/drm/card0-DSI-1/status"
 run --dry-run
@@ -257,6 +259,9 @@ OUT=$(HOME="$TMP/home" UNINSTALL_ROOT="$R" sh "$UNINSTALL" --dry-run --no-boot-c
 check "uninstall dry-run: exit 0" '[ $RC = 0 ]'
 check "uninstall dry-run: removes board.conf" 'has "rm -f $R/etc/applaunch/board.conf"'
 check "uninstall dry-run: removes the gpio rule" 'has "rm -f $R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules"'
+R=$(root pi3a-wsdsi43); run --board-only
+OUT=$(HOME="$TMP/home" UNINSTALL_ROOT="$R" sh "$UNINSTALL" --dry-run --no-boot-config 2>&1); RC=$?
+check "uninstall dry-run: removes the sysfs backlight rule" '[ $RC = 0 ] && has "rm -f $R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"'
 check "uninstall dry-run: changed nothing" '[ -f "$R/etc/applaunch/board.conf" ]'
 
 # --- appliance boards: the deck and the Pi 3A+ get the text console unit, nothing of the desktop variant
@@ -368,7 +373,10 @@ for f in cyberdeckzero.service cyberdeckzero-console cyberdeckzero-console.servi
     check "build.sh puts $f in the bundle" 'grep -q "$f" "$D/build.sh"'
 done
 check "build.sh leaves the stock start-up logo and the ADB helpers out" 'grep -q "rm -f \"\$OUT/payload/share/share/images/logo_lcd.png\"" "$D/build.sh" && grep -q "rm -rf \"\$OUT/payload/share/adb\"" "$D/build.sh"'
-check "build.sh names the tarball by version, with the earlier name as a copy" 'grep -q "TARBALL=\"cyberdeckzero-launcher-\$VERSION-arm64.tar.gz\"" "$D/build.sh" && grep -q "LEGACY_TARBALL=\"pizero2w-bundle.tar.gz\"" "$D/build.sh"'
+check "build.sh names the tarball by version and arch (arm64 by default), with the earlier name as a copy" 'grep -q "TARBALL=\"cyberdeckzero-launcher-\$VERSION-\$ARCH.tar.gz\"" "$D/build.sh" && grep -qx "ARCH=arm64" "$D/build.sh" && grep -q "LEGACY_TARBALL=\"pizero2w-bundle.tar.gz\"" "$D/build.sh"'
+check "build.sh: the earlier name is an arm64 copy only, amd64 builds natively with its own config" 'grep -qx "\[ \"\$ARCH\" = arm64 \] || LEGACY_NAME=0" "$D/build.sh" && grep -q "CONFIG=linux_x86_64_native_cp0_config_defaults.mk" "$D/build.sh" && [ -f "$D/../linux_x86_64_native_cp0_config_defaults.mk" ]'
+check "amd64 config: the device config without the NEON lines" '[ "$(sed "s/\r\$//" "$D/../config_defaults.mk" | grep -v -e "^#" -e "LV_DRAW_SW_ASM_NEON" -e "LV_USE_DRAW_SW_ASM")" = "$(sed "s/\r\$//" "$D/../linux_x86_64_native_cp0_config_defaults.mk" | grep -v "^#")" ] && grep -qx "CONFIG_APPLAUNCH_LINUX_CP0=y" "$D/../linux_x86_64_native_cp0_config_defaults.mk"'
+check "units: the dpi-scaled backend in both launcher units" 'grep -qx "Environment=APPLAUNCH_DISPLAY=dpi-scaled" "$D/cyberdeckzero.service" && grep -qx "Environment=APPLAUNCH_DISPLAY=dpi-scaled" "$D/cyberdeckzero-desktop.service"'
 check "cyberdeckzero-console: valid sh" 'sh -n "$D/cyberdeckzero-console"'
 
 # --- applaunch-console against a fake /sys/class/vtconsole and a fake systemctl
@@ -526,6 +534,7 @@ for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backli
          cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules cyberdeckzero.desktop; do
     cp "$D/$f" "$BUN/payload/etc/"
 done
+chmod 755 "$BUN/payload/etc/"*      # as in the real bundle (built from a Windows checkout: drvfs files are rwx)
 echo png > "$BUN/payload/share/share/images/setting_100.png"
 echo ofl > "$BUN/payload/share/share/font/JetBrainsMono-OFL.txt"
 ( cd "$BUN/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$BUN/payload/share.manifest"
@@ -560,9 +569,22 @@ printf 'sudo %s\n' "$*" >> "$FAKE_CALLS"
 [ "$1" = -v ] && exit 0
 exec "$@"
 EOF
-printf '#!/bin/sh\necho aarch64\n' > "$FAKEBIN/uname"
-printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 1\n' > "$FAKEBIN/apt-get"
-for c in loginctl udevadm usermod chown dpkg dtc; do
+printf '#!/bin/sh\necho "${FAKE_UNAME_M:-aarch64}"\n' > "$FAKEBIN/uname"
+printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit "${FAKE_APT_RC:-1}"\n' > "$FAKEBIN/apt-get"
+cat > "$FAKEBIN/dpkg" <<'EOF'
+#!/bin/sh
+# stand-in dpkg: logs the call; "-s PKG" answers "not installed" for the packages in FAKE_DPKG_MISSING
+printf 'dpkg %s\n' "$*" >> "$FAKE_CALLS"
+if [ "$1" = -s ]; then case " ${FAKE_DPKG_MISSING:-} " in *" $2 "*) exit 1 ;; esac; fi
+exit 0
+EOF
+cat > "$FAKEBIN/pkaction" <<'EOF'
+#!/bin/sh
+# stand-in pkaction: polkit answers unless FAKE_POLKIT=missing
+printf 'pkaction %s\n' "$*" >> "$FAKE_CALLS"
+[ "${FAKE_POLKIT:-ok}" = ok ]
+EOF
+for c in loginctl udevadm usermod chown dtc groupadd; do
     printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
 done
 chmod 755 "$FAKEBIN"/*
@@ -595,6 +617,8 @@ check "fake install, fresh: nothing to migrate" 'has "nothing to migrate" && ! c
 check "fake install, fresh: licences in /usr/share/doc/cyberdeckzero-launcher" '[ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSE" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSES/LVGL-MIT.txt" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/fonts/JetBrainsMono-OFL.txt" ]'
 check "fake install, fresh: board profile written, assets copied" '[ -f "$R/etc/applaunch/board.conf" ] && [ -f "$A/share/images/setting_100.png" ]'
 check "fake install, fresh: no apt-get, nothing written outside the fake root" '! called "apt-get" && [ ! -e /usr/share/doc/cyberdeckzero-launcher ] && [ ! -e /etc/systemd/system/cyberdeckzero-console.service ]'
+check "fake install, fresh: the user unit is 644 (systemd: not marked executable), no unit, rule or profile executable" '[ "$(stat -c %a "$H/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$H" -type f -perm /111)" ]'
+check "fake install, fresh: a Pi's packages (dtc, no polkitd or bluez), bluetooth.service left alone, polkit checked" 'called "dpkg -s device-tree-compiler" && ! called "dpkg -s polkitd" && ! called "dpkg -s bluez" && ! called "enable --now bluetooth.service" && called "pkaction --action-id org.freedesktop.login1.reboot" && has "polkit: running"'
 
 # appliance board installed with v0.6.0 (Pi 3A+): migrated
 R=$(root pi3a-luckfox35)
@@ -683,6 +707,176 @@ check "fake DSI install: cmdline.txt gets the two console arguments only, backup
 check "fake DSI install: the hand-written profile kept, no gpio rule, reboot for the console settings only" '[ "$(cksum < "$R/etc/applaunch/board.conf")" = "$HAND" ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && has "edited by hand: kept" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ] && has "reboot now so the console settings apply" && ! has "PWM backlight and"'
 fullboot
 check "fake DSI install, second run: boot files unchanged, nothing to migrate" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && [ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && has "nothing to migrate" && ! has "reboot now"'
+
+# --- PC (amd64, report 028): the Panasonic FZ-M1 tablet as measured in x-a: DMI, the i915 framebuffer 1280x800, the
+# eDP connector with an EDID, intel_backlight (and an acpi_video0), a disconnected HDMI port; generated here (an EDID is
+# binary). pc_root NAME [PRODUCT] [CHASSIS]: the fake root; edid FILE W_MM H_MM W_CM H_CM: a 128-byte EDID blob.
+edid() {
+    LC_ALL=C awk -v w="$2" -v h="$3" -v wc="$4" -v hc="$5" 'BEGIN {
+        for (i = 0; i < 128; i++) b[i] = 0
+        for (i = 1; i < 7; i++) b[i] = 255
+        b[21] = wc; b[22] = hc
+        if (w > 0) { b[54] = 29; b[55] = 28 }
+        b[66] = w % 256; b[67] = h % 256; b[68] = int(w / 256) * 16 + int(h / 256)
+        for (i = 0; i < 128; i++) printf "%c", b[i] }' > "$1"
+}
+pc_root() {
+    d="$TMP/$1"; rm -rf "$d"
+    mkdir -p "$d/sys/class/dmi/id" "$d/sys/class/graphics/fb0" "$d/sys/class/drm/card1-eDP-1" \
+        "$d/sys/class/drm/card1-HDMI-A-1" "$d/sys/class/backlight/acpi_video0" "$d/sys/class/backlight/intel_backlight" \
+        "$d/proc/1" "$d/boot/grub" "$d/etc/default" "$d/etc/netplan"
+    echo "Panasonic Corporation" > "$d/sys/class/dmi/id/sys_vendor"
+    echo "${2:-FZM1-2}" > "$d/sys/class/dmi/id/product_name"
+    echo "${3:-30}" > "$d/sys/class/dmi/id/chassis_type"
+    echo i915drmfb > "$d/sys/class/graphics/fb0/name"
+    echo 1280,800 > "$d/sys/class/graphics/fb0/virtual_size"
+    echo 32 > "$d/sys/class/graphics/fb0/bits_per_pixel"
+    echo connected > "$d/sys/class/drm/card1-eDP-1/status"
+    echo 1280x800 > "$d/sys/class/drm/card1-eDP-1/modes"
+    edid "$d/sys/class/drm/card1-eDP-1/edid" 152 94 15 9
+    echo disconnected > "$d/sys/class/drm/card1-HDMI-A-1/status"
+    : > "$d/sys/class/drm/card1-HDMI-A-1/edid"
+    echo 937 > "$d/sys/class/backlight/intel_backlight/max_brightness"
+    echo 400 > "$d/sys/class/backlight/intel_backlight/brightness"
+    echo 15 > "$d/sys/class/backlight/acpi_video0/max_brightness"
+    echo systemd > "$d/proc/1/comm"
+    printf 'menuentry "Armbian" {\n\tlinux /boot/vmlinuz root=UUID=1234 quiet\n}\n' > "$d/boot/grub/grub.cfg"
+    printf 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n' > "$d/etc/default/grub"
+    printf 'network:\n  version: 2\n  renderer: networkd\n  wifis:\n    wlan0:\n      dhcp4: true\n' > "$d/etc/netplan/20-wifi.yaml"
+    echo "$d"
+}
+pcrun() { OUT=$(INSTALL_MACHINE=x86_64 SYSROOT="$R" sh "$INSTALL" "$@" 2>&1); RC=$?; }
+R=$(pc_root pc)
+check "pc fixture: the EDID blob is 128 bytes with the EDID header" '[ "$(wc -c < "$R/sys/class/drm/card1-eDP-1/edid" | tr -d " ")" = 128 ] && [ "$(od -An -tx1 -N8 "$R/sys/class/drm/card1-eDP-1/edid" | tr -d " \n")" = 00ffffffffffff00 ]'
+pcrun --dry-run
+check "pc dry-run: exit 0, board pc-fzm1-2, the DMI facts" '[ $RC = 0 ] && has "board: pc-fzm1-2" && has "dmi: Panasonic Corporation / FZM1-2, chassis type 30, x86_64"'
+check "pc dry-run: appliance session, the user service and the console unit (fbcon vtcon1 unbound)" 'has "session: appliance" && has "cyberdeckzero-console.service frees the panel"'
+check "pc dry-run: no boot configuration (no config.txt, GRUB, kernel command line), no gpio rule" 'has "boot config: none on a PC (GRUB and the kernel command line are left alone)" && ! has "PWM backlight" && ! has "cmdline" && ! has "92-applaunch-backlight-gpio"'
+check "pc dry-run: the intel_backlight levels rule planned" 'has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of intel_backlight)"'
+check "pc dry-run: the PC's packages (polkitd, bluez; no dtc), bluetooth.service, NetworkManager left to the owner" 'has "packages (PC, when missing): libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez; bluetooth.service enabled" && has "network-manager is" && ! has "device-tree-compiler"'
+check "pc dry-run: nothing written" '[ ! -e "$R/etc/applaunch" ] && [ ! -e "$R/etc/udev" ]'
+pcrun --board-only
+P="$R/etc/applaunch/board.conf"
+EXPECT='APPLAUNCH_BOARD=pc-fzm1-2
+APPLAUNCH_DISPLAY=dpi-scaled
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=1280x800
+APPLAUNCH_ROTATE=0
+APPLAUNCH_PANEL_MM=152x94
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+APPLAUNCH_KBD_IGNORE=bus:0011
+APPLAUNCH_HIDE_TILES=app_Store
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(grep -v '^#' "$P" 2>/dev/null)
+if [ "$GOT" = "$EXPECT" ]; then ok "pc profile: exact keys and values (EDID 152x94 mm, i8042 ignored for presence)"; else ko "pc profile: exact keys and values (EDID 152x94 mm, i8042 ignored for presence)" "$GOT"; fi
+check "pc profile: the mm source named" 'grep -qx "# panel size in mm, from the EDID of eDP-1: the layout.s density" "$P"'
+# shellcheck disable=SC1090
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_DISPLAY $APPLAUNCH_FB $APPLAUNCH_LOGICAL $APPLAUNCH_PANEL_MM $APPLAUNCH_KBD_IGNORE" ) )
+check "pc profile: valid sh syntax" '[ "$GOT" = "dpi-scaled /dev/fb0 1280x800 152x94 bus:0011" ]'
+check "pc profile: only KEY=VALUE or comment lines" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null'
+BLR="$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"
+check "pc board-only: intel_backlight rule (video group), no gpio rule" '[ -f "$BLR" ] && grep -q "KERNEL==\"intel_backlight\"" "$BLR" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+SUM1=$(cksum < "$P")
+pcrun --board-only
+check "pc second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ]'
+# the size when the EDID's detailed timing has none: the basic block (cm), else the known model, else nothing
+R=$(pc_root pc-cm); edid "$R/sys/class/drm/card1-eDP-1/edid" 0 0 15 9
+pcrun --dry-run
+check "pc, EDID with the size in cm only: 150x90" 'has "APPLAUNCH_PANEL_MM=150x90"'
+R=$(pc_root pc-noedid); : > "$R/sys/class/drm/card1-eDP-1/edid"
+pcrun --dry-run
+check "pc FZM1-2 without an EDID size: the known 150x93" 'has "APPLAUNCH_PANEL_MM=150x93" && has "from the known size of the FZM1-2"'
+R=$(pc_root pc-generic "Some Laptop 14" 10); edid "$R/sys/class/drm/card1-eDP-1/edid" 0 0 0 0
+pcrun --dry-run
+check "pc laptop, unknown size: no panel size, its keyboard counts, slug of the product" '[ $RC = 0 ] && has "board: pc-some-laptop-14" && ! has "APPLAUNCH_PANEL_MM=" && has "panel size unknown" && ! has "APPLAUNCH_KBD_IGNORE"'
+R=$(pc_root pc-detach "Tablet X" 32)
+pcrun --dry-run
+check "pc detachable (chassis 32): its built-in keyboard device does not count" 'has "APPLAUNCH_KBD_IGNORE=bus:0011"'
+R=$(pc_root pc-nobl); rm -rf "$R/sys/class/backlight"
+pcrun --dry-run
+check "pc without a backlight device: no APPLAUNCH_BACKLIGHT, no rule" '[ $RC = 0 ] && ! has "APPLAUNCH_BACKLIGHT=" && ! has "92-applaunch-backlight-sysfs"'
+R=$(pc_root pc-acpi); rm -rf "$R/sys/class/backlight/intel_backlight"
+pcrun --dry-run
+check "pc without intel_backlight: the first backlight there" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/acpi_video0"'
+R=$(pc_root pc-nofb); rm -rf "$R/sys/class/graphics/fb0"
+pcrun --dry-run
+check "pc without a framebuffer: unknown, said why, would stop, no boot configuration" '[ $RC = 0 ] && has "board: unknown" && has "PC (x86_64) without a framebuffer" && has "would stop here" && has "boot config: none on a PC"'
+R=$(pc_root pc-arm)
+OUT=$(INSTALL_MACHINE=aarch64 SYSROOT="$R" sh "$INSTALL" --dry-run 2>&1); RC=$?
+check "the PC's sys tree on an aarch64 system without a device tree: no pc profile" '[ $RC = 0 ] && has "board: unknown" && ! has "pc-fzm1-2"'
+
+# a whole fake install of the amd64 bundle on the tablet (x86_64): a fake launcher with an x86-64 ELF header
+elf() {  # elf FILE E_MACHINE: a fake binary whose ELF header names that machine (62 x86-64, 183 aarch64)
+    LC_ALL=C awk -v m="$2" 'BEGIN { printf "%c%c%c%c%c%c%c", 127, 69, 76, 70, 2, 1, 1
+        for (i = 7; i < 18; i++) printf "%c", 0
+        printf "%c%c", m, 0; printf "\necho launcher\n" }' > "$1"
+    chmod 755 "$1"
+}
+BUN64="$TMP/bundle-amd64"; rm -rf "$BUN64"; cp -R "$BUN" "$BUN64"; elf "$BUN64/payload/bin/cyberdeckzero" 62
+BUNARM="$TMP/bundle-arm64"; rm -rf "$BUNARM"; cp -R "$BUN" "$BUNARM"; elf "$BUNARM/payload/bin/cyberdeckzero" 183
+pcfull() {  # pcfull ROOT BUNDLE MACHINE [options]: install.sh as a real run would go (boot configuration on) into ROOT
+    r=$1; bun=$2; m=$3; shift 3
+    : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" FAKE_UNAME_M="$m" SYSROOT="$r" INSTALL_FAKE_SYSTEM=1 \
+          sh "$bun/install.sh" --user "$U" --no-default-source "$@" 2>&1); RC=$?
+}
+R=$(pc_root pc-full)
+BOOTSUM=$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)
+pcfull "$R" "$BUN64" x86_64
+check "fake PC install: exit 0, profile pc-fzm1-2" '[ $RC = 0 ] && has "profile pc-fzm1-2" && grep -qx "APPLAUNCH_BOARD=pc-fzm1-2" "$R/etc/applaunch/board.conf"'
+check "fake PC install: no boot file touched (GRUB, /etc/default/grub), no config.txt or cmdline.txt made, no dtc" '[ "$(cat "$R/boot/grub/grub.cfg" "$R/etc/default/grub" | cksum)" = "$BOOTSUM" ] && [ ! -e "$R/boot/firmware" ] && [ -z "$(find "$R/boot" -name "*.txt*")" ] && ! called "dtc " && has "PC: GRUB and the kernel command line are left as they are"'
+check "fake PC install: no device-tree-compiler asked for" '! called "dpkg -s device-tree-compiler"'
+check "fake PC install: user service, linger, console unit, getty@tty1 masked (as on the Pi appliance boards)" '[ -f "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && called "loginctl enable-linger $U" && called "systemctl enable --now cyberdeckzero-console.service" && called "systemctl mask getty@tty1.service"'
+check "fake PC install: the backlight rule, the groups" '[ -f "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" ] && called "usermod -aG input,video,netdev $U"'
+check "fake PC install: polkitd and bluez checked, bluetooth.service enabled and started, polkit answers" 'called "dpkg -s polkitd" && called "dpkg -s bluez" && called "systemctl enable --now bluetooth.service" && has "bluetooth.service enabled and started" && has "polkit: running" && ! has "WARNING: no polkit"'
+check "fake PC install: the user unit is 644, no unit, rule or profile executable" '[ "$(stat -c %a "$R$UHOME/.config/systemd/user/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$R$UHOME/.config" -type f -perm /111)" ]'
+check "fake PC install: network-manager never installed" '! called "apt-get install" && ! grep -q "network-manager" "$CALLS"'
+if getent group bluetooth >/dev/null 2>&1; then
+    check "fake PC install: the user joins the bluetooth group (BlueZ's D-Bus policy)" 'called "usermod -aG bluetooth $U"'
+else
+    check "fake PC install: no bluetooth group, no usermod for it" '! called "usermod -aG bluetooth"'
+fi
+if id -nG "$U" | tr " " "\n" | grep -qx sudo; then
+    check "fake PC install: the user is in the sudo group: no warning about the power / clock rule" '! has "is not in the sudo group"'
+else
+    check "fake PC install: the user is not in the sudo group: warned (the power / clock rule needs it)" 'has "is not in the sudo group"'
+fi
+if ! command -v nmcli >/dev/null 2>&1; then
+    check "fake PC install: NetworkManager missing: the notice names it, Settings > Wi-Fi, the netplan recipe and the roll-back" 'has "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager" && has "on the console" && has "sudo apt install network-manager" && has "echo '"'"'network: {version: 2, renderer: NetworkManager}'"'"' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml" && has "sudo netplan apply" && has "Roll back" && has "sudo rm /etc/netplan/90-applaunch-networkmanager.yaml"'
+    check "fake PC install: the recipe reboots after netplan apply (netplan-wpa-<interface> holds the Wi-Fi), the check, the roll-back reboots too" 'has "          sudo reboot" && has "sudo systemctl stop netplan-wpa-<interface>.service" && has "nmcli -t device status" && has ":connected\", not \":unavailable\"" && has "An ssh session over Wi-Fi drops" && [ "$(printf "%s\n" "$OUT" | grep -c "^          sudo reboot$")" = 2 ]'
+fi
+# the packages missing: apt-get installs polkitd and bluez (never network-manager)
+R=$(pc_root pc-missing)
+FAKE_DPKG_MISSING="polkitd bluez"; FAKE_APT_RC=0; export FAKE_DPKG_MISSING FAKE_APT_RC
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_DPKG_MISSING FAKE_APT_RC
+check "fake PC install, polkitd and bluez missing: apt-get installs exactly them" '[ $RC = 0 ] && called "apt-get update" && called "apt-get install -y --no-install-recommends polkitd bluez"'
+# polkit does not answer: the install goes on, warned twice (after the rules, at the end)
+R=$(pc_root pc-nopolkit)
+FAKE_POLKIT=missing; export FAKE_POLKIT
+pcfull "$R" "$BUN64" x86_64
+unset FAKE_POLKIT
+check "fake PC install without polkit: exit 0, Reboot / Shut down / the clock named in a WARNING, the fix given" '[ $RC = 0 ] && has "WARNING: polkit is not available" && has "WARNING: no polkit: Settings > Reboot / Shut down and the clock settings will not work. Fix: sudo apt install polkitd"'
+# NetworkManager there (an nmcli on PATH): no notice
+NMBIN="$TMP/fake-nm"; mkdir -p "$NMBIN"; printf '#!/bin/sh\nexit 0\n' > "$NMBIN/nmcli"; cp "$NMBIN/nmcli" "$NMBIN/bluetoothctl"; chmod 755 "$NMBIN"/*
+R=$(pc_root pc-nm)
+OPATH=$PATH; PATH="$NMBIN:$PATH"
+pcfull "$R" "$BUN64" x86_64
+PATH=$OPATH
+check "fake PC install with NetworkManager: no notice" '[ $RC = 0 ] && ! has "NOTICE: network-manager"'
+R=$(pc_root pc-wrongarch)
+pcfull "$R" "$BUNARM" x86_64
+check "the arm64 bundle on a PC: refused before any change, the right bundle named" '[ $RC = 1 ] && has "this bundle is for arm64, this system is amd64" && has "cyberdeckzero-launcher-<version>-amd64.tar.gz" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc/applaunch" ]'
+R=$(root pi3a-luckfox35)
+pcfull "$R" "$BUN64" aarch64
+check "the amd64 bundle on a Pi: refused" '[ $RC = 1 ] && has "this bundle is for amd64, this system is arm64" && [ ! -e "$R/usr/share/APPLaunch" ]'
+pcfull "$R" "$BUNARM" aarch64 --no-boot-config
+check "the arm64 bundle on a Pi: accepted as before" '[ $RC = 0 ] && has "profile pi3a-luckfox35"'
 
 # --- default app source: install.sh's plan and option
 R=$(root zero2w)

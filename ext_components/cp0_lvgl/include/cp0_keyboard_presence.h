@@ -79,6 +79,32 @@ int cp0_kbd_presence_count(const char *proc_path);
 /* 1 when both lists hold the same devices in the same order. */
 int cp0_kbd_presence_list_equal(const cp0_kbd_presence_list_t *a, const cp0_kbd_presence_list_t *b);
 
+/* ---- ignore list (APPLAUNCH_KBD_IGNORE in board.conf; report 028, X5) -----------------------------------------
+ * Comma-separated entries, each a device name exactly as /proc prints it (N: Name=, e.g. "AT Translated Set 2
+ * keyboard") or "bus:XXXX" (hex, I: Bus=; bus:0011 = every i8042 device), spaces around an entry ignored:
+ *   - a plain entry: the keyboard is still read (its keys work: a tablet's built-in i8042 keys, a keyboard dock) but
+ *     it does not count as "a keyboard is connected" (the launcher's on-screen keyboard policy and the apps' input
+ *     state file): the on-screen keyboard shows when no other keyboard is there;
+ *   - an entry prefixed "drop:" (drop:bus:0011, drop:<name>): the device is left out of the keyboard list altogether,
+ *     neither counted nor read (a barcode scanner that must not type into the launcher). Drop wins over a plain entry.
+ * cp0_kbd_presence_enumerate(_all) and the watcher apply the drop entries of the environment's list; the parse
+ * functions above do not (pure). */
+#define CP0_KBD_IGNORE_ENV "APPLAUNCH_KBD_IGNORE"
+
+typedef enum {
+    CP0_KBD_IGNORE_NO = 0,       /* counted and read */
+    CP0_KBD_IGNORE_PRESENCE = 1, /* read, not counted */
+    CP0_KBD_IGNORE_DROP = 2,     /* neither */
+} cp0_kbd_ignore_t;
+
+/* What the list `spec` (NULL or "" = nothing ignored) says about the device `name` on bus `bus`. */
+cp0_kbd_ignore_t cp0_kbd_presence_ignore_match(const char *spec, const char *name, unsigned bus);
+/* Copies into `out` the keyboards of `list` that count as connected under `spec`; returns out->count. */
+unsigned cp0_kbd_presence_counted(const cp0_kbd_presence_list_t *list, const char *spec,
+                                  cp0_kbd_presence_list_t *out);
+/* Removes the devices `spec` drops from `list`, in place, order kept; returns how many went. */
+unsigned cp0_kbd_presence_drop(cp0_kbd_presence_list_t *list, const char *spec);
+
 /* ---- pointers (pure, no I/O) --------------------------------------------------------------------------------- */
 
 /* What the pointer rule looks at, for one device. */

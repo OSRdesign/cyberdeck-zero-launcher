@@ -379,13 +379,14 @@ settings_t12b::about_help::Content settings_storage_content()
     const SettingsStorageInfo storage = SettingsStorageModel::read();
     settings_t12b::about_help::Content content{"Storage", {}};
     if (storage.valid) {
+        // "SD card" on the Pi boards as before; a PC's disk by its kind and name ("SSD sda (model)"), never "SD card"
         content.lines = {
-            "SD card",
+            SettingsStorageModel::device_line(storage),
             "Total: " + SettingsStorageModel::format_bytes(storage.total_bytes),
             "Available: " + SettingsStorageModel::format_bytes(storage.available_bytes),
         };
     } else {
-        content.lines = {"SD card information unavailable."};
+        content.lines = {"Storage information unavailable."};
     }
     return content;
 }

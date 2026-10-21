@@ -1,6 +1,7 @@
 #!/bin/sh
-# Install CyberdeckZero Launcher on a Raspberry Pi Zero 2W with the Waveshare 2.8" DPI LCD (the deck), or on another
-# known board (see README.md, "Boards"): the board is detected and its profile written to /etc/applaunch/board.conf.
+# Install CyberdeckZero Launcher on a Raspberry Pi Zero 2W with the Waveshare 2.8" DPI LCD (the deck), on another
+# known board (see README.md, "Boards"), or on a PC (x86_64, the amd64 bundle: the "pc" profile, README.md, "PCs"):
+# the board is detected and its profile written to /etc/applaunch/board.conf.
 # A board that boots to a desktop (a display manager such as lightdm is enabled or running) gets the desktop
 # variant: the launcher is started from the applications menu and gives the desktop back when it exits (README.md,
 # "Desktop boards"); the others run it at boot as the user service cyberdeckzero.service.
@@ -27,7 +28,11 @@
 #
 # Prerequisites that this script does NOT do:
 #   - Waveshare DPI panel overlays in config.txt (see config.txt.snippet and the Waveshare wiki);
-#   - pairing the Bluetooth keyboard (bluetoothctl).
+#   - pairing the Bluetooth keyboard (bluetoothctl);
+#   - on a PC: installing NetworkManager (Settings > Wi-Fi needs it, but it takes the network over from netplan /
+#     systemd-networkd: the end of the install prints a recipe to run on the console). polkitd and BlueZ are installed
+#     on a PC (reboot / shutdown / the clock, and Settings > Bluetooth, need them). A PC's boot configuration (GRUB,
+#     kernel command line) is never changed.
 set -eu
 
 KEYBOARD_NAME="M4 Keyboard"
@@ -67,8 +72,9 @@ done
 # profile and the backlight udev rule are written under $SYSROOT/etc. Leave it unset on a real board.
 # INSTALL_FAKE_SYSTEM=1 (test hook, with SYSROOT) allows a whole install into $SYSROOT: every system path and the
 # user's home are taken under it, and the test puts stand-ins for systemctl, runuser, loginctl, udevadm, usermod,
-# dpkg, chown and uname first on PATH (tests/test-install-board.sh). Never set it on a real board.
-# INSTALL_GLIBC_VERSION is a test hook too: it replaces the glibc version read from the system.
+# dpkg, chown, uname and pkaction first on PATH (tests/test-install-board.sh). Never set it on a real board.
+# INSTALL_GLIBC_VERSION is a test hook too: it replaces the glibc version read from the system; INSTALL_MACHINE
+# replaces "uname -m" (aarch64, x86_64) for the board detection.
 SYSROOT=${SYSROOT:-}
 if [ -n "$SYSROOT" ] && [ "$DRY" = 0 ] && [ "$BOARD_ONLY" = 0 ] && [ "${INSTALL_FAKE_SYSTEM:-0}" != 1 ]; then
     echo "SYSROOT is a test hook: use it only with --dry-run or --board-only" >&2; exit 2
@@ -142,6 +148,12 @@ fi
 # ---------------------------------------------------------------------------------------------------------
 rd() { [ -r "$1" ] && tr -d '\0' < "$1" 2>/dev/null | head -n 1; }
 MODEL=$(rd "$SYSROOT/proc/device-tree/model" || true)
+# a PC: x86_64 and DMI (see "PC" below)
+MACHINE=${INSTALL_MACHINE:-$(uname -m)}
+DMI="$SYSROOT/sys/class/dmi/id"
+DMI_VENDOR=$(rd "$DMI/sys_vendor" || true)
+DMI_PRODUCT=$(rd "$DMI/product_name" || true)
+DMI_CHASSIS=$(rd "$DMI/chassis_type" || true)
 
 # the framebuffer device whose fbdev name starts with $1 and whose virtual_size is $2 (e.g. 320,480)
 find_fb() {
@@ -164,6 +176,9 @@ drm_connected() {
 }
 print_facts() {
     echo "  model: ${MODEL:-unknown}"
+    if [ -n "$DMI_VENDOR$DMI_PRODUCT" ]; then
+        echo "  dmi: ${DMI_VENDOR:-?} / ${DMI_PRODUCT:-?}, chassis type ${DMI_CHASSIS:-?}, $MACHINE"
+    fi
     found=0
     for d in "$SYSROOT"/sys/class/drm/card[0-9]*-*; do
         [ -e "$d/status" ] || continue
@@ -183,7 +198,7 @@ print_facts() {
     echo "  backlight:${bl:- none}"
 }
 
-# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi5-hyperpixel4 | hackberry-cm5 | "" (unknown).
+# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi5-hyperpixel4 | hackberry-cm5 | pc-<model> | "" (unknown).
 # PANEL_FB: the panel's framebuffer of a board with a profile (not the deck).
 # BOARD_NOTE: why a known model was left unknown (two panels at once), printed with the facts.
 BOARD=""
@@ -249,13 +264,89 @@ else
         *"Compute Module 5"*) detect_panel hackberry-cm5 && BOARD=hackberry-cm5 ;;
     esac
 fi
+
+# ---------------------------------------------------------------------------------------------------------
+# PC (x86_64 without a device tree, the amd64 bundle; report 028): the model from DMI, the panel the DRM driver's
+# framebuffer (i915drmfb on the FZ-M1), its size in mm from the connected connector's EDID, else a table of known
+# models, else nothing (the launcher's default density: large controls). Landscape, no rotation, touch by capability.
+# ---------------------------------------------------------------------------------------------------------
+pc_slug() { printf '%s' "$1" | tr 'A-Z' 'a-z' | sed -e 's/[^a-z0-9][^a-z0-9]*/-/g' -e 's/^-//' -e 's/-$//' | cut -c1-32; }
+# the panel's framebuffer: the DRM driver's fbdev (name ending in "drmfb"), else the first one
+pc_fb() {
+    first=""
+    for d in "$SYSROOT"/sys/class/graphics/fb[0-9]*; do
+        [ -d "$d" ] || continue
+        [ -n "$first" ] || first="/dev/${d##*/}"
+        case "$(rd "$d/name" || true)" in *drmfb) echo "/dev/${d##*/}"; return 0 ;; esac
+    done
+    [ -z "$first" ] || echo "$first"
+}
+# the connected DRM connector of the panel: an internal one first (eDP, LVDS, DSI), else any connected one
+pc_connector() {
+    for kind in eDP LVDS DSI ""; do
+        for d in "$SYSROOT"/sys/class/drm/card[0-9]*-"$kind"*; do
+            [ -d "$d" ] && [ "$(rd "$d/status" || true)" = connected ] && { echo "$d"; return 0; }
+        done
+    done
+    return 0
+}
+# WxH in mm from an EDID blob: the first detailed timing's image size (mm), else the basic block's (cm); nothing when
+# the blob is no EDID or gives no plausible size
+edid_mm() {
+    [ -r "$1" ] || return 0
+    # shellcheck disable=SC2046
+    set -- $(od -An -tu1 -v -N128 "$1" 2>/dev/null)
+    [ $# -eq 128 ] && [ "$1 $2 $3 $4 $5 $6 $7 $8" = "0 255 255 255 255 255 255 0" ] || return 0
+    w=0; h=0
+    if [ "${55}" != 0 ] || [ "${56}" != 0 ]; then      # bytes 54-55: pixel clock of a detailed timing descriptor
+        w=$(( ${67} + ${69} / 16 * 256 )); h=$(( ${68} + ${69} % 16 * 256 ))    # bytes 66-68
+    fi
+    if [ "$w" -lt 20 ] || [ "$h" -lt 20 ]; then w=$(( ${22} * 10 )); h=$(( ${23} * 10 )); fi   # bytes 21-22, cm
+    if [ "$w" -ge 20 ] && [ "$h" -ge 20 ] && [ "$w" -le 2000 ] && [ "$h" -le 2000 ]; then echo "${w}x${h}"; fi
+}
+# Known PCs: panel size in mm (measured on the board) when the EDID has none; tablets whose built-in keyboard device
+# is always there (its keys stay usable, it only does not count as "a keyboard is connected")
+pc_known_mm() {
+    case "$DMI_PRODUCT" in
+        FZM1-2*|FZ-M1*) echo 150x93 ;;      # Panasonic FZ-M1 (mk2): 7" 1280x800 (report 028, x-a, from the touch panel)
+    esac
+}
+pc_is_tablet() {
+    case "$DMI_CHASSIS" in 30|32) return 0 ;; esac        # SMBIOS chassis: 30 tablet, 32 detachable
+    case "$DMI_PRODUCT" in FZM1-2*|FZ-M1*) return 0 ;; esac
+    return 1
+}
+IS_PC=0
+PC_CONN=""; PC_MM=""; PC_MM_FROM=""; PC_LOGICAL=""
+# the packages of a PC: the launcher's libraries, polkitd (logind and timedated ask polkit before a reboot, a shutdown or
+# a clock change from the launcher's user service; Debian 13 and Ubuntu 24.04+ name it polkitd) and BlueZ
+PC_PKGS="libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez"
+if [ -z "$MODEL" ] && [ "$MACHINE" = x86_64 ]; then
+    IS_PC=1
+    if [ -z "$BOARD_ARG" ]; then
+        PANEL_FB=$(pc_fb || true)
+        PC_CONN=$(pc_connector || true)
+        if [ -n "$PC_CONN" ]; then PC_MM=$(edid_mm "$PC_CONN/edid" || true); fi
+        conn=${PC_CONN##*/}
+        if [ -n "$PC_MM" ]; then PC_MM_FROM="the EDID of ${conn#card*-}"
+        else PC_MM=$(pc_known_mm); [ -z "$PC_MM" ] || PC_MM_FROM="the known size of the $DMI_PRODUCT"; fi
+        if [ -n "$PANEL_FB" ]; then
+            s=$(rd "$SYSROOT/sys/class/graphics/${PANEL_FB#/dev/}/virtual_size" || true)
+            case "$s" in [0-9]*,[0-9]*) PC_LOGICAL="${s%,*}x${s#*,}" ;; esac
+            slug=$(pc_slug "$DMI_PRODUCT")
+            BOARD="pc-${slug:-generic}"
+        else
+            BOARD_NOTE="PC (x86_64) without a framebuffer: the launcher draws on /dev/fb0, the DRM driver's fbdev emulation."
+        fi
+    fi
+fi
 # The deck's PWM backlight overlay goes into config.txt on the deck and, as before, on an unknown board installed with
 # --force, except when the model is one of the other boards' (Pi 3A+, Pi 5, CM5) and only its panel was not
 # recognised: those panels bring their own backlight (and overlay), so config.txt stays as it is there.
 DECK_BOOT=0
 if [ "$BOARD" = zero2w ]; then
     DECK_BOOT=1
-elif [ -z "$BOARD" ]; then
+elif [ -z "$BOARD" ] && [ "$IS_PC" = 0 ]; then
     case "$MODEL" in
         *"Raspberry Pi 3 Model A Plus"*|*"Raspberry Pi 5"*|*"Compute Module 5"*) ;;
         *) DECK_BOOT=1 ;;
@@ -377,7 +468,51 @@ APPLAUNCH_TOUCH_ORIENT=buffer
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 EOF
         ;;
+        # A PC (amd64): the DRM driver's framebuffer at its own size, landscape (no rotation), the dpi-scaled backend
+        # (also set by the units: a launcher started by hand with this file gets it too), touch by capability in buffer
+        # orientation, the first backlight with levels (intel_backlight first).
+        pc-*)
+            bl=$(pc_backlight)
+            echo "APPLAUNCH_BOARD=$BOARD"
+            echo "APPLAUNCH_DISPLAY=dpi-scaled"
+            echo "APPLAUNCH_FB=$PANEL_FB"
+            if [ -n "$PC_LOGICAL" ]; then echo "APPLAUNCH_LOGICAL=$PC_LOGICAL"; fi
+            echo "APPLAUNCH_ROTATE=0"
+            if [ -n "$PC_MM" ]; then
+                echo "# panel size in mm, from $PC_MM_FROM: the layout's density"
+                echo "APPLAUNCH_PANEL_MM=$PC_MM"
+            else
+                echo "# panel size unknown (no EDID size, not a known model): the launcher's default density (large controls)"
+            fi
+            cat <<EOF
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+EOF
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            if pc_is_tablet; then
+                echo "# the tablet's built-in keyboard device (i8042, bus 0011) is always there: it does not count as a"
+                echo "# connected keyboard (the on-screen keyboard shows without a USB or Bluetooth one); its keys still work"
+                echo "APPLAUNCH_KBD_IGNORE=bus:0011"
+            fi
+            cat <<EOF
+# the Store tile starts hidden (the Store's hub has arm64 packages only); Settings > Launcher can show it
+APPLAUNCH_HIDE_TILES=app_Store
+LV_LINUX_FBDEV_DEVICE=$PANEL_FB
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+        ;;
     esac
+}
+# The PC's backlight with levels: intel_backlight, else the first one there; none: nothing
+pc_backlight() {
+    if [ -d "$SYSROOT/sys/class/backlight/intel_backlight" ]; then echo intel_backlight; return 0; fi
+    for d in "$SYSROOT"/sys/class/backlight/*; do
+        [ -e "$d" ] && { echo "${d##*/}"; return 0; }
+    done
+    return 0
 }
 # The DSI panel's backlight device: the DSI overlay's regulator at i2c 10-0045 (seen on the Pi 3A+ with both
 # vc4-kms-dsi-waveshare-800x480 and vc4-kms-dsi-7inch), else
@@ -448,6 +583,17 @@ gpio_bl_rule() {
 # On/off GPIO backlight (boards without a PWM backlight): let the video group switch it.
 # "change" too, so that "udevadm trigger" at install time applies it without a reboot.
 SUBSYSTEM=="backlight", KERNEL=="backlight_gpio", ACTION=="add|change", RUN+="/bin/sh -c 'chgrp video /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power; chmod g+w /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power'"
+EOF
+}
+# The levels backlight of the profile (APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/<name>: the Pi 3A+ DSI
+# regulator, the PC's intel_backlight): its brightness file is root's only, the launcher runs as the user.
+SYSFS_BL_RULE="92-applaunch-backlight-sysfs.rules"
+SYSFS_BL=$(profile_body | sed -n 's|^APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/\([A-Za-z0-9._:-]*\)$|\1|p')
+sysfs_bl_rule() {
+    cat <<EOF
+# Backlight with brightness levels named in the board profile (APPLAUNCH_BACKLIGHT=sysfs:...): let the video group
+# set it. "change" too, so that "udevadm trigger" at install time applies it without a reboot.
+SUBSYSTEM=="backlight", KERNEL=="$SYSFS_BL", ACTION=="add|change", RUN+="/bin/sh -c 'chgrp video /sys/class/backlight/%k/brightness; chmod g+w /sys/class/backlight/%k/brightness'"
 EOF
 }
 
@@ -543,7 +689,10 @@ if [ "$DRY" = 1 ]; then
     echo "profile: $PROFILE_MSG"
     case "$PROFILE_ACTION" in write|replace) echo "--- $PROFILE"; profile_content ;; esac
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
-    if [ "$SESSION" = desktop ]; then
+    if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
+    if [ "$IS_PC" = 1 ]; then
+        echo "boot config: none on a PC (GRUB and the kernel command line are left alone)"
+    elif [ "$SESSION" = desktop ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
     elif [ "$DECK_BOOT" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
@@ -570,6 +719,10 @@ if [ "$DRY" = 1 ]; then
         echo "--- /etc/polkit-1/rules.d/$DESKTOP_RULES"
         render "$DESKTOP_RULES"
     elif [ "$BOARD_ONLY" = 0 ]; then
+        if [ "$IS_PC" = 1 ]; then
+            echo "packages (PC, when missing): $PC_PKGS; bluetooth.service enabled and started; network-manager is"
+            echo "  not installed (it takes the network over: the end of the install prints a recipe for the console)"
+        fi
         echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck): $USER_UNIT"
         echo "  for $TARGET_USER (lingering on), enabled and started"
         echo "console: $CONSOLE_UNIT frees the panel from the text console once the boot is done (the boot lines still show)"
@@ -593,14 +746,29 @@ if [ "$BOARD_ONLY" = 1 ]; then
     apply_profile
     if [ "$GPIO_BL" = 1 ]; then
         mkdir -p "$UDEV_DIR"
-        gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
+        gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"; chmod 644 "$UDEV_DIR/$GPIO_BL_RULE"
         echo "installed $UDEV_DIR/$GPIO_BL_RULE"
+        [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
+    fi
+    if [ -n "$SYSFS_BL" ]; then
+        mkdir -p "$UDEV_DIR"
+        sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"; chmod 644 "$UDEV_DIR/$SYSFS_BL_RULE"
+        echo "installed $UDEV_DIR/$SYSFS_BL_RULE"
         [ -n "$SYSROOT" ] || { udevadm control --reload; udevadm trigger --subsystem-match=backlight || true; }
     fi
     exit 0
 fi
 
 PAYLOAD="$HERE/payload"
+# arm64 or amd64 from the e_machine field of the launcher's ELF header (183 = aarch64, 62 = x86-64); "" if unreadable
+bundle_arch() {
+    f="$PAYLOAD/bin/$LAUNCHER_BIN"
+    [ "$(od -An -tx1 -N4 "$f" 2>/dev/null | tr -d ' \n')" = 7f454c46 ] || return 0
+    case "$(od -An -tu1 -j18 -N2 "$f" | tr -s ' \n' ' ')" in
+        " 183 0 ") echo arm64 ;;
+        " 62 0 ") echo amd64 ;;
+    esac
+}
 BOOT="$SYSROOT/boot/firmware"
 [ -d "$BOOT" ] || BOOT="$SYSROOT/boot"
 
@@ -690,7 +858,17 @@ if [ "$SESSION" = desktop ]; then
     fi
     check_user_name "$TARGET_USER"
 fi
-[ "$(uname -m)" = aarch64 ] || { echo "a 64-bit (aarch64) OS is required" >&2; exit 1; }
+# The bundle's architecture (its launcher's ELF header) must be the system's: aarch64 = arm64, x86_64 = amd64
+case "$MACHINE" in
+    aarch64) SYS_ARCH=arm64 ;;
+    x86_64) SYS_ARCH=amd64 ;;
+    *) echo "a 64-bit OS is required: aarch64 (Raspberry Pi) or x86_64 (PC), this one is $MACHINE" >&2; exit 1 ;;
+esac
+BUNDLE_ARCH=$(bundle_arch)
+if [ -n "$BUNDLE_ARCH" ] && [ "$BUNDLE_ARCH" != "$SYS_ARCH" ]; then
+    echo "this bundle is for $BUNDLE_ARCH, this system is $SYS_ARCH ($MACHINE): use cyberdeckzero-launcher-<version>-$SYS_ARCH.tar.gz. Nothing was changed." >&2
+    exit 1
+fi
 # The migration stops the earlier launcher's unit: run from a terminal inside it (the launcher's own terminal app),
 # that stop would end this script half way, the old unit gone and the new one not yet there.
 if [ -z "$SYSROOT" ] && grep -q -e "$OLD_USER_UNIT" -e "$OLD_DESKTOP_UNIT" /proc/self/cgroup 2>/dev/null; then
@@ -700,7 +878,11 @@ if [ -z "$SYSROOT" ] && grep -q -e "$OLD_USER_UNIT" -e "$OLD_DESKTOP_UNIT" /proc
 fi
 
 say "Installing packages"
-PKGS="libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler"
+if [ "$IS_PC" = 1 ]; then
+    PKGS=$PC_PKGS        # no dtc on a PC; polkitd and BlueZ, which the Pi images have already
+else
+    PKGS="libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler"
+fi
 MISSING=""
 for pkg in $PKGS; do
     dpkg -s "$pkg" >/dev/null 2>&1 || MISSING="$MISSING $pkg"
@@ -712,6 +894,20 @@ if [ -n "$MISSING" ]; then
 else
     echo "all packages already present"
 fi
+if [ "$IS_PC" = 1 ]; then
+    # BlueZ's daemon for Settings > Bluetooth (its package enables it on most distributions; an Armbian image may not)
+    if systemctl enable --now bluetooth.service >/dev/null 2>&1; then
+        echo "bluetooth.service enabled and started"
+    else
+        echo "WARNING: bluetooth.service could not be started: Settings > Bluetooth will not work (systemctl status bluetooth)" >&2
+    fi
+fi
+# NetworkManager (Settings > Wi-Fi) and, on a Pi image without it, BlueZ: not installed here; the end of the install
+# says what to do (NetworkManager takes the network over from netplan / networkd: on the console)
+NEED_NM=0
+command -v nmcli >/dev/null 2>&1 || NEED_NM=1
+NEED_BLUEZ=0
+command -v bluetoothctl >/dev/null 2>&1 || NEED_BLUEZ=1
 
 say "Installing the launcher into ${APP_ROOT#"$SYSROOT"}"
 mkdir -p "$APP_ROOT/bin" "$APP_ROOT/lib" "$APP_ROOT/applications"
@@ -729,6 +925,14 @@ ln -sfn "$LAUNCHER_BIN" "$APP_ROOT/bin/$OLD_LAUNCHER_BIN"
 ln -sfn "$CONSOLE_HELPER" "$APP_ROOT/bin/$OLD_CONSOLE_HELPER"
 echo "$LAUNCHER_BIN and $CONSOLE_HELPER installed; the earlier names $OLD_LAUNCHER_BIN and $OLD_CONSOLE_HELPER link to them"
 remove_retired
+# a PC distribution may lack a library the Pi images have: name the missing ones (the packages differ per distribution)
+if [ "$IS_PC" = 1 ] && command -v ldd >/dev/null 2>&1; then
+    for b in "$APP_ROOT/bin/$LAUNCHER_BIN" "$APP_ROOT/bin/M5CardputerZero-AppStore"; do
+        [ -f "$b" ] || continue
+        miss=$(ldd "$b" 2>/dev/null | sed -n 's/^[[:space:]]*\([^ ]*\) => not found.*/\1/p' | tr '\n' ' ')
+        [ -z "$miss" ] || echo "WARNING: ${b##*/} needs libraries that are missing: $miss(apt-file search <name>)" >&2
+    done
+fi
 chown -R "$TARGET_USER:$TARGET_USER" "$APP_ROOT/applications"
 chmod -R a+rX "$APP_ROOT"
 
@@ -753,18 +957,44 @@ cat > "$UDEV_DIR/99-bt-keyboard.rules" <<EOF
 # Stable name for the Bluetooth keyboard (it gets a new event node each time it reconnects).
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="$KEYBOARD_NAME", SYMLINK+="input/bt-keyboard"
 EOF
+chmod 644 "$UDEV_DIR/99-bt-keyboard.rules"
 if [ "$GPIO_BL" = 1 ]; then
     gpio_bl_rule > "$UDEV_DIR/$GPIO_BL_RULE"
+    chmod 644 "$UDEV_DIR/$GPIO_BL_RULE"
     echo "on/off GPIO backlight: /etc/udev/rules.d/$GPIO_BL_RULE"
+fi
+if [ -n "$SYSFS_BL" ]; then
+    sysfs_bl_rule > "$UDEV_DIR/$SYSFS_BL_RULE"
+    chmod 644 "$UDEV_DIR/$SYSFS_BL_RULE"
+    echo "backlight levels ($SYSFS_BL): /etc/udev/rules.d/$SYSFS_BL_RULE"
 fi
 udevadm control --reload
 udevadm trigger --subsystem-match=input --subsystem-match=misc --subsystem-match=backlight || true
+# netdev (the polkit rule for NetworkManager) is a Debian group that other distributions may not have
+if ! getent group netdev >/dev/null 2>&1; then groupadd -f netdev && echo "group netdev created (50-networkmanager-netdev.rules)"; fi
 usermod -aG input,video,netdev "$TARGET_USER"
+# BlueZ's D-Bus policy lets the bluetooth group (made by the bluez package) talk to it from a background session
+if getent group bluetooth >/dev/null 2>&1; then usermod -aG bluetooth "$TARGET_USER"; fi
 
 say "Installing PolicyKit rules (Wi-Fi, time settings, reboot/shutdown from the launcher)"
 mkdir -p "$POLKIT_DIR"
 install -m 644 "$PAYLOAD/etc/50-networkmanager-netdev.rules" "$POLKIT_DIR/50-networkmanager-netdev.rules"
 install -m 644 "$PAYLOAD/etc/51-launcher-time-power.rules" "$POLKIT_DIR/51-launcher-time-power.rules"
+# Reboot, shutdown and the clock from Settings go through logind / timedated, which ask polkit: without polkitd they
+# refuse the launcher's user service, and the rules above never apply
+POLKIT_OK=0
+if command -v pkaction >/dev/null 2>&1 && pkaction --action-id org.freedesktop.login1.reboot >/dev/null 2>&1; then
+    POLKIT_OK=1
+    echo "polkit: running (Settings > Reboot / Shut down and the date and time settings can work)"
+    # 51-launcher-time-power.rules allows the sudo group only
+    if ! id -nG "$TARGET_USER" 2>/dev/null | tr ' ' '\n' | grep -qx sudo; then
+        echo "WARNING: $TARGET_USER is not in the sudo group: 51-launcher-time-power.rules (reboot, shutdown, clock from" >&2
+        echo "         Settings) does not apply to it. Fix: sudo usermod -aG sudo $TARGET_USER" >&2
+    fi
+else
+    echo "WARNING: polkit is not available (no polkitd, or it does not answer): Settings > Reboot, Shut down and the" >&2
+    echo "         date and time settings will be refused. Install it: sudo apt install polkitd" >&2
+fi
 if [ "$SESSION" = desktop ]; then
     # the menu entry starts the launcher's unit as the user, without a password
     render "$DESKTOP_RULES" > "$POLKIT_DIR/$DESKTOP_RULES.tmp"
@@ -809,7 +1039,8 @@ else
     systemctl enable --now "$CONSOLE_UNIT" || echo "($CONSOLE_UNIT did not start now; it runs at the next boot)"
 
     mkdir -p "$UNIT_DIR"
-    cp "$PAYLOAD/etc/$USER_UNIT" "$UNIT_DIR/$USER_UNIT"
+    # 644: the bundle's copy may carry an executable bit (systemd then warns "is marked executable")
+    install -m 644 "$PAYLOAD/etc/$USER_UNIT" "$UNIT_DIR/$USER_UNIT"
     chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config"
     loginctl enable-linger "$TARGET_USER"
 fi
@@ -820,7 +1051,10 @@ apply_profile
 # The PWM backlight overlay is for the deck's Waveshare panel (DECK_BOOT, see the board detection); a board with its
 # own profile keeps its config.txt and only gets the cmdline arguments (never an fbcon= argument).
 # A desktop board keeps its boot configuration as it is (its desktop owns the console settings).
-if [ "$SESSION" = desktop ]; then
+if [ "$IS_PC" = 1 ]; then
+    say "Boot configuration"
+    echo "PC: GRUB and the kernel command line are left as they are (the boot lines show, as on the deck)"
+elif [ "$SESSION" = desktop ]; then
     say "Boot configuration"
     echo "desktop board: config.txt and cmdline.txt left as they are"
 elif [ "$BOOT_CONFIG" = 1 ]; then
@@ -890,6 +1124,44 @@ say "Done"
 if [ "$SESSION" = desktop ]; then
     echo "Start the launcher from the desktop: applications menu > CyberdeckZero Launcher (or: systemctl start $DESKTOP_UNIT)."
     echo "The desktop stops while it runs; Settings > System > Quit to desktop brings it back."
+fi
+if [ "$POLKIT_OK" = 0 ]; then
+    echo "WARNING: no polkit: Settings > Reboot / Shut down and the clock settings will not work. Fix: sudo apt install polkitd"
+fi
+if [ "$NEED_BLUEZ" = 1 ]; then
+    echo "NOTICE: bluez is not installed: Settings > Bluetooth will not work. Fix: sudo apt install bluez"
+fi
+if [ "$NEED_NM" = 1 ]; then
+    echo "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager. install.sh does not install it,"
+    echo "        because it takes the network over (from netplan / systemd-networkd here). Do it on the console, not"
+    echo "        from an ssh session over Wi-Fi (the link drops while it switches):"
+    if [ -d "$SYSROOT/etc/netplan" ]; then
+        cat <<'EOF'
+          sudo apt install network-manager
+          sudo cp -a /etc/netplan /etc/netplan.bak-applaunch
+          echo 'network: {version: 2, renderer: NetworkManager}' | sudo tee /etc/netplan/90-applaunch-networkmanager.yaml
+          sudo chmod 600 /etc/netplan/90-applaunch-networkmanager.yaml
+          sudo netplan apply
+          sudo reboot
+        The reboot is needed: netplan's own Wi-Fi supplicant (netplan-wpa-<interface>.service, a wpa_supplicant
+        on /run/netplan/wpa-<interface>.conf) keeps running after "netplan apply" and holds the interface, so
+        NetworkManager cannot take it ("wpa_supplicant couldn't grab this interface", the device "unavailable",
+        Settings > Wi-Fi "Wi-Fi service unavailable"). Without a reboot, on the console:
+          sudo systemctl stop netplan-wpa-<interface>.service
+        An ssh session over Wi-Fi drops either way. Check after the reboot:
+          nmcli -t device status        (the Wi-Fi line ends in ":connected", not ":unavailable")
+        then Settings > Wi-Fi. Roll back (on the console, then reboot as well):
+          sudo rm /etc/netplan/90-applaunch-networkmanager.yaml
+          sudo apt remove network-manager
+          sudo netplan apply
+          sudo reboot
+        Details (a Wi-Fi entry with its own "renderer: networkd", a slow boot): README.md, "Install on a PC (amd64)".
+EOF
+    else
+        echo "          sudo apt install network-manager"
+        echo "        and let NetworkManager manage the Wi-Fi interface (no other service for it: ifupdown, networkd,"
+        echo "        a wpa_supplicant of its own), then reboot. Check: nmcli -t device status (the Wi-Fi \":connected\")."
+    fi
 fi
 echo "Next: pair the keyboard if you have not yet (bluetoothctl: scan on / pair / trust / connect)."
 if [ "${REBOOT:-0}" = 1 ]; then

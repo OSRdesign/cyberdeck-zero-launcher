@@ -9,6 +9,7 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 #include "model/app_registry_callback.hpp"
+#include "model/tile_default_policy.hpp"
 
 #include <charconv>
 #include <cstdlib>
@@ -41,6 +42,13 @@ bool config_set_int(const char *key, int val)
     return succeeded;
 }
 
+// the board profile's default for a configurable tile (APPLAUNCH_HIDE_TILES, model/tile_default_policy.hpp)
+int tile_default(const AppDescriptor &desc)
+{
+    return tile_default_policy::default_enabled(desc.config_key ? desc.config_key : "",
+                                                std::getenv("APPLAUNCH_HIDE_TILES"));
+}
+
 bool config_save()
 {
     bool succeeded = false;
@@ -56,14 +64,14 @@ bool launcher_app_registry_is_enabled(const AppDescriptor &desc)
     if (desc.always_on || !desc.configurable)
         return true;
     if (!desc.config_key || !*desc.config_key) return true;
-    return config_get_int(desc.config_key, 1) != 0;
+    return config_get_int(desc.config_key, tile_default(desc)) != 0;
 }
 
 bool launcher_app_registry_set_enabled(const AppDescriptor &desc, bool enabled)
 {
     if (desc.always_on || !desc.configurable) return true;
     if (!desc.config_key || !*desc.config_key) return false;
-    const int previous = config_get_int(desc.config_key, 1) != 0 ? 1 : 0;
+    const int previous = config_get_int(desc.config_key, tile_default(desc)) != 0 ? 1 : 0;
     if (!config_set_int(desc.config_key, enabled ? 1 : 0)) return false;
     if (config_save()) return true;
     config_set_int(desc.config_key, previous);

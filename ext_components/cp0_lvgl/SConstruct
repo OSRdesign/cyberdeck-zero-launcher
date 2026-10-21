@@ -95,11 +95,15 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
         configure_target_gio(REQUIREMENTS, DEFINITIONS, LDFLAGS)
         if service_enabled('CAMERA'):
             REQUIREMENTS += ['camera', 'camera-base', 'jpeg']
-        PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'dbus-1.0'),
-                            toolchain_path('usr', 'lib', env.get('GCC_DUMPMACHINE', ''), 'dbus-1.0', 'include')]
-        # cp0_statusbar.c (the shared status-bar renderer) draws its text and icon with FreeType
-        PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'freetype2'),
-                            toolchain_path('usr', 'include', 'libpng16')]
+        if os.environ.get("CONFIG_TOOLCHAIN_SYSROOT"):
+            PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'dbus-1.0'),
+                                toolchain_path('usr', 'lib', env.get('GCC_DUMPMACHINE', ''), 'dbus-1.0', 'include')]
+            # cp0_statusbar.c (the shared status-bar renderer) draws its text and icon with FreeType
+            PRIVATE_INCLUDE += [toolchain_path('usr', 'include', 'freetype2'),
+                                toolchain_path('usr', 'include', 'libpng16')]
+        else:
+            # native build (amd64 PCs, report 028): the build box's -dev packages, found by pkg-config
+            DEFINITIONS_PRIVATE += pkg_config_cflags('dbus-1') + pkg_config_cflags('freetype2')
         REQUIREMENTS += ['freetype']
 
         if 'CONFIG_CP0_LVGL_USE_ZMQ_LOG' in os.environ:

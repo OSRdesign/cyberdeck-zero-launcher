@@ -274,8 +274,14 @@ int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp
 {
     if (out) out->count = 0;
     if (pointers) pointers->count = 0;
+    const char *ignore = getenv(CP0_KBD_IGNORE_ENV);
+    cp0_kbd_presence_list_t local;
+    if (!out && ignore && ignore[0]) out = &local; /* the drop entries need the list to count right */
     const int fd = open(proc_path ? proc_path : CP0_KBD_PRESENCE_PROC_PATH, O_RDONLY | O_CLOEXEC);
-    if (fd < 0) return -1;
+    if (fd < 0) {
+        if (out) out->count = 0;
+        return -1;
+    }
 
     presence_parser_t p;
     parser_init(&p, word_bits, out, pointers);
@@ -304,7 +310,77 @@ int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp
     close(fd);
     if (line_len > 0) parser_line(&p, line, line_len);
     parser_flush(&p);
+    /* the board profile's "drop:" entries are neither counted nor read (cp0_keyboard_presence.h, ignore list) */
+    if (ignore && ignore[0]) p.total -= (int)cp0_kbd_presence_drop(out, ignore);
     return p.total;
+}
+
+/* ============================================================
+ *  Ignore list (APPLAUNCH_KBD_IGNORE)
+ * ============================================================ */
+
+/* 1 when the entry [s, s + n) names the device: "bus:XXXX" (hex) or the exact name */
+static int ignore_entry_matches(const char *s, size_t n, const char *name, unsigned bus)
+{
+    if (n > 4 && memcmp(s, "bus:", 4) == 0) {
+        unsigned value = 0;
+        for (size_t i = 4; i < n; i++) {
+            const int digit = hex_value(s[i]);
+            if (digit < 0 || i > 12) return 0;
+            value = value * 16u + (unsigned)digit;
+        }
+        return value == bus;
+    }
+    return name && strlen(name) == n && memcmp(s, name, n) == 0;
+}
+
+cp0_kbd_ignore_t cp0_kbd_presence_ignore_match(const char *spec, const char *name, unsigned bus)
+{
+    cp0_kbd_ignore_t result = CP0_KBD_IGNORE_NO;
+    for (const char *s = spec; s && *s;) {
+        const char *end = strchr(s, ',');
+        if (!end) end = s + strlen(s);
+        const char *a = s, *b = end;
+        while (a < b && (*a == ' ' || *a == '\t')) a++;
+        while (b > a && (b[-1] == ' ' || b[-1] == '\t')) b--;
+        int drop = 0;
+        if ((size_t)(b - a) > 5 && memcmp(a, "drop:", 5) == 0) {
+            drop = 1;
+            a += 5;
+        }
+        if (b > a && ignore_entry_matches(a, (size_t)(b - a), name, bus)) {
+            if (drop) return CP0_KBD_IGNORE_DROP;
+            result = CP0_KBD_IGNORE_PRESENCE;
+        }
+        s = *end ? end + 1 : end;
+    }
+    return result;
+}
+
+unsigned cp0_kbd_presence_counted(const cp0_kbd_presence_list_t *list, const char *spec,
+                                  cp0_kbd_presence_list_t *out)
+{
+    if (!out) return 0;
+    out->count = 0;
+    for (unsigned i = 0; list && i < list->count; i++)
+        if (cp0_kbd_presence_ignore_match(spec, list->devices[i].name, list->devices[i].bus) == CP0_KBD_IGNORE_NO)
+            out->devices[out->count++] = list->devices[i];
+    return out->count;
+}
+
+unsigned cp0_kbd_presence_drop(cp0_kbd_presence_list_t *list, const char *spec)
+{
+    if (!list) return 0;
+    unsigned kept = 0;
+    const unsigned before = list->count;
+    for (unsigned i = 0; i < before; i++) {
+        if (cp0_kbd_presence_ignore_match(spec, list->devices[i].name, list->devices[i].bus) == CP0_KBD_IGNORE_DROP)
+            continue;
+        if (kept != i) list->devices[kept] = list->devices[i];
+        kept++;
+    }
+    list->count = kept;
+    return before - kept;
 }
 
 int cp0_kbd_presence_count(const char *proc_path)
