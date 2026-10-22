@@ -322,8 +322,10 @@ pc_is_tablet() {
 IS_PC=0
 PC_CONN=""; PC_MM=""; PC_MM_FROM=""; PC_LOGICAL=""
 # the packages of a PC: the launcher's libraries, polkitd (logind and timedated ask polkit before a reboot, a shutdown or
-# a clock change from the launcher's user service; Debian 13 and Ubuntu 24.04+ name it polkitd) and BlueZ
-PC_PKGS="libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez"
+# a clock change from the launcher's user service; Debian 13 and Ubuntu 24.04+ name it polkitd), BlueZ and alsa-utils
+# (amixer: Settings > Speaker finds the sound card's volume control with it, and sets the volume when no sound server
+# runs, report 030; the Pi images have it)
+PC_PKGS="libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez alsa-utils"
 if [ -z "$MODEL" ] && [ "$MACHINE" = x86_64 ]; then
     IS_PC=1
     if [ -z "$BOARD_ARG" ]; then
@@ -553,6 +555,13 @@ EOF
         ;;
     esac
 }
+# The board's own sound card (not HDMI) in /proc/asound/cards: its line ("0 [PCH ]: HDA-Intel - HDA Intel PCH"), or
+# nothing. With one, the user joins the audio group: the launcher reads and sets its volume with amixer when no sound
+# server holds the card (Settings > Speaker, report 030).
+local_sound_card() {
+    [ -r "$SYSROOT/proc/asound/cards" ] || return 0
+    grep -E '^ *[0-9]+ \[' "$SYSROOT/proc/asound/cards" | grep -iv hdmi | head -n 1 | sed 's/^ *//' || true
+}
 # The PC's backlight with levels: intel_backlight, else the first one there; none: nothing
 pc_backlight() {
     if [ -d "$SYSROOT/sys/class/backlight/intel_backlight" ]; then echo intel_backlight; return 0; fi
@@ -643,6 +652,7 @@ sysfs_bl_rule() {
 SUBSYSTEM=="backlight", KERNEL=="$SYSFS_BL", ACTION=="add|change", RUN+="/bin/sh -c 'chgrp video /sys/class/backlight/%k/brightness; chmod g+w /sys/class/backlight/%k/brightness'"
 EOF
 }
+SOUND_CARD=$(local_sound_card)
 
 # ---------------------------------------------------------------------------------------------------------
 # Desktop variant files: templates in the bundle (payload/etc/, or next to this script in the source tree) with
@@ -792,6 +802,7 @@ if [ "$DRY" = 1 ]; then
     case "$PROFILE_ACTION" in write|replace) echo "--- $PROFILE"; profile_content ;; esac
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
     if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
+    if [ "$BOARD_ONLY" = 0 ] && [ -n "$SOUND_CARD" ]; then echo "audio group: the user joins it (sound card: $SOUND_CARD)"; fi
     if [ "$IS_PC" = 1 ]; then
         echo "boot config: none on a PC (GRUB and the kernel command line are left alone)"
     elif [ "$SESSION" = desktop ]; then
@@ -1148,6 +1159,12 @@ if ! getent group netdev >/dev/null 2>&1; then groupadd -f netdev && echo "group
 usermod -aG input,video,netdev "$TARGET_USER"
 # BlueZ's D-Bus policy lets the bluetooth group (made by the bluez package) talk to it from a background session
 if getent group bluetooth >/dev/null 2>&1; then usermod -aG bluetooth "$TARGET_USER"; fi
+# A sound card of the board's own (not HDMI): the audio group opens /dev/snd for amixer when no sound server holds the
+# card (Settings > Speaker, report 030)
+if [ -n "$SOUND_CARD" ] && getent group audio >/dev/null 2>&1; then
+    usermod -aG audio "$TARGET_USER"
+    echo "audio group: $TARGET_USER (sound card: $SOUND_CARD)"
+fi
 
 say "Installing PolicyKit rules (Wi-Fi, time settings, reboot/shutdown from the launcher)"
 mkdir -p "$POLKIT_DIR"

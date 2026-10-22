@@ -131,9 +131,10 @@ void activate()
     ensure_overlay();
     if (!s_overlay) return;
     s_active = true;
-    // An on/off backlight (board profile gpio:<dir>) has no dim level: the clock shows at full
-    // backlight instead of risking a dark panel.
-    s_saved_backlight = cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF
+    // An on/off backlight (board profile gpio:<dir>, or detected at max 1) has no dim level: the clock shows at full
+    // backlight instead of risking a dark panel. No backlight at all: nothing to dim.
+    s_saved_backlight = cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF ||
+                                cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE
                             ? -1
                             : launcher_media_controls::dim_backlight(kDimPercent);
     // The compat window is drawn straight to the panel: stop that so the overlay covers everything.

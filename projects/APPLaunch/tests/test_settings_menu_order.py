@@ -68,9 +68,14 @@ def test_screen_keeps_lock_timeout_options():
 def test_volume_opens_the_volume_editor_directly():
     builder = settings_tree_builder()
     assert re.search(
-        r'root,\s*SettingEntry\{"Speaker",\s*volume_page3_factory,\s*PageType::FullCustom\}',
+        r'root,\s*SettingEntry\{"Speaker",\s*volume_page3_factory,\s*kSpeakerPage\}',
         builder,
     )
+    # report 030: on our boards a value page (the native host's slider), shown when the board has sound; the default
+    # (simulator) profile keeps the legacy full-screen volume page
+    assert "constexpr PageType kSpeakerPage = PageType::NextPageNeeded;" in builder
+    assert "constexpr PageType kSpeakerPage = PageType::FullCustom;" in builder
+    assert "if (hardware.speaker == settings_caps::RowShow::Row)" in builder
     assert not re.search(r'append_child\(\s*speaker,\s*SettingEntry\{"Volume"', builder)
 
 

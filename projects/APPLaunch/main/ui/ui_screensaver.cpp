@@ -21,6 +21,7 @@
 #include "model/lockscreen_state_model.hpp"
 #include "model/screensaver_model.hpp"
 #include "model/screensaver_runtime_contract.hpp"
+#include "settings/settings_hw_profile.hpp"
 #include "ui_app_page.hpp"
 
 #include <algorithm>
@@ -196,7 +197,7 @@ void register_lockscreen_sounds()
 
 void play_lockscreen_sound(const char *asset) noexcept
 {
-    if (!asset) return;
+    if (!asset || !APPLAUNCH_SYSTEM_SOUNDS) return; /* off on our boards (report 030 C12) */
     try {
         register_lockscreen_sounds();
         s_last_sound_asset = asset;
@@ -256,6 +257,7 @@ bool prepare_system_sound() noexcept
 
 void start_system_sound_prepare() noexcept
 {
+    if (!APPLAUNCH_SYSTEM_SOUNDS) return; /* no sound to play: the audio device stays closed */
     try {
         if (s_audio_prepare_future.valid())
             (void)s_audio_prepare_future.get();

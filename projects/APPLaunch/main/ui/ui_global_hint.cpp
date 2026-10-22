@@ -39,6 +39,7 @@
 #include "esc_hold_hint_controller.h"
 #include "model/setup_value_policy.hpp"
 #include "model/global_hint_policy.hpp"
+#include "settings/settings_capabilities.hpp"
 
 #include <atomic>
 #include <cstdlib>
@@ -108,9 +109,11 @@ void on_key(const struct key_item *elm) noexcept
         (elm->mods & KBD_MOD_SHIFT) != 0,
     });
 
+    // Volume and brightness keys do nothing and show nothing on a board without the hardware (report 030, C11)
     switch (action) {
         case GlobalHintAction::BRIGHTNESS_UP:
         case GlobalHintAction::BRIGHTNESS_DOWN: {
+            if (!settings_caps::backlight_for_keys()) return;
             const int delta = action == GlobalHintAction::BRIGHTNESS_UP
                                   ? setup_values::kBrightnessStepPercent
                                   : -setup_values::kBrightnessStepPercent;
@@ -120,6 +123,7 @@ void on_key(const struct key_item *elm) noexcept
         }
         case GlobalHintAction::VOLUME_UP:
         case GlobalHintAction::VOLUME_DOWN: {
+            if (!settings_caps::sound_for_keys()) return;
             const int delta = action == GlobalHintAction::VOLUME_UP
                                   ? launcher_media_controls::VOLUME_STEP_PERCENT
                                   : -launcher_media_controls::VOLUME_STEP_PERCENT;
@@ -129,6 +133,7 @@ void on_key(const struct key_item *elm) noexcept
             return;
         }
         case GlobalHintAction::TOGGLE_MUTE:
+            if (!settings_caps::sound_for_keys()) return;
             launcher_media_osd().show_mute(launcher_media_controls::toggle_mute());
             return;
         case GlobalHintAction::RESET_LCD:

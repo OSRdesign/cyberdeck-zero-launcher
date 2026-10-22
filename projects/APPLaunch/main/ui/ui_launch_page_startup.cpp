@@ -9,6 +9,7 @@
 #include "launcher_platform.hpp"
 #include "lvgl/src/widgets/gif/lv_gif.h"
 #include "sample_log.h"
+#include "settings/settings_hw_profile.hpp"
 
 #include <cstdio>
 #include <memory>
@@ -105,6 +106,7 @@ void UILaunchPage::stop_startup_presentation()
 
 void UILaunchPage::play_startup_sound_with_retry()
 {
+    if (!APPLAUNCH_SYSTEM_SOUNDS) return; /* the interface sounds are off on our boards (report 030 C12) */
     const std::shared_ptr<StartupSoundAsyncState> state = startup_sound_state_;
     if (state->pending.exchange(true)) return;
 

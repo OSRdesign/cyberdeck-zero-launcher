@@ -1,0 +1,33 @@
+# Report 030 (c-1): Settings > Speaker on a board with sound (the harness's fake asound tree, command "sound card": the
+# tablet's HDA Intel PCH card with its Master control). The root menu gets Speaker after Screen: a native slider (100 %
+# to 0 %, 10 % steps) on the volume page's logic; Right / Left change the volume (the audio service's fixture), the row
+# reads it back. A release build. Review only: no golden.
+title settings speaker
+review
+env APPLAUNCH_DEV 0
+sound card
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home
+launch Settings
+wait 300
+expect_rows Screen Speaker Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_text 50%
+shot settings_speaker_root
+header settings_speaker_root Settings
+key DOWN
+wait 300
+shot settings_speaker_selected
+key RIGHT
+wait 500
+expect_text 60%
+shot settings_speaker_louder
+key LEFT
+wait 500
+key LEFT
+wait 500
+expect_text 40%
+shot settings_speaker_quieter

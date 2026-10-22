@@ -164,10 +164,16 @@ private:
 
     /* Board profile (cp0_backlight_profile.h): a gpio on/off or a sysfs (levels) backlight lives in
      * its own sysfs directory; the default stays today's /sys/class/backlight/backlight. Every
-     * brightness client (Settings, hotkeys, screensaver, startup restore) goes through these three calls. */
+     * brightness client (Settings, hotkeys, screensaver, startup restore) goes through these three calls.
+     * No backlight (none, or none detected): every call fails. */
     static bool backlight_onoff()
     {
         return cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF;
+    }
+
+    static bool backlight_none()
+    {
+        return cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE;
     }
 
     static std::string backlight_file(const char *name)
@@ -179,18 +185,24 @@ private:
 
     int backlight_read()
     {
+        if (backlight_none())
+            return -1;
         return read_int_file(backlight_file("brightness").c_str(), -1, 0,
                              std::numeric_limits<int>::max());
     }
 
     int backlight_max()
     {
+        if (backlight_none())
+            return -1;
         return read_int_file(backlight_file("max_brightness").c_str(), backlight_onoff() ? 1 : 100, 1,
                              std::numeric_limits<int>::max());
     }
 
     int backlight_write(int val)
     {
+        if (backlight_none())
+            return -1;
         if (val < 0)
             val = 0;
         int mx = backlight_max();

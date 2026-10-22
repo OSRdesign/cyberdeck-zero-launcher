@@ -1,0 +1,25 @@
+# Report 030 (c-1), decision C8 P1: a backlight that is on / off only, found by detection ("backlight onoff": the Pi 5
+# HyperPixel's gpio-backlight "backlight", max_brightness 1, no APPLAUNCH_BACKLIGHT in its profile). Screen > Brightness
+# is the honest On / "Off 10 s" choice, as on the Pi 3A+ Luckfox, instead of 10 levels that all write 1. A release
+# build. Review only: no golden.
+title settings backlight onoff
+review
+sizes 800x480 640x480 720x720
+env APPLAUNCH_DEV 0
+backlight onoff
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+key ENTER
+wait 300
+expect_rows Brightness DarkTime
+shot settings_backlight_onoff_screen
+header settings_backlight_onoff_screen "Settings > Screen" Screen
+key ENTER
+wait 300
+expect_rows On "Off 10 s"
+shot settings_backlight_onoff_choice

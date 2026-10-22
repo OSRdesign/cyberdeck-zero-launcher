@@ -1,0 +1,27 @@
+# Report 030 (c-1): the HackBerry's case speaker connected over Bluetooth ("sound bluetooth": no local card, a sound
+# server with a Bluetooth speaker's sink): the Speaker row shows, as with a card (decision C2). The HackBerry's board
+# profile, its desktop session, 720x720 at its density; no backlight device there ("backlight none"): Screen has DarkTime
+# alone (no Brightness row that does nothing, decision C4). A release build. Review only: no golden.
+title settings speaker bluetooth hackberry
+review
+sizes 720x720
+env APPLAUNCH_DEV 0
+env APPLAUNCH_BOARD hackberry-cm5
+env APPLAUNCH_SESSION desktop
+env APPLAUNCH_STD_KEYBOARD 1
+ppmm 670
+backlight none
+sound bluetooth
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+expect_rows Screen Speaker Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+shot settings_speaker_bluetooth_root
+key ENTER
+wait 300
+expect_rows DarkTime
+shot settings_speaker_bluetooth_screen

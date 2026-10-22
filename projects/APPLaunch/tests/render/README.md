@@ -52,6 +52,7 @@ The launcher code is compiled **unchanged** and runs as on the deck. No product 
 | Launcher object (`class Launch`) | `src/harness_launch.cpp` instead of `launch.cpp`: the scene names the tiles; launching a page app runs the real `app::launch` lambda (`begin_page`, loading overlay, page constructor, `cp0_lvgl_start_app_page`) |
 | Time | LVGL tick: fake clock advanced in 5 ms steps; wall clock (`time`, `gettimeofday`, `clock_gettime(REALTIME)`): the scene's `clock` |
 | Platform C calls left after `--gc-sections` | `src/harness_stubs.cpp` (no battery, no sudo, `cp0_time_str` from the scene clock, a copy of the built-in app registry table) |
+| Board capabilities (`cp0_capabilities.c`, report 030) | real, on fake trees and fake programs under `out/<WxH>/runtime` (`power_supply`, `backlight`, `asound`, `fakebin`): scene commands `battery`, `backlight`, `sound` |
 
 Each size runs in its own forked process (the display manager is process-wide). Board profiles per size:
 
@@ -79,6 +80,8 @@ runs at those sizes only.
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings`, `Calculator`, `SSH` and `CLI` (the terminal page, on the fake PTY) open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
 | `battery off\|mains\|PCT discharging\|charging\|full\|notcharging` | the fake `power_supply` tree the launcher reads (`APPLAUNCH_POWER_SUPPLY_ROOT` = `out/<WxH>/runtime/power_supply`, set at boot, emptied before every scene: never the host's battery): nothing (the Pi boards, the default), an AC adapter alone, or the FZ-M1's `ADP1` + `BAT1` (energy units: 26.64 of 33.3 Wh, 7.412 V, 6.54 W discharging, 12 W charging). Status strip: `wait 2100` after a change; Settings > Battery's row follows the tree when Settings opens |
+| `backlight levels\|onoff\|none` | before the first drawing command (detected once per launcher run). The fake `/sys/class/backlight` the launcher detects its backlight in when the profile has no `APPLAUNCH_BACKLIGHT` (`APPLAUNCH_BACKLIGHT_ROOT` = `out/<WxH>/runtime/backlight`, report 030): `levels` (the default) the deck's PWM `backlight` (max = the fixture's 255: today's default path), `onoff` the Pi 5 HyperPixel's `gpio-backlight` (max 1: Brightness On / Off), `none` no device (the HackBerry: no Brightness row) |
+| `sound off\|hdmi\|card\|bluetooth` | what the launcher finds as Settings opens (report 030; `APPLAUNCH_ASOUND_ROOT` = `out/<WxH>/runtime/asound`, `APPLAUNCH_AMIXER` / `APPLAUNCH_PACTL` = fake programs in `out/<WxH>/runtime/fakebin`, never the host's): `off` (the default) nothing, `hdmi` vc4-hdmi cards only, `card` the tablet's HDA Intel PCH with Master, `bluetooth` no card but a sound server with a Bluetooth speaker's sink. The audio service's VolumeRead / VolumeWrite answer the fixture volume (50 at start) |
 | `home` | build the grid and show it (`native_ui::refresh_apps` + `show_home`) |
 | `launch NAME` | tap-equivalent launch of a tile |
 | `stockapp` | stock app: toolbar chrome + a flat 320x170 placeholder picture through the real external blit (no process) |
@@ -147,6 +150,13 @@ development, at 480x320 to 1280x800 (`docs/dev/native-settings-page-howto.md` se
 tablet's density at 1280x800): the home strip with a battery discharging, charging, full, low with Bluetooth off, gone;
 Settings with the Battery row and its page (discharging, charging, full, the battery removed while it is open); no
 Battery row and an unchanged strip with an AC adapter alone or nothing.
+`settings_speaker` (report 030 c-1, review-only, the five sizes, `sound card`): Speaker after Screen in the root
+menu, its slider at 50 %, Right to 60 %, Left twice to 40 %. `settings_speaker_none` (review-only, `sound hdmi`): no
+Speaker row. `settings_speaker_bluetooth` (review-only, 720x720, the HackBerry's profile, `sound bluetooth`,
+`backlight none`): Speaker from the Bluetooth sink, Screen with DarkTime alone. `settings_backlight_onoff`
+(review-only, `backlight onoff`): Screen > Brightness as On / "Off 10 s". `settings_capability_hints` (review-only,
+`APPLAUNCH_HINT_BACKLIGHT=button`, `APPLAUNCH_HINT_SOUND=bluetooth:...`, no backlight, HDMI only): the Info rows
+"Speaker: pair ... in Bluetooth" and "Brightness: use the button on the case".
 `ssh_native` (task 014 P4, review-only, `APPLAUNCH_OSK=force`): the native SSH form (labels beside the fields) with the
 keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
 (keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.

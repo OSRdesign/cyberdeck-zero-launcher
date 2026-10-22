@@ -13,16 +13,17 @@
 
 #if defined(APPLAUNCH_HW_PIZERO2W)
 
-// Raspberry Pi Zero 2W cyberdeck (and the other boards of this port): no speaker, no wired Ethernet,
-// no battery gauge.
-#ifndef APPLAUNCH_SETTINGS_SPEAKER
-#define APPLAUNCH_SETTINGS_SPEAKER 0
-#endif
+// Raspberry Pi Zero 2W cyberdeck (and the other boards of this port). Speaker, Battery and Screen > Brightness are not
+// switched here: they follow what the board has, detected each time Settings opens (report 030, decision C1:
+// cp0_capabilities.h, settings_capabilities.hpp). No wired Ethernet row (C10: later).
 #ifndef APPLAUNCH_SETTINGS_ETHERNET
 #define APPLAUNCH_SETTINGS_ETHERNET 0
 #endif
-#ifndef APPLAUNCH_SETTINGS_BATTERY
-#define APPLAUNCH_SETTINGS_BATTERY 0
+// The launcher's own interface sounds (startup, home switch / enter, the legacy lock screen) stay off on our boards
+// (decision C12: silent today, a board that gains sound must not start beeping). The volume page's preview still
+// plays: it answers the user's own volume change.
+#ifndef APPLAUNCH_SYSTEM_SOUNDS
+#define APPLAUNCH_SYSTEM_SOUNDS 0
 #endif
 #ifndef APPLAUNCH_SETTINGS_SHUTDOWN
 #define APPLAUNCH_SETTINGS_SHUTDOWN 1
@@ -89,6 +90,9 @@
 #endif
 #ifndef APPLAUNCH_SETTINGS_BATTERY
 #define APPLAUNCH_SETTINGS_BATTERY 1
+#endif
+#ifndef APPLAUNCH_SYSTEM_SOUNDS
+#define APPLAUNCH_SYSTEM_SOUNDS 1 // default: the startup, switch and lock-screen sounds play
 #endif
 #ifndef APPLAUNCH_SETTINGS_SHUTDOWN
 #define APPLAUNCH_SETTINGS_SHUTDOWN 0 // default: Reboot only

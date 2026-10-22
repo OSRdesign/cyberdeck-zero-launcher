@@ -236,6 +236,20 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$build_dir/cp0_power_supply.o" \
     -o "$build_dir/test_settings_battery_model"
 "$build_dir/test_settings_battery_model"
+# Report 030 (c-1): the Settings rows of each board (Battery, Brightness, Speaker) from fake trees and fake programs
+# through the run-time capabilities (cp0_capabilities.c) and the row rules
+${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_capabilities.c" \
+    -o "$build_dir/cp0_capabilities.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_settings_capabilities.cpp" \
+    "$settings_ui_root/settings_capabilities_model.cpp" \
+    "$build_dir/cp0_capabilities.o" "$build_dir/cp0_power_supply.o" \
+    -o "$build_dir/test_settings_capabilities"
+"$build_dir/test_settings_capabilities"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
     "$test_root/test_settings_about_info_model.cpp" \
