@@ -197,7 +197,7 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
 | `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
-| `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer` |
+| `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer`; config.txt only with `--pwm-backlight` (below) |
 | `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
 | `pc-<model>`: a PC (amd64 bundle), e.g. `pc-fzm1-2` (Panasonic FZ-M1 mk2) | x86_64 with no device tree, a framebuffer (the DRM driver's, `*drmfb`, first); `<model>` is the DMI product name in lower case | `board.conf`: `APPLAUNCH_DISPLAY=dpi-scaled`, that framebuffer, `APPLAUNCH_LOGICAL` = its size, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_PANEL_MM` from the connected connector's EDID (eDP first; the detailed timing's mm, else the cm of the basic block), else a table of known models (FZM1-2: 150x93), else none (default density, large controls); touch `auto` / `buffer`; `APPLAUNCH_BACKLIGHT=sysfs:` the first backlight (`intel_backlight` first) and its udev rule; on a tablet (SMBIOS chassis 30 or 32, or a known tablet) `APPLAUNCH_KBD_IGNORE=bus:0011`; `APPLAUNCH_HIDE_TILES=app_Store`. No boot configuration (GRUB, kernel command line), no dtc |
 | anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report. A Pi 3A+ with both its panels connected is not guessed: choose with `--board`. With `--force`, the deck's PWM backlight overlay is added only on a model that is not one of the boards above (a Pi 3A+, Pi 5 or CM5 whose panel was not recognised keeps its config.txt) |
@@ -219,6 +219,29 @@ The Pi 5 and HackBerry values are the ones `tools/boards/board.py test-start` us
 in mm is not measured yet (task 014), so their profiles have no `APPLAUNCH_PANEL_MM` and the layout uses its default
 density. These two boards normally run the Raspberry Pi OS desktop: they then get the desktop variant
 ([Desktop boards](#desktop-boards)); on a Lite image they are installed like the deck.
+
+**Pi 5 + HyperPixel 4: brightness levels (`--pwm-backlight`, optional; report 030, c-4, not yet tested on the
+board).** The HyperPixel overlay drives the backlight (GPIO19) with `gpio-backlight`: on or off only, so Settings
+offers On / Off. `sudo ./install.sh --pwm-backlight` turns it into a PWM backlight with 10 levels; a plain install never
+does (and `--no-boot-config` wins over it). On this board only, on the appliance and the desktop variant alike, it:
+
+- builds `/boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo` from `hyperpixel4-pwm-backlight.dts` with `dtc`;
+- copies `config.txt` to `config.txt.bak-applaunch` (once) and adds `dtoverlay=hyperpixel4-pwm-backlight` right after
+  the `dtoverlay=vc4-kms-dpi-hyperpixel4...` line (it changes the backlight that overlay adds, so it must come after
+  it; without that line nothing is done);
+- asks for a reboot.
+
+The overlay keeps the HyperPixel overlay's `backlight` node (the panel driver waits for that node's backlight) and makes
+it a `pwm-backlight` on the RP1 hardware PWM0, channel 3 (GPIO19's alternate function), 10 kHz, levels 0..10
+(`/sys/class/backlight/backlight`, `max_brightness` 10). Measured on the panel: 1 % duty is black, 2 % is dim and readable, and
+the backlight is near full from about 15 %, so levels 1 to 9 run from 2 % to 14 % and level 10 is 100 % (it looks like level 9) (the table is in the `.dts`). A coil whine may be heard at
+low levels. The profile needs no line: the launcher finds the levels by itself (as on the deck), and Raspberry Pi OS's
+`60-backlight.rules` already lets the video group set the brightness. `uninstall.sh` removes the line and the overlay.
+
+Revert by hand: delete the line `dtoverlay=hyperpixel4-pwm-backlight` from `/boot/firmware/config.txt` (or copy
+`config.txt.bak-applaunch` back if nothing else changed since), `sudo rm /boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo`,
+`sudo reboot`: the on/off `gpio-backlight` is back. If the panel stays dark after the reboot, take the SD card to another
+computer and remove the line from `config.txt` on its boot partition.
 
 The profile is a systemd `EnvironmentFile` (`EnvironmentFile=-/etc/applaunch/board.conf` in `cyberdeckzero.service`,
 `-` = optional). systemd lets its values override the service's `Environment=` lines, so the deck's values
@@ -454,7 +477,8 @@ removes the binaries, the framebuffer shim, the launcher assets under `/usr/shar
 bundle, listed in `payload/share.manifest`), the udev rules (then `udevadm control --reload`) and the PolicyKit rules,
 the board profile `/etc/applaunch/board.conf` (and the directory if empty; a `board.conf.bak` is kept),
 unmasks and enables `getty@tty1` if it is masked, and takes the PWM backlight out of the boot configuration: the exact
-lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `config.txt` (a timestamped
+lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `config.txt` (on the Pi 5,
+`dtoverlay=hyperpixel4-pwm-backlight`; a timestamped
 `config.txt.bak-uninstall-<time>` is made first and the removed lines are printed), the `.dtbo`, and the
 `vt.global_cursor_default=0` / `consoleblank=0` arguments in `cmdline.txt` when the `*.bak-applaunch` backup shows that
 `install.sh` added them. Reboot afterwards.
@@ -486,6 +510,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `cyberdeckzero-desktop.service`, `cyberdeckzero.desktop`, `52-cyberdeckzero-desktop.rules` | Desktop boards: the system unit that runs the launcher in place of the desktop, the applications menu entry, and the PolicyKit rule that lets the launcher's user start and stop that unit; install.sh fills in the user and the display manager ([Desktop boards](#desktop-boards)). |
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
+| `hyperpixel4-pwm-backlight.dts` | Pi 5 + HyperPixel 4, only with `install.sh --pwm-backlight`: its on/off GPIO19 backlight becomes a PWM one with levels (RP1 PWM0). |
 | `90-backlight-unblank.rules` | The PWM backlight starts powered down: unblank it when it appears. |
 | `91-applaunch-vkbd.rules` | `uinput` permission and the `/dev/input/applaunch-vkbd` name used for legacy apps. |
 | `93-applaunch-rfkill.rules` | `/dev/rfkill` writable by the `netdev` group, so Settings > Bluetooth can run `rfkill unblock bluetooth` as the launcher user. |
@@ -518,7 +543,7 @@ What each board gets (from the boards' measured facts, the fake trees of `projec
 | Deck (Zero 2 W, Waveshare 2.8" DPI) | no row | levels (PWM `backlight`, as before) | no row (no audio output) |
 | Pi 3A+ Luckfox SPI | no row | On / Off (`gpio:` profile, as before) | a row when the 3.5 mm jack's card (`bcm2835 Headphones`, PCM) is there; HDMI alone: no row |
 | Pi 3A+ Waveshare DSI | no row | levels (`sysfs:` profile, as before) | as the Luckfox |
-| Pi 5 + HyperPixel 4 | no row | **On / Off** (detected: `gpio-backlight`, max 1; it offered 10 levels that all wrote 1 before) | no row (vc4-hdmi only, no `pactl`) |
+| Pi 5 + HyperPixel 4 | no row | **On / Off** (detected: `gpio-backlight`, max 1; it offered 10 levels that all wrote 1 before); levels after `install.sh --pwm-backlight` ([Boards](#boards)) | no row (vc4-hdmi only, no `pactl`) |
 | HackBerry CM5 | no row | **no row** (no backlight device; the row did nothing before) | a row while the case speaker is connected over Bluetooth (its sink); otherwise none |
 | FZ-M1 tablet | Battery row | levels (`intel_backlight`, 937) | **Speaker row** (HDA Intel PCH, Master; with or without a sound server) |
 

@@ -202,16 +202,23 @@ bool toggle_mute()
     return muted;
 }
 
-bool restore_startup_backlight()
+int restore_startup_backlight(cp0_backlight_kind_t kind)
 {
+    if (kind == CP0_BACKLIGHT_KIND_NONE || kind == CP0_BACKLIGHT_KIND_GPIO_ONOFF) return 0;
     std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
     const int maximum = backlight_max();
-    const int saved = read_config_int(setup_values::kBrightnessConfigKey, maximum);
-    const int target = saved > 0 ? std::min(saved, maximum) : maximum;
+    int current = -1;
+    cp0_signal_settings_api({"BacklightRead"}, [&](int code, std::string data) {
+        int parsed = 0;
+        if (code == 0 && LauncherMediaControlsModel::parse_int(data, parsed) && parsed >= 0) current = parsed;
+    });
+    const int saved = read_config_int(setup_values::kBrightnessConfigKey, 0); // 0: nothing saved
+    const int target = cp0_backlight_startup_level(kind, maximum, current, saved);
+    if (target < 0) return 0;
     const int written = write_backlight_raw(target);
-    if (written <= 0 || written > maximum) return false;
+    if (written <= 0 || written > maximum) return -1;
     model.set_brightness(setup_values::brightness_step_percent_from_raw(written, maximum));
-    return written == target;
+    return written == target ? 1 : -1;
 }
 
 int suspend_backlight()

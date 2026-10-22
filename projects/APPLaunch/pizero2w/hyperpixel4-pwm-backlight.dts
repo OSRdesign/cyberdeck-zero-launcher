@@ -1,0 +1,69 @@
+/*
+ * Pimoroni HyperPixel 4" on a Raspberry Pi 5: turn the on/off gpio-backlight (GPIO19) of the stock
+ * vc4-kms-dpi-hyperpixel4 overlay into a PWM backlight with levels, so the launcher's Brightness setting dims the
+ * panel (report 030, C8 P2, spike c-4). Pi 5 only (RP1).
+ *
+ * How:
+ *   - GPIO19 has the RP1 hardware PWM0 channel 3 as an alternate function (RP1 "pwm0"; `pinctrl funcs 19` lists
+ *     PWM0_CHAN3). RP1 PWM0 (label rp1_pwm0, 50 MHz clock, #pwm-cells = 3) is disabled in the Pi 5 device tree:
+ *     fragment@0 adds the pin group, fragment@1 enables the controller with it.
+ *   - The HyperPixel overlay's node /backlight stays, it only changes driver (fragment@2): the panel node
+ *     (ili9806e, "pimoroni,hyperpixel4") points at it with `backlight = <&backlight>`, and its probe waits for a
+ *     backlight device on that node, so disabling the node and adding another one (as the deck's overlay does)
+ *     would leave the panel dark. Its leftover `gpios` property is not read by pwm-backlight (that one reads
+ *     enable-gpios only). The node name stays "backlight": /sys/class/backlight/backlight keeps its path.
+ *
+ * Levels: brightness 0..10 (max_brightness 10, as on the deck); the table is in percent of the period.
+ *   0 is off. MEASURED on a Pi 5 + HyperPixel 4 at 10 kHz (spike c-4): 1 % duty = black screen, 2 % = dim and readable,
+ *   5 % clearly dimmer than 10 %, 10 % barely dimmer than 20 %, and from about 15 % up the launcher's slider shows no
+ *   change: the panel's backlight circuit saturates early (the Pimoroni reports of a narrow low-duty range agree).
+ *   So levels 1..9 are 2 % to 14 %. Level 1 = 2 % so that a saved brightness restored as "1" after a reboot is still
+ *   visible. Level 10 = 100 % (pwm-backlight takes the last entry as full duty, it cannot be capped lower) and looks
+ *   like level 9.
+ * Period: 100000 ns = 10 kHz. A coil whine at low duty is reported at audible frequencies; 20 kHz (50000) is
+ *   reported silent; its floor would need re-measuring (not done).
+ *
+ * Build:   dtc -@ -I dts -O dtb -o hyperpixel4-pwm-backlight.dtbo hyperpixel4-pwm-backlight.dts
+ * Install: copy the .dtbo to /boot/firmware/overlays/ and add to config.txt, AFTER the HyperPixel overlay line:
+ *              dtoverlay=hyperpixel4-pwm-backlight
+ *          then reboot. (install.sh --pwm-backlight does both, see README.md.)
+ * Revert:  remove that line (config.txt.bak-applaunch keeps the original) and reboot.
+ */
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "brcm,bcm2712";
+
+	/* GPIO19 to its RP1 PWM0 function (channel 3); pull-down as the Pi 5 tree's own PWM pin group */
+	fragment@0 {
+		target = <&rp1_gpio>;
+		__overlay__ {
+			hyperpixel4_bl_pwm_pins: hyperpixel4_bl_pwm_pins {
+				function = "pwm0";
+				pins = "gpio19";
+				bias-pull-down;
+			};
+		};
+	};
+
+	fragment@1 {
+		target = <&rp1_pwm0>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&hyperpixel4_bl_pwm_pins>;
+			status = "okay";
+		};
+	};
+
+	/* the HyperPixel overlay's backlight node, same node and phandle, now a pwm-backlight */
+	fragment@2 {
+		target-path = "/backlight";
+		__overlay__ {
+			compatible = "pwm-backlight";
+			pwms = <&rp1_pwm0 3 100000 0>; /* PWM0 channel 3 (GPIO19), 10 kHz, normal polarity */
+			brightness-levels = <0 2 3 4 5 6 7 9 11 14 100>;
+			default-brightness-level = <10>;
+		};
+	};
+};

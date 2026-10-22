@@ -113,6 +113,9 @@ CMDLINE="$BOOT/cmdline.txt"
 OVERLAY="$BOOT/overlays/waveshare-pwm-backlight.dtbo"
 PWM_LINE='dtoverlay=pwm,pin=18,func=2'
 BL_LINE='dtoverlay=waveshare-pwm-backlight'
+# the Pi 5 + HyperPixel 4's PWM backlight (install.sh --pwm-backlight): one line and its overlay
+HP_OVERLAY="$BOOT/overlays/hyperpixel4-pwm-backlight.dtbo"
+HP_LINE='dtoverlay=hyperpixel4-pwm-backlight'
 STAMP=$(date +%Y%m%d-%H%M%S)
 
 say() { printf '\n== %s\n' "$*"; }
@@ -222,6 +225,18 @@ if [ "$BOOT_CONFIG" = 1 ] && [ -f "$CONFIG" ]; then
         fi
     fi
 fi
+CFG_REMOVE_HP=0
+if [ "$BOOT_CONFIG" = 1 ] && [ -f "$CONFIG" ] && grep -qxF "$HP_LINE" "$CONFIG"; then
+    if [ -n "$CONFIG_REF" ] && grep -qxF "$HP_LINE" "$CONFIG_REF"; then
+        CFG_NOTE="${CFG_NOTE:+$CFG_NOTE; }$HP_LINE is also in $CONFIG_REF: not written by install.sh, kept"
+    else
+        CFG_REMOVE_HP=1
+    fi
+fi
+# the config.txt lines to remove, for the plan
+CFG_LINES=""
+[ "$CFG_REMOVE_BL" = 0 ] || CFG_LINES="$BL_LINE$( [ "$CFG_REMOVE_PWM" = 1 ] && echo " and $PWM_LINE")"
+[ "$CFG_REMOVE_HP" = 0 ] || CFG_LINES="${CFG_LINES:+$CFG_LINES, }$HP_LINE"
 CMD_TOKENS=""
 CMD_NOTE=""
 if [ "$BOOT_CONFIG" = 1 ] && [ -f "$CMDLINE" ]; then
@@ -243,6 +258,12 @@ if [ "$BOOT_CONFIG" = 1 ] && exists "$OVERLAY"; then
     # keep the overlay file if config.txt still loads it (a line that is not ours)
     if [ "$CFG_REMOVE_BL" = 1 ] || ! { [ -f "$CONFIG" ] && grep -qxF "$BL_LINE" "$CONFIG"; } || [ "$RESTORE_CONFIG" = 1 ]; then
         DTBO_REMOVE=1
+    fi
+fi
+HP_DTBO_REMOVE=0
+if [ "$BOOT_CONFIG" = 1 ] && exists "$HP_OVERLAY"; then
+    if [ "$CFG_REMOVE_HP" = 1 ] || ! { [ -f "$CONFIG" ] && grep -qxF "$HP_LINE" "$CONFIG"; } || [ "$RESTORE_CONFIG" = 1 ]; then
+        HP_DTBO_REMOVE=1
     fi
 fi
 RESTORE_OK=0
@@ -293,10 +314,11 @@ echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${DESKT
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
         echo "  - $CONFIG restored from $CONFIG.bak-before-pwm (a timestamped backup of the current file is made first)"
-    elif [ "$CFG_REMOVE_BL" = 1 ]; then
-        echo "  - config.txt lines: $BL_LINE$( [ "$CFG_REMOVE_PWM" = 1 ] && echo " and $PWM_LINE")"
+    elif [ -n "$CFG_LINES" ]; then
+        echo "  - config.txt lines: $CFG_LINES"
     fi
     [ "$DTBO_REMOVE" = 1 ] && echo "  - $OVERLAY"
+    [ "$HP_DTBO_REMOVE" = 1 ] && echo "  - $HP_OVERLAY"
     [ -n "$CMD_TOKENS" ] && echo "  - cmdline.txt arguments:$CMD_TOKENS"
 fi
 if [ "$GETTY_STATE" = masked ]; then echo "  - unmask and enable getty@tty1 (login console on tty1 comes back)"; fi
@@ -486,18 +508,27 @@ if [ "$BOOT_CONFIG" = 1 ]; then
         act $SUDO cp "$CONFIG.bak-before-pwm" "$CONFIG"
         note "restored $CONFIG from $CONFIG.bak-before-pwm"
         NEED_REBOOT=1
-    elif [ "$CFG_REMOVE_BL" = 1 ]; then
+    elif [ -n "$CFG_LINES" ]; then
         act $SUDO cp -p "$CONFIG" "$CONFIG.bak-uninstall-$STAMP"
         note "backup: $CONFIG.bak-uninstall-$STAMP"
         EDIT_TMP=$(mktemp)
-        grep -vxF -e "$BL_LINE" "$CONFIG" > "$EDIT_TMP" || true
-        if [ "$CFG_REMOVE_PWM" = 1 ]; then
-            grep -vxF -e "$PWM_LINE" "$EDIT_TMP" > "$EDIT_TMP.2" || true
+        cp "$CONFIG" "$EDIT_TMP"
+        for line in "$BL_LINE" "$PWM_LINE" "$HP_LINE"; do
+            case "$line" in
+                "$BL_LINE") [ "$CFG_REMOVE_BL" = 1 ] || continue ;;
+                "$PWM_LINE") [ "$CFG_REMOVE_PWM" = 1 ] || continue ;;
+                "$HP_LINE") [ "$CFG_REMOVE_HP" = 1 ] || continue ;;
+            esac
+            grep -vxF -e "$line" "$EDIT_TMP" > "$EDIT_TMP.2" || true
             mv "$EDIT_TMP.2" "$EDIT_TMP"
-        fi
+        done
         note "config.txt lines removed:"
-        grep -nxF -e "$BL_LINE" -e "$PWM_LINE" "$CONFIG" | while IFS= read -r l; do
-            case "$l" in *"$PWM_LINE") [ "$CFG_REMOVE_PWM" = 1 ] || continue ;; esac
+        grep -nxF -e "$BL_LINE" -e "$PWM_LINE" -e "$HP_LINE" "$CONFIG" | while IFS= read -r l; do
+            case "$l" in
+                *":$BL_LINE") [ "$CFG_REMOVE_BL" = 1 ] || continue ;;
+                *":$PWM_LINE") [ "$CFG_REMOVE_PWM" = 1 ] || continue ;;
+                *":$HP_LINE") [ "$CFG_REMOVE_HP" = 1 ] || continue ;;
+            esac
             printf '    - %s\n' "$l"
         done
         act $SUDO cp "$EDIT_TMP" "$CONFIG"
@@ -507,6 +538,7 @@ if [ "$BOOT_CONFIG" = 1 ]; then
         note "config.txt: no line of install.sh to remove${CFG_NOTE:+ ($CFG_NOTE)}"
     fi
     if [ "$DTBO_REMOVE" = 1 ]; then rm_sys "$OVERLAY"; NEED_REBOOT=1; else note "overlay file: nothing to remove"; fi
+    if [ "$HP_DTBO_REMOVE" = 1 ]; then rm_sys "$HP_OVERLAY"; NEED_REBOOT=1; fi
     if [ -n "$CMD_TOKENS" ]; then
         act $SUDO cp -p "$CMDLINE" "$CMDLINE.bak-uninstall-$STAMP"
         note "backup: $CMDLINE.bak-uninstall-$STAMP"
@@ -571,5 +603,8 @@ if [ "$GETTY_STATE" = masked ]; then
     echo "  - the login console on tty1 comes back at the next boot (or now: sudo systemctl start getty@tty1)"
 fi
 echo "  - the Waveshare gpio-backlight (on/off) takes over again after the reboot; the PWM brightness setting is gone"
+if [ "$CFG_REMOVE_HP" = 1 ] || [ "$HP_DTBO_REMOVE" = 1 ]; then
+    echo "  - the HyperPixel 4's gpio-backlight (on/off) takes over again after the reboot"
+fi
 echo "  - /dev/uinput and the bt-keyboard name go back to the system defaults after a reboot"
 echo "  - to install again: sudo ./install.sh from the bundle"

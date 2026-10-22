@@ -16,6 +16,9 @@
 #   --keyboard-name NAME   Bluetooth keyboard name as shown in `bluetoothctl devices` (default: "M4 Keyboard")
 #   --user NAME            user that runs the launcher (default: the user who ran sudo)
 #   --no-boot-config       do not touch /boot/firmware/config.txt and cmdline.txt (no PWM backlight)
+#   --pwm-backlight        Pi 5 + HyperPixel 4 (pi5-hyperpixel4) only: also turn its on/off backlight into a PWM one
+#                          with brightness levels (overlay hyperpixel4-pwm-backlight, a config.txt line, a reboot;
+#                          README.md, "Pi 5 + HyperPixel 4: brightness levels"). Never done without this option
 #   --board NAME           use this board profile instead of detecting it (zero2w, pi3a-luckfox35,
 #                          pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
@@ -39,6 +42,7 @@ set -eu
 KEYBOARD_NAME="M4 Keyboard"
 TARGET_USER=""
 BOOT_CONFIG=1
+PWM_BACKLIGHT=0
 FORCE=0
 DRY=0
 BOARD_ONLY=0
@@ -46,7 +50,7 @@ BOARD_ARG=""
 DEFAULT_SOURCE=1
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,31p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
         --dry-run) DRY=1 ;;
     esac
 done
@@ -60,6 +64,7 @@ while [ $# -gt 0 ]; do
         --keyboard-name) [ $# -ge 2 ] || { echo "--keyboard-name needs a name" >&2; exit 2; }; KEYBOARD_NAME="$2"; shift 2 ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
+        --pwm-backlight) PWM_BACKLIGHT=1; shift ;;
         --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
@@ -356,6 +361,22 @@ elif [ -z "$BOARD" ] && [ "$IS_PC" = 0 ]; then
         *"Raspberry Pi 3 Model A Plus"*|*"Raspberry Pi 5"*|*"Compute Module 5"*) ;;
         *) DECK_BOOT=1 ;;
     esac
+fi
+# The Pi 5 + HyperPixel 4's own PWM backlight overlay (brightness levels, report 030 c-4): only when asked with
+# --pwm-backlight, only on that board, on the appliance and the desktop variant alike; --no-boot-config wins.
+HP_PWM=0
+HP_PWM_NOTE=""
+HP_DTS=hyperpixel4-pwm-backlight.dts
+HP_DTBO=hyperpixel4-pwm-backlight.dtbo
+HP_LINE=dtoverlay=hyperpixel4-pwm-backlight
+if [ "$PWM_BACKLIGHT" = 1 ]; then
+    if [ "$BOARD" != pi5-hyperpixel4 ]; then
+        HP_PWM_NOTE="--pwm-backlight is for the Pi 5 + HyperPixel 4 (pi5-hyperpixel4) only: ignored on ${BOARD:-this board}"
+    elif [ "$BOOT_CONFIG" = 0 ]; then
+        HP_PWM_NOTE="--pwm-backlight: skipped (--no-boot-config)"
+    else
+        HP_PWM=1
+    fi
 fi
 
 # ---------------------------------------------------------------------------------------------------------
@@ -828,12 +849,22 @@ if [ "$DRY" = 1 ]; then
     if [ "$BOARD_ONLY" = 0 ] && [ "$WP_DROPIN" = 1 ]; then echo "wireplumber: ~/$WP_DROPIN_REL for the user (Bluetooth audio while the launcher runs; applies after the next login or \`systemctl --user restart wireplumber\`)"; fi
     if [ "$IS_PC" = 1 ]; then
         echo "boot config: none on a PC (GRUB and the kernel command line are left alone)"
+    elif [ "$SESSION" = desktop ] && [ "$HP_PWM" = 1 ]; then
+        echo "boot config: the PWM backlight overlay only (--pwm-backlight, below); cmdline.txt left alone on a desktop board"
     elif [ "$SESSION" = desktop ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
     elif [ "$DECK_BOOT" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
+    elif [ "$HP_PWM" = 1 ]; then
+        echo "boot config: the HyperPixel's PWM backlight overlay (--pwm-backlight, below) + cmdline cursor/consoleblank"
     else
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)" || echo "boot config: skipped (--no-boot-config)"
+    fi
+    if [ "$HP_PWM" = 1 ]; then
+        echo "PWM backlight (--pwm-backlight): /boot/firmware/overlays/$HP_DTBO built with dtc, the line $HP_LINE"
+        echo "  after the vc4-kms-dpi-hyperpixel4 line of config.txt (config.txt.bak-applaunch first); then reboot"
+    elif [ -n "$HP_PWM_NOTE" ]; then
+        echo "$HP_PWM_NOTE"
     fi
     if [ "$BOARD_ONLY" = 0 ]; then
         TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
@@ -1315,7 +1346,7 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
             fi
             REBOOT=1
         fi
-    else
+    elif [ "$HP_PWM" = 0 ]; then
         echo "${BOARD:-this board}: config.txt left as it is (the PWM backlight overlay is for the deck's Waveshare panel)"
     fi
     for arg in vt.global_cursor_default=0 consoleblank=0; do
@@ -1324,6 +1355,32 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
             REBOOT=1
         fi
     done
+fi
+# Pi 5 + HyperPixel 4, only with --pwm-backlight (HP_PWM, see the board detection): the overlay turns the HyperPixel
+# overlay's gpio-backlight node into a pwm-backlight (RP1 PWM0 channel 3 on GPIO19), so its line must come after
+# the HyperPixel one. The board profile needs no line: the launcher finds "backlight" with levels by itself (report 030),
+# and Raspberry Pi OS's 60-backlight.rules lets the video group set its brightness.
+if [ "$HP_PWM" = 1 ]; then
+    say "PWM backlight (Pi 5 + HyperPixel 4, --pwm-backlight)"
+    CONFIG="$BOOT/config.txt"
+    if ! grep -qE '^dtoverlay=vc4-kms-dpi-hyperpixel4(,|$)' "$CONFIG" 2>/dev/null; then
+        echo "WARNING: no dtoverlay=vc4-kms-dpi-hyperpixel4 line in $CONFIG: PWM backlight not set up (it changes the backlight that overlay adds)"
+    else
+        [ -f "$CONFIG.bak-applaunch" ] || cp "$CONFIG" "$CONFIG.bak-applaunch"
+        mkdir -p "$BOOT/overlays"
+        dtc -@ -I dts -O dtb -o "$BOOT/overlays/$HP_DTBO" "$PAYLOAD/etc/$HP_DTS"
+        if grep -qxF "$HP_LINE" "$CONFIG"; then
+            echo "config.txt already loads it ($HP_LINE); overlay rebuilt"
+        else
+            LAST=$(grep -nE '^dtoverlay=vc4-kms-dpi-hyperpixel4(,|$)' "$CONFIG" | tail -1 | cut -d: -f1)
+            sed -i "${LAST}a $HP_LINE" "$CONFIG"
+            echo "config.txt: $HP_LINE added after line $LAST (the original is config.txt.bak-applaunch)"
+            REBOOT=1
+        fi
+    fi
+elif [ -n "$HP_PWM_NOTE" ]; then
+    say "PWM backlight"
+    echo "$HP_PWM_NOTE"
 fi
 
 # Settings > Apps lists the apps of the user's sources: offer the project's apps repo once, as the user (their own
@@ -1418,5 +1475,10 @@ EOF
 fi
 echo "Next: pair the keyboard if you have not yet (bluetoothctl: scan on / pair / trust / connect)."
 if [ "${REBOOT:-0}" = 1 ]; then
-    echo "Boot configuration changed: reboot now so the $( [ "$DECK_BOOT" = 1 ] && echo 'PWM backlight and ' )console settings apply:  sudo reboot"
+    if [ "$SESSION" = desktop ]; then
+        # only --pwm-backlight changes the boot configuration of a desktop board
+        echo "Boot configuration changed: reboot now so the PWM backlight applies:  sudo reboot"
+    else
+        echo "Boot configuration changed: reboot now so the $( { [ "$DECK_BOOT" = 1 ] || [ "$HP_PWM" = 1 ]; } && echo 'PWM backlight and ' )console settings apply:  sudo reboot"
+    fi
 fi
