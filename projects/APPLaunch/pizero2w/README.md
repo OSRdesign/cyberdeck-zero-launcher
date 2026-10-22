@@ -148,7 +148,7 @@ as an appliance: run `install.sh` again (the FZ-M1 with Armbian's XFCE:
 
 **Known limits.** The FZ-M1's touch reports at most two contacts: the three-finger switcher gesture cannot fire there;
 use the clock long-press or Alt+Tab (the terminal's on-screen keyboard has Alt). No battery in the status strip yet
-(x-d). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
+(x-d). Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
 Launcher shows it again if wanted.
 
 ## Multitasking

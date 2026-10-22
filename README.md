@@ -169,7 +169,7 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 **x86 PCs (amd64).** The same launcher also runs on x86_64 PCs with a touch panel, with no display server (report 028;
 reference: the Panasonic FZ-M1 tablet): take `cyberdeckzero-launcher-<version>-amd64.tar.gz` (or build it with
 `build.sh --arch amd64`) and run the same `sudo ./install.sh`. It needs glibc 2.38 or newer (Debian 13, Ubuntu 24.04
-or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Apps for amd64 come later. New in v0.8.1.
+or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Settings > Apps lists five apps built for amd64 (v0.8.2); the x86 port is new in v0.8.1.
 See [Install on a PC](projects/APPLaunch/pizero2w/README.md#install-on-a-pc-amd64).
 
 ## Licence
