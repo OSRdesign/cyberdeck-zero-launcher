@@ -37,8 +37,14 @@ for arg in "$@"; do
 done
 
 NAME=OSRdesign/cyberdeck-zero-apps
+# The apps repo has one registry per architecture: registry.json for arm64 (boards), registry-amd64.json for a PC
+# (decision X8). APPLAUNCH_ARCH overrides the detection (a test hook, as in the launcher).
+ARCH=${APPLAUNCH_ARCH:-$(dpkg --print-architecture 2>/dev/null || true)}
+[ -n "$ARCH" ] || ARCH=$(uname -m 2>/dev/null || true)
+case "$ARCH" in x86_64) ARCH=amd64 ;; aarch64) ARCH=arm64 ;; esac
+case "$ARCH" in arm64|armhf|"") REGISTRY=registry.json ;; *) REGISTRY=registry-$ARCH.json ;; esac
 # what Settings > Apps > Sources > Add makes of "OSRdesign/cyberdeck-zero-apps" (apps_backend::normalize_source)
-URL=https://raw.githubusercontent.com/$NAME/main/registry.json
+URL=https://raw.githubusercontent.com/$NAME/main/$REGISTRY
 # the Store's built-in registries (projects/AppStore/main/backend/appstore_native.cpp: kDefaultUrl, kCnUrl)
 HUB_URL=https://cardputerzero.github.io/generated/registry.json
 HUB_NAME="CardputerZero Hub"
@@ -105,12 +111,16 @@ else
     B_NAME=$HUB_NAME; B_URL=$HUB_URL; B_REGION=default
 fi
 # Exactly what the Store writes (nlohmann::json, keys sorted, two-space indent): the hub first, then the source.
+# The hubs' packages are arm64 only (decision X13): on any other architecture the list holds the source alone.
 seed_json() {
     cat <<EOF
 {
   "active_region": "$ACTIVE",
   "region": "$REGION",
   "registries": [
+EOF
+    if [ "$REGISTRY" = registry.json ]; then
+        cat <<EOF
     {
       "builtin": true,
       "enabled": true,
@@ -118,6 +128,9 @@ seed_json() {
       "region": "$B_REGION",
       "url": "$B_URL"
     },
+EOF
+    fi
+    cat <<EOF
     {
       "enabled": true,
       "name": "$NAME",

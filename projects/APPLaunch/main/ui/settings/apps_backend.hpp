@@ -77,6 +77,14 @@ std::vector<Source> parse_sources(const std::string &registries_output);
 /* "owner/repo", "github.com/owner/repo[/...]", "https://github.com/owner/repo[/tree/branch]" or a direct
  * https URL to a registry.json -> the URL of its registry.json and a short name. */
 bool normalize_source(const std::string &input, std::string &url, std::string &name, std::string &error);
+/* The same for a given architecture: the owner/repo forms name registry.json on arm64 and registry-<arch>.json
+ * elsewhere (registry-amd64.json on a PC); a full address is never rewritten. */
+bool normalize_source(const std::string &input, std::string &url, std::string &name, std::string &error,
+                      const std::string &arch);
+/* The system architecture as the apps repo names it ("arm64", "amd64"); APPLAUNCH_ARCH overrides it (tests). */
+std::string system_arch();
+/* "registry.json" for arm64, else "registry-<arch>.json". */
+std::string registry_file(const std::string &arch);
 
 bool parse_package_job(const std::string &prepare_output, PackageJob &job);
 /* The privileged command (run through sudo) that applies a prepared package job. */
