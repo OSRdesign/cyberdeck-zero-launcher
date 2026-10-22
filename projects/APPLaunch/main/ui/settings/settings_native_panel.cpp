@@ -27,6 +27,7 @@ std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter
     case SettingsNativePage::Storage:
     case SettingsNativePage::Licenses:
     case SettingsNativePage::DateTimeInfo:
+    case SettingsNativePage::Battery:
         return settings_info_panel_create(settings_native_page(node), context);
     case SettingsNativePage::BluetoothPaired:
     case SettingsNativePage::BluetoothScan:

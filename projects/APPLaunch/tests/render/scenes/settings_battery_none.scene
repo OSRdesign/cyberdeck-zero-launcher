@@ -1,0 +1,28 @@
+# Decision X12 (report 028): no Battery row without a power_supply battery. An AC adapter alone (a desktop PC, a board
+# on a USB supply) and an empty power_supply directory (the Pi boards) give the same root menu as before, and no
+# battery in the status strip (compare battery_none_mains with battery_none_empty). Review only: no golden.
+title settings battery none
+review
+sizes 640x480 1280x800
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+battery mains
+home
+shot battery_none_mains
+battery off
+wait 2100
+expect_same battery_none_mains
+shot battery_none_empty
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+key ESC
+wait 300
+battery mains
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+shot settings_battery_none_mains

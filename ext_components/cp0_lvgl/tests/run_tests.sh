@@ -606,11 +606,20 @@ gzip -dc "$fx/mtrec-PI3A-20261020-002544.csv.gz" | "$binary" - 800x480 9/10 0
 "$binary"
 
 # Task L1: the shared status strip's place from the shell tokens, the Wi-Fi signal rule, the leftmost drawn column
+# (X12: and the battery rule)
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/include" \
     "$root/src/cp0_ui_metrics.c" \
     "$root/src/cp0_ui_status_strip.c" \
     "$root/tests/test_ui_status_strip.c" -o "$binary"
+"$binary"
+
+# Decision X12 (report 028): the power_supply battery reader on fake sysfs trees (absent, AC only, discharging,
+# charging, full, the device choice, $APPLAUNCH_POWER_SUPPLY_ROOT)
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_power_supply.c" \
+    "$root/tests/test_power_supply.c" -o "$binary"
 "$binary"
 
 # Task 014 P2b: on-screen keyboard core (layout from the tokens, pages, Shift / Ctrl state machine, key event

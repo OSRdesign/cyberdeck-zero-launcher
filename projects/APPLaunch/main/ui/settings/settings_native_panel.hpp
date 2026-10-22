@@ -6,7 +6,7 @@
  * node gets is settings_native_page() (settings_page.hpp); this file only builds it.
  *
  *   KeyboardTest  the development form (settings_keyboard_page.cpp)
- *   About, User, Storage, Licenses, DateTimeInfo   the read-only pages (settings_native_info_page.cpp)
+ *   About, User, Storage, Licenses, DateTimeInfo, Battery   the read-only pages (settings_native_info_page.cpp)
  *   Wifi          the Wi-Fi section (settings_native_wifi_page.cpp)
  *   Bluetooth     Paired Devices, Scan, Alias (settings_native_bluetooth_page.cpp)
  *   Apps          Settings > Apps, its Apps and Sources tabs (settings_native_apps_page.cpp)

@@ -39,7 +39,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Legacy apps | Fullscreen 320x170 framebuffer apps (from the Store) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings (native, full screen) takes taps and drags directly, and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
-| Settings | Hardware profile (`settings_hw_profile.hpp`) hides what our boards lack (speaker, Ethernet, battery) and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). |
+| Settings | Hardware profile (`settings_hw_profile.hpp`) hides what our boards lack (speaker, Ethernet, the upstream bq27220 battery pages) and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). **Battery** (after Bluetooth) shows only on a board with a Linux `power_supply` battery (a PC's ACPI `BAT0`/`BAT1`, a gauge driver's; read when Settings opens): charge, status, time left or to full, power, voltage, health, device, refreshed every 2 s; the status strip then shows the battery's level and percentage left of the Bluetooth icon (green while charging). The Pi boards have none: no row, nothing in the strip. |
 | Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present (a keyboard listed in `APPLAUNCH_KBD_IGNORE` does not count); in a terminal it has an **Alt** key next to Ctrl (one-shot, double tap locks: Alt then Tab is Alt+Tab). Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
 | Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
@@ -147,8 +147,8 @@ as an appliance: run `install.sh` again (the FZ-M1 with Armbian's XFCE:
 [Desktop on the FZ-M1 tablet](#desktop-on-the-fz-m1-tablet-armbian-xfce)).
 
 **Known limits.** The FZ-M1's touch reports at most two contacts: the three-finger switcher gesture cannot fire there;
-use the clock long-press or Alt+Tab (the terminal's on-screen keyboard has Alt). No battery in the status strip yet
-(x-d). Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
+use the clock long-press or Alt+Tab (the terminal's on-screen keyboard has Alt). The battery (`BAT1`) shows in the
+status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
 Launcher shows it again if wanted.
 
 ## Multitasking
@@ -493,7 +493,9 @@ per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides th
 - Legacy apps contain their own copy of the inherited matrix keymap, so punctuation typed inside them may
   differ; the launcher's own pages are not affected.
 - The Pi Zero 2W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound.
-- There is no battery gauge or hardware RTC; the clock comes from Network Time. A PC's battery is not shown yet (x-d).
+- The Pi boards have no battery gauge or hardware RTC; the clock comes from Network Time. A board with a Linux
+  `power_supply` battery (a PC) shows it in the status strip and Settings > Battery; the low-battery warning and
+  shutdown still follow the upstream bq27220 gauge service only.
 - Entries hidden by the hardware profile are kept in the source and compiled out (`#if`), not deleted.
 
 ## Reverting the PWM backlight

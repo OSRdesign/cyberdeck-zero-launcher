@@ -75,6 +75,7 @@ enum class SettingsNativePage {
     BluetoothAlias,
     Apps,
     TimeZone, // Date & Time > Time zone: the zone picker (settings_native_timezone_page.hpp)
+    Battery,  // Battery: a power_supply battery's read-only page (settings_native_info_page.hpp, decision X12)
 };
 SettingsNativePage settings_native_page(const NodeIter &node);
 
