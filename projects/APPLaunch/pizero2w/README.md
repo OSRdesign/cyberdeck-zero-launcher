@@ -129,8 +129,7 @@ the console, with a reboot as well:
 `sudo rm /etc/netplan/90-applaunch-networkmanager.yaml && sudo apt remove network-manager && sudo netplan apply && sudo reboot`
 (and `sudo systemctl enable systemd-networkd-wait-online.service` if you disabled it).
 
-**Get the bundle**: `cyberdeckzero-launcher-<version>-amd64.tar.gz` from the releases (from the first release after
-x-b), or build it natively on an x86_64 Linux or WSL box:
+**Get the bundle**: `cyberdeckzero-launcher-<version>-amd64.tar.gz` from the releases (from v0.8.1), or build it natively on an x86_64 Linux or WSL box:
 `projects/APPLaunch/pizero2w/build.sh --arch amd64 [--with-store]` (or `tools/dev/wsl-build.sh --arch amd64
 --with-store`). It needs `gcc g++ pkg-config libinput-dev libxkbcommon-dev libudev-dev libdbus-1-dev libglib2.0-dev
 libfreetype-dev`, and `libssl-dev` for the Store (the Settings > Apps engine). The layout is the arm64 bundle's.
