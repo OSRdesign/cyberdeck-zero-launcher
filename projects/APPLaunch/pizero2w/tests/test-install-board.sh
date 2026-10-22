@@ -1003,7 +1003,7 @@ printf '2026-10-11 INFO sync\nREGISTRY\tUPDATED\t%s\t%s\tok\t9\t%s\n' "$2" "$3" 
 EOF
 chmod +x "$FAKE"
 # run default-sources.sh; output in $OUT, exit code in $RC; state folder $S
-seed() { OUT=$(HOME="$TMP/home" M5APPSTORE_STATE_DIR="$S" APPLAUNCH_APPSTORE_BIN="${BIN:-$FAKE}" FAKE_LOG="$LOG" \
+seed() { OUT=$(HOME="$TMP/home" APPLAUNCH_ARCH="${SEED_ARCH:-arm64}" M5APPSTORE_STATE_DIR="$S" APPLAUNCH_APPSTORE_BIN="${BIN:-$FAKE}" FAKE_LOG="$LOG" \
                 FAKE_FAIL="${SYNC_FAIL:-0}" sh "$SEED" "$@" 2>&1); RC=$?; }
 calls() { if [ -f "$LOG" ]; then wc -l < "$LOG" | tr -d ' '; else echo 0; fi; }
 json_ok() { if command -v python3 >/dev/null 2>&1; then python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$1"; else true; fi; }
@@ -1051,6 +1051,25 @@ check "seed second run: decided already, nothing changed, no sync" '[ $RC = 0 ] 
 printf '%s\n' "$HUB_ONLY" > "$S/registries.json"
 seed
 check "seed after the user removed it: not added back" 'has "already decided" && [ "$(cat "$S/registries.json")" = "$HUB_ONLY" ]'
+
+# a PC (amd64): the source is registry-amd64.json and the arm64-only hubs are not seeded (X8, X13)
+AMD_URL=https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/registry-amd64.json
+EXPECT_AMD="{
+  \"active_region\": \"default\",
+  \"region\": \"auto\",
+  \"registries\": [
+    {
+      \"enabled\": true,
+      \"name\": \"OSRdesign/cyberdeck-zero-apps\",
+      \"url\": \"$AMD_URL\"
+    }
+  ]
+}"
+S="$TMP/state-amd64"; rm -f "$LOG"; SEED_ARCH=amd64
+seed
+check "seed amd64: registry-amd64.json, no hub, synced" '[ $RC = 0 ] && has "added OSRdesign/cyberdeck-zero-apps" && has "synced: 9 apps (ok)" && grep -q "registry-amd64.json" "$S/registries.json" && ! grep -q "cardputer" "$S/registries.json"'
+check "seed amd64: the Store format exactly, one sync of the amd64 registry" '[ "$(cat "$S/registries.json")" = "$EXPECT_AMD" ] && json_ok "$S/registries.json" && [ "$(cat "$LOG")" = "--edit-registry $AMD_URL $AMD_URL --registry-name OSRdesign/cyberdeck-zero-apps" ]'
+SEED_ARCH=arm64
 
 # existing install whose list holds the built-in hub only (region China): seeded, region kept, old file backed up
 S="$TMP/state-hub"; rm -f "$LOG"; mkdir -p "$S"

@@ -690,10 +690,29 @@ static void model_actions()
 
     // the add-source entry: the backend's address rules
     std::string url, name, error;
+    setenv("APPLAUNCH_ARCH", "arm64", 1);   // the host running the test may be x86_64
     assert(settings_apps::Model::parse_source("deck-lab/apps", url, name, error));
     assert(url == "https://raw.githubusercontent.com/deck-lab/apps/main/registry.json" && name == "deck-lab/apps");
     assert(!settings_apps::Model::parse_source("", url, name, error) && error == "Enter owner/repo");
     assert(!settings_apps::Model::parse_source("lonely", url, name, error) && error == "Use owner/repo");
+
+    // per-arch registry (X8): arm64 unchanged, a PC reads registry-amd64.json, a full address is never rewritten
+    const std::string raw = "https://raw.githubusercontent.com/OSRdesign/cyberdeck-zero-apps/main/";
+    assert(apps_backend::normalize_source("OSRdesign/cyberdeck-zero-apps", url, name, error, "arm64") &&
+           url == raw + "registry.json" && name == "OSRdesign/cyberdeck-zero-apps");
+    assert(apps_backend::normalize_source("OSRdesign/cyberdeck-zero-apps", url, name, error, "amd64") &&
+           url == raw + "registry-amd64.json" && name == "OSRdesign/cyberdeck-zero-apps");
+    assert(apps_backend::normalize_source("https://github.com/o/r/tree/dev", url, name, error, "amd64") &&
+           url == "https://raw.githubusercontent.com/o/r/dev/registry-amd64.json");
+    assert(apps_backend::normalize_source(raw + "registry.json", url, name, error, "amd64") &&
+           url == raw + "registry.json");
+    assert(apps_backend::normalize_source("https://example.org/x/registry.json", url, name, error, "amd64") &&
+           url == "https://example.org/x/registry.json");
+    setenv("APPLAUNCH_ARCH", "amd64", 1);
+    assert(apps_backend::system_arch() == "amd64");
+    assert(apps_backend::normalize_source("deck-lab/apps", url, name, error) &&
+           url == "https://raw.githubusercontent.com/deck-lab/apps/main/registry-amd64.json");
+    unsetenv("APPLAUNCH_ARCH");
 }
 
 static void model_confirmations()

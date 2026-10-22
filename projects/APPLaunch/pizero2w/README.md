@@ -87,8 +87,9 @@ it. `--no-default-source` skips all of this. By hand, as the user (never with su
 
 Phase x-b of the x86 port (report 028, decisions X1-X15 of 2026-10-21): the same launcher, fbdev and LVGL with no
 display server, on an x86_64 PC with a built-in touch panel. Reference machine: the Panasonic FZ-M1 mk2 tablet
-(`pc-fzm1-2`, Armbian on Ubuntu 26.04). Apps from Settings > Apps come in phase x-c (until then its sources list
-arm64 apps, which do not install on a PC).
+(`pc-fzm1-2`, Armbian on Ubuntu 26.04). On amd64, Settings > Apps reads `registry-amd64.json` of the apps repo (the
+arm64 boards keep `registry.json`), and the two CardputerZero hubs are not added to the source list (their packages
+are arm64 only). A source given as a full registry address is used as typed.
 
 **Requirements.**
 - glibc 2.38 or newer: Debian 13, Ubuntu 24.04 or 26.04, Armbian on them (not Debian 12 or Ubuntu 22.04). Any x86-64

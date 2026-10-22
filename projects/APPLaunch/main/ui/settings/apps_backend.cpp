@@ -19,6 +19,7 @@
 #include <pwd.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -270,7 +271,33 @@ std::vector<Source> parse_sources(const std::string &registries_output)
     return sources;
 }
 
+std::string system_arch()
+{
+    // APPLAUNCH_ARCH is a test hook (as APPLAUNCH_APPSTORE_BIN is)
+    const char *forced = std::getenv("APPLAUNCH_ARCH");
+    if (forced && *forced) return forced;
+    struct utsname u;
+    if (uname(&u) != 0) return "arm64";
+    const std::string machine = u.machine;
+    if (machine == "aarch64" || machine == "arm64" || machine.rfind("armv", 0) == 0) return "arm64";
+    if (machine == "x86_64" || machine == "amd64") return "amd64";
+    return machine;
+}
+
+std::string registry_file(const std::string &arch)
+{
+    // arm64 keeps registry.json (the boards and the decks); any other arch reads registry-<arch>.json
+    if (arch.empty() || arch == "arm64" || arch == "aarch64") return "registry.json";
+    return "registry-" + arch + ".json";
+}
+
 bool normalize_source(const std::string &input, std::string &url, std::string &name, std::string &error)
+{
+    return normalize_source(input, url, name, error, system_arch());
+}
+
+bool normalize_source(const std::string &input, std::string &url, std::string &name, std::string &error,
+                      const std::string &arch)
 {
     std::string text;
     for (char c : input)
@@ -329,7 +356,7 @@ bool normalize_source(const std::string &input, std::string &url, std::string &n
     if (repo.size() > 4 && repo.compare(repo.size() - 4, 4, ".git") == 0) repo.erase(repo.size() - 4);
     std::string branch = "main";
     if (parts.size() >= 4 && (parts[2] == "tree" || parts[2] == "blob")) branch = parts[3];
-    url = "https://raw.githubusercontent.com/" + parts[0] + "/" + repo + "/" + branch + "/registry.json";
+    url = "https://raw.githubusercontent.com/" + parts[0] + "/" + repo + "/" + branch + "/" + registry_file(arch);
     name = parts[0] + "/" + repo;
     return true;
 }

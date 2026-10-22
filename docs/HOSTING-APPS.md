@@ -53,7 +53,9 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 * Settings > Apps uses the Store's backend (`/usr/share/APPLaunch/bin/M5CardputerZero-AppStore`), so the Store
   must be installed (it is, with the release bundle built with `--with-store`).
 * Accepted source addresses: `owner/repo`, `github.com/owner/repo`, `https://github.com/owner/repo` (optionally
-  `/tree/<branch>`), or the direct address of a `registry.json`.
+  `/tree/<branch>`), or the direct address of a `registry.json`. The `owner/repo` forms name `registry.json` on
+  arm64 and `registry-<arch>.json` (`registry-amd64.json`) on any other architecture
+  (`apps_backend::normalize_source`, `default-sources.sh`); a full address is never rewritten.
 
 ## Using Settings > Apps on the deck
 
