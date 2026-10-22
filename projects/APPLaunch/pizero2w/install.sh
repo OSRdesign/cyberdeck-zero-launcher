@@ -514,6 +514,9 @@ APPLAUNCH_LOGICAL=720x720
 APPLAUNCH_ROTATE=0
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_GAUGE=max17048:auto:0x36
+APPLAUNCH_HINT_BACKLIGHT=button
+APPLAUNCH_HINT_SOUND=bluetooth:XWF-M18-M28-M38
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 EOF
         ;;
@@ -803,6 +806,7 @@ if [ "$DRY" = 1 ]; then
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
     if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
     if [ "$BOARD_ONLY" = 0 ] && [ -n "$SOUND_CARD" ]; then echo "audio group: the user joins it (sound card: $SOUND_CARD)"; fi
+    if [ "$BOARD_ONLY" = 0 ] && [ "$BOARD" = hackberry-cm5 ]; then echo "i2c group: the user joins it, if the system has one (battery gauge)"; fi
     if [ "$IS_PC" = 1 ]; then
         echo "boot config: none on a PC (GRUB and the kernel command line are left alone)"
     elif [ "$SESSION" = desktop ]; then
@@ -1164,6 +1168,12 @@ if getent group bluetooth >/dev/null 2>&1; then usermod -aG bluetooth "$TARGET_U
 if [ -n "$SOUND_CARD" ] && getent group audio >/dev/null 2>&1; then
     usermod -aG audio "$TARGET_USER"
     echo "audio group: $TARGET_USER (sound card: $SOUND_CARD)"
+fi
+# The HackBerry's battery gauge (APPLAUNCH_GAUGE in its profile) is read over /dev/i2c-N, which the i2c group opens
+# (Raspberry Pi OS's udev rule); a user made by the image is in it already, a user added later is not
+if [ "$BOARD" = hackberry-cm5 ] && getent group i2c >/dev/null 2>&1; then
+    usermod -aG i2c "$TARGET_USER"
+    echo "i2c group: $TARGET_USER (battery gauge)"
 fi
 
 say "Installing PolicyKit rules (Wi-Fi, time settings, reboot/shutdown from the launcher)"

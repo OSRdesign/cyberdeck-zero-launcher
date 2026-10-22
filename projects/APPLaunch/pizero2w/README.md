@@ -233,6 +233,7 @@ APPLAUNCH_COMPAT_SCALE=1             # 1 or 2: scale of the 320x170 legacy-app w
 APPLAUNCH_TOUCH_DEV=auto             # auto = pick by capability, or /dev/input/eventN
 APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuffer; legacy = SWAP_XY/INVERT_* env (default legacy)
 APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> levels | none; unset: detected
+APPLAUNCH_GAUGE=max17048:/dev/i2c-15:0x36   # battery fuel gauge read over i2c-dev when the kernel has no battery; auto = the bus of the touch controller
 APPLAUNCH_KBD_IGNORE=bus:0011        # keyboards that do not count as connected (names, bus:XXXX; drop:... = not read either)
 APPLAUNCH_HIDE_TILES=app_Store       # home tiles hidden by default (Settings > Launcher can show them)
 ```
@@ -246,7 +247,10 @@ Brightness offers On / Off 10 s), more is levels (the deck's PWM `backlight`, ex
 backlight (no Brightness row). `APPLAUNCH_BACKLIGHT=none` says the board has no backlight to drive although a device
 exists. `APPLAUNCH_HINT_BATTERY`, `APPLAUNCH_HINT_BACKLIGHT` (`button`) and `APPLAUNCH_HINT_SOUND`
 (`bluetooth:<speaker>`) name hardware a board has but that is not set up: Settings then shows a read-only row with the
-reason instead of nothing (no profile writes them yet). `APPLAUNCH_KBD_IGNORE` is a comma list of device
+reason instead of nothing (the HackBerry profile writes `button` and `bluetooth:XWF-M18-M28-M38`).
+`APPLAUNCH_GAUGE=max17048:<i2c-dev path or auto>:<address>` (report 030, C5) reads a MAX17048 fuel gauge over i2c-dev, only
+when `/sys/class/power_supply` has no battery: percent, voltage and the charging direction (the HackBerry profile writes
+`max17048:auto:0x36`; the user needs the `i2c` group, which install.sh adds on that board). `APPLAUNCH_KBD_IGNORE` is a comma list of device
 names exactly as `/proc/bus/input/devices` prints them and `bus:XXXX` entries (hex: `bus:0011` = the i8042
 keyboard of a laptop or tablet). A listed keyboard is still read (its keys work: a tablet's buttons, a keyboard
 dock), but it does not count as "a keyboard is connected", so the on-screen keyboard shows when no other keyboard is

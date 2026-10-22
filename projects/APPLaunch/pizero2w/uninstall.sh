@@ -316,7 +316,7 @@ echo "Will keep:"
 [ "$PURGE_CONFIG" = 1 ] || echo "  - $CONF_DIR, $STATE_DIR, $CACHE_DIR"
 if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then :; else echo "  - installed app packages and their data (/usr/share/APPLaunch/applications, /opt/..., apps' own files)"; fi
 echo "  - packages install.sh added with apt (libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler)"
-echo "  - group membership (input, video, netdev; audio with a sound card) of $TARGET_USER"
+echo "  - group membership (input, video, netdev; audio with a sound card; i2c on the HackBerry) of $TARGET_USER"
 [ "$DISABLE_LINGER" = 1 ] || echo "  - lingering (add --disable-linger to turn it off)"
 echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm"
 echo "  - $PROFILE.bak if install.sh made one (a replaced or hand-edited profile)"
@@ -552,7 +552,7 @@ if [ -d "$APP_ROOT" ]; then
 fi
 for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm" "$PROFILE.bak"; do [ -f "$b" ] && echo "  backup kept: $b"; done
 for b in "$BOOT"/config.txt.bak-uninstall-* "$BOOT"/cmdline.txt.bak-uninstall-*; do [ -f "$b" ] && echo "  backup made now: $b"; done
-echo "  apt packages added by install.sh, and the groups input/video/netdev (audio) of $TARGET_USER (not recorded by install.sh)"
+echo "  apt packages added by install.sh, and the groups input/video/netdev (audio, i2c) of $TARGET_USER (not recorded by install.sh)"
 if [ "$DISABLE_LINGER" = 0 ]; then echo "  lingering stays on for $TARGET_USER (loginctl disable-linger $TARGET_USER to undo)"; fi
 echo "Follow-ups:"
 if [ "$NEED_REBOOT" = 1 ]; then

@@ -328,6 +328,9 @@ APPLAUNCH_LOGICAL=720x720
 APPLAUNCH_ROTATE=0
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_GAUGE=max17048:auto:0x36
+APPLAUNCH_HINT_BACKLIGHT=button
+APPLAUNCH_HINT_SOUND=bluetooth:XWF-M18-M28-M38
 LV_LINUX_FBDEV_DEVICE=/dev/fb0'
 GOT=$(grep -v '^#' "$P" 2>/dev/null)
 if [ "$GOT" = "$EXPECT" ]; then ok "hackberry profile: exact keys and values"; else ko "hackberry profile: exact keys and values" "$GOT"; fi
@@ -682,6 +685,11 @@ check "fake desktop migration: the running earlier launcher stopped (desktop bac
 check "fake desktop migration: new unit, rule and menu entry, filled in" 'grep -qx "User=$U" "$R/etc/systemd/system/cyberdeckzero-desktop.service" && grep -q "\"cyberdeckzero-desktop.service\"" "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" && grep -qx "Name=CyberdeckZero Launcher" "$R/usr/share/applications/cyberdeckzero.desktop"'
 check "fake desktop migration: no user service, no console unit, not started" '[ ! -e "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && has "not started now" && ! called "start cyberdeckzero-desktop.service"'
 check "fake desktop migration: the earlier helper name links to the new one (ExecStopPost= of a loaded old unit)" '[ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ]'
+if getent group i2c >/dev/null 2>&1; then
+    check "HackBerry desktop install: the user joins the i2c group (battery gauge)" 'called "usermod -aG i2c $U"'
+else
+    check "HackBerry desktop install: no i2c group on this system, no usermod for it" '! called "usermod -aG i2c"'
+fi
 check "HackBerry desktop install: no variant switch, no user service touched, no kbd asked for (a Pi), the session named at the end" '! has "variant: switching" && ! has "== Switching" && ! called "systemctl --user" && ! called "dpkg -s kbd" && ! called "getty@tty1" && has "session: desktop (display manager lightdm.service enabled; running: labwc+lightdm)" && has "run install.sh again"'
 SNAP1=$(snapshot "$R")
 full "$R"
