@@ -18,7 +18,6 @@
 #include "cp0_backlight_profile.h"
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
-#include "settings_adb_guide_page.hpp"
 #include "settings_battery_info_page.hpp"
 #include "settings_battery_calibration_page.hpp"
 #include "settings_bluetooth_connected_devices_page.hpp"
@@ -37,7 +36,6 @@
 #include "settings_volume_page.hpp"
 #include "settings_wifi_page.hpp"
 #include "settings_tree_types.hpp"
-#include "settings_extport.hpp"
 #include "../model/setup_value_policy.hpp"
 
 #include <atomic>
@@ -357,13 +355,6 @@ static std::unique_ptr<DComponens::LvglComponensBase> wifi_add_hidden_page_facto
     bool enabled = false;
     query_wifi_power(enabled);
     return std::make_unique<LvSettingWifiScanPage3>(parent, page_node, std::move(on_back), true, enabled);
-}
-
-static std::unique_ptr<DComponens::LvglComponensBase> adb_guide_page_factory(lv_obj_t *parent,
-                                                                             const NodeIter &page_node,
-                                                                             std::function<void()> on_back)
-{
-    return std::make_unique<LvSettingAdbGuidePage3>(parent, page_node, std::move(on_back));
 }
 
 static std::unique_ptr<DComponens::LvglComponensBase> bluetooth_connected_page_factory(lv_obj_t *parent,
@@ -788,20 +779,6 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(bluetooth, SettingEntry{"Scan", bluetooth_scan_page_factory, PageType::FullCustom});
     }
 
-#if APPLAUNCH_SETTINGS_EXTPORT  // M5IOE1 expander (Cardputer only)
-    {
-        NodeIter ext_port = mode_tree.append_child(root, SettingEntry{"ExtPort", roller_page_factory});
-        mode_tree.append_child(
-            ext_port,
-            SettingEntry{"Ext 5V", std::bind(&ext_port_com, "EXT5V", std::placeholders::_1,
-                                              std::placeholders::_2), true});
-        mode_tree.append_child(
-            ext_port,
-            SettingEntry{"Grove 5V", std::bind(&ext_port_com, "GROVE5V", std::placeholders::_1,
-                                                std::placeholders::_2), true});
-    }
-#endif  // APPLAUNCH_SETTINGS_EXTPORT
-
 #if APPLAUNCH_SETTINGS_BATTERY  // bq27220 battery gauge (Cardputer only)
     {
         NodeIter info = mode_tree.append_child(root, SettingEntry{"Battery", roller_page_factory});
@@ -825,16 +802,6 @@ void UISettingTreePage::create_page_detail()
 #if APPLAUNCH_SETTINGS_APPS  // install / remove apps from GitHub sources
     mode_tree.append_child(root, SettingEntry{"Apps", settings_apps_page_factory, PageType::FullCustom});
 #endif
-
-#if APPLAUNCH_SETTINGS_DEVELOPER  // ADB gadget mode (Cardputer only)
-    {
-        NodeIter developer = mode_tree.append_child(root, SettingEntry{"Developer", roller_page_factory});
-        SettingEntry adb_entry{"ADB", LvSettingAdbGuidePage3::toggle_setting, true};
-        adb_entry.status_read_policy = SettingStatusReadPolicy::Direct;
-        mode_tree.append_child(developer, std::move(adb_entry));
-        mode_tree.append_child(developer, SettingEntry{"ADB guide", adb_guide_page_factory, PageType::FullCustom});
-    }
-#endif  // APPLAUNCH_SETTINGS_DEVELOPER
 
     {
         mode_tree.append_child(root, SettingEntry{"User", settings_account_page_factory, PageType::FullCustom});
@@ -884,10 +851,6 @@ void UISettingTreePage::create_page_detail()
 
     {
         NodeIter system = mode_tree.append_child(root, SettingEntry{"System", roller_page_factory});
-#if APPLAUNCH_SETTINGS_SOFTWARE_UPDATE  // update source is Cardputer specific
-        mode_tree.append_child(system,
-                               SettingEntry{"Software", settings_update_page_factory, PageType::FullCustom});
-#endif  // APPLAUNCH_SETTINGS_SOFTWARE_UPDATE
         mode_tree.append_child(system,
                                SettingEntry{"Storage", settings_storage_page_factory, PageType::FullCustom});
         mode_tree.append_child(system,

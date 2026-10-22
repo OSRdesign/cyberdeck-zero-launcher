@@ -36,7 +36,7 @@ class TextBlock;
 //  On the native display (the dpi-scaled backend: the Pi boards, task 014 P4) the
 //  form is a native page instead (ui_app_ssh_native.cpp): the Settings header,
 //  Host / Port / User as TextFields, Connect and Help buttons, a status line,
-//  Help as a TextBlock. Stock CardputerZero keeps the 320x150 form above.
+//  Help as a TextBlock. Builds without that backend keep the 320x150 form above.
 // ============================================================
 
 class UISSHPage : public AppPage

@@ -1,8 +1,8 @@
 /*
  * Native full-screen touch calculator for the Raspberry Pi Zero 2W + Waveshare 2.8" DPI LCD port.
  *
- * Replaces the external CardputerZero-Calculator program (it draws straight to a 320x170
- * framebuffer and is not installed on the Pi). Input: touch keypad or the keyboard.
+ * The only Calculator since report 029: the external 320x170 framebuffer calculator program the
+ * inherited code could start instead is gone. Input: touch keypad or the keyboard.
  */
 
 #pragma once

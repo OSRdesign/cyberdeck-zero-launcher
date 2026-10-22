@@ -1,7 +1,5 @@
 # cp0_lvgl Interface Reference
 
-Languages: [中文](cp0_lvgl.md) | English (this page) | [日本語](cp0_lvgl.ja.md)
-
 This document is the public contract for `ext_components/cp0_lvgl`. New pages and extension modules can use it as their first reference. When fixing a bug, changing behavior, or checking a platform difference, inspect the actual implementation under `src/` and the matching `*_contract.*` files. Device and SDL backends share signal names and argument formats, but their underlying capabilities can differ.
 
 ## Quick Start
@@ -177,7 +175,7 @@ void cp0_dir_watch_stop(cp0_watcher_t watcher);
 int cp0_file_read_first_line(const char *path, char *out, int out_size);
 ```
 
-`cp0_file_path_c` resolves logical names such as `applications`, `appstore_exec`, `calculator_exec`, `adb_helper`, `launcher_settings`, `oobe_marker`, `home_dir`, `lock_file`, `keyboard_device`, `keyboard_map`, and `share/images/`, `share/audio/`, or font resources. The returned C string belongs to a thread-local cache; copy it if it must outlive the call. Watch handles are nonzero module-owned values and may only be passed to the matching start/poll/stop functions.
+`cp0_file_path_c` resolves logical names such as `applications`, `appstore_exec`, `launcher_settings`, `home_dir`, `lock_file`, `keyboard_device`, `keyboard_map`, and `share/images/`, `share/audio/`, or font resources. The returned C string belongs to a thread-local cache; copy it if it must outlive the call. Watch handles are nonzero module-owned values and may only be passed to the matching start/poll/stop functions.
 
 ### Network and Wi-Fi
 
@@ -210,7 +208,7 @@ int cp0_wifi_radio_set_enabled(int enabled);
 
 `cp0_battery_read` reads the latest background snapshot and performs no hardware I/O; use it only when `valid == 1`. Battery units are mV, mA, 0.1 C, mAh, and percent SOC. `cp0_bq27220_calibrate` accepts indices 0..3. `cp0_backlight_write` clamps to 0..max. `cp0_time_set` requires `YYYY-MM-DD HH:MM:SS`; manual RTC persistence requires NTP to be disabled. `cp0_time_ntp_get/set` controls NTP.
 
-Other C functions read Ethernet/default network information, account information, time text, desktop execution safety, start background updates, and request/clear LoRa initialization stop.
+Other C functions read Ethernet/default network information, account information, time text and desktop execution safety.
 
 ### App contract reader (`include/cp0_app_contract.h`)
 
@@ -252,10 +250,6 @@ All `args` below are `std::list<std::string>` with the command at element zero. 
 
 Commands are `Path logical_name`, `DirList path`, `DirListDetail path`, `Exists path`, `ReadFile path [max_bytes]`, `EnsureDirForUser path`, `Touch path`, `Remove path`, `WatchStart path`, `WatchPoll handle`, and `WatchStop handle`. `Exists` returns `1/0`; `WatchStart` returns a handle; directory data is line-encoded. Empty or NUL-containing paths are invalid. Unknown commands return code -2.
 
-### LoRa: `cp0_signal_lora_api(args, cb)`
-
-Commands are `Init`, `Poll`, `Info`, `SendText text`, `StartReceive`, `SetTxMode 0|1`, and `Shutdown`. Text must be nonempty and at most 127 bytes. `Poll` and `Info` return raw `cp0_lora_info_t` bytes; `Poll` performs hardware polling while `Info` only reads state. `cp0_lora_request_stop` and `cp0_lora_clear_stop` control initialization cancellation.
-
 ### Wi-Fi
 
 Commands are `Status`, `Scan [0..32]`, `Connect ssid [password]`, `ConnectHidden ssid [password]`, `Disconnect`, `ProfileForget ssid`, `ProfileExists ssid`, `ProfileDisconnectActive`, `RadioEnabled`, and `RadioSetEnabled on|off|1|0|true|false`. Status data is `connected:ssid:ip:signal:ethernet`. Scan data has one `ssid:signal:security:in_use:saved` record per line, with backslash, colon, LF, and CR escaped. Prefer the C wrappers for decoding.
@@ -270,13 +264,13 @@ Session commands are `BtSessionInit` (returns an id), `BtSessionDeinit id`, `BtS
 
 ### Settings
 
-`cp0_signal_settings_api` commands are `BacklightRead`, `BacklightMax`, `BacklightWrite value`, `Log topic message`, `TimeStr`, `GpioSet name 0|1`, and `GpioGet name`. GPIO names are `GROVE5V`/`extport_usb`, `EXT5V`/`extport_5vout`, and `BACKLIGHT`. Integer results are returned as decimal text; `TimeStr` is `HH:MM`.
+`cp0_signal_settings_api` commands are `BacklightRead`, `BacklightMax`, `BacklightWrite value`, `Log topic message`, and `TimeStr`. Integer results are returned as decimal text; `TimeStr` is `HH:MM`.
 
 ### Process, OS information, and time
 
-`cp0_signal_process_api` commands are `ExecBlocking executable keep_root`, `Spawn executable keep_root`, `Stop pid`, `CheckLock path`, `Kill pid grace_ms`, `RunArgv background argv...`, `RunSudo password argv...` (legacy only), `CaptureArgv argv...`, `AdbStatus`, `DesktopExecIsSafe executable`, `Shutdown`, `Reboot`, and `DelayMs milliseconds`. `Spawn` returns a PID; `CaptureArgv` returns stdout; `AdbStatus` returns two status lines.
+`cp0_signal_process_api` commands are `ExecBlocking executable keep_root`, `Spawn executable keep_root`, `Stop pid`, `CheckLock path`, `Kill pid grace_ms`, `RunArgv background argv...`, `RunSudo password argv...` (legacy only), `CaptureArgv argv...`, `DesktopExecIsSafe executable`, `Shutdown`, `Reboot`, and `DelayMs milliseconds`. `Spawn` returns a PID; `CaptureArgv` returns stdout.
 
-`cp0_signal_osinfo_api` and `cp0_signal_timedate_api` share one service. Commands are `NetworkDefaultInfoRead`, `EthInfoRead` (three lines: IPv4, gateway, MAC), `NetworkList` (tab-separated interface records), `AccountInfoRead` (user and hostname), `TimeSet timestamp`, `LocalTime` (`year,month,day,hour,minute,second`), `RandomU32`, `NtpGet`, `NtpSet 0|1`, `AptUpdateBackground`, and `UpdateLauncherBackground`.
+`cp0_signal_osinfo_api` and `cp0_signal_timedate_api` share one service. Commands are `NetworkDefaultInfoRead`, `EthInfoRead` (three lines: IPv4, gateway, MAC), `NetworkList` (tab-separated interface records), `AccountInfoRead` (user and hostname), `TimeSet timestamp`, `LocalTime` (`year,month,day,hour,minute,second`), `RandomU32`, `NtpGet`, and `NtpSet 0|1`.
 
 ### Battery, screenshot, camera, and soundcard
 
@@ -290,13 +284,13 @@ Session commands are `BtSessionInit` (returns an id), `BtSessionDeinit id`, `BtS
 
 `cp0_signal_sudo_argv_async` takes `(argv, auth_timeout_ms, exec_timeout_ms, complete, started)`. `started(ret, request_id)` arrives first; on success `ret == 0` and the id is nonzero. `complete(result_code, exit_code)` then arrives once. Cancel with `cp0_signal_sudo_cancel(request_id, done)`; `done(0)` means cancellation was accepted.
 
-`cp0_signal_system_admin_async` has the same signature but only accepts `AdbSet 0|1`, `AdbAuthorize public_key` (680..2048 bytes, no CR/LF), `AdbRevoke fingerprint` (64 lowercase hexadecimal characters), `AdbClearAuthorizations`, `NtpSet 0|1`, `TimezoneSet zone` (runs `timedatectl set-timezone zone`, the zone one argument with no shell; 1..64 bytes of `[A-Za-z0-9_+/-]`, each `/`-separated part starting with a letter: `cp0::tz::valid_name`, `include/cp0_timezone.hpp`), and `TimeSet YYYY-MM-DD HH:MM:SS`. Invalid arguments call only `started(-EINVAL, 0)` and do not produce a completion callback. Keep request ids and cancel them when a UI workflow leaves or times out.
+`cp0_signal_system_admin_async` has the same signature but only accepts `NtpSet 0|1`, `TimezoneSet zone` (runs `timedatectl set-timezone zone`, the zone one argument with no shell; 1..64 bytes of `[A-Za-z0-9_+/-]`, each `/`-separated part starting with a letter: `cp0::tz::valid_name`, `include/cp0_timezone.hpp`), and `TimeSet YYYY-MM-DD HH:MM:SS`. Invalid arguments call only `started(-EINVAL, 0)` and do not produce a completion callback. Keep request ids and cancel them when a UI workflow leaves or times out.
 
 `cp0_signal_network()` and `cp0_signal_forkexec()` are reserved plan declarations. The current `cp0_lvgl` sources do not register them, so confirm an implementation before calling.
 
 ## Change and Debug Rules
 
 1. Read this document and `include/signal_register_plan.h` before changing a call site.
-2. When changing an interface, update all three language documents, the matching contract, C wrapper, call sites, and tests.
+2. When changing an interface, update this document, the matching contract, C wrapper, call sites, and tests.
 3. For bug fixes, inspect the implementation and contract files; verify callback threads, initialization, teardown, background workers, and wire escaping.
 4. Run `ext_components/cp0_lvgl/tests/run_tests.sh`. Changes involving Linux commands, BlueZ, libcamera, framebuffer, or sudo also require target-platform validation.

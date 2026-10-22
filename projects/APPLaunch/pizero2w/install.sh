@@ -107,10 +107,12 @@ OLD_DESKTOP_UNIT=applaunch-desktop.service
 OLD_DESKTOP_RULES=52-applaunch-desktop.rules
 OLD_DESKTOP_ENTRY_NAME=applaunch.desktop
 # Files that earlier bundles put in /usr/share/APPLaunch and this one no longer ships (install.sh copies the bundle
-# over the folder and never deletes by wildcard: installed apps live there too): the stock start-up logo, two unused
-# images, the stock USB ADB gadget helpers.
+# over the folder and never deletes by wildcard: installed apps live there too): the upstream start-up logo, two unused
+# images, the upstream USB ADB gadget helpers, and since report 029 an empty placeholder library, an unused desktop
+# template and the icons of the removed upstream ZClaw app.
 RETIRED_FILES="share/images/logo_lcd.png share/images/launcher_brand_logo.png share/images/carousel_zero_wordmark.png
-adb/cardputer-adb adb/cardputer-adb-gadget"
+adb/cardputer-adb adb/cardputer-adb-gadget lib/nihao.so applications/vim.desktop.temple share/images/claw_100.png
+share/images/claw_80.png share/images/zclaw_avatar_16.png share/images/zclaw_send_button_18.png share/images/zclaw_sparkles_10.png"
 RETIRED_DIRS="adb"                               # removed when empty afterwards
 
 # System paths ($SYSROOT is empty on a real board)
@@ -710,7 +712,7 @@ print_migration() {
         echo "  - files of earlier bundles that this one does not ship: found: removed:"
         printf '%s\n' "$gone" | sed "s|^|      ${APP_ROOT#"$SYSROOT"}/|"
     else
-        echo "  - files of earlier bundles that this one does not ship (logo_lcd.png, two unused images, adb/): none found"
+        echo "  - files of earlier bundles that this one does not ship (logo_lcd.png, unused images and placeholders, adb/): none found"
     fi
 }
 

@@ -30,8 +30,6 @@ struct Operations {
     std::function<uint32_t()> random_u32;
     std::function<int()> get_ntp;
     std::function<int(bool)> set_ntp;
-    std::function<int()> apt_update_background;
-    std::function<int()> update_launcher_background;
 };
 
 Result dispatch(const std::list<std::string> &arguments, const Operations &operations);

@@ -26,7 +26,7 @@ longer to try the software. Sitting on my desk was the cyberdeck I built from th
 [My first cyberdeck build](https://www.reddit.com/r/cyberDeck/comments/1tng497/my_first_cyberdeck_build/)
 (a Raspberry Pi Zero 2W, a Waveshare 2.8" DPI touch LCD and a Bluetooth keyboard). So I opened Claude Code
 and asked it to adapt the CardputerZero launcher to that machine. The result ran on a Pi Zero 2W, with touch, a 2x
-upscaled window for the stock 320x170 apps, and has since grown into the launcher described above.
+upscaled window for the legacy 320x170 apps, and has since grown into the launcher described above.
 
 > **This is a hobby project and a derivative work.** Almost all of the code is the work of the CardputerZero
 > and M5Stack teams and of the open-source projects listed in the credits below. My changes are the Raspberry Pi
@@ -87,11 +87,13 @@ who learns a lot from open source:
 - Libraries bundled by the launcher (full list and licences in
   [`docs/OPEN_SOURCE_COMPONENTS.md`](docs/OPEN_SOURCE_COMPONENTS.md) and [`LICENSES/`](LICENSES/)):
   [nlohmann/json](https://github.com/nlohmann/json), [cJSON](https://github.com/DaveGamble/cJSON),
-  [fmt](https://github.com/fmtlib/fmt), [spdlog](https://github.com/gabime/spdlog),
-  [cpp-httplib](https://github.com/yhirose/cpp-httplib), [libhv](https://github.com/ithewei/libhv),
-  [eventpp](https://github.com/wqking/eventpp), [tinyalsa](https://github.com/tinyalsa/tinyalsa),
-  [miniaudio](https://github.com/mackron/miniaudio), [RadioLib](https://github.com/jgromes/RadioLib),
-  [SimpleBLE](https://github.com/simpleble/simpleble), [C-Thread-Pool](https://github.com/Pithikos/C-Thread-Pool)
+  [fmt](https://github.com/fmtlib/fmt), [cpp-httplib](https://github.com/yhirose/cpp-httplib),
+  [libhv](https://github.com/ithewei/libhv), [eventpp](https://github.com/wqking/eventpp),
+  [miniaudio](https://github.com/mackron/miniaudio), [SimpleBLE](https://github.com/simpleble/simpleble),
+  [C-Thread-Pool](https://github.com/Pithikos/C-Thread-Pool);
+  earlier versions also carried [spdlog](https://github.com/gabime/spdlog),
+  [RadioLib](https://github.com/jgromes/RadioLib) and [tinyalsa](https://github.com/tinyalsa/tinyalsa), which went
+  with the upstream code we did not use (report 029)
 - **System pieces used on the Pi**: [libinput](https://gitlab.freedesktop.org/libinput/libinput),
   [libxkbcommon](https://github.com/xkbcommon/libxkbcommon), [FreeType](https://gitlab.freedesktop.org/freetype/freetype),
   [NetworkManager](https://gitlab.freedesktop.org/NetworkManager/NetworkManager), [BlueZ](https://github.com/bluez/bluez),
@@ -143,9 +145,11 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 ## What is in this repository
 
 <!-- branding-allow-begin: derivation statement -->
-- The launcher tree inherited from the CardputerZero launcher, with the Raspberry Pi port on top. The upstream
-  project's README and guides are kept, unedited, in [`docs/upstream/`](docs/upstream/)
-  ([README](docs/upstream/UPSTREAM_README.md), [中文](docs/upstream/README_ZH.md), [日本語](docs/upstream/README_JA.md)).
+- The launcher, derived from the CardputerZero launcher, with the Raspberry Pi port and everything since on top.
+  Since 2026-10-22 the repository holds only the code CyberdeckZero uses: the upstream apps, demos, emulator,
+  workflows, release scripts and documents, and the code for the upstream device's own hardware, were removed
+  ([report 029](docs/dev/reports/029-upstream-decoupling.md)); the git history keeps them, and the upstream
+  project itself is linked in the credits above.
 <!-- branding-allow-end -->
 - **[`projects/APPLaunch/pizero2w/`](projects/APPLaunch/pizero2w/README.md)**: everything specific to the Raspberry
   Pi boards: what the port adds, how to build the bundle (`build.sh`), how to install it (`install.sh`), the panel

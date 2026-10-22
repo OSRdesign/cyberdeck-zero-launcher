@@ -1,7 +1,7 @@
 /*
- * Virtual framebuffer shared between the launcher and external (stock CardputerZero) apps.
+ * Virtual framebuffer shared between the launcher and external legacy fullscreen apps.
  *
- * External apps draw to a Linux framebuffer sized for the Cardputer's 320x170 screen. On the
+ * External legacy apps draw to a Linux framebuffer sized for a 320x170 screen. On the
  * Raspberry Pi port an LD_PRELOAD shim (libapplaunch_vfb.so) redirects the app's framebuffer
  * open/ioctl/mmap calls to a shared-memory file with this layout, and the launcher scales that
  * picture up into the compat window.

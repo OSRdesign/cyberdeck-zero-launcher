@@ -5,32 +5,24 @@
  * here instead of being deleted. Set a macro to 1 (or define it on the command line)
  * to bring an entry back, e.g. for another platform.
  *
- * Build with APPLAUNCH_HW=pizero2w in the environment to select the Raspberry Pi
- * Zero 2W profile (see main/SConstruct); the default is the stock CardputerZero.
+ * Build with APPLAUNCH_HW=pizero2w in the environment to select the profile of our boards
+ * (Raspberry Pi boards and PCs; see main/SConstruct, every bundle sets it). Without it the
+ * default profile applies (the SDL simulator): the menu the code was inherited with.
  */
 #pragma once
 
 #if defined(APPLAUNCH_HW_PIZERO2W)
 
-// Raspberry Pi Zero 2W cyberdeck: no speaker, no wired Ethernet, no M5IOE1 expander,
-// no battery gauge, no ADB gadget mode, and software updates come from elsewhere.
+// Raspberry Pi Zero 2W cyberdeck (and the other boards of this port): no speaker, no wired Ethernet,
+// no battery gauge.
 #ifndef APPLAUNCH_SETTINGS_SPEAKER
 #define APPLAUNCH_SETTINGS_SPEAKER 0
 #endif
 #ifndef APPLAUNCH_SETTINGS_ETHERNET
 #define APPLAUNCH_SETTINGS_ETHERNET 0
 #endif
-#ifndef APPLAUNCH_SETTINGS_EXTPORT
-#define APPLAUNCH_SETTINGS_EXTPORT 0
-#endif
 #ifndef APPLAUNCH_SETTINGS_BATTERY
 #define APPLAUNCH_SETTINGS_BATTERY 0
-#endif
-#ifndef APPLAUNCH_SETTINGS_DEVELOPER
-#define APPLAUNCH_SETTINGS_DEVELOPER 0
-#endif
-#ifndef APPLAUNCH_SETTINGS_SOFTWARE_UPDATE
-#define APPLAUNCH_SETTINGS_SOFTWARE_UPDATE 0
 #endif
 #ifndef APPLAUNCH_SETTINGS_SHUTDOWN
 #define APPLAUNCH_SETTINGS_SHUTDOWN 1
@@ -39,11 +31,6 @@
 // (no sudo password, no `hwclock -w`). A manual time lasts until the next boot.
 #ifndef APPLAUNCH_SETTINGS_TIME_NO_SUDO
 #define APPLAUNCH_SETTINGS_TIME_NO_SUDO 1
-#endif
-// The stock Calculator is an external program that draws to a 320x170 framebuffer and is not
-// installed here: use the built-in native touch calculator page instead.
-#ifndef APPLAUNCH_APPS_NATIVE_CALCULATOR
-#define APPLAUNCH_APPS_NATIVE_CALCULATOR 1
 #endif
 // A standard keyboard has no Fn key: pages without text entry open their help with plain H, and the
 // SSH page (typing fields) uses F1.
@@ -92,7 +79,7 @@
 #define APPLAUNCH_TXT_RTC_WRITE_FAILED "Could not save the time"
 #define APPLAUNCH_TXT_RTC_OP_IN_PROGRESS "Time operation in progress"
 
-#else // stock CardputerZero
+#else // default profile (no APPLAUNCH_HW)
 
 #ifndef APPLAUNCH_SETTINGS_SPEAKER
 #define APPLAUNCH_SETTINGS_SPEAKER 1
@@ -100,47 +87,35 @@
 #ifndef APPLAUNCH_SETTINGS_ETHERNET
 #define APPLAUNCH_SETTINGS_ETHERNET 1
 #endif
-#ifndef APPLAUNCH_SETTINGS_EXTPORT
-#define APPLAUNCH_SETTINGS_EXTPORT 1
-#endif
 #ifndef APPLAUNCH_SETTINGS_BATTERY
 #define APPLAUNCH_SETTINGS_BATTERY 1
 #endif
-#ifndef APPLAUNCH_SETTINGS_DEVELOPER
-#define APPLAUNCH_SETTINGS_DEVELOPER 1
-#endif
-#ifndef APPLAUNCH_SETTINGS_SOFTWARE_UPDATE
-#define APPLAUNCH_SETTINGS_SOFTWARE_UPDATE 1
-#endif
 #ifndef APPLAUNCH_SETTINGS_SHUTDOWN
-#define APPLAUNCH_SETTINGS_SHUTDOWN 0 // the stock menu only offers Reboot
+#define APPLAUNCH_SETTINGS_SHUTDOWN 0 // default: Reboot only
 #endif
 #ifndef APPLAUNCH_SETTINGS_TIME_NO_SUDO
-#define APPLAUNCH_SETTINGS_TIME_NO_SUDO 0 // stock: sudo coordinator + `hwclock -w`
-#endif
-#ifndef APPLAUNCH_APPS_NATIVE_CALCULATOR
-#define APPLAUNCH_APPS_NATIVE_CALCULATOR 0 // stock: external CardputerZero-Calculator
+#define APPLAUNCH_SETTINGS_TIME_NO_SUDO 0 // default: sudo coordinator + `hwclock -w`
 #endif
 #ifndef APPLAUNCH_HELP_PLAIN_H
-#define APPLAUNCH_HELP_PLAIN_H 0 // stock: Fn+H is a hardware key code on the Cardputer keyboard
+#define APPLAUNCH_HELP_PLAIN_H 0 // default: Fn+H (a key code of the legacy matrix keyboard)
 #endif
 #ifndef APPLAUNCH_SETTINGS_TOUCH
-#define APPLAUNCH_SETTINGS_TOUCH 0 // stock: no touch panel
+#define APPLAUNCH_SETTINGS_TOUCH 0 // default: no touch panel
 #endif
 #ifndef APPLAUNCH_SETTINGS_APPS
-#define APPLAUNCH_SETTINGS_APPS 0 // stock: apps are managed in the Store
+#define APPLAUNCH_SETTINGS_APPS 0 // default: apps are managed in the Store
 #endif
 #ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
-#define APPLAUNCH_LAUNCHER_STORE_TOGGLE 0 // stock: the Store tile is always shown, not in Settings > Launcher
+#define APPLAUNCH_LAUNCHER_STORE_TOGGLE 0 // default: the Store tile is always shown, not in Settings > Launcher
 #endif
 #ifndef APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP
-#define APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP 0 // stock: the launcher is the device's only screen
+#define APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP 0 // default: the launcher is the device's only screen
 #endif
 #define APPLAUNCH_TXT_HELP_HINT "Fn+H:Help"
 #define APPLAUNCH_TXT_HELP_CLOSE "Fn+H: close"
 #define APPLAUNCH_TXT_SSH_HELP_HINT "KEY_HELP:Help"
 
-// User-facing wording for Date & Time (stock CardputerZero: hardware RTC).
+// User-facing wording for Date & Time (default profile: a hardware RTC).
 #define APPLAUNCH_TXT_RTC_WRITE_PROMPT "Write RTC?"
 #define APPLAUNCH_TXT_RTC_INVALID_VALUE "Invalid RTC value"
 #define APPLAUNCH_TXT_RTC_READING_STATUS "Reading RTC status"

@@ -55,8 +55,6 @@ int main()
         ++ntp_calls;
         return 0;
     };
-    operations.apt_update_background = [] { return 3; };
-    operations.update_launcher_background = [] { return 4; };
 
     auto result = cp0::osinfo::dispatch({"NetworkDefaultInfoRead"}, operations);
     assert(result.code == 0 && default_network);
@@ -93,8 +91,9 @@ int main()
     assert(cp0::osinfo::dispatch({"NtpSet", "1junk"}, operations).code == -1);
     assert(ntp_calls == 2);
 
-    assert(cp0::osinfo::dispatch({"AptUpdateBackground"}, operations).code == 3);
-    assert(cp0::osinfo::dispatch({"UpdateLauncherBackground"}, operations).code == 4);
+    // the upstream updater commands are gone (report 029)
+    assert(cp0::osinfo::dispatch({"AptUpdateBackground"}, operations).code == -1);
+    assert(cp0::osinfo::dispatch({"UpdateLauncherBackground"}, operations).code == -1);
     assert(cp0::osinfo::dispatch({}, operations).code == -1);
     assert(cp0::osinfo::dispatch({"Unknown"}, operations).payload == "unknown osinfo api command");
 

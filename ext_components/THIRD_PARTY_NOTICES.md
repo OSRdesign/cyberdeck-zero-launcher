@@ -7,13 +7,9 @@ the MIT license used for M5Stack-authored wrapper code.
 | Wrapper | Upstream source | License record |
 | --- | --- | --- |
 | `Miniaudio` | `https://github.com/mackron/miniaudio` | The complete public-domain/MIT-0 notice is embedded at the end of `Miniaudio/include/miniaudio.h`. |
-| `RadioLib` | `https://github.com/jgromes/RadioLib` | MIT text in `RadioLib/LICENSE`; SConstruct fetches a URL without pinning a commit. |
 | `Sigslot` | `https://github.com/palacaze/sigslot` | Fetched at the commit pinned by `Sigslot/SConstruct`; retain the upstream MIT notice. |
-| `SmoothUI` | `https://github.com/Forairaaaaa/smooth_ui_toolkit` | MIT text in `SmoothUI/LICENSE`; commit pinned by SConstruct. |
-| `Spdlog` | `https://github.com/gabime/spdlog` | Fetched at the commit pinned by `Spdlog/SConstruct`; retain the upstream MIT notice. |
 
-Full notices are also retained in `Miniaudio/LICENSE`, `Sigslot/LICENSE`
-and `Spdlog/LICENSE`. SDK dependencies used by these components include
+Full notices are also retained in `Miniaudio/LICENSE` and `Sigslot/LICENSE`. SDK dependencies used by these components include
 LVGL (MIT), eventpp (Apache-2.0), and platform libraries selected by
 SConstruct. `../LICENSES/` records libhv (BSD-3-Clause), fmt (MIT), tinyalsa
 (BSD-3-Clause), cJSON, C-Thread-Pool and cpp-httplib (MIT). The repository
@@ -24,3 +20,6 @@ uses BlueZ/DBus, and the SimpleBLE cache must not be described as MIT.
 See [`../docs/OPEN_SOURCE_COMPONENTS.md`](../docs/OPEN_SOURCE_COMPONENTS.md)
 for the complete repository inventory, including SDK, LVGL, and system
 dependencies.
+
+The `SmoothUI` and `Spdlog` wrappers (MIT; no build of this project enabled them) and the `RadioLib` wrapper (MIT,
+only used by the removed LoRa service) were removed on 2026-10-22 (report 029).

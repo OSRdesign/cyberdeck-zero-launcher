@@ -128,8 +128,8 @@ if [ "$WITH_STORE" = 1 ] && [ -d "$REPO/projects/AppStore/dist/APPLaunch" ]; the
     cp -a "$REPO/projects/AppStore/dist/APPLaunch/." "$OUT/payload/share/"
 fi
 # Not in the Pi bundle (install.sh removes them from an earlier install: RETIRED_FILES there):
-#   share/images/logo_lcd.png   the stock device's start-up logo, shown only by the stock start-up path
-#   adb/                        the stock USB ADB gadget helpers (no ADB on the Pi builds: Settings has no Developer page)
+#   share/images/logo_lcd.png   the upstream start-up logo (no longer in the repository since report 029)
+#   adb/                        the upstream USB ADB gadget helpers (no longer in the repository since report 029)
 rm -f "$OUT/payload/share/share/images/logo_lcd.png"
 rm -rf "$OUT/payload/share/adb"
 for file in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts \

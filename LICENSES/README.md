@@ -38,3 +38,7 @@ embedded metadata confirms the same Adobe copyright and OFL-1.1 license.
 
 Retain original per-file notices and any nested dependency licenses. Recheck
 these copies whenever dependency revisions change, especially unpinned downloads.
+
+Note of 2026-10-22 (report 029): the emulator, CameraApp, LaunchWizard (with Keyboard Guide), the stock
+Calculator submodule and the RadioLib, SmoothUI and Spdlog wrappers were removed from this repository. The texts
+above that came from them stay here unchanged; the paths named in the table refer to the git history.

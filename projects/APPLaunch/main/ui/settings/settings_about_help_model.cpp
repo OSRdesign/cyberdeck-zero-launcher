@@ -121,10 +121,6 @@ miniaudio 0.11.25
 https://github.com/mackron/miniaudio/tree/0.11.25
 Unlicense OR MIT-0
 
-RadioLib
-https://github.com/jgromes/RadioLib
-MIT
-
 - Fonts:
 
 Montserrat

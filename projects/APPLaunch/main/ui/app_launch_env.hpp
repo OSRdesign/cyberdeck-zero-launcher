@@ -45,7 +45,7 @@ std::string export_command(const Input &in);
 bool from_metrics(const cp0_ui_metrics_t *m, Mode mode, const char *runtime_dir, Input *out);
 
 /* export_command() for the running launcher (cp0_ui_metrics_current(), XDG_RUNTIME_DIR); "" when there are no
- * metrics (the stock CardputerZero build, the SDL simulator): no contract there, the command stays as it was. */
+ * metrics (a build without the dpi-scaled backend, the SDL simulator): no contract there, the command stays as it was. */
 std::string export_for_current(Mode mode);
 
 } // namespace app_launch_env

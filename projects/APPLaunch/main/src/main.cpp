@@ -22,22 +22,13 @@
 #include "backward.h"
 #endif
 
-const char *bash_init = "if [ ! -f ~/Downloads/hello.md ] ; then unzip /var/template.zip -d ~/Downloads/ ; sync ; fi";
-
 int main(void)
 {
-    system(bash_init);
     Cp0LvglRunOptions options;
     options.after_resource_init = []() {
         const char *display_mode = std::getenv("APPLAUNCH_DISPLAY");
         if (display_mode != nullptr && std::string(display_mode) == "dpi-scaled")
-            return; // Pi Zero 2W: no M5IOE1 backlight GPIO; leave the DPI backlight as-is
-        cp0_signal_settings_api({"GpioSet", "BACKLIGHT", "0"}, [](int code, std::string data) {
-            if (code == 0)
-                SLOGI("[BOOT] set m5ioe1 line 9 low");
-            else
-                SLOGE("[BOOT] failed to set m5ioe1 line 9 low: %s", data.c_str());
-        });
+            return; // the dpi-scaled boards: the backlight stays as the board left it
         if (launcher_media_controls::restore_startup_backlight())
             SLOGI("[BOOT] restored working backlight brightness");
         else

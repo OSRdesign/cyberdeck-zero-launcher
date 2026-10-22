@@ -4,7 +4,7 @@
 
 Before analyzing the code, check whether `compile_commands.json` exists in this
 directory (`projects/APPLaunch/compile_commands.json`). If it does not, follow
-the cross-compilation instructions in `../../docs/upstream/README_ZH.md` (upstream README, Chinese): load
+the build instructions in `pizero2w/README.md` and `../../tools/dev/README.md`: load
 the config matching your current platform, then run one cross-compilation:
 
 ```bash
@@ -12,10 +12,11 @@ export CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk
 bbear -- scons -j22
 ```
 
-`linux_x86_cross_cp0_config_defaults.mk` corresponds to the current platform
-(Linux x86_64 host, CP0 cross toolchain). Pick the matching
-`*_config_defaults.mk` for your platform from `../../docs/upstream/README_ZH.md` — for
-example `linux_x86_sdl2_config_defaults.mk` for the SDL2 simulator on Linux.
+`linux_x86_cross_cp0_config_defaults.mk` corresponds to the arm64 boards
+(Linux x86_64 host, aarch64 cross toolchain). The other configurations in this
+directory are `linux_x86_64_native_cp0_config_defaults.mk` (amd64 PCs, a native
+build), `config_defaults.mk` (a native build on the board) and
+`linux_x86_sdl2_config_defaults.mk` (the SDL2 simulator on Linux).
 
 This command generates `compile_commands.json` in this directory. Then use the
 source files that actually participate in the cross-compilation (as listed in

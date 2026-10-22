@@ -25,9 +25,6 @@ version_file = local_path.parent.parent / "ext_components" / "cp0_lvgl" / "sdk_v
 version = version_file.read_text(encoding="utf-8")
 static_lib_path = sdk_path / "github_source" / f"static_lib_{version}"
 
-if os.environ.get("CardputerZero", '') == 'y':
-    os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_cross_cp0_config_defaults.mk"
-
 if os.environ.get("CONFIG_DEFAULT_FILE") == None:
     if platform.machine() == 'x86_64':
         os.environ["CONFIG_DEFAULT_FILE"] = "linux_x86_sdl2_config_defaults.mk"

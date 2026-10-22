@@ -1,4 +1,4 @@
-# Virtual keyboard hub used to feed stock (framebuffer) apps: the launcher forwards the physical
+# Virtual keyboard hub used to feed legacy (framebuffer) apps: the launcher forwards the physical
 # keyboard and the on-screen toolbar keys into one uinput device that the app reads.
 # - let the input group create uinput devices (osrde is in it);
 # - give the device a stable name for the app (LV_LINUX_KEYBOARD_DEVICE).

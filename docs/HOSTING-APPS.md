@@ -171,4 +171,4 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | Default source at install (the Store's `registries.json`, once per user) | `projects/APPLaunch/pizero2w/default-sources.sh`, run by `install.sh` |
 | The Store's shared source list (mirror) and the default source | `settings_apps_registry_mirror.{hpp,cpp}` (pure), `settings_apps_jobs.cpp` (adapter), test `tests/test_settings_apps_registry_mirror.cpp` |
 | Example app | `apps/cyberdeck-app-template/` in the apps repo (native); `apps/lanscan/` (320x170 compat) |
-| Switch (off on the stock CardputerZero build) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |
+| Switch (off in the default profile, a build without `APPLAUNCH_HW=pizero2w`) | `APPLAUNCH_SETTINGS_APPS` in `settings_hw_profile.hpp` |

@@ -112,14 +112,6 @@ Result dispatch(const std::list<std::string> &arguments, const Operations &opera
             return {-1, {}};
         return operations.set_ntp ? Result{operations.set_ntp(enabled == "1"), {}} : Result{};
     }
-    if (command == "AptUpdateBackground") {
-        return operations.apt_update_background ? Result{operations.apt_update_background(), {}} : Result{};
-    }
-    if (command == "UpdateLauncherBackground") {
-        return operations.update_launcher_background
-                   ? Result{operations.update_launcher_background(), {}}
-                   : Result{};
-    }
         return {-1, "unknown osinfo api command"};
     } catch (...) {
         return {-1, "osinfo backend failure"};

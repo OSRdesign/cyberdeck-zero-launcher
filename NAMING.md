@@ -41,13 +41,36 @@ both. See the [Pi port README](projects/APPLaunch/pizero2w/README.md).
 | `M5CardputerZero-AppStore` | the Store's binary in `/usr/share/APPLaunch/bin/` | the Store's name, unchanged; the launcher starts it by that name |
 | `M5APPSTORE_*` | the Store's environment variables | the Store's code, unchanged |
 | `CardputerZero Hub` | the Store's built-in catalogue and its registry URLs | built into the Store, which refuses to remove it; credited in Settings and Licenses |
-| `/proc/cardputerzero_hw_id` | hardware id file of the stock device | read by apps and the launcher to tell the stock hardware apart |
-| `/tmp/M5CardputerZero-APPLaunch_fcntl.lock` | single-instance lock file | shared with the stock apps |
-| `M5CardputerZero-Calculator` | the stock Calculator app's binary | upstream app, unchanged |
-| `M5IOE1`, `tca8418_keypad_m5stack_keymap` | I/O expander and keymap of the stock hardware | hardware and system file names |
+| `/com/cardputerzero/applaunch/agent` | the launcher's BlueZ pairing agent (D-Bus object path) | apps document it (Mesh Hop's BLE notes); changing it needs nothing on disk, but is a visible interface |
+| `/tmp/M5CardputerZero-APPLaunch_fcntl.lock` | single-instance lock file | shared with legacy apps |
+| `M5CardputerZero-APPLaunch` | the launcher binary's name of v0.6.0 and before | kept by `install.sh` as a link to `cyberdeckzero` |
+| `M5CardputerZero-<app>` | binary names of some apps (`/usr/share/APPLaunch/bin/`: LAN Scan, Wi-Fi Survey, the MeshZero draft) | named in their `.desktop` `Exec=` lines; the apps drop the prefix at their next version (report 025 decision 7) |
+| `tca8418_keypad_m5stack_keymap` | keymap file of the inherited keyboard path (`cp0_file_path("keyboard_map")`) | a system file name |
 
 Copyright notices (`LICENSE`, the `SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD` headers, `LICENSES/`)
 stay exactly as they are: the MIT licence requires them.
+
+Renaming any of these is possible later, but only with a migration (install.sh moving folders and config, an
+alias period for the binary and paths, a new app contract version, the apps rebuilt); report 029 section 5 lists
+them with what each rename would need.
+
+## Decoupling from upstream (2026-10-22, report 029)
+
+On the owner's decision of 2026-10-22 the repository no longer carries upstream code that CyberdeckZero does not
+use. Removed: the upstream app and demo projects (ZClaw, LaunchWizard, UserDemo, HelloWorld, the emulator,
+CameraApp) and the Calculator and Keyboard-Guide submodules; the inherited CI workflows and `.deb` release scripts;
+the upstream documentation (`docs/upstream/`, ADB, macOS build guides) and the Chinese and Japanese copies of the
+cp0_lvgl reference; the unused nmtui, bluectl, Spdlog, SmoothUI and RadioLib components; the macOS and Windows build
+configurations; and the code for hardware our boards do not have: Settings > ExtPort (M5IOE1 expander), Developer
+(USB ADB), System > Software (the upstream `.deb` updater), the LoRa service and pages, the external stock
+Calculator, the first-boot wizard hooks. Git history keeps all of it.
+
+Kept: every copyright notice and licence text; the names above; the bundled Store (built from the `projects/AppStore`
+submodule, unchanged) and the SDK submodule (the build framework); the native UI, the dpi-scaled display, the
+compat/VFB layer for legacy fullscreen apps, Settings, multitasking, the app contract, the amd64 build and the board
+tooling; and, until the owner decides (report 029 section 4), the Battery, Speaker and Ethernet pages (compiled
+out on our boards), the camera service, the default hardware profile and the legacy renderer used by the SDL
+simulator.
 
 ## Checking
 

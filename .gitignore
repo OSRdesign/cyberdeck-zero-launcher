@@ -20,8 +20,6 @@ skills-lock.json
 *.bak
 projects/APPLaunch/docs/UILaunchPage_carousel_animation.html
 
-# Generated OOBE binary — CI copies the freshly built LaunchWizard here before packaging
-projects/APPLaunch/APPLaunch/bin/LaunchWizard
 bluez*
 projects/lcd_test
 .sconsign.dblite

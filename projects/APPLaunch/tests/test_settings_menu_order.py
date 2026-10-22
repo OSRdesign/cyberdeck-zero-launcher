@@ -23,12 +23,10 @@ EXPECTED_ROOT_ORDER = [
     "Wi-Fi",
     "Ethernet",
     "Bluetooth",
-    "ExtPort",
     "Battery",
     "Launcher",
     "Touch",
     "Apps",
-    "Developer",
     "User",
     "Date & Time",
     "System",
@@ -106,16 +104,6 @@ def test_ethernet_is_a_submenu_with_enable_and_existing_info_page():
     assert 'settings_fonts::mono(14)' in SYSTEM_PAGE
 
 
-def test_ext_port_order_and_hardware_mappings():
-    ext_port_entries = re.findall(
-        r'append_child\(\s*ext_port,\s*SettingEntry\{"([^"]+)"',
-        settings_tree_builder(),
-    )
-    assert ext_port_entries == ["Ext 5V", "Grove 5V"]
-    assert 'SettingEntry{"Ext 5V", std::bind(&ext_port_com, "EXT5V"' in SETTINGS_PAGE
-    assert 'SettingEntry{"Grove 5V", std::bind(&ext_port_com, "GROVE5V"' in SETTINGS_PAGE
-
-
 def test_launcher_settings_use_builtin_and_release_preinstalled_apps():
     assert SETTINGS_ADAPTER.count("launcher_app_registry_entries(&count)") == 2
     assert "launcher_builtin_app_registry_entries(&count)" not in SETTINGS_ADAPTER
@@ -123,10 +111,8 @@ def test_launcher_settings_use_builtin_and_release_preinstalled_apps():
     assert "launcher::is_protected_launcher_app(descriptor.config_key)" in SETTINGS_ADAPTER
     assert '{"Python", "python_100.png", "app_Python", true, false}' in BUILTIN_REGISTRY
     assert '{"Snake", "game_100.png", "app_Game", true, false}' in BUILTIN_REGISTRY
-    assert (
-        "zclaw.desktop\tZClaw\tshare/images/claw_100.png\t"
-        "/usr/share/APPLaunch/bin/ZClaw\tfalse\ttrue"
-    ) in PREINSTALLED_MANIFEST
+    # the release ships no preinstalled desktop app (ZClaw went with the upstream projects, report 029): header only
+    assert [line for line in PREINSTALLED_MANIFEST.splitlines() if line and not line.startswith("#")] == []
 
 
 def test_system_replaces_about_with_requested_entries():
@@ -138,11 +124,11 @@ def test_system_replaces_about_with_requested_entries():
     )
     # About on every board, right after Licenses, with no condition (same options on every board; its "Board:" line
     # alone follows APPLAUNCH_BOARD); the other System rows come from append_* helpers (pointer, keyboard, session,
-    # boot actions)
-    assert system_entries == ["Software", "Storage", "Licenses", "About"]
+    # boot actions). The stock Software row is gone (upstream update source).
+    assert system_entries == ["Storage", "Licenses", "About"]
     assert 'std::getenv("APPLAUNCH_BOARD")' not in system
     assert re.search(r'\n\s*mode_tree\.append_child\(system, SettingEntry\{"About"', system)
-    assert "settings_update_page_factory" in system
+    assert "settings_update_page_factory" not in system
     assert "settings_storage_page_factory" in system
     assert "settings_credit_page_factory" in system
     assert "boot_actions::Action::Reboot" in system
@@ -158,6 +144,5 @@ if __name__ == "__main__":
     test_volume_opens_the_volume_editor_directly()
     test_wifi_menu_uses_product_labels_without_changing_actions()
     test_ethernet_is_a_submenu_with_enable_and_existing_info_page()
-    test_ext_port_order_and_hardware_mappings()
     test_launcher_settings_use_builtin_and_release_preinstalled_apps()
     test_system_replaces_about_with_requested_entries()

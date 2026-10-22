@@ -142,11 +142,9 @@ void execute_filesystem_operation(const std::shared_ptr<BootState> &state,
                                   boot_actions::Operation operation,
                                   std::string path)
 {
-    const char *command = operation == boot_actions::Operation::RemoveLauncherSettings
-                              ? "Remove"
-                              : "Touch";
+    // the only filesystem operation is RemoveLauncherSettings (Factory Reset)
     invoke_filesystem(
-        {command, std::move(path)},
+        {"Remove", std::move(path)},
         [state, generation, operation](int code, std::string data) mutable {
             handle_boot_operation_result(state, generation, operation, code, std::move(data));
         });

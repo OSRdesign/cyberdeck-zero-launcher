@@ -5,7 +5,7 @@
 # --- Licences and notices (MIT obligation, never edited) ---
 LICENSE                                   # M5Stack's MIT notice
 LICENSES/**                               # licence texts and their index
-ext_components/*/LICENSE                  # cp0_lvgl, bluectl, nmtui: M5Stack MIT notices
+ext_components/*/LICENSE                  # cp0_lvgl: M5Stack MIT notice
 ext_components/THIRD_PARTY_NOTICES.md     # upstream third-party notice
 .gitmodules                               # upstream submodule URLs (m5stack, CardputerZero orgs)
 docs/OPEN_SOURCE_COMPONENTS.md            # credits: component inventory (M5Stack SDK, upstream notices)
@@ -15,46 +15,12 @@ tools/dev/check-branding.sh               # names the brand words it looks for
 tools/dev/branding-allow*.txt             # this file and the apps-repo template
 NAMING.md                                 # lists the inherited technical names and why they stay
 
-# --- Upstream documentation, kept for reference ---
-docs/upstream/**                          # moved upstream docs (banner on top)
-docs/adb-capabilities.md                  # upstream ADB notes (stock device feature)
-docs/adb-debug-guide.md                   # upstream ADB guide (stock device feature)
-docs/adb-shell-terminal.md                # upstream ADB notes (stock device feature)
-docs/file-transfer-performance.md         # upstream measurement on the stock device
-docs/macos-docker-build.md                # upstream stock build guide (CardputerZero=y flag, stock binary name)
-docs/macos-docker-build-ja.md             # same, Japanese
-
-# --- Upstream subprojects and submodules (not our product; submodules are not grepped anyway) ---
-SDK/**                                    # M5Stack Linux Libs SDK (submodule)
+# --- Upstream submodules (not our product; submodules are not grepped anyway) ---
+SDK/**                                    # M5Stack Linux Libs SDK (submodule): the build framework
 projects/AppStore/**                      # M5Stack's CardputerZero Store (submodule, unchanged)
-projects/Calculator/**                    # upstream submodule
-projects/Keyboard-Guide/**                # upstream submodule
-projects/CameraApp/**                     # upstream app project and submodule
-projects/CardputerZero-Emulator/**        # upstream emulator
-projects/HelloWorld/**                    # upstream example
-projects/LaunchWizard/**                  # upstream app
-projects/UserDemo/**                      # upstream app
-projects/ZClaw/**                         # upstream app
 
-# --- Stock build, packaging and CI (inherited, not used by our releases) ---
-.github/workflows/**                      # inherited workflows, run only on a master branch we do not have
-scripts/build_cardputerzero_release_local.sh   # stock .deb release builder
-scripts/debian_packager.py                # stock .deb packager (binary names, X-CardputerZero-Update-ABI)
-projects/APPLaunch/SConstruct             # stock build entry (CardputerZero=y flag, upstream UserDemo URL)
-projects/APPLaunch/setup.ini              # stock deploy helper (stock binary name)
-projects/APPLaunch/win_x86_cross_config_defaults.mk   # stock cross-build comment
-projects/APPLaunch/tests/test_appstore_packaging.py   # tests of the stock packager
-projects/APPLaunch/tests/test_preinstalled_app_packaging.py   # tests of the stock release builder
-projects/APPLaunch/tests/test_updater_packaging.py    # tests of the stock updater packaging
-ext_components/cp0_lvgl/tests/test_launcher_updater.cpp   # stock updater test data (m5stack1 revision)
-ext_components/cp0_lvgl/src/cp0/cp0_lvgl_osinfo.cpp   # stock updater URL (github.com/CardputerZero), off on Pi builds
-
-# --- Stock-profile code our boards cannot reach (report 025 section 4 item 8) ---
-projects/APPLaunch/main/ui/settings/settings_system_page.cpp      # "Device: M5CardputerZero" (stock profile only)
-projects/APPLaunch/main/ui/settings/settings_adb_guide_page.cpp   # ADB guide label (stock profile only)
-ext_components/cp0_lvgl/src/sdl/**        # SDL simulator: window title, alias, stock binary/lock names
-projects/APPLaunch/APPLaunch/adb/**       # stock USB ADB gadget (manufacturer/product strings); not in the Pi bundle
-ext_components/cp0_lvgl/src/cp0/cp0_lvgl_settings.cpp   # kCardputerZeroGpioMap: stock board GPIO map identifier
+# --- Build files that name upstream download locations ---
+projects/APPLaunch/SConstruct             # arm64 sysroot archive downloaded from an upstream release (report 029)
 
 # --- History: decisions, reports, tasks ---
 docs/dev/decisions.md

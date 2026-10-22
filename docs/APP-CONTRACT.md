@@ -152,7 +152,7 @@ A file without `vkb` (an older launcher) means `auto`; a file without `pointer` 
 |---|---|
 | `X-Fullscreen=true` | fullscreen mode: the launcher stops drawing, the app owns the whole panel until it exits (the hold-Esc watchdog still applies). Without it the app is a compat app: 320x170 in the scaled window, toolbar below. |
 | `X-Background=run\|freeze` | (section 13) the app may be hidden and resumed instead of owning the panel until it exits; `freeze` = stopped while hidden, `run` = keeps working while hidden. Absent or another value: today's behaviour. Only with `X-Fullscreen=true`, only under a launcher with multitasking on; an older launcher ignores it. Declare it only in a build that answers the protocol (section 13, "The helper"). |
-| `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (stock CardputerZero, the SDL simulator) shows it. |
+| `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (the SDL simulator) shows it. |
 
 **An older launcher ignores `X-MinSize`** (and every contract variable), so an app must still start on a screen that
 is too small and say so ("needs a 640x480 screen") instead of drawing off the edge.

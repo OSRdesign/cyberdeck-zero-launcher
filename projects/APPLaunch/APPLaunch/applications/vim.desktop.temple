@@ -1,7 +1,0 @@
-[Desktop Entry]
-Name=Vim
-TryExec=vim
-Exec=vim
-Terminal=true
-Icon=share/images/cli_100.png
-Type=Application

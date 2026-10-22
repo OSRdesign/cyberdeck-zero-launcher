@@ -171,10 +171,7 @@ private:
 
         if (file == "applications") return std::string(kAppRoot) + "/applications";
         if (file == "appstore_exec") return std::string(kAppRoot) + "/bin/M5CardputerZero-AppStore";
-        if (file == "calculator_exec") return std::string(kAppRoot) + "/bin/M5CardputerZero-Calculator";
-        if (file == "adb_helper") return std::string(kAppRoot) + "/adb/cardputer-adb";
         if (file == "launcher_settings") return "/var/lib/applaunch/settings";
-        if (file == "oobe_marker") return "/var/lib/applaunch/run-oobe";
         if (file == "home_dir") {
             const char *home = std::getenv("HOME");
             return home && home[0] ? home : "/tmp";

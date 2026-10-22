@@ -46,7 +46,7 @@
  * 4. .desktop keys: X-Fullscreen=true (fullscreen mode); X-MinSize=WxH (the tile is hidden on a smaller screen; an
  *    older launcher ignores it). Full reference: docs/APP-CONTRACT.md.
  *
- * Failure modes: an app started another way (ssh, an older launcher, the stock CardputerZero) has no contract env and
+ * Failure modes: an app started another way (ssh, an older launcher, a launcher without the contract) has no contract env and
  * maybe no files: cp0_app_env_read() returns -1, the readers return -1, and the app uses its own probe (fbdev
  * VSCREENINFO) and cp0_app_screen_compute(). Stability: within contract 1 the names, units and meanings above never
  * change; keys and variables are only added.

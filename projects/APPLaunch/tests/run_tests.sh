@@ -14,7 +14,6 @@ python3 "$test_root/test_launcher_store_toggle_contract.py"
 python3 "$test_root/test_settings_wifi_enable_copy_contract.py"
 python3 "$test_root/test_settings_ethernet_layout_contract.py"
 python3 "$test_root/test_settings_rtc_layout_contract.py"
-python3 "$test_root/test_preinstalled_app_packaging.py"
 python3 "$test_root/test_settings_storage_build_contract.py"
 python3 "$test_root/test_static_resource_staging.py"
 python3 "$test_root/test_lockscreen_contract.py"
@@ -36,8 +35,6 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     "$test_root/test_page_timer_lifecycle.cpp" \
     -o "$build_dir/test_page_timer_lifecycle"
 "$build_dir/test_page_timer_lifecycle"
-python3 "$test_root/test_updater_packaging.py"
-python3 "$test_root/test_appstore_packaging.py"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../main/include" \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
@@ -165,16 +162,6 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_keyboard_text_input"
 "$build_dir/test_keyboard_text_input"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    "$test_root/test_mesh_page_model.cpp" \
-    "$test_root/../main/ui/model/mesh_page_model.cpp" \
-    -o "$build_dir/test_mesh_page_model"
-"$build_dir/test_mesh_page_model"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    "$test_root/test_lora_page_model.cpp" \
-    "$test_root/../main/ui/model/lora_page_model.cpp" \
-    -o "$build_dir/test_lora_page_model"
-"$build_dir/test_lora_page_model"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_tank_battle_model.cpp" \
     "$test_root/../main/ui/model/tank_battle_model.cpp" \
     -o "$build_dir/test_tank_battle_model"
@@ -244,14 +231,10 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 "$build_dir/test_settings_about_info_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
-    "$test_root/test_settings_system_update_model.cpp" \
+    "$test_root/test_settings_system_model.cpp" \
     "$settings_ui_root/settings_system_model.cpp" \
-    -o "$build_dir/test_settings_system_update_model"
-"$build_dir/test_settings_system_update_model"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
-    "$test_root/../../../ext_components/cp0_lvgl/tests/test_update_job.cpp" \
-    -o "$build_dir/test_update_job"
-"$build_dir/test_update_job"
+    -o "$build_dir/test_settings_system_model"
+"$build_dir/test_settings_system_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -I"$settings_ui_root" \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
