@@ -126,7 +126,7 @@ not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
 | System > Quit to desktop | `APPLAUNCH_SESSION=desktop` (desktop unit), native host, `APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP` | desktop session only | hardware-dependent (meaningless without a desktop) |
 | System > Reboot | none | every board | aligned |
 | System > Shutdown | `APPLAUNCH_SETTINGS_SHUTDOWN` (1 on our profile, 0 stock) | every board (stock: no) | stock rule, needs owner decision for stock |
-| Speaker, Ethernet, ExtPort, Battery, Developer (ADB) | `APPLAUNCH_SETTINGS_*` (0 on our profile) | stock only | hardware-dependent (speaker, RJ45, M5IOE1 expander, bq27220 gauge, USB gadget) |
+| Speaker, Ethernet, ExtPort, Battery, Developer (ADB) | `APPLAUNCH_SETTINGS_*` (0 on our profile) | stock only | hardware-dependent (speaker, RJ45, IO expander, bq27220 gauge, USB gadget) |
 
 The native host hides a node it has no widget for (`SettingsNodeKind::Custom`); none of our profile's nodes is one.
 System rows keep their order; rows counted from the end (Shutdown, Reboot, Quit to desktop, Keyboard test, On-screen
