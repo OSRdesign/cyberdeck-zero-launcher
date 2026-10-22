@@ -247,6 +247,19 @@ static void parked_transactions()
     unsetenv("M5APPSTORE_STATE_DIR");
 }
 
+// The Store backend reads dpkg's English messages: programs run through run_program get the C locale, whatever the
+// launcher's own language (a French board showed "unable to determine current Debian package state").
+static void backend_runs_in_c_locale()
+{
+    setenv("LC_ALL", "fr_FR.UTF-8", 1);
+    setenv("LANGUAGE", "fr", 1);
+    const auto r = apps_backend::run_program("/bin/sh", {"-c", "printf '%s|%s' \"$LC_ALL\" \"${LANGUAGE-unset}\""}, 5);
+    assert(r.rc == 0);
+    assert(r.out == "C|unset");
+    unsetenv("LC_ALL");
+    unsetenv("LANGUAGE");
+}
+
 static void sync_reasons()
 {
     SyncProbe up;
@@ -870,6 +883,7 @@ int main()
     upgrades();
     parsing();
     sync_progress();
+    backend_runs_in_c_locale();
     sync_reasons();
     sync_verdicts();
     stage_lines();
