@@ -40,6 +40,20 @@ void cp0_ui_status_set_wifi(cp0_statusbar_state_t *state, int connected, int sig
     state->wifi_pct = pct;
 }
 
+void cp0_ui_status_set_battery(cp0_statusbar_state_t *state, const cp0_power_battery_t *battery)
+{
+    if (!state) return;
+    if (!battery || battery->percent < 0) {
+        state->battery = 0;
+        state->battery_pct = 0;
+        state->battery_charging = 0;
+        return;
+    }
+    state->battery = 1;
+    state->battery_pct = battery->percent > 100 ? 100 : battery->percent;
+    state->battery_charging = battery->state == CP0_BATTERY_CHARGING;
+}
+
 int cp0_ui_status_first_column(const uint32_t *argb, int w, int rows)
 {
     if (!argb || w <= 0) return w > 0 ? w : 0;

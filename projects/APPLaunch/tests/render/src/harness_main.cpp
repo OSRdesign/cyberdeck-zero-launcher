@@ -56,6 +56,7 @@
 #include <string>
 #include <vector>
 
+#include <dirent.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -575,6 +576,65 @@ struct Run {
     cp0_fb_out_t view{}; /* the same logical<->buffer mapping as the display manager */
 };
 
+/* ---------------------------------------------------------------- the power_supply tree (decision X12) */
+
+/* The launcher reads its battery from $APPLAUNCH_POWER_SUPPLY_ROOT (cp0_power_supply.h): here a fake sysfs tree next to
+ * the shots, empty (no battery, as on the Pi boards; never the host's own) unless the scene's "battery" fills it. */
+std::string power_supply_root(const Run &run) { return run.out_dir + "/" + run.size.name() + "/runtime/power_supply"; }
+
+void remove_power_supply(const std::string &root, const char *device)
+{
+    const std::string dir = root + "/" + device;
+    if (DIR *d = opendir(dir.c_str())) {
+        while (const dirent *entry = readdir(d))
+            if (entry->d_name[0] != '.') unlink((dir + "/" + entry->d_name).c_str());
+        closedir(d);
+    }
+    rmdir(dir.c_str());
+}
+
+void put_power_supply(const std::string &root, const char *device, const char *file, const std::string &value)
+{
+    mkdirs(root + "/" + device);
+    std::ofstream(root + "/" + device + "/" + file) << value << '\n';
+}
+
+/* battery off: nothing; mains: an AC adapter alone; PCT STATUS: the tablet's two devices, ADP1 (online unless
+ * discharging) and BAT1 in energy units (33.3 Wh design, 26.64 Wh full: health 80 %, 7.412 V, 6.54 W discharging,
+ * 12 W charging) */
+bool set_power_supply(const Run &run, const std::vector<std::string> &w)
+{
+    const std::string root = power_supply_root(run);
+    remove_power_supply(root, "ADP1");
+    remove_power_supply(root, "BAT1");
+    mkdirs(root);
+    if (w.size() == 2 && w[1] == "off") return true;
+    if (w.size() == 2 && w[1] == "mains") {
+        put_power_supply(root, "ADP1", "type", "Mains");
+        put_power_supply(root, "ADP1", "online", "1");
+        return true;
+    }
+    static const std::map<std::string, std::string> kStatus = {
+        {"discharging", "Discharging"}, {"charging", "Charging"}, {"full", "Full"}, {"notcharging", "Not charging"}};
+    const auto status = w.size() == 3 ? kStatus.find(w[2]) : kStatus.end();
+    if (status == kStatus.end()) return false;
+    const int pct = std::max(0, std::min(100, std::atoi(w[1].c_str())));
+    const long long full_uwh = 26640000;
+    put_power_supply(root, "ADP1", "type", "Mains");
+    put_power_supply(root, "ADP1", "online", w[2] == "discharging" ? "0" : "1");
+    put_power_supply(root, "BAT1", "type", "Battery");
+    put_power_supply(root, "BAT1", "present", "1");
+    put_power_supply(root, "BAT1", "status", status->second);
+    put_power_supply(root, "BAT1", "capacity", std::to_string(pct));
+    put_power_supply(root, "BAT1", "energy_full_design", "33300000");
+    put_power_supply(root, "BAT1", "energy_full", std::to_string(full_uwh));
+    put_power_supply(root, "BAT1", "energy_now", std::to_string(full_uwh * pct / 100));
+    put_power_supply(root, "BAT1", "power_now",
+                     w[2] == "discharging" ? "6540000" : w[2] == "charging" ? "12000000" : "0");
+    put_power_supply(root, "BAT1", "voltage_now", "7412000");
+    return true;
+}
+
 /* sudoprompt: the responsive sudo prompt (cp0_sudo_prompt_ui) driven without the sudo coordinator, which the harness
  * does not link. open / busy / wrong / close stand for what cp0_sudo_async does: SHOW_PROMPT (an input group around the
  * field, as create_prompt makes it), START_WORKER, SHOW_AUTH_ERROR, DESTROY_PROMPT. OK / Enter ends in busy by itself;
@@ -796,6 +856,8 @@ void boot(Run &run)
     setenv("APPLAUNCH_TOUCH_ORIENT", "buffer", 1);
     /* Settings > Storage reads no mount table here: never the host's disk (its free space would change the shots) */
     setenv("APPLAUNCH_STORAGE_MOUNTS", "/nonexistent/harness-mounts", 1);
+    /* nor the host's battery: the scene's fake power_supply tree (empty: no battery) */
+    setenv("APPLAUNCH_POWER_SUPPLY_ROOT", power_supply_root(run).c_str(), 1);
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
     /* screen.state lands next to the shots, never in the real runtime directory */
     const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";
@@ -1601,6 +1663,11 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         fx.bt_connected = w[1] == "connected";
         return true;
     }
+    if (cmd == "battery") {
+        if (!set_power_supply(run, w))
+            return fail(scene, line, "usage: battery off|mains|PCT discharging|charging|full|notcharging");
+        return true;
+    }
     if (cmd == "config") {
         if (w.size() != 3) return fail(scene, line, "usage: config KEY VALUE");
         harness::config_set(w[1], w[2]);
@@ -2077,6 +2144,7 @@ int run_scene_at(const Scene &scene, const Size &size, const std::string &out_di
     run.profile = make_profile(default_profile(size), size);
     run.ppmm = default_ppmm(size);
     run.out_dir = out_dir;
+    set_power_supply(run, {"battery", "off"}); /* an earlier scene's battery never leaks into this one */
     for (const Line &line : scene.lines) {
         if (!line.only.empty() && std::find(line.only.begin(), line.only.end(), size) == line.only.end()) continue;
         if (!run_line(run, scene, line)) return 1;

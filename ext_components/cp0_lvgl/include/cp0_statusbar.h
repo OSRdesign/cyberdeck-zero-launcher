@@ -7,8 +7,10 @@
  *
  * Geometry, colours and thresholds are the ones of the home grid (native_ui.cpp): a 104x40 brown clock pill
  * 16 px from the right edge and 8 px from the top, four Wi-Fi bars (8 px wide, 12 px pitch) left of it and
- * the Bluetooth glyph left of the bars. Text and glyph are rendered with FreeType from the same fonts the
- * launcher's builtin Montserrat 28 is made of (Montserrat-Medium.ttf and the FontAwesome symbol font).
+ * the Bluetooth glyph left of the bars; a battery, when the state has one, left of the Bluetooth glyph's place
+ * (its level glyph from the symbol font, its percentage at 18 px). Text and glyphs are rendered with FreeType
+ * from the same fonts the launcher's builtin Montserrat 28 is made of (Montserrat-Medium.ttf and the
+ * FontAwesome symbol font).
  *
  * Plain C99, needs only FreeType. Not thread safe: use one instance per thread.
  */
@@ -28,6 +30,11 @@ typedef struct {
     int bt_on;                           /* adapter on: the glyph is shown */
     int bt_connected;                    /* a device is connected: the glyph is blue */
     char clock[8];                       /* "HH:MM" */
+    /* A battery (decision X12; 0 = none, nothing drawn: a zeroed state looks as before): its level glyph and its
+     * charge in percent, left of the Bluetooth glyph's place, white; green (the Wi-Fi bars' colour) while charging. */
+    int battery;                         /* a battery is present */
+    int battery_pct;                     /* 0..100 */
+    int battery_charging;                /* charging */
 } cp0_statusbar_state_t;
 
 typedef struct cp0_statusbar cp0_statusbar_t;
@@ -37,7 +44,8 @@ cp0_statusbar_t *cp0_statusbar_create(const char *text_font, const char *icon_fo
 void cp0_statusbar_destroy(cp0_statusbar_t *bar);
 
 /* Reads Wi-Fi / Bluetooth state from sysfs and procfs and the time from the system clock (what an app that
- * has no access to the launcher's own services can see). Cheap, but not meant for every frame: ~2 s. */
+ * has no access to the launcher's own services can see). Cheap, but not meant for every frame: ~2 s. The battery
+ * fields stay 0 (cp0::ui::StatusStrip reads the battery itself, cp0_power_supply.h). */
 void cp0_statusbar_read_state(cp0_statusbar_state_t *state);
 
 /* Draws the bar into the top CP0_STATUSBAR_HEIGHT rows of an ARGB8888 buffer `width` pixels wide

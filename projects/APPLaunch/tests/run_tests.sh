@@ -223,6 +223,19 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$settings_ui_root/settings_page_battery_info_model.cpp" \
     -o "$build_dir/test_settings_battery_info_model"
 "$build_dir/test_settings_battery_info_model"
+# Decision X12: Settings > Battery from a power_supply battery (fake sysfs trees, the cp0_lvgl reader)
+${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_power_supply.c" \
+    -o "$build_dir/cp0_power_supply.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_settings_battery_model.cpp" \
+    "$settings_ui_root/settings_battery_model.cpp" \
+    "$build_dir/cp0_power_supply.o" \
+    -o "$build_dir/test_settings_battery_model"
+"$build_dir/test_settings_battery_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
     "$test_root/test_settings_about_info_model.cpp" \

@@ -1,0 +1,43 @@
+# Decision X12 (report 028): Settings > Battery on a board with a power_supply battery (the harness's fake tree, command
+# "battery": the tablet's BAT1 and ADP1). The root menu gets Battery after Bluetooth; its page reads the battery every
+# 2 s: discharging (time left, power), charging (time to full), full, then the battery gone while the page is open.
+# A release build, the tablet's board profile and density at 1280x800. Review only: no golden.
+title settings battery
+review
+sizes 320x170 480x320 640x480 1280x800
+@1280x800 ppmm 842
+env APPLAUNCH_DEV 0
+@1280x800 env APPLAUNCH_BOARD pc-fzm1-2
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+battery 85 discharging
+home
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Battery Launcher Touch Apps User "Date & Time" System
+shot settings_battery_root
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 300
+expect_text "3 h 27 min"
+expect_text "6.5 W"
+shot settings_battery_page
+battery 42 charging
+wait 2100
+expect_text "1 h 17 min"
+shot settings_battery_charging
+battery 100 full
+wait 2100
+expect_text Full
+shot settings_battery_full
+battery off
+wait 2100
+expect_text "No battery"
+shot settings_battery_gone
+key ESC
+wait 300
+shot settings_battery_back

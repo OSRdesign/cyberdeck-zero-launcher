@@ -13,6 +13,7 @@
 #include "settings_session.hpp"
 #include "settings_touch_page.hpp"
 #include "settings_native_apps_page.hpp"
+#include "settings_native_info_page.hpp"
 #include "settings_native_timezone_page.hpp"
 
 #include "cp0_backlight_profile.h"
@@ -640,6 +641,8 @@ SettingsNativePage settings_native_page(const NodeIter &node)
     if (factory_is(factory, settings_apps_page_factory)) return SettingsNativePage::Apps;
     // Date & Time > Time zone: the zone picker
     if (factory_is(factory, settings_timezone_page_factory)) return SettingsNativePage::TimeZone;
+    // Battery (a power_supply battery, decision X12): its read-only page
+    if (factory_is(factory, settings_battery_page_factory)) return SettingsNativePage::Battery;
     // task 014 P3b: the Wi-Fi section is one native page (its Enable toggle, Networks and Join Hidden Network)
     if (factory_is(factory, roller_page_factory))
         for (auto child = node.begin(); child != node.end(); ++child)
@@ -791,6 +794,10 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(bq_calibrate, SettingEntry{"Exit CAL"});
 #endif
     }
+#else
+    // our boards: Battery when the board has a power_supply battery as Settings opens (a PC's ACPI battery, a gauge
+    // driver's), native Settings only; the Pi boards have none, so no row (decision X12)
+    if (settings_ui::native_selected()) settings_battery::append_entry(mode_tree, root);
 #endif  // APPLAUNCH_SETTINGS_BATTERY
 
 #ifdef LAUNCHER_BUILD

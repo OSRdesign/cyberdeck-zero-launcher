@@ -7,6 +7,7 @@
 #include "settings_native_info_page.hpp"
 
 #include "lvgl_components.hpp"
+#include "settings_battery_model.hpp"
 #include "settings_fonts.hpp"
 #include "settings_rtc_page.hpp"
 #include "settings_static_info_page.hpp"
@@ -44,6 +45,14 @@ namespace {
 
 constexpr std::chrono::milliseconds kAccountTimeout{15000}; /* the legacy User page's request timeout */
 constexpr uint32_t kClockRefreshMs = 1000;                   /* the legacy Date & Time Info page's refresh */
+constexpr uint32_t kBatteryRefreshMs = 2000;                 /* the status strip's */
+
+std::vector<cp0::ui::InfoItem> battery_items()
+{
+    cp0_power_battery_t battery{};
+    const bool found = cp0_power_supply_battery(&battery) != 0;
+    return settings_info::items_of(settings_battery::info_lines(found, battery));
+}
 
 /* A worker for the account read (the legacy component base's async tasks: a worker thread, the result on the LVGL
  * thread, cancelled and joined when the page goes). */
@@ -108,6 +117,10 @@ public:
                 table_->set_items(account_items({"--", "--"}));
                 load_account();
                 break;
+            case SettingsNativePage::Battery:
+                table_->set_items(battery_items());
+                battery_timer_ = lv_timer_create(battery_cb, kBatteryRefreshMs, this);
+                break;
             default:
                 break;
             }
@@ -122,6 +135,8 @@ public:
     {
         if (clock_timer_) lv_timer_delete(clock_timer_);
         clock_timer_ = nullptr;
+        if (battery_timer_) lv_timer_delete(battery_timer_);
+        battery_timer_ = nullptr;
         tasks_.reset(); /* cancels and joins the account read before the table goes */
         if (caption_) page_.set_caption("", false);
     }
@@ -133,6 +148,12 @@ private:
         if (!self || !self->table_) return;
         std::vector<std::string> lines = self->clock_lines_;
         if (settings_rtc_info_lines(lines)) self->table_->set_items(settings_info::items_of(lines));
+    }
+
+    static void battery_cb(lv_timer_t *timer)
+    {
+        auto *self = static_cast<InfoPanel *>(lv_timer_get_user_data(timer));
+        if (self && self->table_) self->table_->set_items(battery_items());
     }
 
     void caption(const std::string &text, bool error)
@@ -186,6 +207,7 @@ private:
     std::unique_ptr<Tasks> tasks_;
     std::vector<std::string> clock_lines_;
     lv_timer_t *clock_timer_ = nullptr;
+    lv_timer_t *battery_timer_ = nullptr;
     bool caption_ = false;
 };
 
@@ -196,3 +218,18 @@ std::unique_ptr<SettingsNativePanel> settings_info_panel_create(SettingsNativePa
 {
     return std::make_unique<InfoPanel>(page, context);
 }
+
+std::unique_ptr<DComponens::LvglComponensBase> settings_battery_page_factory(lv_obj_t *, const NodeIter &,
+                                                                             std::function<void()>)
+{
+    return nullptr; /* native only: settings_native_panel_create() */
+}
+
+namespace settings_battery {
+
+void append_entry(Tree &tree, const NodeIter &root)
+{
+    if (present()) tree.append_child(root, SettingEntry{"Battery", settings_battery_page_factory, PageType::Normal});
+}
+
+} // namespace settings_battery

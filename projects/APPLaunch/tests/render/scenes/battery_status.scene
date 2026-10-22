@@ -1,0 +1,29 @@
+# Decision X12 (report 028): the home grid's status strip with a power_supply battery (the harness's fake tree, command
+# "battery": the tablet's BAT1 and ADP1), discharging, charging, full, low with Bluetooth off, then no battery at all
+# (no battery drawn, as on the Pi boards). The tablet at 1280x800 has its own density (8.42 px/mm).
+# Review only: no golden.
+title battery status strip
+review
+sizes 320x170 480x320 640x480 800x480 1280x800
+@1280x800 ppmm 842
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+battery 85 discharging
+home
+shot battery_discharging
+battery 42 charging
+wait 2100
+shot battery_charging
+battery 100 full
+wait 2100
+shot battery_full
+battery 7 discharging
+bt off
+wait 2100
+shot battery_low_bt_off
+battery off
+bt on
+wait 2100
+shot battery_none

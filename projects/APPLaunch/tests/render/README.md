@@ -78,6 +78,7 @@ runs at those sizes only.
 | `profile deck\|pi3a\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings`, `Calculator`, `SSH` and `CLI` (the terminal page, on the fake PTY) open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
+| `battery off\|mains\|PCT discharging\|charging\|full\|notcharging` | the fake `power_supply` tree the launcher reads (`APPLAUNCH_POWER_SUPPLY_ROOT` = `out/<WxH>/runtime/power_supply`, set at boot, emptied before every scene: never the host's battery): nothing (the Pi boards, the default), an AC adapter alone, or the FZ-M1's `ADP1` + `BAT1` (energy units: 26.64 of 33.3 Wh, 7.412 V, 6.54 W discharging, 12 W charging). Status strip: `wait 2100` after a change; Settings > Battery's row follows the tree when Settings opens |
 | `home` | build the grid and show it (`native_ui::refresh_apps` + `show_home`) |
 | `launch NAME` | tap-equivalent launch of a tile |
 | `stockapp` | stock app: toolbar chrome + a flat 320x170 placeholder picture through the real external blit (no process) |
@@ -142,6 +143,10 @@ with the new offset, the home grid's clock, then Europe > Paris. `settings_nativ
 the root menu and System with `expect_rows` (and the About page's lines: a "Board" line only with a board profile) for
 the deck without a board profile, pi3a-wsdsi43, hackberry-cm5 in its desktop session, pc-fzm1-2, release and
 development, at 480x320 to 1280x800 (`docs/dev/native-settings-page-howto.md` section 5).
+`battery_status`, `settings_battery`, `settings_battery_none` (decision X12, review-only, at 320x170 to 1280x800; the
+tablet's density at 1280x800): the home strip with a battery discharging, charging, full, low with Bluetooth off, gone;
+Settings with the Battery row and its page (discharging, charging, full, the battery removed while it is open); no
+Battery row and an unchanged strip with an AC adapter alone or nothing.
 `ssh_native` (task 014 P4, review-only, `APPLAUNCH_OSK=force`): the native SSH form (labels beside the fields) with the
 keyboard up on Host, Port (number pad) and User, the whole form with the keyboard down, the "Host is required" error
 (keyboard down, then up with the error under the field), the help page (`key F1`) and back, at the five sizes. The harness links the SSH page and its terminal (a tile named `SSH` opens it); the terminal is never shot.

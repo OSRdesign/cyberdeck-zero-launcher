@@ -160,6 +160,9 @@ void StatusStrip::refresh()
 {
     // Nothing to do (and no work to pay for) while another screen owns the display.
     if (!screen_active()) return;
+    // The battery like the clock: the strip reads it itself (sysfs power_supply, decision X12); none on the Pi boards.
+    cp0_power_battery_t battery{};
+    cp0_ui_status_set_battery(&state_, cp0_power_supply_battery(&battery) ? &battery : nullptr);
     if (source_) source_(state_);
     redraw();
 }
@@ -200,8 +203,9 @@ int status_strip_left()
     cp0_ui_status_strip_geom(m, m->w, &g);
     cp0_statusbar_t *bar = renderer();
     if (!bar || g.w <= 0) return g.x; /* not kept: measured when the renderer is there */
-    // draw the strip in its fullest state (Bluetooth glyph shown, all bars, a clock) into a scratch canvas and take
-    // its first column that has a pixel: the strip's own geometry, not a copy of it
+    // draw the strip in its fullest state (Bluetooth glyph shown, all bars, a clock; a battery at 100 % when the board
+    // has one now) into a scratch canvas and take its first column that has a pixel: the strip's own geometry, not a
+    // copy of it
     const int rows = g.rows + 16;
     std::vector<uint32_t> pixels(static_cast<size_t>(g.w) * rows, 0u);
     cp0_statusbar_state_t full{};
@@ -210,6 +214,11 @@ int status_strip_left()
     full.bt_on = 1;
     full.bt_connected = 1;
     std::snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
+    cp0_power_battery_t battery{};
+    if (cp0_power_supply_battery(&battery)) {
+        battery.percent = 100;
+        cp0_ui_status_set_battery(&full, &battery);
+    }
     cp0_statusbar_render_scaled(bar, pixels.data(), g.w, g.w, 0, g.top, 0, &full, g.pct);
     const int first = cp0_ui_status_first_column(pixels.data(), g.w, rows);
     left = g.x + (first < g.w ? first : 0);

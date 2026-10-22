@@ -79,11 +79,51 @@ static void test_first_column(void)
     assert(cp0_ui_status_first_column(px, 0, 3) == 0);
 }
 
+/* Decision X12: a battery shows its charge, green while charging; none (or no charge) shows nothing, as before */
+static void test_battery(void)
+{
+    cp0_statusbar_state_t s;
+    memset(&s, 0, sizeof(s));
+    assert(s.battery == 0); /* a zeroed state (an app's, the Pi boards') has no battery */
+
+    cp0_power_battery_t b;
+    memset(&b, 0, sizeof(b));
+    b.percent = 85;
+    b.state = CP0_BATTERY_DISCHARGING;
+    cp0_ui_status_set_battery(&s, &b);
+    assert(s.battery == 1 && s.battery_pct == 85 && s.battery_charging == 0);
+    b.percent = 42;
+    b.state = CP0_BATTERY_CHARGING;
+    cp0_ui_status_set_battery(&s, &b);
+    assert(s.battery == 1 && s.battery_pct == 42 && s.battery_charging == 1);
+    b.percent = 100;
+    b.state = CP0_BATTERY_FULL; /* on AC but not charging: no charging colour */
+    cp0_ui_status_set_battery(&s, &b);
+    assert(s.battery == 1 && s.battery_pct == 100 && s.battery_charging == 0);
+    b.state = CP0_BATTERY_NOT_CHARGING;
+    cp0_ui_status_set_battery(&s, &b);
+    assert(s.battery_charging == 0);
+    b.percent = -1; /* cp0_power_supply_battery() found none */
+    cp0_ui_status_set_battery(&s, &b);
+    assert(s.battery == 0 && s.battery_pct == 0 && s.battery_charging == 0);
+    b.percent = 64;
+    cp0_ui_status_set_battery(&s, &b);
+    cp0_ui_status_set_battery(&s, NULL);
+    assert(s.battery == 0 && s.battery_pct == 0 && s.battery_charging == 0);
+    /* the other fields stay */
+    s.wifi_up = 1;
+    s.bt_on = 1;
+    cp0_ui_status_set_battery(&s, &b);
+    assert(s.wifi_up == 1 && s.bt_on == 1 && s.battery == 1);
+    cp0_ui_status_set_battery(NULL, &b); /* no crash */
+}
+
 int main(void)
 {
     test_geom();
     test_signal();
     test_first_column();
+    test_battery();
     printf("test_ui_status_strip: ok\n");
     return 0;
 }

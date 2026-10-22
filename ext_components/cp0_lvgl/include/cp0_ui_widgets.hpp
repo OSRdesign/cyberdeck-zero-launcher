@@ -188,9 +188,11 @@ private:
 /* ------------------------------------------------------------------ status strip and title (task L1) */
 
 /* Fills the Wi-Fi and Bluetooth fields of the strip's state (wifi_up, wifi_pct, bt_on, bt_connected; the strip sets
- * the clock itself). Called on the LVGL thread when the strip is added, then every 2 s while the strip's screen is the
- * active one, and by StatusStrip::refresh(). Must return quickly: start slow queries elsewhere and report the last
- * known values. cp0_ui_status_set_wifi() (cp0_ui_status_strip.h) applies the bars' rule. */
+ * the clock itself, and the battery fields from cp0_power_supply_battery() right before the source runs: a board
+ * without a power_supply battery shows none). Called on the LVGL thread when the strip is added, then every 2 s while
+ * the strip's screen is the active one, and by StatusStrip::refresh(). Must return quickly: start slow queries
+ * elsewhere and report the last known values. cp0_ui_status_set_wifi() (cp0_ui_status_strip.h) applies the bars'
+ * rule. */
 using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
 
 /* The default source: sysfs / procfs (cp0_statusbar_read_state: wlan0 operstate and /proc/net/wireless, the hci
@@ -240,7 +242,8 @@ private:
     lv_timer_t *status_timer_ = nullptr;
 };
 
-/* x of the strip's leftmost drawn pixel on the native display (its fullest state: Bluetooth glyph, all bars, a clock):
+/* x of the strip's leftmost drawn pixel on the native display (its fullest state: Bluetooth glyph, all bars, a clock;
+ * a battery at "100%" when the board has a power_supply battery at the first call, which fixes the value):
  * what a page header keeps free, the strip_left argument of cp0_ui_roller_page(). 0 under the SDL simulator. */
 int status_strip_left();
 

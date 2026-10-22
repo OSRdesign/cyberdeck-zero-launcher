@@ -2,11 +2,12 @@
  * SPDX-License-Identifier: MIT
  *
  * Pure logic of the shared status strip (task L1, report 024): where the strip sits on a native display, the Wi-Fi
- * rule of its bars and the strip's leftmost drawn column. The LVGL widget is cp0::ui::StatusStrip
+ * rule of its bars, the battery's rule and the strip's leftmost drawn column. The LVGL widget is cp0::ui::StatusStrip
  * (cp0_ui_widgets.hpp); the pixels come from the cp0_statusbar renderer. Plain C, no LVGL.
  */
 #pragma once
 
+#include "cp0_power_supply.h"
 #include "cp0_statusbar.h"
 #include "cp0_ui_metrics.h"
 
@@ -37,6 +38,10 @@ void cp0_ui_status_set_wifi(cp0_statusbar_state_t *state, int connected, int sig
 /* First column (0..w-1) of an ARGB8888 buffer (w px wide and stride, rows high) holding a pixel with alpha; w when
  * the buffer is empty. */
 int cp0_ui_status_first_column(const uint32_t *argb, int w, int rows);
+
+/* The battery's rule (decision X12): a battery from cp0_power_supply_battery() shows its charge (0..100), green while
+ * it charges; NULL (no battery) shows none (battery = 0: the strip looks as it did before batteries). */
+void cp0_ui_status_set_battery(cp0_statusbar_state_t *state, const cp0_power_battery_t *battery);
 
 #ifdef __cplusplus
 }
