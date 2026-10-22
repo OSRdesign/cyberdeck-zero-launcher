@@ -127,8 +127,7 @@ def test_system_replaces_about_with_requested_entries():
     # boot actions). The stock Software row is gone (upstream update source).
     assert system_entries == ["Storage", "Licenses", "About"]
     assert 'std::getenv("APPLAUNCH_BOARD")' not in system
-    assert re.search(r'
-\s*mode_tree\.append_child\(system, SettingEntry\{"About"', system)
+    assert re.search(r'\n\s*mode_tree\.append_child\(system, SettingEntry\{"About"', system)
     assert "settings_update_page_factory" not in system
     assert "settings_storage_page_factory" in system
     assert "settings_credit_page_factory" in system
