@@ -86,6 +86,19 @@ Result run_program(const std::string &binary, const std::vector<std::string> &ar
     for (const std::string &arg : args) argv.push_back(const_cast<char *>(arg.c_str()));
     argv.push_back(nullptr);
 
+    // The Store backend reads dpkg's messages ("no packages found matching"): run it in the C locale, or a board set to
+    // another language (French, ...) cannot tell an absent package from an error ("unable to determine current Debian
+    // package state"). Built before the fork: the child only execs.
+    std::vector<std::string> env_store;
+    for (char **entry = environ; entry && *entry; ++entry) {
+        const std::string item = *entry;
+        if (item.rfind("LC_ALL=", 0) != 0 && item.rfind("LANGUAGE=", 0) != 0) env_store.push_back(item);
+    }
+    env_store.push_back("LC_ALL=C");
+    std::vector<char *> envp;
+    for (std::string &item : env_store) envp.push_back(item.data());
+    envp.push_back(nullptr);
+
     const pid_t pid = ::fork();
     if (pid < 0) {
         ::close(pipe_fd[0]);
@@ -98,7 +111,7 @@ Result run_program(const std::string &binary, const std::vector<std::string> &ar
         ::dup2(pipe_fd[1], STDERR_FILENO);
         const int null_fd = ::open("/dev/null", O_RDONLY);
         if (null_fd >= 0) ::dup2(null_fd, STDIN_FILENO);
-        ::execvp(binary.c_str(), argv.data());   // searches PATH for a bare name such as "curl"
+        ::execvpe(binary.c_str(), argv.data(), envp.data());   // searches PATH for a bare name such as "curl"
         ::_exit(127);
     }
     ::close(pipe_fd[1]);
