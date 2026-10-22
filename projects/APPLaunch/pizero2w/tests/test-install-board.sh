@@ -338,6 +338,29 @@ check "hackberry profile: only KEY=VALUE or comment lines" '! grep -v -E "^(#.*|
 run --dry-run --user "bad user"
 check "desktop dry-run with an odd user name: shown only (the real install refuses it)" '[ $RC = 0 ]'
 check "install.sh refuses odd user names for the desktop files" 'grep -q "check_user_name \"\$TARGET_USER\"" "$INSTALL"'
+# --- the WirePlumber drop-in (Bluetooth audio while the launcher has stopped the display manager): desktop boards with
+# WirePlumber only
+fake_wireplumber() { mkdir -p "$1/usr/bin"; printf '#!/bin/sh\nexit 0\n' > "$1/usr/bin/wireplumber"; chmod 755 "$1/usr/bin/wireplumber"; }
+WPREL=".config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf"
+R=$(root hackberry-cm5)
+desktop "$R" lightdm.service lightdm labwc
+run --dry-run --user tester
+check "hackberry dry-run without WirePlumber: no drop-in" '[ $RC = 0 ] && ! has "wireplumber:"'
+fake_wireplumber "$R"
+run --dry-run --user tester
+check "hackberry dry-run with WirePlumber: the drop-in planned, not restarted now" '[ $RC = 0 ] && has "wireplumber: ~/$WPREL for the user" && has "applies after the next login or \`systemctl --user restart wireplumber\`"'
+check "hackberry dry-run with WirePlumber: nothing written" '[ ! -e "$R/home" ] && [ -z "$(find "$R" -name "50-cyberdeckzero-bluez-no-seat.conf")" ]'
+run --board-only
+check "hackberry board-only with WirePlumber: no drop-in" '[ $RC = 0 ] && ! has "wireplumber" && [ -z "$(find "$R" -name "50-cyberdeckzero-bluez-no-seat.conf")" ]'
+R=$(root zero2w)
+desktop "$R" lightdm.service lightdm
+fake_wireplumber "$R"
+run --dry-run --user tester
+check "zero2w deck with a desktop and WirePlumber: no drop-in" '[ $RC = 0 ] && ! has "wireplumber:"'
+R=$(root pi5-hyperpixel4)
+fake_wireplumber "$R"
+run --dry-run --user tester
+check "pi5 appliance with WirePlumber: no drop-in" '[ $RC = 0 ] && has "session: appliance" && ! has "wireplumber:"'
 
 # --- Pi 5 desktop found by its processes only (no alias link): the display manager is taken from them
 R=$(root pi5-hyperpixel4)
@@ -677,6 +700,7 @@ R=$(root hackberry-cm5)
 A="$R/usr/share/APPLaunch"
 desktop "$R" lightdm.service lightdm labwc
 old_install "$R" desktop "$UHOME"
+fake_wireplumber "$R"
 FAKE_ACTIVE=applaunch-desktop.service; export FAKE_ACTIVE
 full "$R"
 unset FAKE_ACTIVE
@@ -685,6 +709,14 @@ check "fake desktop migration: the running earlier launcher stopped (desktop bac
 check "fake desktop migration: new unit, rule and menu entry, filled in" 'grep -qx "User=$U" "$R/etc/systemd/system/cyberdeckzero-desktop.service" && grep -q "\"cyberdeckzero-desktop.service\"" "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" && grep -qx "Name=CyberdeckZero Launcher" "$R/usr/share/applications/cyberdeckzero.desktop"'
 check "fake desktop migration: no user service, no console unit, not started" '[ ! -e "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && has "not started now" && ! called "start cyberdeckzero-desktop.service"'
 check "fake desktop migration: the earlier helper name links to the new one (ExecStopPost= of a loaded old unit)" '[ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ]'
+WPF="$R$UHOME/$WPREL"
+WPEXPECT='# CyberdeckZero: the launcher stops the display manager, which makes WirePlumber drop Bluetooth audio (seat monitoring)
+wireplumber.profiles = {
+  main = {
+    monitor.bluez.seat-monitoring = disabled
+  }
+}'
+check "fake desktop install: the WirePlumber drop-in written, 644, given to the user, not restarted" '[ "$(cat "$WPF" 2>/dev/null)" = "$WPEXPECT" ] && [ "$(stat -c %a "$WPF")" = 644 ] && called "chown -R $U:$U $R$UHOME/.config/wireplumber" && has "wireplumber: ~/$WPREL of $U written" && ! called "restart wireplumber"'
 if getent group i2c >/dev/null 2>&1; then
     check "HackBerry desktop install: the user joins the i2c group (battery gauge)" 'called "usermod -aG i2c $U"'
 else
@@ -694,6 +726,19 @@ check "HackBerry desktop install: no variant switch, no user service touched, no
 SNAP1=$(snapshot "$R")
 full "$R"
 check "fake desktop migration, second run: nothing to migrate, same tree" '[ $RC = 0 ] && has "nothing to migrate" && [ "$(snapshot "$R")" = "$SNAP1" ]'
+check "fake desktop install, second run: the WirePlumber drop-in already up to date" 'has "wireplumber: ~/$WPREL of $U already up to date"'
+# a hand-changed drop-in is put back
+mkdir -p "${WPF%/*}"; printf 'changed\n' > "$WPF"
+full "$R"
+check "fake desktop install: a changed WirePlumber drop-in rewritten" '[ $RC = 0 ] && has "wireplumber: ~/$WPREL of $U written" && [ "$(cat "$WPF")" = "$WPEXPECT" ]'
+# uninstall: the drop-in goes, and the folders it alone was in
+: > "$CALLS"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --dry-run --no-boot-config 2>&1); RC=$?
+check "fake uninstall dry-run, desktop: the WirePlumber drop-in listed, kept" '[ $RC = 0 ] && has "$WPF (desktop boards" && has "[dry-run] rm -f $WPF" && [ -f "$WPF" ]'
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --yes --no-boot-config 2>&1); RC=$?
+check "fake uninstall, desktop: the WirePlumber drop-in and its empty folders removed" '[ ! -e "$WPF" ] && [ ! -e "$R$UHOME/.config/wireplumber" ]'
 
 # a whole uninstall of a half-migrated board (both generations there): everything of both goes, user data stays
 R=$(root pi3a-luckfox35)

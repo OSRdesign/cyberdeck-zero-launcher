@@ -441,6 +441,24 @@ if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ]; then
         DESKTOP_BOOT_WARN="the system boots to $BOOT_TARGET (systemctl get-default): $DM_UNIT does not start at boot, and the launcher no longer does either. Fix: sudo systemctl set-default graphical.target"
     fi
 fi
+# Desktop variant: starting the launcher stops the display manager, and WirePlumber 0.5 then drops its Bluetooth
+# monitor (seat monitoring: no active seat), so BlueZ has no A2DP endpoint and a Bluetooth speaker fails to connect
+# ("a2dp-sink profile connect failed: Protocol not available"). A per-user drop-in turns seat monitoring off.
+WP_DROPIN_REL=".config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf"
+wireplumber_installed() {
+    if [ -n "$SYSROOT" ]; then [ -x "$SYSROOT/usr/bin/wireplumber" ]
+    else command -v wireplumber >/dev/null 2>&1 || [ -x /usr/bin/wireplumber ]; fi
+}
+wp_dropin_content() {
+    echo "# CyberdeckZero: the launcher stops the display manager, which makes WirePlumber drop Bluetooth audio (seat monitoring)"
+    echo "wireplumber.profiles = {"
+    echo "  main = {"
+    echo "    monitor.bluez.seat-monitoring = disabled"
+    echo "  }"
+    echo "}"
+}
+WP_DROPIN=0
+if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ] && wireplumber_installed; then WP_DROPIN=1; fi
 
 # The profile for the board ("" = no profile file: the deck keeps the service's own environment).
 # It is a systemd EnvironmentFile: its values override the Environment= lines of cyberdeckzero.service,
@@ -807,6 +825,7 @@ if [ "$DRY" = 1 ]; then
     if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
     if [ "$BOARD_ONLY" = 0 ] && [ -n "$SOUND_CARD" ]; then echo "audio group: the user joins it (sound card: $SOUND_CARD)"; fi
     if [ "$BOARD_ONLY" = 0 ] && [ "$BOARD" = hackberry-cm5 ]; then echo "i2c group: the user joins it, if the system has one (battery gauge)"; fi
+    if [ "$BOARD_ONLY" = 0 ] && [ "$WP_DROPIN" = 1 ]; then echo "wireplumber: ~/$WP_DROPIN_REL for the user (Bluetooth audio while the launcher runs; applies after the next login or \`systemctl --user restart wireplumber\`)"; fi
     if [ "$IS_PC" = 1 ]; then
         echo "boot config: none on a PC (GRUB and the kernel command line are left alone)"
     elif [ "$SESSION" = desktop ]; then
@@ -1226,6 +1245,23 @@ if [ "$SESSION" = desktop ]; then
     mkdir -p "$MENU_DIR"
     install -m 644 "$PAYLOAD/etc/$DESKTOP_ENTRY_NAME" "$DESKTOP_ENTRY"
     echo "desktop: /etc/systemd/system/$DESKTOP_UNIT (stops $DM_UNIT while the launcher runs) and ${DESKTOP_ENTRY#"$SYSROOT"}"
+    if [ "$WP_DROPIN" = 1 ]; then
+        # not restarted here: a running desktop session must not lose its sound
+        WP_FILE="$TARGET_HOME/$WP_DROPIN_REL"
+        WP_NEW_CONFIG=0; [ -d "$TARGET_HOME/.config" ] || WP_NEW_CONFIG=1
+        if [ -f "$WP_FILE" ] && [ "$(cat "$WP_FILE")" = "$(wp_dropin_content)" ]; then
+            WP_STATE="already up to date"
+        else
+            mkdir -p "${WP_FILE%/*}"
+            wp_dropin_content > "$WP_FILE.tmp"
+            chmod 644 "$WP_FILE.tmp"
+            mv "$WP_FILE.tmp" "$WP_FILE"
+            WP_STATE="written"
+        fi
+        chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config/wireplumber"
+        [ "$WP_NEW_CONFIG" = 0 ] || chown "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config"
+        echo "wireplumber: ~/$WP_DROPIN_REL of $TARGET_USER $WP_STATE (Bluetooth audio while the launcher runs; applies after the next login or \`systemctl --user restart wireplumber\`)"
+    fi
     # (an appliance install's user service, which must not start a second launcher at boot under the desktop, is
     # gone already: switch_to_desktop)
 else

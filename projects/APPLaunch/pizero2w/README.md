@@ -299,7 +299,12 @@ installed unit, with the system booting to `graphical.target`; or one of the des
 - `/usr/share/applications/cyberdeckzero.desktop`: "CyberdeckZero Launcher" in the applications menu (Accessories), which
   runs `systemctl --no-block start cyberdeckzero-desktop.service`;
 - `/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules`: that user, and only that user, may start, stop or restart that
-  one unit without a password. Nothing is opened up for lightdm: the unit stops and starts it as root.
+  one unit without a password. Nothing is opened up for lightdm: the unit stops and starts it as root;
+- with WirePlumber installed, `~/.config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf` for that
+  user (`monitor.bluez.seat-monitoring = disabled`): once the launcher has stopped the display manager, WirePlumber 0.5
+  would otherwise drop its Bluetooth monitor and a Bluetooth speaker fails to connect ("a2dp-sink profile connect failed:
+  Protocol not available"). It applies after the next login or `systemctl --user restart wireplumber`; uninstall.sh
+  removes it.
 
 **Start:** applications menu > CyberdeckZero Launcher (or `systemctl start cyberdeckzero-desktop.service` from a shell,
 no sudo). The unit has `Conflicts=lightdm.service` and `After=lightdm.service`: systemd stops the desktop first, then
