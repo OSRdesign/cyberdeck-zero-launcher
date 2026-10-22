@@ -133,6 +133,7 @@ fi
 rm -f "$OUT/payload/share/share/images/logo_lcd.png"
 rm -rf "$OUT/payload/share/adb"
 for file in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts \
+            hyperpixel4-pwm-backlight.dts \
             90-backlight-unblank.rules 91-applaunch-vkbd.rules 93-applaunch-rfkill.rules \
             50-networkmanager-netdev.rules 51-launcher-time-power.rules \
             cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules \

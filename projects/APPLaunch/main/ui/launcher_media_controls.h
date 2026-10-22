@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "cp0_backlight_profile.h"
 #include "model/setup_value_policy.hpp"
 
 namespace launcher_media_controls {
@@ -17,9 +18,11 @@ int adjust_volume(int delta_percent);
 int adjust_brightness(int delta_percent);
 bool toggle_mute();
 
-// Apply saved brightness at startup, defaulting to maximum for missing/invalid
-// values. Does not persist changes or reuse a screen-off hardware reading.
-bool restore_startup_backlight();
+// Once at startup: set the backlight as cp0_backlight_startup_level() says (the
+// saved brightness, or the maximum when nothing is saved and the panel is below
+// half). Nothing for no backlight or an on/off one. Does not persist changes or
+// reuse a screen-off hardware reading. 1 written, 0 left alone, -1 failed.
+int restore_startup_backlight(cp0_backlight_kind_t kind);
 
 /* Drive the panel backlight to zero without persisting anything, for the
  * screen-off gesture.  Returns the raw value to hand back to

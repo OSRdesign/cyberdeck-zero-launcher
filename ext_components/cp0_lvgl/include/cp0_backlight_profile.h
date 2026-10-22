@@ -47,6 +47,22 @@ int cp0_backlight_profile_get_max(void);
  * failure. */
 int cp0_backlight_profile_set_brightness(int value);
 
+/* The level the launcher sets once when it starts (systemd-backlight brings back the level the last session ended
+ * with, which may be dim): the brightness saved by Settings > Brightness (`saved`: the raw level kept under the
+ * launcher config key "brightness", <= 0 when there is none), clamped to `max`; with nothing saved, `max` when the
+ * current level is below half of it or unknown (-1). Returns -1 to leave the backlight alone: no backlight, on/off only
+ * (gpio, or max_brightness 1), already at the saved level, or nothing saved and already at least half. Pure, no I/O. */
+static inline int cp0_backlight_startup_level(cp0_backlight_kind_t kind, int max, int current, int saved)
+{
+    if (kind == CP0_BACKLIGHT_KIND_NONE || kind == CP0_BACKLIGHT_KIND_GPIO_ONOFF || max <= 1) return -1;
+    if (saved > 0) {
+        const int level = saved < max ? saved : max;
+        return level == current ? -1 : level;
+    }
+    if (current >= 0 && (long long)current * 2 >= max) return -1;
+    return max;
+}
+
 #ifdef __cplusplus
 }
 #endif

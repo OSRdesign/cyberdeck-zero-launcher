@@ -295,6 +295,26 @@ run --dry-run --user tester
 check "pi5 dry-run: board pi5-hyperpixel4" '[ $RC = 0 ] && has "board: pi5-hyperpixel4" && has "session: appliance"'
 check "pi5 dry-run: test_env values (fb0, 800x480, rotate 90, touch by capability)" 'has "APPLAUNCH_FB=/dev/fb0" && has "APPLAUNCH_LOGICAL=800x480" && has "APPLAUNCH_ROTATE=90" && has "APPLAUNCH_TOUCH_DEV=auto" && has "APPLAUNCH_TOUCH_ORIENT=buffer"'
 check "pi5 dry-run: nothing written" '[ ! -e "$R/etc" ]'
+# its PWM backlight overlay (report 030, c-4): only with --pwm-backlight; the profile stays the same (no backlight line)
+check "pi5 dry-run: no PWM backlight overlay without --pwm-backlight" '! has "hyperpixel4-pwm-backlight" && ! has "PWM backlight (--pwm-backlight)" && has "boot config: cmdline cursor/consoleblank only"'
+PLAIN=$OUT
+run --dry-run --user tester --pwm-backlight
+check "pi5 dry-run --pwm-backlight: overlay built with dtc, its line after the HyperPixel one, backup, reboot" '[ $RC = 0 ] && has "PWM backlight (--pwm-backlight): /boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo built with dtc, the line dtoverlay=hyperpixel4-pwm-backlight" && has "after the vc4-kms-dpi-hyperpixel4 line of config.txt (config.txt.bak-applaunch first); then reboot" && has "PWM backlight overlay (--pwm-backlight, below) + cmdline cursor/consoleblank"'
+check "pi5 dry-run --pwm-backlight: the same profile, no backlight line or rule" '[ "$(printf "%s\n" "$OUT" | sed -n "/^--- /,/^LV_LINUX/p")" = "$(printf "%s\n" "$PLAIN" | sed -n "/^--- /,/^LV_LINUX/p")" ] && ! has "APPLAUNCH_BACKLIGHT" && ! has "92-applaunch-backlight"'
+check "pi5 dry-run --pwm-backlight: nothing written" '[ ! -e "$R/etc" ] && [ ! -e "$R/boot" ]'
+run --dry-run --user tester --pwm-backlight --no-boot-config
+check "pi5 dry-run --pwm-backlight --no-boot-config: skipped" '[ $RC = 0 ] && has "--pwm-backlight: skipped (--no-boot-config)" && ! has "built with dtc"'
+desktop "$R" lightdm.service lightdm labwc
+run --dry-run --user tester --pwm-backlight
+check "pi5 desktop dry-run --pwm-backlight: the overlay only, cmdline.txt left alone" '[ $RC = 0 ] && has "session: desktop" && has "boot config: the PWM backlight overlay only (--pwm-backlight, below); cmdline.txt left alone on a desktop board" && has "the line dtoverlay=hyperpixel4-pwm-backlight"'
+run --dry-run --user tester
+check "pi5 desktop dry-run: no boot config without --pwm-backlight" 'has "boot config: none on a desktop board" && ! has "hyperpixel4-pwm-backlight"'
+for B in zero2w pi3a-luckfox35 hackberry-cm5; do
+    R=$(root $B)
+    run --dry-run --user tester --pwm-backlight
+    check "$B dry-run --pwm-backlight: ignored, not this board's" '[ $RC = 0 ] && has "--pwm-backlight is for the Pi 5 + HyperPixel 4 (pi5-hyperpixel4) only: ignored on $B" && ! has "hyperpixel4-pwm-backlight.dtbo"'
+done
+check "zero2w dry-run --pwm-backlight: the deck's own PWM overlay as before" 'R=$(root zero2w); run --dry-run --pwm-backlight; has "boot config: PWM backlight overlay + cmdline cursor/consoleblank"'
 
 # --- HackBerry CM5 booting to its desktop: the desktop variant
 R=$(root hackberry-cm5)
@@ -557,7 +577,7 @@ printf '#!/bin/sh\necho launcher\n' > "$BUN/payload/bin/cyberdeckzero"
 cp "$D/cyberdeckzero-console" "$BUN/payload/bin/"
 chmod 755 "$BUN/payload/bin/cyberdeckzero" "$BUN/payload/bin/cyberdeckzero-console"
 : > "$BUN/payload/lib/libapplaunch_vfb.so"
-for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts 90-backlight-unblank.rules \
+for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts hyperpixel4-pwm-backlight.dts 90-backlight-unblank.rules \
          91-applaunch-vkbd.rules 93-applaunch-rfkill.rules 50-networkmanager-netdev.rules 51-launcher-time-power.rules \
          cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules cyberdeckzero.desktop; do
     cp "$D/$f" "$BUN/payload/etc/"
@@ -776,6 +796,65 @@ check "fake DSI install: cmdline.txt gets the two console arguments only, backup
 check "fake DSI install: the hand-written profile kept, no gpio rule, reboot for the console settings only" '[ "$(cksum < "$R/etc/applaunch/board.conf")" = "$HAND" ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && has "edited by hand: kept" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ] && has "reboot now so the console settings apply" && ! has "PWM backlight and"'
 fullboot
 check "fake DSI install, second run: boot files unchanged, nothing to migrate" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && [ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && has "nothing to migrate" && ! has "reboot now"'
+
+# the Pi 5 + HyperPixel 4's PWM backlight (report 030, c-4): config.txt is left alone without --pwm-backlight; with it
+# the overlay is built, its line goes right after the HyperPixel one (config.txt backed up first) and a reboot is asked
+# for; a second run adds nothing; uninstall.sh takes the line and the overlay off again
+HP_CFG0='[all]
+dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-dpi-hyperpixel4,rotate=90
+[cm5]
+dtoverlay=dwc2,dr_mode=host'
+HP_CFG1='[all]
+dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-dpi-hyperpixel4,rotate=90
+dtoverlay=hyperpixel4-pwm-backlight
+[cm5]
+dtoverlay=dwc2,dr_mode=host'
+hp_root() {  # hp_root [desktop]: a Pi 5 + HyperPixel 4 fake root with its boot files in $R
+    R=$(root pi5-hyperpixel4)
+    mkdir -p "$R/boot/firmware/overlays"
+    printf '%s\n' "$HP_CFG0" > "$R/boot/firmware/config.txt"
+    printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+    [ "${1:-}" != desktop ] || desktop "$R" lightdm.service lightdm labwc
+}
+hp_install() { : > "$CALLS"; OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \
+    sh "$BUN/install.sh" --user "$U" --no-default-source "$@" 2>&1); RC=$?; }
+hp_root
+hp_install
+check "fake Pi 5 install without --pwm-backlight: config.txt untouched, no backup, no overlay built" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/config.txt")" = "$HP_CFG0" ] && [ ! -e "$R/boot/firmware/config.txt.bak-applaunch" ] && ! called "hyperpixel4-pwm-backlight" && ! has "hyperpixel4-pwm-backlight"'
+hp_root
+hp_install --pwm-backlight
+HP_DTC="dtc -@ -I dts -O dtb -o $R/boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo $BUN/payload/etc/hyperpixel4-pwm-backlight.dts"
+check "fake Pi 5 install --pwm-backlight: exit 0, overlay built with dtc from the bundle" '[ $RC = 0 ] && called "$HP_DTC"'
+check "fake Pi 5 install --pwm-backlight: its line right after the HyperPixel one, the original kept as config.txt.bak-applaunch" '[ "$(cat "$R/boot/firmware/config.txt")" = "$HP_CFG1" ] && [ "$(cat "$R/boot/firmware/config.txt.bak-applaunch")" = "$HP_CFG0" ] && has "config.txt: dtoverlay=hyperpixel4-pwm-backlight added after line 3"'
+check "fake Pi 5 install --pwm-backlight: reboot asked for, the profile has no backlight line, no backlight rule" 'has "reboot now so the PWM backlight and console settings apply" && ! grep -q APPLAUNCH_BACKLIGHT "$R/etc/applaunch/board.conf" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" ] && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+hp_install --pwm-backlight
+check "fake Pi 5 install --pwm-backlight, second run: the line not added twice, no reboot" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/config.txt")" = "$HP_CFG1" ] && has "config.txt already loads it" && ! has "reboot now"'
+: > "$R/boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo"      # the stand-in dtc writes no file
+: > "$CALLS"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --dry-run 2>&1); RC=$?
+check "fake Pi 5 uninstall dry-run: the line and the overlay planned, nothing changed" '[ $RC = 0 ] && has "config.txt lines: dtoverlay=hyperpixel4-pwm-backlight" && has "  - $R/boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo" && [ "$(cat "$R/boot/firmware/config.txt")" = "$HP_CFG1" ]'
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --yes 2>&1); RC=$?
+check "fake Pi 5 uninstall: the line and the overlay gone, config.txt as before, reboot asked for" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/config.txt")" = "$HP_CFG0" ] && [ ! -e "$R/boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo" ] && has "    - 4:dtoverlay=hyperpixel4-pwm-backlight" && has "HyperPixel 4'"'"'s gpio-backlight (on/off) takes over again" && has "sudo reboot"'
+# the deck's two lines still go the same way through that code (they share it since c-4)
+R=$(root zero2w)
+mkdir -p "$R/boot/firmware/overlays"
+printf '[all]\ndtoverlay=waveshare-28dpi-3b\ndtoverlay=pwm,pin=18,func=2\ndtoverlay=waveshare-pwm-backlight\ndtparam=audio=on\n' > "$R/boot/firmware/config.txt"
+printf '[all]\ndtoverlay=waveshare-28dpi-3b\ndtparam=audio=on\n' > "$R/boot/firmware/config.txt.bak-applaunch"
+: > "$R/boot/firmware/overlays/waveshare-pwm-backlight.dtbo"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --yes 2>&1); RC=$?
+check "fake deck uninstall: its two PWM lines and overlay removed as before, nothing of the HyperPixel" '[ $RC = 0 ] && has "config.txt lines: dtoverlay=waveshare-pwm-backlight and dtoverlay=pwm,pin=18,func=2" && [ "$(cat "$R/boot/firmware/config.txt")" = "$(cat "$R/boot/firmware/config.txt.bak-applaunch")" ] && has "    - 3:dtoverlay=pwm,pin=18,func=2" && has "    - 4:dtoverlay=waveshare-pwm-backlight" && [ ! -e "$R/boot/firmware/overlays/waveshare-pwm-backlight.dtbo" ] && ! has "hyperpixel4" && ! has "HyperPixel"'
+hp_root desktop
+hp_install --pwm-backlight
+check "fake Pi 5 desktop install --pwm-backlight: the line added, cmdline.txt untouched, reboot for the PWM backlight" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/config.txt")" = "$HP_CFG1" ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0" ] && [ ! -e "$R/boot/firmware/cmdline.txt.bak-applaunch" ] && has "reboot now so the PWM backlight applies"'
+hp_root
+printf '[all]\ndtoverlay=vc4-kms-v3d\n' > "$R/boot/firmware/config.txt"
+hp_install --pwm-backlight
+check "fake Pi 5 install --pwm-backlight without the HyperPixel line: warned, config.txt untouched, no dtc" '[ $RC = 0 ] && has "WARNING: no dtoverlay=vc4-kms-dpi-hyperpixel4 line" && [ "$(cat "$R/boot/firmware/config.txt")" = "$(printf "[all]\ndtoverlay=vc4-kms-v3d")" ] && ! called "hyperpixel4-pwm-backlight"'
 
 # --- PC (amd64, report 028): the Panasonic FZ-M1 tablet as measured in x-a: DMI, the i915 framebuffer 1280x800, the
 # eDP connector with an EDID, intel_backlight (and an acpi_video0), a disconnected HDMI port; generated here (an EDID is

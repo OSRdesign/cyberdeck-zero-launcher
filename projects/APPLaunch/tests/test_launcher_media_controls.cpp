@@ -209,29 +209,52 @@ int main()
 
     // Restart after screen-off must restore the saved raw value, even when it
     // comes from a legacy brightness level outside the current 10% steps.
+    const auto levels = CP0_BACKLIGHT_KIND_DEFAULT;
     const int previous_config_writes = config_writes;
     configured_brightness = 64;
     backlight_value = 0;
-    assert(launcher_media_controls::restore_startup_backlight());
+    assert(launcher_media_controls::restore_startup_backlight(levels) == 1);
     assert(backlight_value == 64);
     assert(configured_brightness == 64);
+    backlight_value = 255; // a saved level wins over a brighter boot level
+    assert(launcher_media_controls::restore_startup_backlight(CP0_BACKLIGHT_KIND_SYSFS) == 1);
+    assert(backlight_value == 64);
+    assert(launcher_media_controls::restore_startup_backlight(levels) == 0); // already there
+    assert(backlight_value == 64);
 
     for (int saved : {0, -1, 999}) {
         configured_brightness = saved;
         backlight_value = 0;
-        assert(launcher_media_controls::restore_startup_backlight());
+        assert(launcher_media_controls::restore_startup_backlight(levels) == 1);
         assert(backlight_value == backlight_maximum);
         assert(configured_brightness == saved);
     }
     brightness_config_missing = true;
     backlight_value = 0;
-    assert(launcher_media_controls::restore_startup_backlight());
+    assert(launcher_media_controls::restore_startup_backlight(levels) == 1);
     assert(backlight_value == backlight_maximum);
+    backlight_value = 25; // the last session ended dim (below half), nothing saved: full
+    assert(launcher_media_controls::restore_startup_backlight(levels) == 1);
+    assert(backlight_value == backlight_maximum);
+    backlight_value = 140; // already at least half, nothing saved: left alone
+    assert(launcher_media_controls::restore_startup_backlight(levels) == 0);
+    assert(backlight_value == 140);
     brightness_config_missing = false;
+
+    // No backlight, or an on/off one: never touched, whatever is saved.
+    configured_brightness = 64;
+    backlight_value = 0;
+    assert(launcher_media_controls::restore_startup_backlight(CP0_BACKLIGHT_KIND_NONE) == 0);
+    assert(launcher_media_controls::restore_startup_backlight(CP0_BACKLIGHT_KIND_GPIO_ONOFF) == 0);
+    assert(backlight_value == 0);
+    backlight_maximum = 1; // a levels kind whose device only has 0/1
+    assert(launcher_media_controls::restore_startup_backlight(levels) == 0);
+    assert(backlight_value == 0);
+    backlight_maximum = 255;
 
     backlight_write_failed = true;
     backlight_value = 0;
-    assert(!launcher_media_controls::restore_startup_backlight());
+    assert(launcher_media_controls::restore_startup_backlight(levels) == -1);
     assert(backlight_value == 0);
     backlight_write_failed = false;
     assert(config_writes == previous_config_writes);

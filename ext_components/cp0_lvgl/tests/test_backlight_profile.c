@@ -225,6 +225,42 @@ static void child_detect_late(const char *root)
     _exit(0);
 }
 
+/* The level set once at launcher start (cp0_backlight_startup_level): pure, no profile involved. `saved` is the raw
+ * level Settings > Brightness keeps (<= 0: none). */
+static int check_startup_level(void)
+{
+    const cp0_backlight_kind_t sysfs = CP0_BACKLIGHT_KIND_SYSFS;
+    /* nothing saved, the last session ended dim (the Pi 5 HyperPixel pwm, 0..10): full */
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 1, -1) == 10);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 0, 0) == 10);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, -1, -1) == 10); /* current unknown: full */
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 4, -1) == 10);  /* 40 %: below half */
+    /* nothing saved, already at least half: left alone */
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 5, -1) == -1);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 10, -1) == -1);
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_DEFAULT, 255, 128, 0) == -1);
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_DEFAULT, 255, 127, 0) == 255);
+    /* a saved level (40 % on max 10 = level 4): that level, whatever the current one */
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 10, 4) == 4);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 1, 4) == 4);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, -1, 4) == 4);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 4, 4) == -1); /* already there: no write */
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_DEFAULT, 255, 0, 64) == 64); /* the deck */
+    CHECK(cp0_backlight_startup_level(sysfs, 937, 937, 94) == 94);                     /* the tablet */
+    /* clamp: a saved level above the device's maximum */
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 2, 255) == 10);
+    CHECK(cp0_backlight_startup_level(sysfs, 10, 10, 255) == -1);
+    /* on/off only (gpio, or a levels kind with max_brightness 1): never touched */
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_GPIO_ONOFF, 1, 0, -1) == -1);
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_GPIO_ONOFF, 1, 0, 1) == -1);
+    CHECK(cp0_backlight_startup_level(sysfs, 1, 0, -1) == -1);
+    CHECK(cp0_backlight_startup_level(sysfs, 0, 0, 4) == -1);
+    /* no backlight */
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_NONE, -1, -1, -1) == -1);
+    CHECK(cp0_backlight_startup_level(CP0_BACKLIGHT_KIND_NONE, 255, 0, 64) == -1);
+    return 0;
+}
+
 static int run(void (*fn)(const char *), const char *arg)
 {
     const pid_t pid = fork();
@@ -271,7 +307,7 @@ int main(void)
     write_file(device, "brightness", "200\n");
     setenv("APPLAUNCH_BACKLIGHT_ROOT", scan, 1);
 
-    int failed = 0;
+    int failed = check_startup_level();
     failed += run(child_default, NULL);
     failed += run(child_default, "pwm");
     failed += run(child_default, "gpio:");

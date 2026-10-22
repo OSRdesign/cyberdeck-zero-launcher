@@ -26,12 +26,13 @@ int main(void)
 {
     Cp0LvglRunOptions options;
     options.after_resource_init = []() {
-        const char *display_mode = std::getenv("APPLAUNCH_DISPLAY");
-        if (display_mode != nullptr && std::string(display_mode) == "dpi-scaled")
-            return; // the dpi-scaled boards: the backlight stays as the board left it
-        if (launcher_media_controls::restore_startup_backlight())
+        // Once per launcher start (never on a wake from the screensaver or a return from an app): the saved
+        // brightness, or full when nothing is saved and the board came up below half (systemd-backlight brings
+        // back the level the last session ended with). No backlight, or an on/off one: left as the board set it.
+        const int restored = launcher_media_controls::restore_startup_backlight(cp0_backlight_profile_kind());
+        if (restored > 0)
             SLOGI("[BOOT] restored working backlight brightness");
-        else
+        else if (restored < 0)
             SLOGE("[BOOT] failed to restore working backlight brightness");
     };
     options.setup = []() {
