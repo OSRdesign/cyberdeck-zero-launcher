@@ -107,6 +107,7 @@ CONF_DIR="$TARGET_HOME/.config/cardputerzero"
 STATE_DIR=${M5APPSTORE_STATE_DIR:-$TARGET_HOME/.local/share/cardputerzero-appstore}
 CACHE_DIR=${M5APPSTORE_CACHE_DIR:-$TARGET_HOME/.cache/cardputerzero-appstore}
 UNIT_DIR="$TARGET_HOME/.config/systemd/user"
+WP_DROPIN="$TARGET_HOME/.config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf"
 CONFIG="$BOOT/config.txt"
 CMDLINE="$BOOT/cmdline.txt"
 OVERLAY="$BOOT/overlays/waveshare-pwm-backlight.dtbo"
@@ -277,6 +278,7 @@ echo "    console)"
 echo "  - system service $DESKTOP_UNIT / $OLD_DESKTOP_UNIT (desktop boards: stopped first if it runs, so the"
 echo "    desktop comes back) and the menu entry ${MENU_DIR#"$ROOT"}/$DESKTOP_ENTRY_NAME / $OLD_DESKTOP_ENTRY_NAME"
 echo "  - system service launcher-ntp-default.service"
+if exists "$WP_DROPIN"; then echo "  - $WP_DROPIN (desktop boards: WirePlumber Bluetooth audio drop-in)"; fi
 echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
 echo "    lib/libapplaunch_vfb.so"
 case "$ASSETS_SOURCE" in
@@ -316,7 +318,7 @@ echo "Will keep:"
 [ "$PURGE_CONFIG" = 1 ] || echo "  - $CONF_DIR, $STATE_DIR, $CACHE_DIR"
 if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then :; else echo "  - installed app packages and their data (/usr/share/APPLaunch/applications, /opt/..., apps' own files)"; fi
 echo "  - packages install.sh added with apt (libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler)"
-echo "  - group membership (input, video, netdev; audio with a sound card) of $TARGET_USER"
+echo "  - group membership (input, video, netdev; audio with a sound card; i2c on the HackBerry) of $TARGET_USER"
 [ "$DISABLE_LINGER" = 1 ] || echo "  - lingering (add --disable-linger to turn it off)"
 echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm"
 echo "  - $PROFILE.bak if install.sh made one (a replaced or hand-edited profile)"
@@ -351,6 +353,13 @@ done
 for d in "$UNIT_DIR/default.target.wants" "$UNIT_DIR"; do
     if [ -d "$d" ] && [ -z "$(ls -A "$d" 2>/dev/null)" ]; then act rmdir "$d"; fi
 done
+# the desktop variant's WirePlumber drop-in (Bluetooth audio while the launcher runs); the folders only if now empty
+if exists "$WP_DROPIN"; then
+    act rm -f "$WP_DROPIN"
+    for d in "${WP_DROPIN%/*}" "$TARGET_HOME/.config/wireplumber"; do
+        if [ -d "$d" ] && [ -z "$(ls -A "$d" 2>/dev/null)" ]; then act_try rmdir "$d"; fi
+    done
+fi
 
 # ---------------------------------------------------------------------------------------------------------
 # The text console and the desktop variant, before the launcher files (their units run the console helper).
@@ -552,7 +561,7 @@ if [ -d "$APP_ROOT" ]; then
 fi
 for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm" "$PROFILE.bak"; do [ -f "$b" ] && echo "  backup kept: $b"; done
 for b in "$BOOT"/config.txt.bak-uninstall-* "$BOOT"/cmdline.txt.bak-uninstall-*; do [ -f "$b" ] && echo "  backup made now: $b"; done
-echo "  apt packages added by install.sh, and the groups input/video/netdev (audio) of $TARGET_USER (not recorded by install.sh)"
+echo "  apt packages added by install.sh, and the groups input/video/netdev (audio, i2c) of $TARGET_USER (not recorded by install.sh)"
 if [ "$DISABLE_LINGER" = 0 ]; then echo "  lingering stays on for $TARGET_USER (loginctl disable-linger $TARGET_USER to undo)"; fi
 echo "Follow-ups:"
 if [ "$NEED_REBOOT" = 1 ]; then

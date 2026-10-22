@@ -13,6 +13,15 @@
  *
  * The directory is $APPLAUNCH_POWER_SUPPLY_ROOT when it is set and not empty (host tests and the render harness point
  * it at a fake tree), else /sys/class/power_supply.
+ *
+ * A second source, only when no sysfs battery is found and the default directory is used (report 030, C5): a MAX17048
+ * fuel gauge read over i2c-dev, named by $APPLAUNCH_GAUGE = "max17048:<i2c-dev path>:<address>", e.g.
+ * "max17048:/dev/i2c-15:0x36" (the HackBerry CM5: its overlay's client for the chip has no power_supply driver).
+ * "max17048:auto:0x36" takes the bus that has the touch controller (a /sys/bus/i2c/devices/<bus>-0048 entry), because the
+ * HackBerry's bus number is not stable. Percent from SOC, voltage from VCELL, the state from CRATE (the charge rate); no
+ * power, minutes or health. A chip that does not answer, or whose VERSION register is not a MAX1704x's, is no battery.
+ * Test hooks: $APPLAUNCH_GAUGE_FILE reads the registers from a regular file (the byte offset is the register) instead of
+ * the device, $APPLAUNCH_I2C_SYSFS_ROOT replaces /sys/bus/i2c/devices for "auto".
  */
 #pragma once
 
@@ -22,6 +31,9 @@ extern "C" {
 
 #define CP0_POWER_SUPPLY_ROOT_ENV "APPLAUNCH_POWER_SUPPLY_ROOT"
 #define CP0_POWER_SUPPLY_DEFAULT_ROOT "/sys/class/power_supply"
+#define CP0_GAUGE_ENV "APPLAUNCH_GAUGE"
+#define CP0_GAUGE_FILE_ENV "APPLAUNCH_GAUGE_FILE"
+#define CP0_I2C_SYSFS_ROOT_ENV "APPLAUNCH_I2C_SYSFS_ROOT"
 
 typedef enum {
     CP0_BATTERY_UNKNOWN = 0,  /* "Unknown" or no status file */

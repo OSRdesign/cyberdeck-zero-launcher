@@ -10,9 +10,17 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
+#ifndef I2C_SLAVE
+#define I2C_SLAVE 0x0703 /* linux/i2c-dev.h, spelled here so a host without the header builds too */
+#endif
 
 #define MAX_MINUTES (7 * 24 * 60) /* a longer estimate is a driver's nonsense (an idle current near 0) */
 
@@ -174,23 +182,128 @@ static int visible(const struct dirent *entry) { return entry->d_name[0] != '.';
 /* byte order, not the locale's: the same device wins on every system */
 static int by_name(const struct dirent **a, const struct dirent **b) { return strcmp((*a)->d_name, (*b)->d_name); }
 
+/* ---- MAX17048 fuel gauge over i2c-dev (report 030, C5) ---- */
+
+#define GAUGE_REG_VCELL 0x02
+#define GAUGE_REG_SOC 0x04
+#define GAUGE_REG_VERSION 0x08
+#define GAUGE_REG_CRATE 0x16
+#define GAUGE_RATE_MILLI 500 /* %/h: the charge rate beyond which the battery is charging (or discharging) */
+
+/* One big-endian 16-bit register: the register byte written, then two bytes read; with the test file, pread. */
+static int gauge_read(int fd, int is_file, int reg, unsigned *value)
+{
+    unsigned char buf[2];
+    if (is_file) {
+        if (pread(fd, buf, 2, (off_t)reg) != 2) return 0;
+    } else {
+        const unsigned char r = (unsigned char)reg;
+        if (write(fd, &r, 1) != 1) return 0;
+        if (read(fd, buf, 2) != 2) return 0;
+    }
+    *value = ((unsigned)buf[0] << 8) | buf[1];
+    return 1;
+}
+
+/* "<dir>-0048" under $APPLAUNCH_I2C_SYSFS_ROOT or /sys/bus/i2c/devices: the bus of the touch controller as /dev/i2c-N */
+static int gauge_auto_path(char *path, size_t size)
+{
+    const char *env = getenv(CP0_I2C_SYSFS_ROOT_ENV);
+    const char *root = env && env[0] ? env : "/sys/bus/i2c/devices";
+    struct dirent **entries = NULL;
+    const int count = scandir(root, &entries, visible, by_name);
+    if (count < 0) return 0;
+    int bus = -1;
+    for (int i = 0; i < count; ++i) {
+        const char *name = entries[i]->d_name;
+        char *end = NULL;
+        const long n = strtol(name, &end, 10);
+        if (bus < 0 && end != name && n >= 0 && n < 1000 && strcmp(end, "-0048") == 0) bus = (int)n;
+        free(entries[i]);
+    }
+    free(entries);
+    if (bus < 0) return 0;
+    return snprintf(path, size, "/dev/i2c-%d", bus) < (int)size;
+}
+
+/* $APPLAUNCH_GAUGE = "max17048:<path>:<address>": the device path (or "auto") and the 7-bit address; 0 when malformed */
+static int gauge_parse(const char *spec, char *path, size_t size, long *address)
+{
+    static const char prefix[] = "max17048:";
+    if (!spec || strncmp(spec, prefix, sizeof(prefix) - 1) != 0) return 0;
+    spec += sizeof(prefix) - 1;
+    const char *colon = strrchr(spec, ':');
+    if (!colon || colon == spec) return 0;
+    const size_t len = (size_t)(colon - spec);
+    if (len >= size) return 0;
+    char *end = NULL;
+    errno = 0;
+    const long addr = strtol(colon + 1, &end, 0);
+    if (errno != 0 || end == colon + 1 || *end != '\0' || addr < 0x03 || addr > 0x77) return 0;
+    memcpy(path, spec, len);
+    path[len] = '\0';
+    if (strcmp(path, "auto") == 0) {
+        if (!gauge_auto_path(path, size)) return 0;
+    } else if (path[0] != '/') {
+        return 0;
+    }
+    *address = addr;
+    return 1;
+}
+
+static int read_gauge(cp0_power_battery_t *out)
+{
+    char path[256];
+    long address = 0;
+    if (!gauge_parse(getenv(CP0_GAUGE_ENV), path, sizeof(path), &address)) return 0;
+    const char *file = getenv(CP0_GAUGE_FILE_ENV);
+    const int is_file = file && file[0];
+
+    const int fd = open(is_file ? file : path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) return 0;
+    int ok = 0;
+    unsigned version = 0, vcell = 0, soc = 0, crate = 0;
+    if ((is_file || ioctl(fd, I2C_SLAVE, address) == 0) && gauge_read(fd, is_file, GAUGE_REG_VERSION, &version) &&
+        (version & 0xFFE0u) == 0x0000u && (version & 0x10u) && gauge_read(fd, is_file, GAUGE_REG_VCELL, &vcell) &&
+        vcell != 0 && vcell != 0xFFFFu && gauge_read(fd, is_file, GAUGE_REG_SOC, &soc)) {
+        ok = 1;
+        if (!gauge_read(fd, is_file, GAUGE_REG_CRATE, &crate)) crate = 0; /* no rate: state Unknown */
+    }
+    close(fd);
+    if (!ok) return 0;
+
+    cp0_power_battery_t battery;
+    clear(&battery);
+    memcpy(battery.name, "max17048", sizeof("max17048"));
+    battery.percent = clamp_percent((long long)(soc >> 8)); /* the high byte: whole percent (low byte / 256 is the fraction) */
+    battery.voltage_mv = (int)(((long long)vcell * 78125 + 500000) / 1000000); /* 78.125 uV per LSB */
+    const long long rate_milli = (long long)(int16_t)crate * 208; /* 0.208 %/h per LSB, in 0.001 %/h */
+    if (rate_milli > GAUGE_RATE_MILLI) battery.state = CP0_BATTERY_CHARGING;
+    else if (rate_milli < -GAUGE_RATE_MILLI) battery.state = CP0_BATTERY_DISCHARGING;
+    else if (battery.percent >= 99) battery.state = CP0_BATTERY_FULL;
+    *out = battery;
+    return 1;
+}
+
 int cp0_power_supply_battery_at(const char *root, cp0_power_battery_t *out)
 {
     if (!out) return 0;
     clear(out);
-    if (!root || !root[0]) {
+    const int default_root = !root || !root[0];
+    if (default_root) {
         const char *env = getenv(CP0_POWER_SUPPLY_ROOT_ENV);
         root = env && env[0] ? env : CP0_POWER_SUPPLY_DEFAULT_ROOT;
     }
     struct dirent **entries = NULL;
     const int count = scandir(root, &entries, visible, by_name);
-    if (count < 0) return 0;
     int found = 0;
+    if (count < 0) return default_root ? read_gauge(out) : 0; /* no power_supply directory at all */
     for (int i = 0; i < count; ++i) {
         if (!found) found = read_battery(root, entries[i]->d_name, out);
         free(entries[i]);
     }
     free(entries);
+    if (!found && default_root) found = read_gauge(out); /* no kernel battery: the configured gauge, if any */
     return found;
 }
 

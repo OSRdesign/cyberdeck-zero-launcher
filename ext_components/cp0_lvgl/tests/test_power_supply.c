@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 static char g_base[256];
 static int g_tree;
@@ -270,6 +271,117 @@ static void test_environment(void)
     unsetenv(CP0_POWER_SUPPLY_ROOT_ENV);
 }
 
+/* ---- the MAX17048 gauge (report 030, C5): registers in a regular file, the byte offset is the register ---- */
+
+static void put_gauge(const char *path, unsigned version, unsigned vcell, unsigned soc, int crate)
+{
+    unsigned char regs[0x20] = {0};
+    regs[0x02] = (unsigned char)(vcell >> 8), regs[0x03] = (unsigned char)vcell;
+    regs[0x04] = (unsigned char)(soc >> 8), regs[0x05] = (unsigned char)soc;
+    regs[0x08] = (unsigned char)(version >> 8), regs[0x09] = (unsigned char)version;
+    regs[0x16] = (unsigned char)((unsigned)crate >> 8), regs[0x17] = (unsigned char)crate;
+    FILE *out = fopen(path, "wb");
+    assert(out);
+    assert(fwrite(regs, 1, sizeof(regs), out) == sizeof(regs));
+    fclose(out);
+}
+
+static void test_gauge(void)
+{
+    char empty[300], file[400], root[300];
+    cp0_power_battery_t b;
+    new_tree(empty, sizeof(empty));
+    snprintf(file, sizeof(file), "%s/gauge.bin", g_base);
+    assert(setenv(CP0_POWER_SUPPLY_ROOT_ENV, empty, 1) == 0);
+    assert(setenv(CP0_GAUGE_FILE_ENV, file, 1) == 0);
+    assert(setenv(CP0_GAUGE_ENV, "max17048:/dev/i2c-15:0x36", 1) == 0);
+
+    /* the probed unit: 4.188 V (53606 LSB), 100.3 %, version 0x0012, rate 0: full */
+    put_gauge(file, 0x0012, 53606, 0x644D, 0);
+    assert(cp0_power_supply_battery(&b) == 1);
+    assert(strcmp(b.name, "max17048") == 0 && b.percent == 100 && b.voltage_mv == 4188);
+    assert(b.state == CP0_BATTERY_FULL && b.power_mw == -1 && b.minutes == -1 && b.health_percent == -1);
+
+    /* 55.5 %, rate 0: state unknown; charging beyond +0.5 %/h (3 LSB = 0.624), discharging beyond -0.5 %/h */
+    put_gauge(file, 0x0012, 48000, 0x3780, 0);
+    assert(cp0_power_supply_battery(&b) == 1 && b.percent == 55 && b.voltage_mv == 3750);
+    assert(b.state == CP0_BATTERY_UNKNOWN);
+    put_gauge(file, 0x0012, 48000, 0x3780, 2); /* 0.416 %/h: below the threshold */
+    assert(cp0_power_supply_battery(&b) == 1 && b.state == CP0_BATTERY_UNKNOWN);
+    put_gauge(file, 0x0012, 48000, 0x3780, 3);
+    assert(cp0_power_supply_battery(&b) == 1 && b.state == CP0_BATTERY_CHARGING);
+    put_gauge(file, 0x0012, 48000, 0x3780, -3);
+    assert(cp0_power_supply_battery(&b) == 1 && b.state == CP0_BATTERY_DISCHARGING);
+    put_gauge(file, 0x0012, 48000, 0x3780, -2);
+    assert(cp0_power_supply_battery(&b) == 1 && b.state == CP0_BATTERY_UNKNOWN);
+    put_gauge(file, 0x0012, 53000, 0x6300, -10); /* 99 % and discharging: not full */
+    assert(cp0_power_supply_battery(&b) == 1 && b.state == CP0_BATTERY_DISCHARGING && b.percent == 99);
+
+    /* the percent is clamped to 0..100 */
+    put_gauge(file, 0x0012, 48000, 0xFF00, 0);
+    assert(cp0_power_supply_battery(&b) == 1 && b.percent == 100);
+    put_gauge(file, 0x0012, 40000, 0x0000, 0);
+    assert(cp0_power_supply_battery(&b) == 1 && b.percent == 0);
+
+    /* a bad VERSION (not a MAX1704x), a zero or all-ones VCELL: no battery, and the output is cleared */
+    put_gauge(file, 0x0000, 48000, 0x3780, 0);
+    assert(cp0_power_supply_battery(&b) == 0 && b.percent == -1 && b.name[0] == '\0');
+    put_gauge(file, 0xFFFF, 48000, 0x3780, 0);
+    assert(cp0_power_supply_battery(&b) == 0);
+    put_gauge(file, 0x0112, 48000, 0x3780, 0);
+    assert(cp0_power_supply_battery(&b) == 0);
+    put_gauge(file, 0x0012, 0, 0x3780, 0);
+    assert(cp0_power_supply_battery(&b) == 0);
+
+    /* a missing or short register file, and an explicit root, never use the gauge */
+    put_gauge(file, 0x0012, 48000, 0x3780, 0);
+    assert(cp0_power_supply_battery_at(empty, &b) == 0);
+    assert(truncate(file, 6) == 0);
+    assert(cp0_power_supply_battery(&b) == 0);
+    unlink(file);
+    assert(cp0_power_supply_battery(&b) == 0);
+
+    /* a malformed APPLAUNCH_GAUGE is ignored */
+    static const char *const bad[] = {"", "max17048", "max17048:", "max17048::0x36", "max17048:/dev/i2c-15",
+                                      "max17048:/dev/i2c-15:", "max17048:/dev/i2c-15:zz", "max17048:/dev/i2c-15:0x80",
+                                      "max17048:/dev/i2c-15:0x01", "max17048:i2c-15:0x36", "bq27xxx:/dev/i2c-15:0x36",
+                                      "max17048:auto:0x36" /* no touch bus in the default sysfs tree on a test host */};
+    put_gauge(file, 0x0012, 48000, 0x3780, 0);
+    for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); ++i) {
+        assert(setenv(CP0_GAUGE_ENV, bad[i], 1) == 0);
+        assert(setenv(CP0_I2C_SYSFS_ROOT_ENV, empty, 1) == 0);
+        assert(cp0_power_supply_battery(&b) == 0);
+    }
+    unsetenv(CP0_I2C_SYSFS_ROOT_ENV);
+
+    /* the sysfs battery wins over the gauge */
+    new_tree(root, sizeof(root));
+    put_acpi_energy(root, "BAT1", "Discharging\n", 42, "16800000\n", "5600000\n");
+    assert(setenv(CP0_POWER_SUPPLY_ROOT_ENV, root, 1) == 0);
+    assert(setenv(CP0_GAUGE_ENV, "max17048:/dev/i2c-15:0x36", 1) == 0);
+    assert(cp0_power_supply_battery(&b) == 1 && strcmp(b.name, "BAT1") == 0 && b.percent == 42);
+
+    /* no power_supply directory at all: the gauge still answers */
+    snprintf(root, sizeof(root), "%s/does-not-exist", g_base);
+    assert(setenv(CP0_POWER_SUPPLY_ROOT_ENV, root, 1) == 0);
+    assert(cp0_power_supply_battery(&b) == 1 && strcmp(b.name, "max17048") == 0);
+
+    /* "auto": the bus of the touch controller (a <bus>-0048 entry), the lowest when several */
+    char sys[300];
+    new_tree(sys, sizeof(sys));
+    put(sys, "15-0036", "name", "x\n");
+    assert(setenv(CP0_I2C_SYSFS_ROOT_ENV, sys, 1) == 0);
+    assert(setenv(CP0_GAUGE_ENV, "max17048:auto:0x36", 1) == 0);
+    assert(cp0_power_supply_battery(&b) == 0); /* no 0048 entry */
+    put(sys, "15-0048", "name", "edt-ft5406\n");
+    assert(cp0_power_supply_battery(&b) == 1 && b.percent == 55);
+
+    unsetenv(CP0_GAUGE_ENV);
+    unsetenv(CP0_GAUGE_FILE_ENV);
+    unsetenv(CP0_I2C_SYSFS_ROOT_ENV);
+    unsetenv(CP0_POWER_SUPPLY_ROOT_ENV);
+}
+
 int main(void)
 {
     const char *tmp = getenv("TMPDIR");
@@ -286,6 +398,7 @@ int main(void)
     test_choice();
     test_long_name();
     test_environment();
+    test_gauge();
 
     char command[400];
     snprintf(command, sizeof(command), "rm -rf '%s'", g_base);

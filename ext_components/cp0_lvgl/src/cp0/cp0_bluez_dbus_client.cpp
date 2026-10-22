@@ -843,6 +843,26 @@ private:
                                method_done, request);
     }
 
+    /* Device1.Trusted = true after a successful Pair(); fire and forget (a failure is only a log line). */
+    void trust_device(const std::string &path)
+    {
+        if (!connection_ || path.empty()) return;
+        g_dbus_connection_call(
+            connection_, kBluez, path.c_str(), kProperties, "Set",
+            g_variant_new("(ssv)", kDevice, "Trusted", g_variant_new_boolean(TRUE)), nullptr,
+            G_DBUS_CALL_FLAGS_NONE, kCallTimeoutMs, nullptr,
+            [](GObject *source, GAsyncResult *result, gpointer) {
+                GError *error = nullptr;
+                GVariant *reply = g_dbus_connection_call_finish(G_DBUS_CONNECTION(source), result, &error);
+                if (reply) g_variant_unref(reply);
+                if (error) {
+                    cp0_zmq_logf("bt", "set Trusted after pair failed: %s", error->message);
+                    g_error_free(error);
+                }
+            },
+            nullptr);
+    }
+
     void call_path(GDBusProxy *proxy, const char *method, GVariant *parameters, CommandRequest *request)
     {
             call_proxy(proxy, method, parameters, request);
@@ -949,6 +969,9 @@ private:
                         self->cancel_pairing_then_remove(self->pairing_device_path_, "pair failed",
                                                          cp0::bluetooth::policy::pair_requires_force_cleanup(error_name));
                 }
+                // Report 030 (C6): a device that paired is trusted too, so it reconnects by itself later. Best
+                // effort: the reply is ignored, a failed Set never changes the result of the pair.
+                if (code == 0 && !self->pairing_device_path_.empty()) self->trust_device(self->pairing_device_path_);
                 self->pairing_device_path_.clear();
             }
         }
