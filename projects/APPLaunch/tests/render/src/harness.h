@@ -110,6 +110,7 @@ struct Fixtures {
     std::string bt_passkey = "246810";      /* the passkey the tablet shows (fake) */
     int backlight_max = 255;
     int backlight = 200;
+    int volume = 50;                   /* the audio service's VolumeRead / VolumeWrite (Settings > Speaker) */
     unsigned keyboards = 0;            /* physical keyboards present (on-screen keyboard policy) */
     /* Network Time (NtpGet answers 1 when on, 0 off); scene command "ntp on|off"; the Network Time toggle sets it
      * (cp0_timedate_set_ntp, a worker thread) */

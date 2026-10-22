@@ -1204,6 +1204,8 @@ lv_display_t *cp0_dpi_scaled_create(void)
         snprintf(backlight, sizeof(backlight), "gpio:%s (on/off)", cp0_backlight_profile_dir());
     else if (cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_SYSFS)
         snprintf(backlight, sizeof(backlight), "sysfs:%s (levels)", cp0_backlight_profile_dir());
+    else if (cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE)
+        snprintf(backlight, sizeof(backlight), "none");
     fprintf(stderr,
             "[display-profile] board=%s fb=%s %dx%d %dbpp line=%d rgb=%u/%u,%u/%u,%u/%u%s rotate=%d logical=%dx%d "
             "compat_scale=%d window=%dx%d@(%d,%d) touch=%s backlight=%s\n",

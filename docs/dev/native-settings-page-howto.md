@@ -17,7 +17,7 @@ own page factory and API, in this order:
 | `Native` | `settings_native_page(node)` is not `None` (checked first) |
 | `Custom` | the entry's `page_type == PageType::FullCustom`, or any other factory not listed below (hidden: no compat path any more) |
 | `Section` | factory `roller_page_factory` or `bluetooth_roller_page_factory` |
-| `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `settings_rtc_confirm_page_factory` (Save?), `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory` |
+| `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `settings_rtc_confirm_page_factory` (Save?), `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory`, `settings_pointer_choice_page_factory`, `volume_page3_factory` (Speaker; options all percentages, so the host draws a slider, as for the Brightness levels) |
 | `Toggle` | no factory, `icon_enabled` and `has_api()` |
 | `Action` | no factory, `has_api()` |
 | `Plain` | nothing to open |
@@ -110,7 +110,9 @@ not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
 
 | Row | Condition | Where it shows today | Verdict |
 |---|---|---|---|
-| Screen > Brightness, DarkTime | none (Brightness options: levels, or On / Off on a gpio on/off backlight, `cp0_backlight_profile_kind()`) | every board | hardware-dependent (the options only) |
+| Screen > Brightness | a backlight, detected as Settings opens (report 030: `cp0_capabilities.h`, `settings_capabilities_model.hpp`; the profile's `APPLAUNCH_BACKLIGHT` or the kernel's preferred device); options: levels, or On / Off on an on/off backlight (`gpio:` or `max_brightness` 1, `cp0_backlight_profile_kind()`); none: no row (an Info row with the reason when the board profile names it, `APPLAUNCH_HINT_BACKLIGHT`) | every board with a backlight (not the HackBerry) | hardware-dependent |
+| Screen > DarkTime | none | every board | aligned |
+| Speaker (after Screen; the volume slider, `volume_page3_factory`) | a sound output as Settings opens (report 030 C2: a non-HDMI ALSA card with a playback volume control, or a sound server's sink, Bluetooth included); an Info row when `APPLAUNCH_HINT_SOUND` names one that is not set up | the FZ-M1 tablet; the Pi 3A+ with its jack's card; the HackBerry while its Bluetooth speaker is connected; stock: always (the legacy page) | hardware-dependent (`settings_speaker*.scene`) |
 | Wi-Fi (Enable, Networks, Join Hidden Network) | none | every board | aligned |
 | Bluetooth (Power, Alias, Discoverable, Named Only, Paired Devices, Scan) | none (no adapter: the pages say so) | every board | aligned |
 | Launcher (one toggle per configurable tile; Store when `APPLAUNCH_LAUNCHER_STORE_TOGGLE`) | `LAUNCHER_BUILD`; `APPLAUNCH_HIDE_TILES` sets defaults only | every board | aligned |
@@ -126,10 +128,16 @@ not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
 | System > Quit to desktop | `APPLAUNCH_SESSION=desktop` (desktop unit), native host, `APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP` | desktop session only | hardware-dependent (meaningless without a desktop) |
 | System > Reboot | none | every board | aligned |
 | System > Shutdown | `APPLAUNCH_SETTINGS_SHUTDOWN` (1 on our profile, 0 stock) | every board (stock: no) | stock rule, needs owner decision for stock |
-| Battery (after Bluetooth; a read-only page: charge, status, time, power, voltage, health, device) | a Linux `power_supply` battery when Settings opens (`settings_battery::present()`, `cp0_power_supply.h`: type Battery, scope not Device, present), native host | boards with a battery (the FZ-M1 tablet); none of the Pi boards | hardware-dependent (no battery, no row; `settings_battery*.scene`) |
-| Speaker, Ethernet, ExtPort, Battery > Info (the bq27220 pages), Developer (ADB) | `APPLAUNCH_SETTINGS_*` (0 on our profile) | stock only | hardware-dependent (speaker, RJ45, IO expander, bq27220 gauge, USB gadget) |
+| Battery (after Bluetooth; a read-only page: charge, status, time, power, voltage, health, device) | a Linux `power_supply` battery when Settings opens (`cp0_capabilities.h` / `settings_battery::present()`, `cp0_power_supply.h`: type Battery, scope not Device, present), native host; an Info row when `APPLAUNCH_HINT_BATTERY` names one that is not set up | boards with a battery (the FZ-M1 tablet); none of the Pi boards | hardware-dependent (no battery, no row; `settings_battery*.scene`) |
+| Ethernet, ExtPort, Battery > Info (the bq27220 pages), Developer (ADB) | `APPLAUNCH_SETTINGS_*` (0 or not defined on our profile) | stock only | hardware-dependent (RJ45, IO expander, bq27220 gauge, USB gadget) |
 
 The native host hides a node it has no widget for (`SettingsNodeKind::Custom`); none of our profile's nodes is one.
+Rows that follow the hardware (Battery, Brightness, Speaker) are decided by `settings_caps::rows_for()` from
+`cp0_caps_probe()` (`settings_capabilities.hpp`, `settings_capabilities_model.hpp`): present = the row, not set up (a
+board profile hint) = a plain entry with "Row: reason" (an Info row), absent = nothing. The table of every board comes
+from `projects/APPLaunch/tests/test_settings_capabilities.cpp` (fake trees); the render scenes
+`settings_speaker*.scene`, `settings_backlight_onoff.scene` and `settings_capability_hints.scene` use the harness
+commands `sound` and `backlight`.
 System rows keep their order; rows counted from the end (Shutdown, Reboot, Quit to desktop, Keyboard test, On-screen
 keyboard) stay where they are, new rows go before them. The render scenes `settings_rows_*.scene` pin the root menu
 and System for the deck (no board), board profiles (pi3a-wsdsi43, hackberry-cm5 in its desktop session, pc-fzm1-2),

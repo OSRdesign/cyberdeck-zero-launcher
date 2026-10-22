@@ -640,8 +640,11 @@ void install_services()
     cp0_signal_timedate_api.append(time_service);
 
     cp0_signal_audio_api.append([](Args args, Reply reply) {
-        // System sounds and volume: accepted, nothing to play on the harness.
-        if (reply) reply(0, arg(args, 0) == "VolumeRead" ? "50" : "");
+        // System sounds: accepted, nothing to play on the harness. The volume: the fixture (Settings > Speaker).
+        Fixtures &f = fixtures();
+        const std::string command = arg(args, 0);
+        if (command == "VolumeWrite") f.volume = std::max(0, std::min(100, std::atoi(arg(args, 1).c_str())));
+        if (reply) reply(0, command == "VolumeRead" || command == "VolumeWrite" ? std::to_string(f.volume) : "");
     });
     cp0_signal_process_api.append([](Args args, Reply reply) { unknown("process", args, reply); });
 }

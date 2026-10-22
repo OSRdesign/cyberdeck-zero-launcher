@@ -5,6 +5,8 @@
  */
 
 #include "settings_page.hpp"
+#include "settings_capabilities.hpp"
+#include "settings_capabilities_model.hpp"
 #include "settings_hw_profile.hpp"
 #include "settings_keyboard_page.hpp"
 #include "settings_pointer_page.hpp"
@@ -685,11 +687,12 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
         if (factory_is(entry.page_factory, roller_page_factory) ||
             factory_is(entry.page_factory, bluetooth_roller_page_factory))
             return SettingsNodeKind::Section;
-        // value pages: LvSettingValuePage3Base subclasses (SettingsChoiceBinding)
+        // value pages: LvSettingValuePage3Base subclasses (SettingsChoiceBinding); the volume (Speaker) is a slider
         for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
                                          confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
                                          settings_keyboard_choice_page_factory, settings_pointer_choice_page_factory,
-                                         settings_rtc_confirm_page_factory}) // Save?: its warning is a host Dialog
+                                         settings_rtc_confirm_page_factory, // Save?: its warning is a host Dialog
+                                         volume_page3_factory})
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
         // any other page of its own: not migrated (the Pi boards have none left; the other boards' pages are
         // hidden in a release build)
@@ -725,11 +728,28 @@ void UISettingTreePage::create_page_detail()
     settings_tree_factory_context() = &mode_tree;
     NodeIter root                   = mode_tree.set_head(SettingEntry{"Settings"});
 
+#if defined(APPLAUNCH_HW_PIZERO2W)
+    // our boards: Brightness, Speaker and Battery follow what the board has as Settings opens (report 030, decisions
+    // C1-C4: cp0_capabilities.h, settings_capabilities_model.hpp); hardware that is absent has no row
+    const settings_caps::Rows hardware = settings_caps::rows_for(settings_caps::probe_for_settings());
+    constexpr PageType kSpeakerPage = PageType::NextPageNeeded; // a value page: the native host's slider
+#else
+    // the default (simulator) profile: Brightness always, Speaker by its switch (the legacy full-screen volume page)
+    settings_caps::Rows hardware;
+    hardware.brightness = settings_caps::RowShow::Row;
+#if defined(APPLAUNCH_SETTINGS_SPEAKER) && APPLAUNCH_SETTINGS_SPEAKER
+    hardware.speaker = settings_caps::RowShow::Row;
+#endif
+    constexpr PageType kSpeakerPage = PageType::FullCustom;
+#endif
+
     {
         NodeIter screen = mode_tree.append_child(root, SettingEntry{"Screen", roller_page_factory});
-        {
+        if (hardware.brightness == settings_caps::RowShow::Row) {
             NodeIter brightness = mode_tree.append_child(screen, SettingEntry{"Brightness", brightness_page3_factory});
             append_brightness_options(mode_tree, brightness);
+        } else if (hardware.brightness == settings_caps::RowShow::Info) {
+            mode_tree.append_child(screen, SettingEntry{hardware.brightness_info}); // a read-only Info row
         }
         {
             NodeIter dark_time = mode_tree.append_child(screen, SettingEntry{"DarkTime", dark_time_page3_factory});
@@ -741,16 +761,17 @@ void UISettingTreePage::create_page_detail()
         }
     }
 
-#if APPLAUNCH_SETTINGS_SPEAKER  // no speaker on a Pi Zero 2W
-    {
-        NodeIter speaker = mode_tree.append_child(
-            root, SettingEntry{"Speaker", volume_page3_factory, PageType::FullCustom});
+    // Speaker (the volume, 100 % to 0 %): our boards when they have a sound output (a non-HDMI card, a sound server's
+    // sink: report 030 C2); an Info row when the board profile expects one that is not set up
+    if (hardware.speaker == settings_caps::RowShow::Row) {
+        NodeIter speaker = mode_tree.append_child(root, SettingEntry{"Speaker", volume_page3_factory, kSpeakerPage});
         for (int index = 0; index < setup_values::volume_metric(setup_values::VolumeMetric::OptionCount); ++index) {
             mode_tree.append_child(
                 speaker, SettingEntry{std::to_string(setup_values::volume_percent(index)) + "%"});
         }
+    } else if (hardware.speaker == settings_caps::RowShow::Info) {
+        mode_tree.append_child(root, SettingEntry{hardware.speaker_info});
     }
-#endif  // APPLAUNCH_SETTINGS_SPEAKER
 
     {
         NodeIter wifi = mode_tree.append_child(root, SettingEntry{"Wi-Fi", roller_page_factory});
@@ -782,7 +803,7 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(bluetooth, SettingEntry{"Scan", bluetooth_scan_page_factory, PageType::FullCustom});
     }
 
-#if APPLAUNCH_SETTINGS_BATTERY  // bq27220 battery gauge (Cardputer only)
+#if defined(APPLAUNCH_SETTINGS_BATTERY) && APPLAUNCH_SETTINGS_BATTERY  // bq27220 gauge (the default profile only)
     {
         NodeIter info = mode_tree.append_child(root, SettingEntry{"Battery", roller_page_factory});
         mode_tree.append_child(info, SettingEntry{"Info", settings_battery_info_page_factory, PageType::FullCustom});
@@ -796,8 +817,12 @@ void UISettingTreePage::create_page_detail()
     }
 #else
     // our boards: Battery when the board has a power_supply battery as Settings opens (a PC's ACPI battery, a gauge
-    // driver's), native Settings only; the Pi boards have none, so no row (decision X12)
-    if (settings_ui::native_selected()) settings_battery::append_entry(mode_tree, root);
+    // driver's), native Settings only; the Pi boards have none, so no row (decision X12, report 030 C1); an Info row
+    // when the board profile expects one that is not set up
+    if (hardware.battery == settings_caps::RowShow::Row && settings_ui::native_selected())
+        settings_battery::append_entry(mode_tree, root);
+    else if (hardware.battery == settings_caps::RowShow::Info)
+        mode_tree.append_child(root, SettingEntry{hardware.battery_info});
 #endif  // APPLAUNCH_SETTINGS_BATTERY
 
 #ifdef LAUNCHER_BUILD

@@ -1,15 +1,23 @@
 /*
  * Backlight method of the board profile (APPLAUNCH_BACKLIGHT, read once on first use):
- *   unset                  default: today's brightness levels through cp0_backlight_read/max/write
- *                          (/sys/class/backlight/backlight on the deck)
  *   gpio:<sysfs dir>       on/off only, e.g. gpio:/sys/class/backlight/backlight_gpio
  *                          (writes <dir>/brightness = 0 or <dir>/max_brightness)
  *   sysfs:<sysfs dir>      brightness levels in that directory, e.g. sysfs:/sys/class/backlight/intel_backlight
  *                          or sysfs:/sys/class/backlight/10-0045 (writes <dir>/brightness = 0 .. max_brightness)
- * Other values (pwm) are not supported yet and fall back to the default.
+ *   none                   no backlight to drive (a board whose only backlight device drives nothing)
+ *   unset                  detected (report 030, cp0_caps_backlight() in cp0_capabilities.h: the kernel's preferred
+ *                          device of /sys/class/backlight; the SDL simulator keeps the default):
+ *                          - a device named "backlight" with levels: the default, today's brightness levels through
+ *                            cp0_backlight_read/max/write (/sys/class/backlight/backlight, the deck's PWM backlight);
+ *                          - another device with levels: as sysfs:<its dir>;
+ *                          - max_brightness 1 (a gpio-backlight, the Pi 5 HyperPixel): as gpio:<its dir>, on/off;
+ *                          - no device: none, looked for again at most every 3 s until one appears (a driver
+ *                            that comes up after the launcher started).
+ * Other values (pwm) are not supported yet and are detected as if unset.
  * The settings service (BacklightRead/Max/Write) uses the same directory for the gpio and sysfs kinds, so every
  * brightness client (Settings, hotkeys, screensaver dim, sleep, startup restore) follows the profile.
- * Writing needs permission on <dir>/brightness; when it is missing the calls just fail (-1).
+ * Writing needs permission on <dir>/brightness; when it is missing the calls just fail (-1). With no backlight (none)
+ * every read and write fails (-1), and Settings has no Brightness row.
  */
 #pragma once
 
@@ -21,6 +29,7 @@ typedef enum {
     CP0_BACKLIGHT_KIND_DEFAULT = 0,    /* brightness levels (today's behaviour) */
     CP0_BACKLIGHT_KIND_GPIO_ONOFF = 1, /* on/off only */
     CP0_BACKLIGHT_KIND_SYSFS = 2,      /* brightness levels in a sysfs backlight directory */
+    CP0_BACKLIGHT_KIND_NONE = 3,       /* no backlight (none, or no device found) */
 } cp0_backlight_kind_t;
 
 cp0_backlight_kind_t cp0_backlight_profile_kind(void);

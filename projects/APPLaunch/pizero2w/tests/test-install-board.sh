@@ -621,6 +621,19 @@ check "fake install, fresh: board profile written, assets copied" '[ -f "$R/etc/
 check "fake install, fresh: no apt-get, nothing written outside the fake root" '! called "apt-get" && [ ! -e /usr/share/doc/cyberdeckzero-launcher ] && [ ! -e /etc/systemd/system/cyberdeckzero-console.service ]'
 check "fake install, fresh: the user unit is 644 (systemd: not marked executable), no unit, rule or profile executable" '[ "$(stat -c %a "$H/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$H" -type f -perm /111)" ]'
 check "fake install, fresh: a Pi's packages (dtc, no polkitd or bluez), bluetooth.service left alone, polkit checked" 'called "dpkg -s device-tree-compiler" && ! called "dpkg -s polkitd" && ! called "dpkg -s bluez" && ! called "enable --now bluetooth.service" && called "pkaction --action-id org.freedesktop.login1.reboot" && has "polkit: running"'
+check "fake install, fresh: no sound card of its own (no /proc/asound here): no audio group" '! called "usermod -aG audio" && ! has "audio group"'
+# HDMI only (the Pi 5, the HackBerry: vc4-hdmi): no sound card of the board's own, no audio group (report 030)
+R=$(root pi5-hyperpixel4)
+mkdir -p "$R/proc/asound"
+printf ' 0 [vc4hdmi0       ]: vc4-hdmi - vc4-hdmi-0\n                      vc4-hdmi-0\n 1 [vc4hdmi1       ]: vc4-hdmi - vc4-hdmi-1\n' > "$R/proc/asound/cards"
+full "$R"
+check "fake install, HDMI-only sound cards: exit 0, no audio group" '[ $RC = 0 ] && ! called "usermod -aG audio" && ! has "audio group"'
+# the Pi 3A+'s 3.5 mm jack (bcm2835 Headphones) beside HDMI: the audio group
+R=$(root pi3a-luckfox35)
+mkdir -p "$R/proc/asound"
+printf ' 0 [vc4hdmi        ]: vc4-hdmi - vc4-hdmi\n 1 [Headphones     ]: bcm2835_headpho - bcm2835 Headphones\n' > "$R/proc/asound/cards"
+run --dry-run
+check "dry-run, the Pi 3A+ jack: the audio group planned" 'has "audio group: the user joins it (sound card: 1 [Headphones     ]: bcm2835_headpho - bcm2835 Headphones)"'
 
 # appliance board installed with v0.6.0 (Pi 3A+): migrated
 R=$(root pi3a-luckfox35)
@@ -743,6 +756,8 @@ pc_root() {
     echo 400 > "$d/sys/class/backlight/intel_backlight/brightness"
     echo 15 > "$d/sys/class/backlight/acpi_video0/max_brightness"
     echo systemd > "$d/proc/1/comm"
+    mkdir -p "$d/proc/asound"
+    printf ' 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n                      HDA Intel PCH at 0x90a10000 irq 126\n' > "$d/proc/asound/cards"
     printf 'menuentry "Armbian" {\n\tlinux /boot/vmlinuz root=UUID=1234 quiet\n}\n' > "$d/boot/grub/grub.cfg"
     printf 'GRUB_CMDLINE_LINUX_DEFAULT="quiet"\n' > "$d/etc/default/grub"
     printf 'network:\n  version: 2\n  renderer: networkd\n  wifis:\n    wlan0:\n      dhcp4: true\n' > "$d/etc/netplan/20-wifi.yaml"
@@ -756,7 +771,8 @@ check "pc dry-run: exit 0, board pc-fzm1-2, the DMI facts" '[ $RC = 0 ] && has "
 check "pc dry-run: appliance session, the user service and the console unit (fbcon vtcon1 unbound)" 'has "session: appliance" && has "cyberdeckzero-console.service frees the panel"'
 check "pc dry-run: no boot configuration (no config.txt, GRUB, kernel command line), no gpio rule" 'has "boot config: none on a PC (GRUB and the kernel command line are left alone)" && ! has "PWM backlight" && ! has "cmdline" && ! has "92-applaunch-backlight-gpio"'
 check "pc dry-run: the intel_backlight levels rule planned" 'has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of intel_backlight)"'
-check "pc dry-run: the PC's packages (polkitd, bluez; no dtc), bluetooth.service, NetworkManager left to the owner" 'has "packages (PC, when missing): libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez; bluetooth.service enabled" && has "network-manager is" && ! has "device-tree-compiler"'
+check "pc dry-run: the PC's packages (polkitd, bluez, alsa-utils; no dtc), bluetooth.service, NetworkManager left to the owner" 'has "packages (PC, when missing): libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez alsa-utils; bluetooth.service enabled" && has "network-manager is" && ! has "device-tree-compiler"'
+check "pc dry-run: the HDA sound card: the user joins the audio group (report 030)" 'has "audio group: the user joins it (sound card: 0 [PCH            ]: HDA-Intel - HDA Intel PCH)"'
 check "pc dry-run: nothing written" '[ ! -e "$R/etc/applaunch" ] && [ ! -e "$R/etc/udev" ]'
 pcrun --board-only
 P="$R/etc/applaunch/board.conf"
@@ -844,6 +860,11 @@ if getent group bluetooth >/dev/null 2>&1; then
 else
     check "fake PC install: no bluetooth group, no usermod for it" '! called "usermod -aG bluetooth"'
 fi
+if getent group audio >/dev/null 2>&1; then
+    check "fake PC install: a sound card of its own: the user joins the audio group (amixer without a sound server)" 'called "usermod -aG audio $U" && has "audio group: $U (sound card: 0 [PCH"'
+else
+    check "fake PC install: no audio group on this system, no usermod for it" '! called "usermod -aG audio"'
+fi
 if id -nG "$U" | tr " " "\n" | grep -qx sudo; then
     check "fake PC install: the user is in the sudo group: no warning about the power / clock rule" '! has "is not in the sudo group"'
 else
@@ -899,7 +920,7 @@ pcrun --dry-run --user "$U"
 check "switch dry-run: desktop session and its evidence" '[ $RC = 0 ] && has "session: desktop (display manager lightdm.service enabled; running: Xorg+lightdm)" && ! has "WARNING: the system boots"'
 check "switch dry-run: the switch planned, what it stops, disables and removes, what it keeps" 'has "switch from the appliance variant to the desktop variant" && has "user service cyberdeckzero.service of $U: stopped if it runs (the launcher on the panel quits now" && has "the launcher and lightdm.service never both start at boot" && has "cyberdeckzero-console.service: disabled and stopped (the text console is bound again), removed" && has "kept as they are: lingering of $U, getty@tty1" && has "sudo systemctl start lightdm.service"'
 check "switch dry-run: the appliance files found, by path" 'has "      $UHOME/.config/systemd/user/cyberdeckzero.service" && has "      $UHOME/.config/systemd/user/default.target.wants/cyberdeckzero.service" && has "      /etc/systemd/system/cyberdeckzero-console.service" && has "      /etc/systemd/system/multi-user.target.wants/cyberdeckzero-console.service"'
-check "switch dry-run: then the desktop variant, kbd for chvt, the unit for lightdm" 'has "/etc/systemd/system/cyberdeckzero-desktop.service for $U, not enabled" && has "polkitd bluez kbd (chvt, for the desktop unit)" && [ -n "$(unit_text | grep -x "Conflicts=lightdm.service")" ] && has "later: if you install or remove a desktop (a display manager), run install.sh again"'
+check "switch dry-run: then the desktop variant, kbd for chvt, the unit for lightdm" 'has "/etc/systemd/system/cyberdeckzero-desktop.service for $U, not enabled" && has "polkitd bluez alsa-utils kbd (chvt, for the desktop unit)" && [ -n "$(unit_text | grep -x "Conflicts=lightdm.service")" ] && has "later: if you install or remove a desktop (a display manager), run install.sh again"'
 check "switch dry-run: nothing changed" '[ -f "$H/cyberdeckzero.service" ] && [ -f "$R/etc/systemd/system/cyberdeckzero-console.service" ] && [ ! -e "$DU" ] && [ "$(cksum < "$P")" = "$CONF_SUM" ]'
 # the launcher runs on the panel while the switch happens
 FAKE_USER_ACTIVE=cyberdeckzero.service; export FAKE_USER_ACTIVE

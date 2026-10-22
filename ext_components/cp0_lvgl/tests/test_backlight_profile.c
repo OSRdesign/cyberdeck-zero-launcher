@@ -14,6 +14,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 /* stand-ins for the settings service (today's /sys/class/backlight/backlight path) */
@@ -159,6 +160,71 @@ static void child_gpio_missing(void)
     _exit(0);
 }
 
+/* Report 030 (c-1): no profile value, detection in $APPLAUNCH_BACKLIGHT_ROOT (set by main to `root`). */
+
+/* the Pi 5 HyperPixel: one gpio-backlight named "backlight", max 1: on/off, honest (no 10 levels that all write 1) */
+static void child_detect_onoff(const char *root)
+{
+    unsetenv("APPLAUNCH_BACKLIGHT");
+    char dir[600];
+    snprintf(dir, sizeof(dir), "%s/backlight", root);
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF);
+    CHECK(strcmp(cp0_backlight_profile_dir(), dir) == 0);
+    CHECK(cp0_backlight_profile_get_max() == 1);
+    CHECK(cp0_backlight_profile_set_on(0) == 0 && read_file_int(dir, "brightness") == 0);
+    CHECK(cp0_backlight_profile_set_brightness(200) == 1 && read_file_int(dir, "brightness") == 1);
+    CHECK(stub_level == 37); /* the settings service's default path was not used */
+    _exit(0);
+}
+
+/* a levels device under another name (an unknown board's DSI regulator): as sysfs:<dir> */
+static void child_detect_sysfs(const char *root)
+{
+    unsetenv("APPLAUNCH_BACKLIGHT");
+    char dir[600];
+    snprintf(dir, sizeof(dir), "%s/10-0045", root);
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_SYSFS);
+    CHECK(strcmp(cp0_backlight_profile_dir(), dir) == 0);
+    CHECK(cp0_backlight_profile_get_max() == 255);
+    CHECK(cp0_backlight_profile_set_brightness(26) == 26 && read_file_int(dir, "brightness") == 26);
+    _exit(0);
+}
+
+/* no backlight device (the HackBerry), or "none" in the profile: every call fails, nothing is written */
+static void child_detect_none(const char *spec)
+{
+    if (spec) setenv("APPLAUNCH_BACKLIGHT", spec, 1);
+    else unsetenv("APPLAUNCH_BACKLIGHT");
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE);
+    CHECK(strcmp(cp0_backlight_profile_dir(), "") == 0);
+    CHECK(cp0_backlight_profile_get_max() == -1);
+    CHECK(cp0_backlight_profile_get_brightness() == -1);
+    CHECK(cp0_backlight_profile_is_on() == -1);
+    CHECK(cp0_backlight_profile_set_brightness(50) == -1);
+    CHECK(cp0_backlight_profile_set_on(1) == -1);
+    CHECK(stub_level == 37);
+    _exit(0);
+}
+
+/* none found at first, the driver's device appears later (the deck's PWM backlight slower than the launcher): found
+ * again within the rescan interval (3 s); "none" in the profile stays none */
+static void child_detect_late(const char *root)
+{
+    unsetenv("APPLAUNCH_BACKLIGHT");
+    char dir[600];
+    snprintf(dir, sizeof(dir), "%s/backlight", root);
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE);
+    CHECK(mkdir(dir, 0755) == 0);
+    write_file(dir, "max_brightness", "255\n");
+    write_file(dir, "brightness", "200\n");
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE); /* not looked for again at once */
+    const struct timespec pause = {3, 300 * 1000 * 1000};
+    nanosleep(&pause, NULL);
+    CHECK(cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_DEFAULT); /* the deck's levels device: the default path */
+    CHECK(cp0_backlight_profile_get_max() == 255);
+    _exit(0);
+}
+
 static int run(void (*fn)(const char *), const char *arg)
 {
     const pid_t pid = fork();
@@ -192,6 +258,19 @@ int main(void)
     write_file(dir, "max_brightness", "1\n");
     write_file(dir, "brightness", "0\n");
 
+    /* the scan directory of an unset profile ($APPLAUNCH_BACKLIGHT_ROOT): the deck's PWM "backlight" (levels, 255),
+     * which keeps the default path through the settings service */
+    char scan[600], device[700];
+    snprintf(scan, sizeof(scan), "%s.scan", dir);
+    snprintf(device, sizeof(device), "%s/backlight", scan);
+    if (mkdir(scan, 0755) != 0 || mkdir(device, 0755) != 0) {
+        perror("mkdir");
+        return 1;
+    }
+    write_file(device, "max_brightness", "255\n");
+    write_file(device, "brightness", "200\n");
+    setenv("APPLAUNCH_BACKLIGHT_ROOT", scan, 1);
+
     int failed = 0;
     failed += run(child_default, NULL);
     failed += run(child_default, "pwm");
@@ -206,6 +285,38 @@ int main(void)
     write_file(dir, "brightness", "400\n");
     failed += run(child_sysfs, dir);
     failed += run(sysfs_missing_adapter, NULL);
+
+    /* detection: max 1 = on/off; another name with levels = sysfs; nothing, or "none" = no backlight */
+    write_file(device, "max_brightness", "1\n");
+    write_file(device, "brightness", "1\n");
+    failed += run(child_detect_onoff, scan);
+    failed += run(child_detect_none, "none");
+    char other[800];
+    snprintf(other, sizeof(other), "%s/10-0045", scan);
+    write_file(device, "max_brightness", "0\n"); /* not a usable device any more */
+    if (mkdir(other, 0755) != 0) {
+        perror("mkdir");
+        return 1;
+    }
+    write_file(other, "max_brightness", "255\n");
+    write_file(other, "brightness", "255\n");
+    failed += run(child_detect_sysfs, scan);
+    setenv("APPLAUNCH_BACKLIGHT_ROOT", dir, 1); /* a directory with no device in it */
+    failed += run(child_detect_none, NULL);
+    setenv("APPLAUNCH_BACKLIGHT_ROOT", "/nonexistent/backlight", 1);
+    failed += run(child_detect_none, NULL);
+    char late[800];
+    snprintf(late, sizeof(late), "%s/late", scan);
+    if (mkdir(late, 0755) != 0) {
+        perror("mkdir");
+        return 1;
+    }
+    setenv("APPLAUNCH_BACKLIGHT_ROOT", late, 1);
+    failed += run(child_detect_late, late);
+
+    char cleanup[900];
+    snprintf(cleanup, sizeof(cleanup), "rm -rf '%s'", scan);
+    if (system(cleanup) != 0) failed += 1;
 
     char path[600];
     snprintf(path, sizeof(path), "%s/brightness", dir);

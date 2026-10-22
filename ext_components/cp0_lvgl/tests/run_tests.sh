@@ -9,9 +9,16 @@ mkdir -p "$build_dir"
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 binary="${TMPDIR:-/tmp}/cp0_lvgl_test_async_utils.$$"
 esc_state_object="${TMPDIR:-/tmp}/cp0_esc_state.$$.$$.o"
-trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
+# Report 030: the run-time capabilities (and the power_supply reader they use), compiled as C once for the C++ tests too
+caps_object="${TMPDIR:-/tmp}/cp0_capabilities.$$.o"
+power_supply_object="${TMPDIR:-/tmp}/cp0_power_supply.$$.o"
+trap 'rm -f "$binary" "$esc_state_object" "$caps_object" "$power_supply_object"' EXIT HUP INT TERM
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$root/include" \
     -c "$root/src/cp0_esc_state.c" -o "$esc_state_object"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$root/include" \
+    -c "$root/src/cp0_capabilities.c" -o "$caps_object"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$root/include" \
+    -c "$root/src/cp0_power_supply.c" -o "$power_supply_object"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" "$root/tests/test_c_api_boundary.cpp" -o "$binary"
@@ -45,10 +52,11 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
     -I"$root/src" "$root/tests/test_sync_signal.cpp" -o "$binary"
 "$binary"
 
+# the volume: pactl when a server answers, else the local card's control through amixer (report 030 C3, fake programs)
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
-    -I"$root/src/cp0" \
+    -I"$root/src/cp0" -I"$root/include" \
     "$root/src/cp0/cp0_audio_mixer_control.cpp" \
-    "$root/tests/test_audio_mixer_control.cpp" -o "$binary"
+    "$root/tests/test_audio_mixer_control.cpp" "$caps_object" "$power_supply_object" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
@@ -166,7 +174,15 @@ trap 'rm -f "$binary" "$esc_state_object"' EXIT HUP INT TERM
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread \
     -I"$root/include" \
     "$root/src/cp0_backlight_profile.c" \
-    "$root/tests/test_backlight_profile.c" -o "$binary"
+    "$root/tests/test_backlight_profile.c" "$caps_object" "$power_supply_object" -o "$binary"
+"$binary"
+
+# Report 030 (c-1): the run-time capabilities on fake trees and fake programs (backlight: none, on/off at max 1, levels,
+# the kernel's preference, the profile; sound: HDMI only, the tablet's HDA card, the Pi 3A+ jack, a server's sinks,
+# a server that does not answer; the board hints; the program runner)
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/tests/test_capabilities.c" "$caps_object" "$power_supply_object" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \

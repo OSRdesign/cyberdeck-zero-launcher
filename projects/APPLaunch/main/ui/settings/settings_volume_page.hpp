@@ -53,6 +53,8 @@ public:
     };
 
     bool ready() const;
+    /* SettingsChoiceBinding (the native Settings' Speaker slider): the volume is known once it has been read */
+    bool choice_ready() const override { return ready_; }
     bool request_pending() const;
     int backend_volume() const;
     int original_volume() const;

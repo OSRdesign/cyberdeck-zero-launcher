@@ -10,6 +10,7 @@
 #include "input_keys.h"
 #include "keyboard_input.h"
 #include "sample_log.h"
+#include "settings/settings_hw_profile.hpp"
 
 #undef SLOGI
 #define SLOGI(...) do { } while (0)
@@ -17,16 +18,18 @@
 namespace {
 
 // ============================================================
-// audio
+// audio (the interface sounds: off on our boards, APPLAUNCH_SYSTEM_SOUNDS, report 030 C12)
 // ============================================================
 
 static void audio_play_switch(void)
 {
+    if (!APPLAUNCH_SYSTEM_SOUNDS) return;
     cp0_signal_audio_api({"SystemSoundPlay", "1"}, nullptr);
 }
 
 static void audio_play_enter(void)
 {
+    if (!APPLAUNCH_SYSTEM_SOUNDS) return;
     cp0_signal_audio_api({"SystemSoundPlay", "2"}, nullptr);
 }
 

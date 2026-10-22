@@ -39,7 +39,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Legacy apps | Fullscreen 320x170 framebuffer apps (from the Store) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings (native, full screen) takes taps and drags directly, and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
-| Settings | Hardware profile (`settings_hw_profile.hpp`) hides what our boards lack (speaker, Ethernet, the upstream bq27220 battery pages) and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); real PWM brightness; Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). **Battery** (after Bluetooth) shows only on a board with a Linux `power_supply` battery (a PC's ACPI `BAT0`/`BAT1`, a gauge driver's; read when Settings opens): charge, status, time left or to full, power, voltage, health, device, refreshed every 2 s; the status strip then shows the battery's level and percentage left of the Bluetooth icon (green while charging). The Pi boards have none: no row, nothing in the strip. |
+| Settings | **Speaker, Battery and Screen > Brightness are detected at run time** each time Settings opens (`cp0_capabilities`, report 030): a row shows only when the board has that hardware, see [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board). The hardware profile (`settings_hw_profile.hpp`) still hides Ethernet and the upstream bq27220 battery pages and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). **Battery** (after Bluetooth) shows only on a board with a Linux `power_supply` battery (a PC's ACPI `BAT0`/`BAT1`, a gauge driver's; read when Settings opens): charge, status, time left or to full, power, voltage, health, device, refreshed every 2 s; the status strip then shows the battery's level and percentage left of the Bluetooth icon (green while charging). The Pi boards have none: no row, nothing in the strip. |
 | Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present (a keyboard listed in `APPLAUNCH_KBD_IGNORE` does not count); in a terminal it has an **Alt** key next to Ctrl (one-shot, double tap locks: Alt then Tab is Alt+Tab). Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
 | Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
@@ -137,8 +137,9 @@ libfreetype-dev`, and `libssl-dev` for the Store (the Settings > Apps engine). T
 
 **Install**: unpack it on the PC and run `cd bundle && sudo ./install.sh`, as on a Pi. On a PC (x86_64, no device
 tree) it writes the `pc` profile (see [Boards](#boards)), installs `libinput10 libxkbcommon0 libfreetype6 curl polkitd
-bluez` when missing and names any other library the launcher lacks, creates the `netdev` group if the distribution has
-none, and
+bluez alsa-utils` when missing and names any other library the launcher lacks, creates the `netdev` group if the
+distribution has none, adds the user to the `audio` group when the PC has a sound card of its own (not HDMI; any board
+with one gets it, see [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board)), and
 installs the user service with lingering, the console unit (it unbinds the kernel's framebuffer console, `vtcon1` on
 the FZ-M1, as on the Pi boards) and the udev and PolicyKit rules. **No boot configuration is changed**: GRUB and the
 kernel command line stay as they are (the boot lines show, then the launcher). A PC that boots to a desktop (a display
@@ -231,14 +232,21 @@ APPLAUNCH_ROTATE=90                  # 0|90|180|270 clockwise pre-rotation into 
 APPLAUNCH_COMPAT_SCALE=1             # 1 or 2: scale of the 320x170 legacy-app window (default 2)
 APPLAUNCH_TOUCH_DEV=auto             # auto = pick by capability, or /dev/input/eventN
 APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuffer; legacy = SWAP_XY/INVERT_* env (default legacy)
-APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> brightness levels
+APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> levels | none; unset: detected
 APPLAUNCH_KBD_IGNORE=bus:0011        # keyboards that do not count as connected (names, bus:XXXX; drop:... = not read either)
 APPLAUNCH_HIDE_TILES=app_Store       # home tiles hidden by default (Settings > Launcher can show them)
 ```
 
 `APPLAUNCH_BACKLIGHT=sysfs:<dir>` (since x-b; before, it fell back to `/sys/class/backlight/backlight`) writes
 `<dir>/brightness` in levels from 0 to `<dir>/max_brightness`: the Settings slider (10 % steps, never under 10 %),
-the hotkeys, the screensaver's dim and the sleep / wake all use it. `APPLAUNCH_KBD_IGNORE` is a comma list of device
+the hotkeys, the screensaver's dim and the sleep / wake all use it. Without the line (the deck, the Pi 5, the
+HackBerry) the launcher detects the backlight (report 030): the kernel's preferred device of `/sys/class/backlight`
+(firmware, then platform, then raw); `max_brightness` 1 is on / off only (the Pi 5 HyperPixel's `gpio-backlight`:
+Brightness offers On / Off 10 s), more is levels (the deck's PWM `backlight`, exactly as before), no device is no
+backlight (no Brightness row). `APPLAUNCH_BACKLIGHT=none` says the board has no backlight to drive although a device
+exists. `APPLAUNCH_HINT_BATTERY`, `APPLAUNCH_HINT_BACKLIGHT` (`button`) and `APPLAUNCH_HINT_SOUND`
+(`bluetooth:<speaker>`) name hardware a board has but that is not set up: Settings then shows a read-only row with the
+reason instead of nothing (no profile writes them yet). `APPLAUNCH_KBD_IGNORE` is a comma list of device
 names exactly as `/proc/bus/input/devices` prints them and `bus:XXXX` entries (hex: `bus:0011` = the i8042
 keyboard of a laptop or tablet). A listed keyboard is still read (its keys work: a tablet's buttons, a keyboard
 dock), but it does not count as "a keyboard is connected", so the on-screen keyboard shows when no other keyboard is
@@ -477,6 +485,34 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |
 | `tests/` | `test-install-board.sh`: board and desktop detection, profile, desktop unit and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board, desktop markers added by the test), `cyberdeckzero-console` against a fake `/sys/class/vtconsole` and a fake `systemctl` (the shutdown guard), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). |
 
+## Sound, battery and brightness per board
+
+Since report 030 (phase c-1) the launcher finds out what the board has each time Settings opens
+(`ext_components/cp0_lvgl/include/cp0_capabilities.h`); no build switch and no board name decides these rows:
+
+- **Battery**: a Linux `power_supply` battery (as since v0.8.3): the Battery row and the status strip's level.
+- **Screen > Brightness**: the backlight of the profile (`APPLAUNCH_BACKLIGHT`), else the one detected (see
+  [Boards](#boards)): levels give the slider, `max_brightness` 1 gives On / Off 10 s, none gives no row.
+- **Speaker** (after Screen, a volume slider, 100 % to 0 %): a sound card of the board's own that is not HDMI, with a
+  playback volume control (Master, Speaker, PCM or Headphone, through `amixer`), or else a sound server's sink
+  (PulseAudio or PipeWire through `pactl`; a Bluetooth speaker counts, `auto_null` and HDMI sinks do not). The volume
+  goes through `pactl` when a server answers, else through the card's control (`amixer -M`, the user in the `audio`
+  group: install.sh adds it when the board has such a card). A board with HDMI audio only has no Speaker row.
+- The **volume and brightness keys** do nothing and show nothing on a board without that hardware.
+- The launcher's own interface sounds (start-up, home, lock screen) stay off on our boards; the Speaker slider plays a
+  short sound after each change so the new volume can be heard.
+
+What each board gets (from the boards' measured facts, the fake trees of `projects/APPLaunch/tests/test_settings_capabilities.cpp`):
+
+| Board | Battery | Brightness | Speaker |
+| --- | --- | --- | --- |
+| Deck (Zero 2 W, Waveshare 2.8" DPI) | no row | levels (PWM `backlight`, as before) | no row (no audio output) |
+| Pi 3A+ Luckfox SPI | no row | On / Off (`gpio:` profile, as before) | a row when the 3.5 mm jack's card (`bcm2835 Headphones`, PCM) is there; HDMI alone: no row |
+| Pi 3A+ Waveshare DSI | no row | levels (`sysfs:` profile, as before) | as the Luckfox |
+| Pi 5 + HyperPixel 4 | no row | **On / Off** (detected: `gpio-backlight`, max 1; it offered 10 levels that all wrote 1 before) | no row (vc4-hdmi only, no `pactl`) |
+| HackBerry CM5 | no row | **no row** (no backlight device; the row did nothing before) | a row while the case speaker is connected over Bluetooth (its sink); otherwise none |
+| FZ-M1 tablet | Battery row | levels (`intel_backlight`, 937) | **Speaker row** (HDA Intel PCH, Master; with or without a sound server) |
+
 ## Settings and environment
 
 `cyberdeckzero.service` environment: `APPLAUNCH_DISPLAY=dpi-scaled`, `APPLAUNCH_ROTATE=0`,
@@ -485,18 +521,26 @@ orientation measured on this deck), `APPLAUNCH_STD_KEYBOARD=1`, optional `APPLAU
 optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20), optional `APPLAUNCH_MULTITASK=0|1`
 ([Multitasking](#multitasking); not set = on from 640x480).
 
-User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness,
+User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness, volume,
 per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides the Store tile).
+
+Test hooks of the detection (the render harness and the unit tests use them; leave them unset on a board):
+`APPLAUNCH_BACKLIGHT_ROOT` (default `/sys/class/backlight`), `APPLAUNCH_ASOUND_ROOT` (default `/proc/asound`),
+`APPLAUNCH_POWER_SUPPLY_ROOT` (default `/sys/class/power_supply`), `APPLAUNCH_AMIXER` and `APPLAUNCH_PACTL` (the
+programs, default `amixer` and `pactl`).
 
 ## Known limits
 
 - Legacy apps contain their own copy of the inherited matrix keymap, so punctuation typed inside them may
   differ; the launcher's own pages are not affected.
-- The Pi Zero 2W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound.
+- The Pi Zero 2W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound (a card
+  with a playback volume control then brings the Speaker row, see
+  [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board)).
 - The Pi boards have no battery gauge or hardware RTC; the clock comes from Network Time. A board with a Linux
   `power_supply` battery (a PC) shows it in the status strip and Settings > Battery; the low-battery warning and
   shutdown still follow the upstream bq27220 gauge service only.
-- Entries hidden by the hardware profile are kept in the source and compiled out (`#if`), not deleted.
+- Entries hidden by the hardware profile (Ethernet, the bq27220 pages) are kept in the source and compiled out
+  (`#if`), not deleted; Speaker, Battery and Brightness are not switched there but detected (above).
 
 ## Reverting the PWM backlight
 

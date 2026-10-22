@@ -358,8 +358,10 @@ private:
     {
         if (engine_initialized_) return true;
 
-        ma_backend backends[] = {ma_backend_pulseaudio};
-        if (ma_context_init(backends, 1, nullptr, &context_) != MA_SUCCESS)
+        // A sound server first (PulseAudio or PipeWire-pulse, Bluetooth sinks included), else ALSA's default device
+        // (a board without a server, report 030 decision C3).
+        ma_backend backends[] = {ma_backend_pulseaudio, ma_backend_alsa};
+        if (ma_context_init(backends, sizeof(backends) / sizeof(backends[0]), nullptr, &context_) != MA_SUCCESS)
             return false;
         context_initialized_ = true;
 

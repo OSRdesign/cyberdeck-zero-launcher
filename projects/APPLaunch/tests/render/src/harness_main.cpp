@@ -635,6 +635,86 @@ bool set_power_supply(const Run &run, const std::vector<std::string> &w)
     return true;
 }
 
+/* ---------------------------------------------------------------- the backlight and the sound output (report 030) */
+
+/* The launcher finds the backlight in $APPLAUNCH_BACKLIGHT_ROOT and the sound output in $APPLAUNCH_ASOUND_ROOT, asking
+ * $APPLAUNCH_AMIXER and $APPLAUNCH_PACTL (cp0_capabilities.h): here fake trees and fake programs next to the shots, never
+ * the host's own. Default: the deck's PWM "backlight" (levels, the fixture's maximum) and no sound. */
+std::string runtime_path(const Run &run, const std::string &name)
+{
+    return run.out_dir + "/" + run.size.name() + "/runtime/" + name;
+}
+
+void remove_tree(const std::string &path)
+{
+    const std::string command = "rm -rf '" + path + "'";
+    if (std::system(command.c_str()) != 0) std::fprintf(stderr, "[harness] could not remove %s\n", path.c_str());
+}
+
+void put_file(const std::string &dir, const std::string &file, const std::string &text, bool executable = false)
+{
+    mkdirs(dir);
+    std::ofstream(dir + "/" + file) << text;
+    if (executable) chmod((dir + "/" + file).c_str(), 0755);
+}
+
+/* backlight levels: the deck's "backlight" (raw, the fixture's maximum); onoff: the Pi 5 HyperPixel's gpio-backlight
+ * "backlight" (max 1); none: no device (the HackBerry) */
+bool set_backlight(const Run &run, const std::string &kind)
+{
+    const std::string root = runtime_path(run, "backlight");
+    remove_tree(root);
+    mkdirs(root);
+    if (kind == "none") return true;
+    if (kind != "levels" && kind != "onoff") return false;
+    const bool onoff = kind == "onoff";
+    put_file(root + "/backlight", "type", "raw\n");
+    put_file(root + "/backlight", "max_brightness", std::to_string(onoff ? 1 : harness::fixtures().backlight_max) + "\n");
+    put_file(root + "/backlight", "brightness", std::to_string(onoff ? 1 : harness::fixtures().backlight) + "\n");
+    return true;
+}
+
+/* sound off: no card, no server (the deck); hdmi: vc4-hdmi only (the Pi 5, the HackBerry); card: the tablet's HDA Intel
+ * PCH with Master; bluetooth: no local card, a sound server with a Bluetooth speaker's sink (the HackBerry's case
+ * speaker connected) */
+bool set_sound(const Run &run, const std::string &kind)
+{
+    const std::string root = runtime_path(run, "asound");
+    const std::string bin = runtime_path(run, "fakebin");
+    remove_tree(root);
+    mkdirs(root);
+    std::remove((bin + "/sinks.txt").c_str());
+    /* amixer -c 0: the HDA card's controls; pactl list short sinks: sinks.txt when there is one */
+    put_file(bin, "amixer",
+             "#!/bin/sh\n[ $# -eq 2 ] && [ \"$1 $2\" = \"-c 0\" ] && { echo \"Simple mixer control 'Master',0\";"
+             " echo \"  Capabilities: pvolume pswitch\"; exit 0; }\nexit 1\n",
+             true);
+    put_file(bin, "pactl",
+             "#!/bin/sh\nd=$(dirname \"$0\")\n[ \"$1\" = list ] && [ -f \"$d/sinks.txt\" ] && cat \"$d/sinks.txt\" && exit 0\n"
+             "exit 1\n",
+             true);
+    if (kind == "off") return true;
+    if (kind == "hdmi") {
+        put_file(root, "cards", " 0 [vc4hdmi0       ]: vc4-hdmi - vc4-hdmi-0\n                      vc4-hdmi-0\n"
+                                " 1 [vc4hdmi1       ]: vc4-hdmi - vc4-hdmi-1\n                      vc4-hdmi-1\n");
+        mkdirs(root + "/card0/pcm0p");
+        mkdirs(root + "/card1/pcm0p");
+        return true;
+    }
+    if (kind == "card") {
+        put_file(root, "cards", " 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n"
+                                "                      HDA Intel PCH at 0x90a10000 irq 126\n");
+        mkdirs(root + "/card0/pcm0p");
+        return true;
+    }
+    if (kind == "bluetooth") {
+        put_file(bin, "sinks.txt", "35\tauto_null\tPipeWire\tfloat32le 2ch 48000Hz\tSUSPENDED\n"
+                                   "52\tbluez_output.02_5A_00_00_00_02.1\tPipeWire\ts16le 2ch 48000Hz\tIDLE\n");
+        return true;
+    }
+    return false;
+}
+
 /* sudoprompt: the responsive sudo prompt (cp0_sudo_prompt_ui) driven without the sudo coordinator, which the harness
  * does not link. open / busy / wrong / close stand for what cp0_sudo_async does: SHOW_PROMPT (an input group around the
  * field, as create_prompt makes it), START_WORKER, SHOW_AUTH_ERROR, DESTROY_PROMPT. OK / Enter ends in busy by itself;
@@ -858,6 +938,11 @@ void boot(Run &run)
     setenv("APPLAUNCH_STORAGE_MOUNTS", "/nonexistent/harness-mounts", 1);
     /* nor the host's battery: the scene's fake power_supply tree (empty: no battery) */
     setenv("APPLAUNCH_POWER_SUPPLY_ROOT", power_supply_root(run).c_str(), 1);
+    /* nor the host's backlight, sound cards or sound server (report 030): the scene's fake trees and programs */
+    setenv("APPLAUNCH_BACKLIGHT_ROOT", runtime_path(run, "backlight").c_str(), 1);
+    setenv("APPLAUNCH_ASOUND_ROOT", runtime_path(run, "asound").c_str(), 1);
+    setenv("APPLAUNCH_AMIXER", runtime_path(run, "fakebin/amixer").c_str(), 1);
+    setenv("APPLAUNCH_PACTL", runtime_path(run, "fakebin/pactl").c_str(), 1);
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
     /* screen.state lands next to the shots, never in the real runtime directory */
     const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";
@@ -1668,6 +1753,15 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             return fail(scene, line, "usage: battery off|mains|PCT discharging|charging|full|notcharging");
         return true;
     }
+    if (cmd == "backlight") { /* detected once per launcher run: before the first drawing command */
+        if (run.booted) return fail(scene, line, "backlight must come before the first drawing command");
+        if (w.size() != 2 || !set_backlight(run, w[1])) return fail(scene, line, "usage: backlight levels|onoff|none");
+        return true;
+    }
+    if (cmd == "sound") { /* looked up as Settings opens */
+        if (w.size() != 2 || !set_sound(run, w[1])) return fail(scene, line, "usage: sound off|hdmi|card|bluetooth");
+        return true;
+    }
     if (cmd == "config") {
         if (w.size() != 3) return fail(scene, line, "usage: config KEY VALUE");
         harness::config_set(w[1], w[2]);
@@ -2145,6 +2239,8 @@ int run_scene_at(const Scene &scene, const Size &size, const std::string &out_di
     run.ppmm = default_ppmm(size);
     run.out_dir = out_dir;
     set_power_supply(run, {"battery", "off"}); /* an earlier scene's battery never leaks into this one */
+    set_backlight(run, "levels");               /* the deck's, as before detection (report 030) */
+    set_sound(run, "off");
     for (const Line &line : scene.lines) {
         if (!line.only.empty() && std::find(line.only.begin(), line.only.end(), size) == line.only.end()) continue;
         if (!run_line(run, scene, line)) return 1;

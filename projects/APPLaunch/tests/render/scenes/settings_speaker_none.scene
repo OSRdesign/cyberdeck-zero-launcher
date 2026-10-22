@@ -1,0 +1,17 @@
+# Report 030 (c-1): no Speaker row on a board without a sound output. "sound hdmi": vc4-hdmi cards only (the Pi 5, the
+# HackBerry; HDMI is not the board's sound, decision C2) and no sound server's sink: the root menu is the same as on the
+# deck. A release build. Review only: no golden.
+title settings speaker none
+review
+sizes 800x480 720x720 640x480
+env APPLAUNCH_DEV 0
+sound hdmi
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+shot settings_speaker_none_root

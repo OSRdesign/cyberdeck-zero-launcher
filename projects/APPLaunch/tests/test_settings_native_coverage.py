@@ -10,7 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / "main/ui/settings/settings_page.cpp").read_text()
 
-# the entries the Pi Zero 2W / Pi 3A+ profile does not build (settings_hw_profile.hpp: the macros are 0 there)
+# the entries our boards' profile does not build (settings_hw_profile.hpp: the macros are 0 or not defined there; the
+# Speaker and Battery rows of our boards follow the board's capabilities at run time, report 030)
 NOT_ON_PI = [
     "APPLAUNCH_SETTINGS_SPEAKER",
     "APPLAUNCH_SETTINGS_ETHERNET",
@@ -35,6 +36,8 @@ def strip_comments(text: str) -> str:
 
 
 def pi_lines(body: str) -> str:
+    # an #if on a NOT_ON_PI macro (or #if 0) is skipped up to its #else (kept: that is the Pi's branch) or #endif;
+    # every other #if keeps both branches
     kept, skip_depth, depth = [], 0, 0
     for line in body.splitlines():
         stripped = line.strip()
@@ -42,6 +45,9 @@ def pi_lines(body: str) -> str:
             depth += 1
             if not skip_depth and (any(m in stripped for m in NOT_ON_PI) or stripped.startswith("#if 0")):
                 skip_depth = depth
+        elif stripped.startswith("#else"):
+            if skip_depth == depth:
+                skip_depth = 0
         elif stripped.startswith("#endif"):
             if skip_depth == depth:
                 skip_depth = 0
