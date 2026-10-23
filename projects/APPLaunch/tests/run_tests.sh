@@ -48,6 +48,15 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/desktop_entry.cpp" \
     -o "$build_dir/test_desktop_entry"
 "$build_dir/test_desktop_entry"
+# Report 032: when the status feed rewrites status.state (the SDL branch of status_feed.cpp: the device thread needs the
+# launcher's services)
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -DHAL_PLATFORM_SDL=1 \
+    -I"$test_root/../main/ui" \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_status_feed.cpp" \
+    "$test_root/../main/ui/status_feed.cpp" \
+    -o "$build_dir/test_status_feed"
+"$build_dir/test_status_feed"
 # Multitasking P-b (task 015): the pure lifecycle model, the Alt+Tab key session and the control protocol, under
 # AddressSanitizer + UndefinedBehaviorSanitizer when the compiler has them (plain build otherwise, with a note)
 mt_san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"

@@ -195,8 +195,9 @@ private:
  * rule. */
 using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
 
-/* The default source: sysfs / procfs (cp0_statusbar_read_state: wlan0 operstate and /proc/net/wireless, the hci
- * devices and rfkill). Needs no cp0_lvgl service, works in any process. */
+/* The default source: the launcher's status feed while it is alive (status.state, cp0_app_status_read: Wi-Fi, Bluetooth
+ * and battery as the home grid shows them), else sysfs / procfs (cp0_statusbar_read_state: the Wi-Fi interface found
+ * under any name, the hci devices and rfkill). Needs no cp0_lvgl service, works in any process. */
 StatusSource default_status_source();
 
 class StatusStrip {

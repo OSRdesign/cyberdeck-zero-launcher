@@ -43,6 +43,11 @@
  *    reads every keyboard (cp0_keyboard_set_read_all_keyboards) follows pointer= by itself (cp0_pointer_nav.h): a
  *    mouse or trackpoint then sends Up / Down / Left / Right, Enter (click) and Ctrl+O (held click, "options").
  *
+ * 3b. <state dir>/status.state (same rules; apps' status strip, report 032): the launcher's Wi-Fi, Ethernet, Bluetooth and
+ *    battery as it shows them. v=1 gen= pid=<launcher pid> wifi=0|1 wifi_pct=0..100 eth=0|1 bt=off|on|connected
+ *    battery=-1|0..100 (-1 = none) battery_state=Charging|Discharging|Full|Not charging|Unknown. Written only when a
+ *    value changes. cp0_app_status_read() returns -1 (use sysfs) when the file is missing, not v=1, or its pid is gone.
+ *
  * 4. .desktop keys: X-Fullscreen=true (fullscreen mode); X-MinSize=WxH (the tile is hidden on a smaller screen; an
  *    older launcher ignores it). Full reference: docs/APP-CONTRACT.md.
  *
@@ -81,6 +86,7 @@ extern "C" {
 #define CP0_APP_STATE_SUBDIR "applaunch"      /* $XDG_RUNTIME_DIR/applaunch/ */
 #define CP0_APP_SCREEN_FILE "screen.state"
 #define CP0_APP_INPUT_FILE "input.state"
+#define CP0_APP_STATUS_FILE "status.state"
 #define CP0_APP_STATE_FALLBACK_PREFIX "/tmp/applaunch-" /* no XDG_RUNTIME_DIR: /tmp/applaunch-screen.state */
 
 /* F1 rules (task 012): a Bluetooth keyboard that went away counts as present (asleep) for this long, any keyboard
@@ -175,6 +181,33 @@ typedef struct {
 int cp0_app_input_parse(const char *text, size_t len, cp0_app_input_t *out);
 /* Reads and parses `path` (NULL: cp0_app_state_path("input.state")). 0 or -1. */
 int cp0_app_input_read(const char *path, cp0_app_input_t *out);
+
+typedef enum {
+    CP0_APP_BT_OFF = 0,   /* adapter off (or no Bluetooth service) */
+    CP0_APP_BT_ON,        /* powered, nothing connected */
+    CP0_APP_BT_CONNECTED, /* powered, a device connected */
+} cp0_app_bt_t;
+
+typedef struct {
+    int pid;                     /* the launcher that wrote it */
+    int wifi;                    /* connected */
+    int wifi_pct;                /* 0..100 */
+    int eth;                     /* a wired link is connected */
+    cp0_app_bt_t bt;
+    int battery;                 /* -1 = none, else 0..100 */
+    int battery_charging;        /* battery_state=Charging */
+    char battery_state[16];      /* "Charging", "Discharging", "Full", "Not charging", "Unknown"; "" when absent */
+    unsigned gen;
+} cp0_app_status_t;
+
+/* Parses status.state text. 0 when it is a v=1 file, else -1 (out cleared). A missing key stays 0 (battery -1, bt off).
+ * Does not look at pid. */
+int cp0_app_status_parse(const char *text, size_t len, cp0_app_status_t *out);
+/* Reads and parses `path` (NULL: cp0_app_state_path("status.state")), without the liveness check. 0 or -1. */
+int cp0_app_status_load(const char *path, cp0_app_status_t *out);
+/* cp0_app_status_load() plus: pid must be a live process (kill(pid, 0)), so the file of a launcher that is gone is not
+ * trusted. 0 when the feed is good, else -1 (out cleared): the app falls back to sysfs (cp0_statusbar_read_state). */
+int cp0_app_status_read(const char *path, cp0_app_status_t *out);
 
 const char *cp0_app_vkb_name(cp0_app_vkb_t vkb);              /* "auto", "off", "force" */
 int cp0_app_vkb_parse(const char *s, cp0_app_vkb_t *out);     /* 0, or -1 when unknown (out untouched) */

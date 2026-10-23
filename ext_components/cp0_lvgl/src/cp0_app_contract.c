@@ -7,10 +7,13 @@
 #define _POSIX_C_SOURCE 200809L
 #include "cp0_app_contract.h"
 
+#include <errno.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <time.h>
 
 /* ------------------------------------------------------------------ small parsers */
@@ -407,6 +410,79 @@ int cp0_app_input_read(const char *path, cp0_app_input_t *out)
     size_t len = 0;
     if (read_file(path, text, sizeof(text), &len) != 0) return cp0_app_input_parse(NULL, 0, out);
     return cp0_app_input_parse(text, len, out);
+}
+
+typedef struct {
+    cp0_app_status_t *s;
+    int version_ok;
+} status_ctx_t;
+
+static void status_line(const char *key, size_t key_len, const char *v, size_t len, void *ctx)
+{
+    status_ctx_t *c = ctx;
+    cp0_app_status_t *s = c->s;
+    long long n;
+    char word[16];
+    if (key_is(key, key_len, "v")) {
+        c->version_ok = parse_int(v, len, 0, INT_MAX, &n) && n == 1;
+    } else if (key_is(key, key_len, "pid")) {
+        if (parse_int(v, len, 0, INT_MAX, &n)) s->pid = (int)n;
+    } else if (key_is(key, key_len, "wifi")) {
+        if (parse_int(v, len, 0, 1, &n)) s->wifi = (int)n;
+    } else if (key_is(key, key_len, "wifi_pct")) {
+        if (parse_int(v, len, 0, 100, &n)) s->wifi_pct = (int)n;
+    } else if (key_is(key, key_len, "eth")) {
+        if (parse_int(v, len, 0, 1, &n)) s->eth = (int)n;
+    } else if (key_is(key, key_len, "bt")) {
+        if (copy_text(v, len, word, sizeof(word)))
+            s->bt = strcmp(word, "connected") == 0 ? CP0_APP_BT_CONNECTED
+                    : strcmp(word, "on") == 0      ? CP0_APP_BT_ON
+                                                   : CP0_APP_BT_OFF;
+    } else if (key_is(key, key_len, "battery")) {
+        if (parse_int(v, len, -1, 100, &n)) s->battery = (int)n;
+    } else if (key_is(key, key_len, "battery_state")) {
+        if (copy_text(v, len, s->battery_state, sizeof(s->battery_state)))
+            s->battery_charging = strcmp(s->battery_state, "Charging") == 0;
+    } else if (key_is(key, key_len, "gen")) {
+        if (parse_int(v, len, 0, UINT_MAX, &n)) s->gen = (unsigned)n;
+    }
+}
+
+int cp0_app_status_parse(const char *text, size_t len, cp0_app_status_t *out)
+{
+    if (!out) return -1;
+    cp0_app_status_t s;
+    memset(&s, 0, sizeof(s));
+    s.battery = -1;
+    memset(out, 0, sizeof(*out));
+    out->battery = -1;
+    if (!text) return -1;
+    status_ctx_t ctx = {&s, 0};
+    for_each_line(text, len, status_line, &ctx);
+    if (!ctx.version_ok) return -1;
+    *out = s;
+    return 0;
+}
+
+int cp0_app_status_load(const char *path, cp0_app_status_t *out)
+{
+    char def[CP0_APP_PATH_MAX + 32];
+    if (!path) {
+        if (cp0_app_state_path(CP0_APP_STATUS_FILE, def, sizeof(def)) != 0) return cp0_app_status_parse(NULL, 0, out);
+        path = def;
+    }
+    char text[512];
+    size_t len = 0;
+    if (read_file(path, text, sizeof(text), &len) != 0) return cp0_app_status_parse(NULL, 0, out);
+    return cp0_app_status_parse(text, len, out);
+}
+
+int cp0_app_status_read(const char *path, cp0_app_status_t *out)
+{
+    if (cp0_app_status_load(path, out) != 0) return -1;
+    if (out->pid > 0 && (kill((pid_t)out->pid, 0) == 0 || errno == EPERM)) return 0;   /* EPERM: alive, another user */
+    (void)cp0_app_status_parse(NULL, 0, out);
+    return -1;
 }
 
 /* ------------------------------------------------------------------ on-screen keyboard rule */

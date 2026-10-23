@@ -594,6 +594,30 @@ gzip -dc "$fx/mtrec-PI3A-20261020-002544.csv.gz" | "$binary" - 800x480 9/10 0
     "$root/tests/test_app_contract.c" -o "$binary"
 "$binary"
 
+# Report 032: the status feed (status.state: the exact text, the round trip, the atomic write, a missing file, a launcher
+# that is gone) and the sysfs fallback's Wi-Fi interface under any name (wlan0, wlp2s0, a USB dongle), on fake trees
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_app_contract.c" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0/cp0_ui_state.c" \
+    "$root/src/cp0/cp0_status_state.c" \
+    "$root/tests/test_status_state.c" -o "$binary"
+"$binary"
+
+# The renderer file needs FreeType's headers (apt: libfreetype-dev); without them: SKIP, unless CI=1
+ft_flags=$(pkg-config --cflags freetype2 2>/dev/null || true)
+if printf '#include <ft2build.h>\n' | "${CC:-cc}" -E $ft_flags -x c - >/dev/null 2>&1 \
+    || [ "${CI:-}" = 1 ] || [ "${REQUIRE_FREETYPE:-}" = 1 ]; then
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+        -I"$root/include" $ft_flags \
+        "$root/src/cp0/cp0_statusbar.c" \
+        "$root/tests/test_statusbar_wifi.c" -lfreetype -lm -o "$binary"
+    "$binary"
+else
+    echo "SKIP test_statusbar_wifi (libfreetype-dev missing: sudo apt install libfreetype-dev)"
+fi
+
 # Task 014 P1b: layout service (classes, density, tokens, pinned deck / Pi 3A+ presets, compat placement,
 # screen.state)
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \

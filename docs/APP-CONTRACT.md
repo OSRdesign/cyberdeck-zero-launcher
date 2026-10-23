@@ -13,7 +13,7 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 
 | Layer | What | Promise |
 |---|---|---|
-| **Contract** | environment variables, `screen.state`, `input.state`, `.desktop` keys | stable within contract 1 (section 8) |
+| **Contract** | environment variables, `screen.state`, `input.state`, `status.state`, `.desktop` keys | stable within contract 1 (section 8) |
 | **SDK** | C files an app copies (section 9) | source, versioned with the launcher tree; no ABI promise |
 | **Internal** | the virtual framebuffer file (VFB2) between the launcher and its `LD_PRELOAD` shim | may change in any release; apps never read it |
 
@@ -25,10 +25,12 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 | panel environment (`APPLAUNCH_SCREEN_*`) | the launcher, process-wide at display creation | once | every child process |
 | `screen.state` | **only** the launcher (atomic rename) | at display creation, and again after **every** app exits (`gen + 1`) | any app |
 | `input.state` | **only** the launcher (atomic rename) | keyboard list change, Settings > System > On-screen keyboard or Pointer navigation change | any app |
+| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth or battery value changes (checked every 2 s) | any app |
 | `.desktop` keys | the app's package | install | the launcher |
 
 The state files live in one directory: `$APPLAUNCH_STATE_DIR`, else `$XDG_RUNTIME_DIR/applaunch/`, else the files
-`/tmp/applaunch-screen.state` and `/tmp/applaunch-input.state` (`cp0_app_state_path()` implements this order).
+`/tmp/applaunch-screen.state`, `/tmp/applaunch-input.state` and `/tmp/applaunch-status.state` (`cp0_app_state_path()`
+implements this order).
 
 An app built on `cp0_lvgl` never writes `screen.state`: its display backend sees `APPLAUNCH_APP_MODE` and skips the
 publication (an older app binary may still overwrite the file while it runs; the launcher rewrites it when the app
@@ -146,6 +148,41 @@ gen=4
 
 A file without `vkb` (an older launcher) means `auto`; a file without `pointer` means `off`.
 
+## 5b. `status.state`
+
+The values the launcher's own status strip shows, for the strip of an app (report 032). Added within contract 1 (keys
+and files are only added, section 8): `v` stays 1 and `APPLAUNCH_CONTRACT` stays 1. An older launcher does not write it.
+
+```
+v=1
+gen=12
+pid=801
+wifi=1
+wifi_pct=72
+eth=0
+bt=connected
+battery=64
+battery_state=Discharging
+```
+
+| Key | Meaning |
+|---|---|
+| `pid` | the launcher process that wrote it. The file is trusted only while `kill(pid, 0)` succeeds (`EPERM` counts as alive): a launcher that crashed or was stopped leaves a file nobody should believe |
+| `wifi` | `1` = connected |
+| `wifi_pct` | signal, 0..100 (the bars' rule is the launcher's: connected shows at least one bar) |
+| `eth` | `1` = a wired link is connected |
+| `bt` | `off` (adapter not powered in BlueZ, or no Bluetooth service), `on` (powered), `connected` (powered and a device connected): exactly what the launcher's Bluetooth glyph shows. sysfs cannot tell "powered" |
+| `battery` | charge 0..100, `-1` = no battery |
+| `battery_state` | `Charging`, `Discharging`, `Full`, `Not charging` or `Unknown` (sysfs spelling). Only `Charging` colours the strip |
+| `gen` | increases on every write (a restarted launcher continues from the old file) |
+
+The launcher rewrites the file only when a shown value changes. Read it with `cp0_app_status_read(NULL, &status)`
+(SDK, section 9): it returns `0` for a good feed, and `-1` when the file is missing, is not `v=1`, has no `pid` or its
+`pid` is gone. On `-1` the app must fall back to its own sources: for the strip, `cp0_statusbar_read_state()` (sysfs and
+procfs; it finds the Wi-Fi interface under any name: `wlan0`, `wlp2s0`, `wlx...`). The strip of an app built on
+`cp0_lvgl` (`cp0::ui::StatusStrip` without a source) does this by itself, and takes the battery from the feed when the
+feed has one. A non-LVGL app that draws its own bar reads the feed the same way.
+
 ## 6. `.desktop` keys
 
 | Key | Meaning |
@@ -191,7 +228,7 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 
 | Files | What | Needs |
 |---|---|---|
-| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
 | `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | the app side of the lifecycle protocol (section 13): `cp0_app_lifecycle_init()` from the environment, `_service()` (non-blocking, answers `ack <n>`), `_send()` (`home`, `switcher`), the key rule `_key_drop()` | libc + POSIX sockets |

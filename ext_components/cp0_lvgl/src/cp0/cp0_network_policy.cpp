@@ -8,9 +8,12 @@
 
 #include <algorithm>
 #include <charconv>
+#include <fstream>
 #include <sstream>
 #include <string_view>
 #include <utility>
+
+#include <dirent.h>
 
 namespace cp0::network {
 namespace {
@@ -185,6 +188,33 @@ std::string first_active_connection(const std::string &output)
             return fields[0];
     }
     return {};
+}
+
+std::string find_wifi_interface(const std::string &sysfs_root)
+{
+    const std::string net = sysfs_root + "/sys/class/net";
+    DIR *dir = opendir(net.c_str());
+    if (!dir)
+        return {};
+    std::vector<std::string> names;
+    while (const dirent *entry = readdir(dir)) {
+        if (entry->d_name[0] == '.')
+            continue;
+        const std::string probe = net + "/" + entry->d_name + "/wireless";
+        if (DIR *wireless = opendir(probe.c_str())) {
+            closedir(wireless);
+            names.push_back(entry->d_name);
+        }
+    }
+    closedir(dir);
+    std::sort(names.begin(), names.end());
+    for (const std::string &name : names) {
+        std::ifstream operstate(net + "/" + name + "/operstate");
+        std::string state;
+        if (operstate >> state && state == "up")
+            return name;
+    }
+    return names.empty() ? std::string() : names.front();
 }
 
 } // namespace cp0::network
