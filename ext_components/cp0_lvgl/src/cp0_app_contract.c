@@ -443,6 +443,12 @@ static void status_line(const char *key, size_t key_len, const char *v, size_t l
     } else if (key_is(key, key_len, "battery_state")) {
         if (copy_text(v, len, s->battery_state, sizeof(s->battery_state)))
             s->battery_charging = strcmp(s->battery_state, "Charging") == 0;
+    } else if (key_is(key, key_len, "volume")) {
+        if (parse_int(v, len, -1, 100, &n)) s->volume = (int)n;
+    } else if (key_is(key, key_len, "mute")) {
+        if (parse_int(v, len, 0, 1, &n)) s->mute = (int)n;
+    } else if (key_is(key, key_len, "brightness_pct")) {
+        if (parse_int(v, len, -1, 100, &n)) s->brightness_pct = (int)n;
     } else if (key_is(key, key_len, "gen")) {
         if (parse_int(v, len, 0, UINT_MAX, &n)) s->gen = (unsigned)n;
     }
@@ -454,8 +460,12 @@ int cp0_app_status_parse(const char *text, size_t len, cp0_app_status_t *out)
     cp0_app_status_t s;
     memset(&s, 0, sizeof(s));
     s.battery = -1;
+    s.volume = -1;
+    s.brightness_pct = -1;
     memset(out, 0, sizeof(*out));
     out->battery = -1;
+    out->volume = -1;
+    out->brightness_pct = -1;
     if (!text) return -1;
     status_ctx_t ctx = {&s, 0};
     for_each_line(text, len, status_line, &ctx);
@@ -483,6 +493,117 @@ int cp0_app_status_read(const char *path, cp0_app_status_t *out)
     if (out->pid > 0 && (kill((pid_t)out->pid, 0) == 0 || errno == EPERM)) return 0;   /* EPERM: alive, another user */
     (void)cp0_app_status_parse(NULL, 0, out);
     return -1;
+}
+
+/* ------------------------------------------------------------------ board.state */
+
+static void board_clear(cp0_app_board_t *b)
+{
+    memset(b, 0, sizeof(*b));
+    b->ram_mb = -1;
+    b->battery = -1;
+    b->backlight_steps = -1;
+    b->sound = -1;
+    b->sound_guess = -1;
+}
+
+typedef struct {
+    cp0_app_board_t *b;
+    int version_ok;
+} board_ctx_t;
+
+static void board_line(const char *key, size_t key_len, const char *v, size_t len, void *ctx)
+{
+    board_ctx_t *c = ctx;
+    cp0_app_board_t *b = c->b;
+    long long n;
+    if (key_is(key, key_len, "v")) {
+        c->version_ok = parse_int(v, len, 0, INT_MAX, &n) && n == 1;
+    } else if (key_is(key, key_len, "pid")) {
+        if (parse_int(v, len, 0, INT_MAX, &n)) b->pid = (int)n;
+    } else if (key_is(key, key_len, "gen")) {
+        if (parse_int(v, len, 0, UINT_MAX, &n)) b->gen = (unsigned)n;
+    } else if (key_is(key, key_len, "launcher")) {
+        (void)copy_text(v, len, b->launcher, sizeof(b->launcher));
+    } else if (key_is(key, key_len, "board")) {
+        (void)copy_text(v, len, b->board, sizeof(b->board));
+    } else if (key_is(key, key_len, "arch")) {
+        (void)copy_text(v, len, b->arch, sizeof(b->arch));
+    } else if (key_is(key, key_len, "ram_mb")) {
+        if (parse_int(v, len, 0, INT_MAX, &n)) b->ram_mb = (int)n;
+    } else if (key_is(key, key_len, "battery")) {
+        if (parse_int(v, len, 0, 2, &n)) b->battery = (int)n;
+    } else if (key_is(key, key_len, "battery_source")) {
+        (void)copy_text(v, len, b->battery_source, sizeof(b->battery_source));
+    } else if (key_is(key, key_len, "backlight")) {
+        (void)copy_text(v, len, b->backlight, sizeof(b->backlight));
+    } else if (key_is(key, key_len, "backlight_steps")) {
+        if (parse_int(v, len, 0, 1000, &n)) b->backlight_steps = (int)n;
+    } else if (key_is(key, key_len, "sound")) {
+        if (parse_int(v, len, 0, 2, &n)) b->sound = (int)n;
+    } else if (key_is(key, key_len, "sound_kind")) {
+        (void)copy_text(v, len, b->sound_kind, sizeof(b->sound_kind));
+    } else if (key_is(key, key_len, "sound_guess")) {
+        if (parse_int(v, len, 0, 1, &n)) b->sound_guess = (int)n;
+    } else if (key_is(key, key_len, "requests")) {
+        (void)copy_text(v, len, b->requests, sizeof(b->requests));
+    } else if (key_is(key, key_len, "battery_note")) {
+        (void)copy_text(v, len, b->battery_note, sizeof(b->battery_note));
+    } else if (key_is(key, key_len, "backlight_note")) {
+        (void)copy_text(v, len, b->backlight_note, sizeof(b->backlight_note));
+    } else if (key_is(key, key_len, "sound_note")) {
+        (void)copy_text(v, len, b->sound_note, sizeof(b->sound_note));
+    }
+}
+
+int cp0_app_board_parse(const char *text, size_t len, cp0_app_board_t *out)
+{
+    if (!out) return -1;
+    cp0_app_board_t b;
+    board_clear(&b);
+    board_clear(out);
+    if (!text) return -1;
+    board_ctx_t ctx = {&b, 0};
+    for_each_line(text, len, board_line, &ctx);
+    if (!ctx.version_ok) return -1;
+    *out = b;
+    return 0;
+}
+
+int cp0_app_board_load(const char *path, cp0_app_board_t *out)
+{
+    char def[CP0_APP_PATH_MAX + 32];
+    if (!path) {
+        if (cp0_app_state_path(CP0_APP_BOARD_FILE, def, sizeof(def)) != 0) return cp0_app_board_parse(NULL, 0, out);
+        path = def;
+    }
+    char text[1536];
+    size_t len = 0;
+    if (read_file(path, text, sizeof(text), &len) != 0) return cp0_app_board_parse(NULL, 0, out);
+    return cp0_app_board_parse(text, len, out);
+}
+
+int cp0_app_board_read(const char *path, cp0_app_board_t *out)
+{
+    if (cp0_app_board_load(path, out) != 0) return -1;
+    if (out->pid > 0 && (kill((pid_t)out->pid, 0) == 0 || errno == EPERM)) return 0;
+    (void)cp0_app_board_parse(NULL, 0, out);
+    return -1;
+}
+
+int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb)
+{
+    if (!board || !verb || !verb[0]) return 0;
+    const size_t n = strlen(verb);
+    const char *p = board->requests;
+    while (*p) {
+        const char *end = strchr(p, ',');
+        const size_t len = end ? (size_t)(end - p) : strlen(p);
+        if (len == n && memcmp(p, verb, n) == 0) return 1;
+        if (!end) break;
+        p = end + 1;
+    }
+    return 0;
 }
 
 /* ------------------------------------------------------------------ on-screen keyboard rule */

@@ -117,6 +117,9 @@ fi
 echo "== building the framebuffer shim ($ARCH)"
 ( cd "$HERE/vfb" && CC=$VFB_CC ./build.sh )
 
+echo "== building cyberdeckzero-ctl ($ARCH)"
+( cd "$HERE/ctl" && CC=$VFB_CC ./build.sh )
+
 echo "== assembling the bundle"
 rm -rf "$OUT"
 mkdir -p "$OUT/payload/bin" "$OUT/payload/lib" "$OUT/payload/share" "$OUT/payload/etc" "$OUT/payload/doc"
@@ -143,6 +146,8 @@ done
 # the text console helper the units run (install.sh puts it in /usr/share/APPLaunch/bin)
 cp "$HERE/cyberdeckzero-console" "$OUT/payload/bin/"
 chmod +x "$OUT/payload/bin/cyberdeckzero-console"
+# the command-line client of the launcher's request socket (install.sh links it into /usr/local/bin)
+cp "$HERE/ctl/cyberdeckzero-ctl" "$OUT/payload/bin/"
 ( cd "$OUT/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$OUT/payload/share.manifest"   # for uninstall.sh
 
 # Licences and notices (install.sh puts them in /usr/share/doc/cyberdeckzero-launcher/): the project's LICENSE, the

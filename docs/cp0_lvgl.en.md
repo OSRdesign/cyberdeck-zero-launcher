@@ -229,6 +229,24 @@ int64_t cp0_app_monotonic_s(void);
 
 The readers return 0 or -1 and always fill `out` (cleared on failure); unknown keys are ignored. `cp0_ui_osk_policy_allows()` calls the same `cp0_app_osk_rule()`, so apps and the launcher decide alike. Variables, file keys, failure modes and the stability promise: [`APP-CONTRACT.md`](APP-CONTRACT.md).
 
+### Board facts and requests to the launcher (`include/cp0_app_contract.h`, `include/cp0_app_client.h`)
+
+Report 035; contract text in [`APP-CONTRACT.md`](APP-CONTRACT.md) sections 5b, 5c and 14. Plain C99 + POSIX, no LVGL, copy-ready like the contract reader.
+
+```c
+/* board.state: board, arch, RAM, battery, backlight, sound (and its kind), the verbs launcher.sock answers here */
+int cp0_app_board_read(const char *path, cp0_app_board_t *out);   /* NULL = default path; -1 = nothing to assume */
+int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb);
+/* status.state gained volume (-1 = no sound), mute, brightness_pct (-1 = no backlight) in cp0_app_status_t */
+
+/* launcher.sock: one request line, one reply line; 0 "ok ...", 1 "err ...", -1 no service / timeout (200 ms default) */
+int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_ms);
+int cp0_app_beep(const char *name);     /* NULL = "notify"; 1 = "err nosound" (board.state sound=0) */
+int cp0_app_toast(const char *text);    /* shown on the launcher's toast when the launcher is in front */
+```
+
+Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).
+
 ## Complete `cp0_signal_*` Usage
 
 All `args` below are `std::list<std::string>` with the command at element zero. Request callbacks use `void(int code, std::string data)` unless a different signature is shown.

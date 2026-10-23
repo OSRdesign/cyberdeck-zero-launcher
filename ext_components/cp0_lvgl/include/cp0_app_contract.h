@@ -45,8 +45,15 @@
  *
  * 3b. <state dir>/status.state (same rules; apps' status strip, report 032): the launcher's Wi-Fi, Ethernet, Bluetooth and
  *    battery as it shows them. v=1 gen= pid=<launcher pid> wifi=0|1 wifi_pct=0..100 eth=0|1 bt=off|on|connected
- *    battery=-1|0..100 (-1 = none) battery_state=Charging|Discharging|Full|Not charging|Unknown. Written only when a
- *    value changes. cp0_app_status_read() returns -1 (use sysfs) when the file is missing, not v=1, or its pid is gone.
+ *    battery=-1|0..100 (-1 = none) battery_state=Charging|Discharging|Full|Not charging|Unknown, and (report 035)
+ *    volume=-1|0..100 (-1 = no sound output) mute=0|1 brightness_pct=-1|0..100 (-1 = no backlight to drive): the levels
+ *    an app draws its own bar from. Written only when a value changes. cp0_app_status_read() returns -1 (use sysfs)
+ *    when the file is missing, not v=1, or its pid is gone.
+ *
+ * 3c. <state dir>/board.state (same rules; report 035): the facts of the board that do not change while the launcher
+ *    runs (the sound output may: it is re-probed). cp0_app_board_read(): board, arch, ram_mb, battery, backlight,
+ *    sound and its kind, and requests= (what launcher.sock answers on this board). A key the launcher does not know is
+ *    absent (the field is -1 / ""), never 0. Requests from an app: cp0_app_client.h and docs/APP-CONTRACT.md section 14.
  *
  * 4. .desktop keys: X-Fullscreen=true (fullscreen mode); X-MinSize=WxH (the tile is hidden on a smaller screen; an
  *    older launcher ignores it). Full reference: docs/APP-CONTRACT.md.
@@ -87,6 +94,7 @@ extern "C" {
 #define CP0_APP_SCREEN_FILE "screen.state"
 #define CP0_APP_INPUT_FILE "input.state"
 #define CP0_APP_STATUS_FILE "status.state"
+#define CP0_APP_BOARD_FILE "board.state"
 #define CP0_APP_STATE_FALLBACK_PREFIX "/tmp/applaunch-" /* no XDG_RUNTIME_DIR: /tmp/applaunch-screen.state */
 
 /* F1 rules (task 012): a Bluetooth keyboard that went away counts as present (asleep) for this long, any keyboard
@@ -197,10 +205,14 @@ typedef struct {
     int battery;                 /* -1 = none, else 0..100 */
     int battery_charging;        /* battery_state=Charging */
     char battery_state[16];      /* "Charging", "Discharging", "Full", "Not charging", "Unknown"; "" when absent */
+    int volume;                  /* -1 = no sound output (or an older launcher), else 0..100 */
+    int mute;                    /* 1 = muted */
+    int brightness_pct;          /* -1 = no backlight to drive (or an older launcher), else 0..100 */
     unsigned gen;
 } cp0_app_status_t;
 
-/* Parses status.state text. 0 when it is a v=1 file, else -1 (out cleared). A missing key stays 0 (battery -1, bt off).
+/* Parses status.state text. 0 when it is a v=1 file, else -1 (out cleared). A missing key stays 0 (battery, volume and
+ * brightness_pct -1, bt off).
  * Does not look at pid. */
 int cp0_app_status_parse(const char *text, size_t len, cp0_app_status_t *out);
 /* Reads and parses `path` (NULL: cp0_app_state_path("status.state")), without the liveness check. 0 or -1. */
@@ -208,6 +220,35 @@ int cp0_app_status_load(const char *path, cp0_app_status_t *out);
 /* cp0_app_status_load() plus: pid must be a live process (kill(pid, 0)), so the file of a launcher that is gone is not
  * trusted. 0 when the feed is good, else -1 (out cleared): the app falls back to sysfs (cp0_statusbar_read_state). */
 int cp0_app_status_read(const char *path, cp0_app_status_t *out);
+
+/* board.state (report 035). Every int is -1 and every string "" when the key is absent. */
+typedef struct {
+    int pid;                     /* the launcher that wrote it */
+    unsigned gen;
+    char launcher[24];           /* launcher version, e.g. "0.8.6" */
+    char board[64];              /* APPLAUNCH_BOARD; "" = no profile (the deck) or unknown */
+    char arch[16];               /* uname -m: aarch64, x86_64 */
+    int ram_mb;                  /* MemTotal in MB */
+    int battery;                 /* 0 none, 1 present, 2 not set up (a hint says there should be one) */
+    char battery_source[48];     /* "power_supply:<name>" or "gauge:max17048" */
+    char backlight[8];           /* "none", "onoff", "levels" */
+    int backlight_steps;         /* the steps the launcher offers: 10, 2 (on / off), 0 */
+    int sound;                   /* 0 none, 1 present, 2 not set up */
+    char sound_kind[12];         /* "alsa" (a local card), "server" (a sound-server sink), "bluetooth" */
+    int sound_guess;             /* 1: sound_kind "bluetooth" comes from the sink's name only */
+    char requests[160];          /* the verbs launcher.sock answers on this board, comma separated */
+    char battery_note[96], backlight_note[96], sound_note[96]; /* the board profile's hint text, for display only */
+} cp0_app_board_t;
+
+/* Parses board.state text. 0 when it is a v=1 file, else -1 (out cleared, all fields absent). */
+int cp0_app_board_parse(const char *text, size_t len, cp0_app_board_t *out);
+/* Reads and parses `path` (NULL: cp0_app_state_path("board.state")), without the liveness check. 0 or -1. */
+int cp0_app_board_load(const char *path, cp0_app_board_t *out);
+/* cp0_app_board_load() plus the pid liveness rule of cp0_app_status_read(). 0 when good, else -1 (out cleared): the
+ * app assumes nothing and hides what depends on it. */
+int cp0_app_board_read(const char *path, cp0_app_board_t *out);
+/* 1 when `verb` is in board->requests. */
+int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb);
 
 const char *cp0_app_vkb_name(cp0_app_vkb_t vkb);              /* "auto", "off", "force" */
 int cp0_app_vkb_parse(const char *s, cp0_app_vkb_t *out);     /* 0, or -1 when unknown (out untouched) */

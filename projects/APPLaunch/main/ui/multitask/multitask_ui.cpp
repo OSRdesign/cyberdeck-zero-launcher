@@ -5,6 +5,7 @@
  */
 #include "multitask_ui.hpp"
 
+#include "app_media.hpp"
 #include "display_handoff.hpp"
 #include "notice_queue.hpp"
 #include "supervisor.hpp"
@@ -97,10 +98,12 @@ public:
         presence_ = cp0_keyboard_get_read_all_keyboards() ? cp0_kbd_presence_shared_acquire() : nullptr;
         attach();
         open_ = true;
+        app_media::raw_session(true);
     }
     void close() override
     {
         if (!open_) return;
+        app_media::raw_session(false);
         sources_.close_all();
         if (presence_) cp0_kbd_presence_shared_release();
         presence_ = nullptr;
@@ -111,7 +114,9 @@ public:
         if (!open_) return -1;
         if (cp0_kbd_presence_watcher_generation(presence_) != seen_ || multitask::Supervisor::now_ms() >= next_attach_)
             attach();
-        return sources_.poll(listener, context);
+        /* report 035: the volume, brightness and mute keys are the launcher's even while an app is in front */
+        Tee tee = {listener, context};
+        return sources_.poll(&LauncherKeys::tee_key, &tee);
     }
     void esc_state(int held) override { cp0_esc_state_write(held); }
     void fds(std::vector<int> &out) override
@@ -121,6 +126,17 @@ public:
     }
 
 private:
+    struct Tee {
+        Listener listener;
+        void *context;
+    };
+    static void tee_key(void *context, int code, int value)
+    {
+        app_media::raw_key(code, value);
+        const Tee *tee = static_cast<const Tee *>(context);
+        if (tee->listener) tee->listener(tee->context, code, value);
+    }
+
     void attach()
     {
         const char *configured = std::getenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE");

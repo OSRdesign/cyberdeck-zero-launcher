@@ -34,6 +34,9 @@ static cp0_app_status_t sample(void)
     s.bt = CP0_APP_BT_CONNECTED;
     s.battery = 64;
     snprintf(s.battery_state, sizeof(s.battery_state), "Not charging");
+    s.volume = 40;
+    s.mute = 0;
+    s.brightness_pct = 70;
     s.gen = 7;
     return s;
 }
@@ -68,7 +71,8 @@ static void test_format_parse(void)
     CHECK(n > 0 && (size_t)n == strlen(text));
     char want[256];
     snprintf(want, sizeof(want),
-             "v=1\ngen=7\npid=%d\nwifi=1\nwifi_pct=72\neth=1\nbt=connected\nbattery=64\nbattery_state=Not charging\n",
+             "v=1\ngen=7\npid=%d\nwifi=1\nwifi_pct=72\neth=1\nbt=connected\nbattery=64\nbattery_state=Not charging\n"
+             "volume=40\nmute=0\nbrightness_pct=70\n",
              (int)getpid());
     CHECK(strcmp(text, want) == 0);
     char tiny[20];
@@ -79,6 +83,20 @@ static void test_format_parse(void)
     CHECK(back.pid == s.pid && back.wifi == 1 && back.wifi_pct == 72 && back.eth == 1);
     CHECK(back.bt == CP0_APP_BT_CONNECTED && back.battery == 64 && back.gen == 7);
     CHECK(strcmp(back.battery_state, "Not charging") == 0 && back.battery_charging == 0);
+    CHECK(back.volume == 40 && back.mute == 0 && back.brightness_pct == 70);
+
+    /* report 035: no sound output / no backlight (-1), muted; an older launcher's file has none of the three keys */
+    cp0_app_status_t levels = s;
+    levels.volume = -1;
+    levels.mute = 1;
+    levels.brightness_pct = -1;
+    CHECK(cp0_status_state_format(&levels, text, sizeof(text)) > 0 && strstr(text, "volume=-1\nmute=1\nbrightness_pct=-1\n"));
+    CHECK(cp0_app_status_parse(text, strlen(text), &back) == 0 && back.volume == -1 && back.mute == 1 && back.brightness_pct == -1);
+    const char *old_file = "v=1\ngen=2\npid=9\nwifi=1\nbattery=50\n";
+    CHECK(cp0_app_status_parse(old_file, strlen(old_file), &back) == 0);
+    CHECK(back.volume == -1 && back.mute == 0 && back.brightness_pct == -1 && back.battery == 50);
+    const char *bad = "v=1\nvolume=101\nmute=2\nbrightness_pct=-2\n";
+    CHECK(cp0_app_status_parse(bad, strlen(bad), &back) == 0 && back.volume == -1 && back.mute == 0 && back.brightness_pct == -1);
 
     /* every bluetooth word, charging, no battery */
     s.bt = CP0_APP_BT_ON;
@@ -98,6 +116,7 @@ static void test_format_parse(void)
 
     /* not a v=1 file: refused, out cleared (battery -1) */
     CHECK(cp0_app_status_parse("v=2\nwifi=1\n", 11, &back) == -1 && back.wifi == 0 && back.battery == -1);
+    CHECK(back.volume == -1 && back.brightness_pct == -1);
     CHECK(cp0_app_status_parse("wifi=1\n", 7, &back) == -1);
     CHECK(cp0_app_status_parse(NULL, 0, &back) == -1);
 }

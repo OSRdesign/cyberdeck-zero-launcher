@@ -96,6 +96,7 @@ GPIO_BL_RULE="92-applaunch-backlight-gpio.rules"
 # ---------------------------------------------------------------------------------------------------------
 LAUNCHER_BIN=cyberdeckzero                       # /usr/share/APPLaunch/bin/cyberdeckzero
 CONSOLE_HELPER=cyberdeckzero-console             # /usr/share/APPLaunch/bin/cyberdeckzero-console
+CTL_BIN=cyberdeckzero-ctl                        # /usr/share/APPLaunch/bin/cyberdeckzero-ctl, linked in /usr/local/bin
 USER_UNIT=cyberdeckzero.service                  # appliance boards: systemd user service
 CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the panel from the text console
 DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
@@ -1157,6 +1158,13 @@ fi
 install -m 644 "$PAYLOAD/lib/libapplaunch_vfb.so" "$APP_ROOT/lib/libapplaunch_vfb.so"
 # the text console helper of the console unit (appliance boards) and the desktop unit (desktop boards)
 install -m 755 "$PAYLOAD/bin/$CONSOLE_HELPER" "$APP_ROOT/bin/$CONSOLE_HELPER"
+# the command-line client of launcher.sock (report 035), on the PATH of every user; a bundle without it installs without
+if [ -f "$PAYLOAD/bin/$CTL_BIN" ]; then
+    install -m 755 "$PAYLOAD/bin/$CTL_BIN" "$APP_ROOT/bin/$CTL_BIN"
+    mkdir -p "$SYSROOT/usr/local/bin"
+    ln -sfn "/usr/share/APPLaunch/bin/$CTL_BIN" "$SYSROOT/usr/local/bin/$CTL_BIN"
+    echo "$CTL_BIN installed (/usr/local/bin/$CTL_BIN)"
+fi
 # The earlier names stay for one release, as links: a unit of an earlier install that is still loaded (its ExecStop=,
 # ExecStopPost=), or a script that starts the launcher by its old path, gets the new files.
 ln -sfn "$LAUNCHER_BIN" "$APP_ROOT/bin/$OLD_LAUNCHER_BIN"

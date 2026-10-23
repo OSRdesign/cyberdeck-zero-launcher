@@ -31,6 +31,10 @@
 extern "C" void __attribute__((weak)) keyboard_pause(void) {}
 extern "C" void __attribute__((weak)) keyboard_resume(void) {}
 extern "C" void __attribute__((weak)) ui_external_esc_hint(int visible) { (void)visible; }
+// The launcher's own handling of the keys it reads for an app (volume, brightness, mute; report 035): a session is open
+// while the watcher reads, every key event goes to cp0_external_app_key (1 press / 0 release / 2 repeat).
+extern "C" void __attribute__((weak)) cp0_external_app_session(int on) { (void)on; }
+extern "C" void __attribute__((weak)) cp0_external_app_key(int code, int value) { (void)code; (void)value; }
 
 namespace cp0_external_app_runner {
 namespace {
@@ -39,6 +43,11 @@ const char *keyboard_device()
 {
     const char *configured = std::getenv("APPLAUNCH_LINUX_KEYBOARD_DEVICE");
     return configured ? configured : "/dev/input/by-path/platform-3f804000.i2c-event";
+}
+
+void key_to_launcher(void *, int code, int value)
+{
+    cp0_external_app_key(code, value);
 }
 
 std::uint64_t monotonic_ms()
@@ -82,7 +91,9 @@ int run(const char *command, bool keep_root)
         std::printf("[cp0] no keyboard available yet (%s): starting the app anyway\n", keyboard_device());
     std::fflush(stdout);
     std::uint64_t next_reopen_ms = monotonic_ms() + 500;
+    cp0_external_app_session(1);
     const auto release_keyboards = [&]() {
+        cp0_external_app_session(0);
         esc_sources.close_all();
         if (presence) cp0_kbd_presence_shared_release();
         presence = nullptr;
@@ -126,7 +137,7 @@ int run(const char *command, bool keep_root)
             attach_keyboards();
         }
         // Esc is held while any keyboard holds it; a keyboard that slept or was unplugged releases its Esc.
-        const int esc_change = esc_sources.poll();
+        const int esc_change = esc_sources.poll(&key_to_launcher, nullptr);
         if (esc_change >= 0) cp0_esc_state_write(esc_change);
 
         const bool esc_now = cp0_esc_state_read() != 0;

@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "app_media.hpp"
 #include "ui_screensaver.h"
 #include "native_screensaver.hpp"
 #include "native_ui.hpp"
@@ -654,6 +655,7 @@ extern "C" int ui_screensaver_is_active(void)
 
 extern "C" void ui_screensaver_set_foreground(int foreground)
 {
+    app_media::set_app_front(foreground == 0); // report 035: raw volume / brightness keys, idle dim of an app
     if (native_ui::enabled()) {
         native_screensaver::set_enabled(foreground != 0);
         return;
