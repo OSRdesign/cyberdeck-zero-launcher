@@ -7,6 +7,7 @@
 #include "cp0_lvgl_app_runner.hpp"
 #include "sample_log.h"
 #include "ui/input_presence.hpp"
+#include "ui/app_requests.hpp"
 #include "ui/launcher_media_controls.h"
 #include "ui/settings/settings_session_model.hpp"
 #include "ui/status_feed.hpp"
@@ -42,9 +43,12 @@ int main(void)
         ui_screensaver_init();
         // The Wi-Fi, Bluetooth and battery values the home grid shows, published for the status strip of apps.
         status_feed::start();
+        // board.state, launcher.sock (requests from apps) and the volume and brightness keys while an app is in front
+        app_requests::start();
         return true;
     };
     options.teardown = []() {
+        app_requests::stop();
         status_feed::stop();
         launcher_ui::deinit();
     };

@@ -605,6 +605,22 @@ gzip -dc "$fx/mtrec-PI3A-20261020-002544.csv.gz" | "$binary" - 800x480 9/10 0
     "$root/tests/test_status_state.c" -o "$binary"
 "$binary"
 
+# Report 035: board.state (the exact text, the round trip, absent keys, the atomic write, a launcher that is gone) and the
+# app side of launcher.sock (the path, no service at once, ok / err, a silent server costs the timeout at most)
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_app_contract.c" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0/cp0_ui_state.c" \
+    "$root/src/cp0/cp0_board_state.c" \
+    "$root/tests/test_board_state.c" -o "$binary"
+"$binary"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+    -I"$root/include" \
+    "$root/src/cp0_app_client.c" \
+    "$root/tests/test_app_client.c" -o "$binary"
+"$binary"
+
 # The renderer file needs FreeType's headers (apt: libfreetype-dev); without them: SKIP, unless CI=1
 ft_flags=$(pkg-config --cflags freetype2 2>/dev/null || true)
 if printf '#include <ft2build.h>\n' | "${CC:-cc}" -E $ft_flags -x c - >/dev/null 2>&1 \

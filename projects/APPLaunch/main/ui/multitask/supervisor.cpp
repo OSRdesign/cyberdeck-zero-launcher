@@ -27,6 +27,10 @@
 #include <unistd.h>
 #endif
 
+/* a finger on the panel while an app is in front (the launcher's idle dim for apps counts it): defined by the launcher,
+ * a no-op here (the host tests) */
+extern "C" void __attribute__((weak)) cp0_external_app_touch(void) {}
+
 namespace multitask {
 
 std::uint64_t Supervisor::now_ms()
@@ -1278,6 +1282,7 @@ void Supervisor::sync_touch()
 void Supervisor::on_touch_frame(void *context, const cp0_touch_frame_t &frame)
 {
     auto *self = static_cast<Supervisor *>(context);
+    cp0_external_app_touch();
     self->touch_event(cp0_g1_frame(&self->g1_, &frame));
 }
 

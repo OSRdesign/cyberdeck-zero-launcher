@@ -57,6 +57,41 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -DHAL_PLATFORM_SDL=1 \
     "$test_root/../main/ui/status_feed.cpp" \
     -o "$build_dir/test_status_feed"
 "$build_dir/test_status_feed"
+# Report 035: requests from apps (launcher.sock: the protocol, the rate limits, the server against the real client) and
+# the facts of board.state on fake trees
+cp0_root="$test_root/../../../ext_components/cp0_lvgl"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_app_request.cpp" \
+    "$test_root/../main/ui/app_request.cpp" \
+    -o "$build_dir/test_app_request"
+"$build_dir/test_app_request"
+${CC:-cc} -std=c99 -Wall -Wextra -Werror -I"$cp0_root/include" \
+    -c "$cp0_root/src/cp0_app_client.c" -o "$build_dir/cp0_app_client.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$test_root/../main/ui" -I"$cp0_root/include" \
+    "$test_root/test_app_request_server.cpp" \
+    "$test_root/../main/ui/app_request.cpp" \
+    "$test_root/../main/ui/app_request_server.cpp" \
+    "$build_dir/cp0_app_client.o" \
+    -o "$build_dir/test_app_request_server"
+"$build_dir/test_app_request_server"
+for unit in cp0_capabilities cp0_power_supply cp0_app_contract cp0_ui_metrics; do
+    ${CC:-cc} -std=c11 -Wall -Wextra -Werror -I"$cp0_root/include" \
+        -c "$cp0_root/src/$unit.c" -o "$build_dir/$unit.o"
+done
+for unit in cp0_board_state cp0_ui_state; do
+    ${CC:-cc} -std=c11 -Wall -Wextra -Werror -I"$cp0_root/include" \
+        -c "$cp0_root/src/cp0/$unit.c" -o "$build_dir/$unit.o"
+done
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$test_root/../main/ui" -I"$cp0_root/include" \
+    "$test_root/test_board_facts.cpp" \
+    "$test_root/../main/ui/board_facts.cpp" \
+    "$build_dir/cp0_capabilities.o" "$build_dir/cp0_power_supply.o" "$build_dir/cp0_app_contract.o" \
+    "$build_dir/cp0_ui_metrics.o" "$build_dir/cp0_board_state.o" "$build_dir/cp0_ui_state.o" \
+    -o "$build_dir/test_board_facts"
+"$build_dir/test_board_facts"
 # Multitasking P-b (task 015): the pure lifecycle model, the Alt+Tab key session and the control protocol, under
 # AddressSanitizer + UndefinedBehaviorSanitizer when the compiler has them (plain build otherwise, with a note)
 mt_san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"

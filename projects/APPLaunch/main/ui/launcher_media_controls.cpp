@@ -187,6 +187,43 @@ int adjust_brightness(int delta_percent)
     return write_brightness(current, target);
 }
 
+int read_volume_percent()
+{
+    return read_volume();
+}
+
+bool read_mute_state()
+{
+    return read_mute();
+}
+
+int set_volume_percent(int percent)
+{
+    if (read_mute())
+        (void)toggle_mute();
+    return write_volume(read_volume(), percent);
+}
+
+bool set_mute_state(bool muted)
+{
+    if (read_mute() != muted)
+        (void)toggle_mute();
+    return read_mute();
+}
+
+int read_brightness_percent()
+{
+    std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
+    return read_brightness();
+}
+
+int set_brightness_percent(int percent)
+{
+    std::lock_guard<std::mutex> operation_lock(brightness_control::operation_mutex());
+    const int current = read_brightness();
+    return write_brightness(current, percent);
+}
+
 bool toggle_mute()
 {
     const bool previous = model.muted();

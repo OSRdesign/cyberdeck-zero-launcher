@@ -13,7 +13,7 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 
 | Layer | What | Promise |
 |---|---|---|
-| **Contract** | environment variables, `screen.state`, `input.state`, `status.state`, `.desktop` keys | stable within contract 1 (section 8) |
+| **Contract** | environment variables, `screen.state`, `input.state`, `status.state`, `board.state`, `launcher.sock`, `.desktop` keys | stable within contract 1 (section 8) |
 | **SDK** | C files an app copies (section 9) | source, versioned with the launcher tree; no ABI promise |
 | **Internal** | the virtual framebuffer file (VFB2) between the launcher and its `LD_PRELOAD` shim | may change in any release; apps never read it |
 
@@ -25,7 +25,9 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 | panel environment (`APPLAUNCH_SCREEN_*`) | the launcher, process-wide at display creation | once | every child process |
 | `screen.state` | **only** the launcher (atomic rename) | at display creation, and again after **every** app exits (`gen + 1`) | any app |
 | `input.state` | **only** the launcher (atomic rename) | keyboard list change, Settings > System > On-screen keyboard or Pointer navigation change | any app |
-| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth or battery value changes (checked every 2 s) | any app |
+| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth, battery, volume, mute or brightness value changes (checked every 2 s; volume and brightness at least every 10 s, at once after a change by the launcher) | any app |
+| `board.state` | **only** the launcher (atomic rename, from a thread of its own) | at start, again after the first sound-server probe, then when a fact changes (sound re-probed every 30 s) | any app |
+| `launcher.sock` | the launcher serves it (a thread of its own, mode 0600) | while the launcher runs | any process of the same user: apps, scripts, ssh (section 14) |
 | `.desktop` keys | the app's package | install | the launcher |
 
 The state files live in one directory: `$APPLAUNCH_STATE_DIR`, else `$XDG_RUNTIME_DIR/applaunch/`, else the files
@@ -163,6 +165,9 @@ eth=0
 bt=connected
 battery=64
 battery_state=Discharging
+volume=40
+mute=0
+brightness_pct=70
 ```
 
 | Key | Meaning |
@@ -174,7 +179,12 @@ battery_state=Discharging
 | `bt` | `off` (adapter not powered in BlueZ, or no Bluetooth service), `on` (powered), `connected` (powered and a device connected): exactly what the launcher's Bluetooth glyph shows. sysfs cannot tell "powered" |
 | `battery` | charge 0..100, `-1` = no battery |
 | `battery_state` | `Charging`, `Discharging`, `Full`, `Not charging` or `Unknown` (sysfs spelling). Only `Charging` colours the strip |
+| `volume` | the launcher's output volume 0..100, `-1` = the board has no sound output (report 035; additive, older launchers do not write it: the reader gives `-1` too) |
+| `mute` | `1` = muted |
+| `brightness_pct` | the backlight as a percent of its maximum, `-1` = no backlight to drive. Snapped to the launcher's 10 steps; while an app is dimmed by section 14 `dim allow` it shows the dimmed level |
 | `gen` | increases on every write (a restarted launcher continues from the old file) |
+
+`volume`, `mute` and `brightness_pct` are for an app that draws its own level bar: the launcher draws nothing over a fullscreen app (section 10), so the user who presses a volume key in your app only hears the change unless the app shows it. Poll the file with the rest of the status; do not call `launcher.sock` for it.
 
 The launcher rewrites the file only when a shown value changes. Read it with `cp0_app_status_read(NULL, &status)`
 (SDK, section 9): it returns `0` for a good feed, and `-1` when the file is missing, is not `v=1`, has no `pid` or its
@@ -183,12 +193,55 @@ procfs; it finds the Wi-Fi interface under any name: `wlan0`, `wlp2s0`, `wlx...`
 `cp0_lvgl` (`cp0::ui::StatusStrip` without a source) does this by itself, and takes the battery from the feed when the
 feed has one. A non-LVGL app that draws its own bar reads the feed the same way.
 
+## 5c. `board.state`
+
+The facts of the board that the launcher already works out for its own Settings (report 035). Added within contract 1: `v` stays 1. An older launcher does not write it.
+
+```
+v=1
+gen=2
+pid=801
+launcher=0.8.6
+board=hackberry-cm5
+arch=aarch64
+ram_mb=1800
+battery=1
+battery_source=gauge:max17048
+backlight=levels
+backlight_steps=10
+sound=1
+sound_kind=bluetooth
+sound_guess=1
+requests=hello,caps,toast,beep,volume,brightness,dim
+```
+
+| Key | Meaning |
+|---|---|
+| `pid`, `gen` | as `status.state` (the file is trusted only while the launcher process is alive) |
+| `launcher` | the launcher version |
+| `board` | `APPLAUNCH_BOARD` of the board profile. Absent on the deck and on a board without a profile |
+| `arch`, `ram_mb` | `uname -m` and MemTotal in MB: the app picks its own memory class |
+| `battery` | `0` none, `1` present, `2` not set up (the profile says there should be one: `battery_note`) |
+| `battery_source` | `power_supply:<name>` (sysfs) or `gauge:max17048` (a fuel gauge read over i2c) |
+| `backlight` | `none`, `onoff` (a gpio backlight: on or off only) or `levels` |
+| `backlight_steps` | the steps the launcher offers: `10`, `2` for on / off, `0` for none |
+| `sound` | `0` no sound output, `1` present, `2` not set up (the profile says how to set it up: `sound_note`) |
+| `sound_kind` | `alsa` (a local card with a playback volume), `server` (a PulseAudio / PipeWire sink), `bluetooth` |
+| `sound_guess` | `1` when `sound_kind=bluetooth` is a **guess** from the sink's name (`bluez_output.*`); the launcher cannot ask the sink what it is |
+| `requests` | the verbs `launcher.sock` answers **on this board** (section 14): `volume` only with sound, `brightness` only with a backlight, `dim` only on a battery board with brightness levels. `beep` is always listed: without sound it answers `err nosound` |
+| `battery_note`, `backlight_note`, `sound_note` | the board profile's hint text (`use the button on the case`, `pair XWF-M18 in Bluetooth`), for display only |
+
+**A fact the launcher does not know is an absent key, never `0`.** Right after the launcher starts, `sound` is absent on a board without a local sound card until the first sound-server probe has run (a moment later; the file is rewritten). The sound output can change while the launcher runs (a Bluetooth speaker connects): it is looked at again every 30 s. The physical buttons of a board (which key a button sends) are **not** published: the launcher has no source for them.
+
+Read it with `cp0_app_board_read(NULL, &board)` (SDK, section 9): `0` for a good file, `-1` when it is missing, not `v=1`, has no `pid` or its `pid` is gone. On `-1` assume nothing and hide what depends on it (an older launcher: no sound option, no beeps). `cp0_app_board_has_request(&board, "beep")` looks in `requests`.
+
 ## 6. `.desktop` keys
 
 | Key | Meaning |
 |---|---|
 | `X-Fullscreen=true` | fullscreen mode: the launcher stops drawing, the app owns the whole panel until it exits (the hold-Esc watchdog still applies). Without it the app is a compat app: 320x170 in the scaled window, toolbar below. |
 | `X-Background=run\|freeze` | (section 13) the app may be hidden and resumed instead of owning the panel until it exits; `freeze` = stopped while hidden, `run` = keeps working while hidden. Absent or another value: today's behaviour. Only with `X-Fullscreen=true`, only under a launcher with multitasking on; an older launcher ignores it. Declare it only in a build that answers the protocol (section 13, "The helper"). |
+| `X-Permissions=...` | **reserved**, not read by any launcher yet (report 035, D3). A later launcher may let an app declare the launcher requests it uses (`beep`, `brightness`, ...) and refuse the rest with `err denied`. Today every request of section 14 is open to every process of the user, rate-limited and logged; do not rely on it being absent. |
 | `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (the SDL simulator) shows it. |
 
 **An older launcher ignores `X-MinSize`** (and every contract variable), so an app must still start on a screen that
@@ -228,7 +281,8 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 
 | Files | What | Needs |
 |---|---|---|
-| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
 | `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | the app side of the lifecycle protocol (section 13): `cp0_app_lifecycle_init()` from the environment, `_service()` (non-blocking, answers `ack <n>`), `_send()` (`home`, `switcher`), the key rule `_key_drop()` | libc + POSIX sockets |
@@ -440,3 +494,53 @@ the PC: `ext_components/cp0_lvgl/tests/test_app_lifecycle.c` (the helper), `proj
 (the real supervisor with `fbhapp`, with and without `--helper`) and, in the apps repository, each app's
 `tests/scenes/lifecycle.scene` (the headless harness plays the launcher). The board test protocols are
 `docs/dev/tests/multitasking-pb-protocol.md`, `-pc-`, `-pd-` and `multitasking-pe-protocol.md` (the real apps).
+
+## 14. Requests to the launcher (`launcher.sock`)
+
+An app is a separate process; the launcher owns the volume, the backlight, the sounds and the notices. An app asks it through one Unix stream socket, `$XDG_RUNTIME_DIR/applaunch/launcher.sock` (mode 0600, the launcher's user). One request line, one reply line, UTF-8, at most 254 bytes plus the newline. It is served by a thread of its own, so it works for apps launched in every mode (compat, fullscreen with or without multitasking, a terminal app) and from a shell or ssh as the same user. There is **no `/tmp` fallback**: without `XDG_RUNTIME_DIR` there is no service. Added within contract 1 (section 8); the protocol has its own level (`hello` says `1`), and verbs and reply fields are only added.
+
+```
+> hello 1                      < ok 1 launcher=0.8.6 app=mesh-hop verbs=hello,caps,toast,beep,volume,brightness,dim
+> caps                         < ok sound=1 backlight=levels dim=1 verbs=...
+> beep [notify|done|warn]      < ok | err nosound
+> toast <text>                 < ok queued | err limit
+> volume get|up|down|mute|unmute   < ok 40 muted=0 | err nosound
+> volume set 55                < ok 55 muted=0
+> brightness get               < ok 70 kind=levels
+> brightness set 30            < ok 30 kind=levels | err absent (no backlight, or on / off only)
+> dim allow|deny               < ok | err absent
+```
+
+Replies are `ok ...` or `err <word>`: `unknown` (no such verb: an older launcher, or a typo), `bad` (arguments), `nosound`, `absent` (the board has no such thing), `limit` (rate limit), `busy` (the backend failed or the server is full), `denied` (reserved, section 6 `X-Permissions`). `app=` in the `hello` reply is the name of the calling process (`/proc/<pid>/comm`, from the kernel's peer credentials; the request cannot name itself).
+
+| Verb | What the launcher does |
+|---|---|
+| `beep` | plays a short built-in sound (`notify` by default, `done`, `warn`) **at the volume in force**, whatever the launcher's own interface sounds are (those stay off; there is no setting for app beeps). A board without a sound output answers `err nosound` and does nothing; board.state `sound=0` says so beforehand. A muted or very quiet volume is silent: that is the user's choice |
+| `toast` | puts the text (printable UTF-8, cut at 160 characters) on the launcher's own toast. The launcher draws nothing over a fullscreen app, so the toast waits and shows when the launcher is in front (after the app exits or is hidden); at most 4 wait, the oldest goes. No badge, no sound |
+| `volume` | reads or changes the output volume exactly like the volume keys (the same backend, saved the same way). `set` un-mutes. Apps that do not play media have no business here; `get` is for a level bar, but `status.state` already has it |
+| `brightness` | `get` reads the percent; `set` snaps to the launcher's steps and saves like the key. Levels backlights only |
+| `dim` | `allow` lets the launcher dim the backlight (to 10%) when nothing was touched for the user's *Dark time* (Settings > Screen; *Never* = never) while this app is in front, on a battery board with brightness levels (`requests` has `dim`); any key or touch brings the light back. Today the panel never dims while an app is in front. The permission is **for the app in front and ends when the launcher takes the panel back** (exit, hidden, Alt+Tab): send `dim allow` again after a resume. Touch is seen only on the supervisor's path (multitasking on); a mouse or trackpoint is not seen, so an app that is used with a pointer only should not allow it. `deny` withdraws it |
+
+Limits (all per client process, answered `err limit`): `beep` and `toast` one per second, `volume`, `brightness` and `dim` ten per second, the rest fifty. Every request is logged by the launcher with the process name (`[req] mesh-hop: beep done`). Eight connections at most (more get `err busy`), an idle one is closed after 30 s, a line over the limit gets `err bad` and the connection is closed. The launcher never executes anything a client names: verbs are looked up in a fixed list, arguments are numbers or a few fixed words, the toast text is displayed and nothing else. **Permissions are an agreement, not a wall:** every client is the same user, who can already run `pactl` or write the backlight; the point is that the launcher keeps owning volume, brightness and sounds.
+
+### The volume, brightness and mute keys inside an app
+
+The launcher reads the keyboards while a fullscreen app is in front and acts on `KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, `KEY_MUTE`, `KEY_BRIGHTNESSUP` and `KEY_BRIGHTNESSDOWN` itself, as it does on its own pages (the same step, the same saved level; no rebuild of the app is needed). **These keys are the launcher's, like Alt+Tab: an app must not act on them too**, or the step doubles. The keys still reach the app (the launcher only reads them). Nothing is drawn on screen: the user hears the change, and the app may show the level from `status.state` (section 5b). On a board without the hardware (`sound=0`, `backlight=none`) they do nothing, as on the launcher's pages. A compat app runs inside the launcher's window, whose key handling already covers them.
+
+### Degrade rules
+
+| Situation | `board.state` | `launcher.sock` | The app |
+|---|---|---|---|
+| launcher 0.8.6 or later | good | answers | uses both |
+| an older launcher | missing | `ENOENT`: `-1` at once | hides sound options, skips beeps and toasts silently, shows no error |
+| the launcher crashed or stopped | `pid` gone: `-1` | `ECONNREFUSED`: `-1` at once | as an older launcher |
+| started over ssh, launcher running | readable | answers (the process name is `ssh`'s child) | works |
+| started over ssh, no launcher | missing | missing | as an older launcher |
+| multitasking off | same | same: the server does not depend on the supervisor | a toast shows after the app exits |
+| the app is frozen while hidden | - | it cannot send | only `X-Background=run` apps notify in the background |
+
+The client (`cp0_app_client.h`) returns `-1` for every "no service" case within its timeout (200 ms by default) and prints nothing; **never call it on a thread that must not stall** (the LVGL thread of a toolkit app): use a worker, and remember a failure for a few seconds instead of retrying per event.
+
+### The command line: `cyberdeckzero-ctl`
+
+`cyberdeckzero-ctl` (installed in `/usr/share/APPLaunch/bin`, linked in `/usr/local/bin`) is the same client for terminal apps, scripts and the board test protocols: `cyberdeckzero-ctl hello`, `beep done`, `toast "2 new messages"`, `volume set 30`, `brightness get`, `dim allow`, `board` (prints `board.state`). It prints the reply; exit status 0 ok, 1 refused (`err ...`), 2 usage, 3 no launcher service.

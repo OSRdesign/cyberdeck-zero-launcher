@@ -18,6 +18,14 @@ int adjust_volume(int delta_percent);
 int adjust_brightness(int delta_percent);
 bool toggle_mute();
 
+/* Levels for the request socket and the status feed (report 035). The caller serialises them (app_media.cpp). */
+int read_volume_percent();                  // 0..100
+bool read_mute_state();
+int set_volume_percent(int percent);        // un-mutes, saves the level like a key press; the level now in force
+bool set_mute_state(bool muted);            // the state now in force
+int read_brightness_percent();              // percent of the maximum, snapped to the launcher's steps
+int set_brightness_percent(int percent);    // snapped to the steps; the percent now in force
+
 // Once at startup: set the backlight as cp0_backlight_startup_level() says (the
 // saved brightness, or the maximum when nothing is saved and the panel is below
 // half). Nothing for no backlight or an on/off one. Does not persist changes or

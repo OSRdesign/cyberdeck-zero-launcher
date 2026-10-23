@@ -51,6 +51,16 @@ int main()
     c = a;
     std::strcpy(c.battery_state, "Charging");
     CHECK(status_feed::differs(a, c));
+    // report 035: the levels apps draw their bars from
+    c = a;
+    c.volume = 40;
+    CHECK(status_feed::differs(a, c));
+    c = a;
+    c.mute = 1;
+    CHECK(status_feed::differs(a, c));
+    c = a;
+    c.brightness_pct = 50;
+    CHECK(status_feed::differs(a, c));
 
     // the SDL stub: start and stop do nothing, twice or unpaired
     status_feed::stop();

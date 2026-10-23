@@ -12,13 +12,15 @@ namespace status_feed {
 bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 {
     return a.wifi != b.wifi || a.wifi_pct != b.wifi_pct || a.eth != b.eth || a.bt != b.bt || a.battery != b.battery ||
-           std::strcmp(a.battery_state, b.battery_state) != 0;
+           std::strcmp(a.battery_state, b.battery_state) != 0 || a.volume != b.volume || a.mute != b.mute ||
+           a.brightness_pct != b.brightness_pct;
 }
 
 } // namespace status_feed
 
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
+#include "app_media.hpp"
 #include "cp0_lvgl_app.h"
 #include "cp0_power_supply.h"
 #include "cp0_statusbar.h"
@@ -44,6 +46,7 @@ namespace {
 
 constexpr auto kPeriod = std::chrono::seconds(2);
 constexpr auto kBtTimeout = std::chrono::milliseconds(1500);
+constexpr auto kLevelsPeriod = std::chrono::seconds(10); // volume and brightness run programs / sysfs: not every 2 s
 
 struct Reply {
     std::mutex mutex;
@@ -83,6 +86,25 @@ cp0_app_bt_t read_bluetooth()
     return connected ? CP0_APP_BT_CONNECTED : CP0_APP_BT_ON;
 }
 
+// Volume, mute and brightness (report 035): read again when the launcher changed one (a key, a request) or every
+// kLevelsPeriod (the user may run pactl); in between the last reading stands.
+void sample_levels(cp0_app_status_t &now)
+{
+    static app_media::Levels levels;
+    static unsigned seen = ~0u;
+    static std::chrono::steady_clock::time_point read_at;
+    const auto clock_now = std::chrono::steady_clock::now();
+    const unsigned generation = app_media::levels_generation();
+    if (seen == ~0u || generation != seen || clock_now - read_at >= kLevelsPeriod) {
+        levels = app_media::read_levels();
+        seen = generation;
+        read_at = clock_now;
+    }
+    now.volume = levels.volume;
+    now.mute = levels.mute;
+    now.brightness_pct = levels.brightness_pct;
+}
+
 void sample(cp0_app_status_t &now)
 {
     cp0_wifi_status_t wifi{};
@@ -105,6 +127,7 @@ void sample(cp0_app_status_t &now)
         now.battery_state[0] = '\0';
         now.battery_charging = 0;
     }
+    sample_levels(now);
 }
 
 struct Feed {

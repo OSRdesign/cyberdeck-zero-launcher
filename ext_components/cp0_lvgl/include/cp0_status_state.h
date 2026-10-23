@@ -11,6 +11,9 @@
  *   bt=off|on|connected  the adapter's BlueZ Powered state and whether a device is connected, as the launcher shows them
  *   battery=-1|0..100  -1 = no battery
  *   battery_state=Charging|Discharging|Full|Not charging|Unknown
+ *   volume=-1|0..100   the launcher's output volume, -1 = no sound output (report 035)
+ *   mute=0|1
+ *   brightness_pct=-1|0..100  the backlight, -1 = none to drive
  *
  * Readers must ignore unknown keys. Apps read it with cp0_app_status_read() (cp0_app_contract.h).
  *

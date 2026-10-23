@@ -69,6 +69,7 @@ PROFILE="$PROFILE_DIR/board.conf"
 # The names of this release, then those of v0.6.0 and before (as in install.sh, "Names")
 LAUNCHER_BIN=cyberdeckzero
 CONSOLE_HELPER=cyberdeckzero-console
+CTL_BIN=cyberdeckzero-ctl
 USER_UNIT=cyberdeckzero.service
 CONSOLE_UNIT=cyberdeckzero-console.service
 DESKTOP_UNIT=cyberdeckzero-desktop.service
@@ -301,7 +302,7 @@ echo "    desktop comes back) and the menu entry ${MENU_DIR#"$ROOT"}/$DESKTOP_EN
 echo "  - system service launcher-ntp-default.service"
 if exists "$WP_DROPIN"; then echo "  - $WP_DROPIN (desktop boards: WirePlumber Bluetooth audio drop-in)"; fi
 echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
-echo "    lib/libapplaunch_vfb.so"
+echo "    $CTL_BIN (and its link $ROOT/usr/local/bin/$CTL_BIN), lib/libapplaunch_vfb.so"
 case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
@@ -457,9 +458,13 @@ if [ -d "$PROFILE_DIR" ] && [ -z "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then a
 
 say "Removing the launcher files in $APP_ROOT"
 for f in "bin/$LAUNCHER_BIN" "bin/$OLD_LAUNCHER_BIN" bin/M5CardputerZero-AppStore "bin/$CONSOLE_HELPER" \
-         "bin/$OLD_CONSOLE_HELPER" lib/libapplaunch_vfb.so; do
+         "bin/$OLD_CONSOLE_HELPER" "bin/$CTL_BIN" lib/libapplaunch_vfb.so; do
     rm_sys "$APP_ROOT/$f"
 done
+# the link of the request socket's client: only when it still points at ours
+if [ -L "$ROOT/usr/local/bin/$CTL_BIN" ] && [ "$(readlink "$ROOT/usr/local/bin/$CTL_BIN")" = "/usr/share/APPLaunch/bin/$CTL_BIN" ]; then
+    rm_sys "$ROOT/usr/local/bin/$CTL_BIN"
+fi
 # files of earlier bundles that the current bundle (and so its manifest) no longer has
 for f in $RETIRED_FILES; do
     if exists "$APP_ROOT/$f"; then rm_sys "$APP_ROOT/$f"; fi
