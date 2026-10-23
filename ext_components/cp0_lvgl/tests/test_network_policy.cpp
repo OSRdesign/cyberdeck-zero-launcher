@@ -7,7 +7,11 @@
 #include "cp0_network_policy.hpp"
 
 #include <cassert>
+#include <cstdlib>
+#include <fstream>
 #include <iostream>
+
+#include <sys/stat.h>
 
 using cp0::network::AccessPoint;
 using cp0::network::Status;
@@ -93,6 +97,45 @@ static void test_simple_command_output_parsers()
     assert(cp0::network::first_active_connection("lo\ncoffee\\:shop\r\nbackup\n") == "coffee:shop");
 }
 
+static void test_find_wifi_interface()
+{
+    char root[] = "/tmp/cp0-network-policy-XXXXXX";
+    assert(mkdtemp(root) != nullptr);
+    const std::string top = root;
+    auto make = [&](const std::string &rel) { mkdir((top + rel).c_str(), 0755); };
+    auto state = [&](const std::string &iface, const char *text) {
+        std::ofstream((top + "/sys/class/net/" + iface + "/operstate").c_str()) << text << '\n';
+    };
+    make("/sys");
+    make("/sys/class");
+    make("/sys/class/net");
+
+    // no sysfs tree at all, then Ethernet only: no Wi-Fi interface
+    assert(cp0::network::find_wifi_interface("/nonexistent").empty());
+    make("/sys/class/net/enp1s0");
+    state("enp1s0", "up");
+    assert(cp0::network::find_wifi_interface(top).empty());
+
+    // the tablet's name, and the Pi's
+    make("/sys/class/net/wlp2s0");
+    make("/sys/class/net/wlp2s0/wireless");
+    state("wlp2s0", "up");
+    assert(cp0::network::find_wifi_interface(top) == "wlp2s0");
+
+    // an up interface wins over a down one that sorts first
+    make("/sys/class/net/wlan0");
+    make("/sys/class/net/wlan0/wireless");
+    state("wlan0", "down");
+    assert(cp0::network::find_wifi_interface(top) == "wlp2s0");
+
+    // none up: still the first by name (the caller only wants an interface to ask about)
+    state("wlp2s0", "down");
+    assert(cp0::network::find_wifi_interface(top) == "wlan0");
+
+    const std::string cleanup = "rm -rf '" + top + "'";
+    assert(system(cleanup.c_str()) == 0);
+}
+
 int main()
 {
     test_terse_fields_decode_escaped_delimiters();
@@ -101,6 +144,7 @@ int main()
     test_named_profile_does_not_imply_connected();
     test_active_wifi_fills_signal_and_missing_ssid();
     test_simple_command_output_parsers();
+    test_find_wifi_interface();
     std::cout << "network policy tests passed\n";
     return 0;
 }

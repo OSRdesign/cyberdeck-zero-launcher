@@ -91,26 +91,69 @@ static int read_first_line(const char *path, char *out, size_t size)
     return ok;
 }
 
+/* path = $APPLAUNCH_STATUS_SYSFS_ROOT (test hook: a fake tree) + rel; rel when the variable is unset */
+static const char *rooted(const char *rel, char *buf, size_t size)
+{
+    const char *root = getenv("APPLAUNCH_STATUS_SYSFS_ROOT");
+    if (!root || !root[0]) return rel;
+    snprintf(buf, size, "%s%s", root, rel);
+    return buf;
+}
+
+static int iface_is_up(const char *name)
+{
+    char rel[160], path[480], line[32];
+    snprintf(rel, sizeof(rel), "/sys/class/net/%.100s/operstate", name);
+    return read_first_line(rooted(rel, path, sizeof(path)), line, sizeof(line)) && strncmp(line, "up", 2) == 0;
+}
+
+/* The Wi-Fi interface, whatever the kernel named it (wlan0, wlp2s0, wlx...): the entries of /proc/net/wireless (it lists
+ * wireless interfaces only), else the /sys/class/net/<if>/wireless directories; the first one whose operstate is up.
+ * The signal comes from its /proc/net/wireless line (0 when it has none). */
+static void read_wifi(cp0_statusbar_state_t *state)
+{
+    char line[160], path[480];
+    FILE *file = fopen(rooted("/proc/net/wireless", path, sizeof(path)), "r");
+    while (file && fgets(line, sizeof(line), file)) {
+        char *colon = strchr(line, ':');
+        if (!colon) continue;                                             /* the two header lines have none */
+        *colon = '\0';
+        const char *name = line;
+        while (*name == ' ') ++name;
+        float link = 0, level = 0;
+        if (!*name || !iface_is_up(name)) continue;
+        state->wifi_up = 1;
+        if (sscanf(colon + 1, "%*s %f %f", &link, &level) == 2) {
+            int pct = (int)(level < 0 ? 2 * (level + 100) : level);       /* dBm -> percent, as native_ui does */
+            state->wifi_pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+        }
+        break;
+    }
+    if (file) fclose(file);
+    if (state->wifi_up) return;
+    DIR *dir = opendir(rooted("/sys/class/net", path, sizeof(path)));
+    struct dirent *entry;
+    while (dir && (entry = readdir(dir))) {
+        char rel[160], probe[480];
+        if (entry->d_name[0] == '.') continue;
+        snprintf(rel, sizeof(rel), "/sys/class/net/%.100s/wireless", entry->d_name);
+        DIR *wireless = opendir(rooted(rel, probe, sizeof(probe)));
+        if (!wireless) continue;
+        closedir(wireless);
+        if (iface_is_up(entry->d_name)) {
+            state->wifi_up = 1;
+            break;
+        }
+    }
+    if (dir) closedir(dir);
+}
+
 void cp0_statusbar_read_state(cp0_statusbar_state_t *state)
 {
     memset(state, 0, sizeof(*state));
-    char line[160];
-    if (read_first_line("/sys/class/net/wlan0/operstate", line, sizeof(line)) && strncmp(line, "up", 2) == 0)
-        state->wifi_up = 1;
-    if (state->wifi_up) {
-        FILE *file = fopen("/proc/net/wireless", "r");
-        while (file && fgets(line, sizeof(line), file)) {
-            const char *colon = strstr(line, "wlan0:");
-            float link = 0, level = 0;
-            if (colon && sscanf(colon + 6, "%*s %f %f", &link, &level) == 2) {
-                int pct = (int)(level < 0 ? 2 * (level + 100) : level);    /* dBm -> percent, as native_ui does */
-                state->wifi_pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
-                break;
-            }
-        }
-        if (file) fclose(file);
-    }
-    DIR *dir = opendir("/sys/class/bluetooth");
+    char path[480];
+    read_wifi(state);
+    DIR *dir = opendir(rooted("/sys/class/bluetooth", path, sizeof(path)));
     if (dir) {
         struct dirent *entry;
         while ((entry = readdir(dir))) {
@@ -121,14 +164,16 @@ void cp0_statusbar_read_state(cp0_statusbar_state_t *state)
         closedir(dir);
     }
     if (state->bt_on) {                                                   /* switched off in rfkill? */
-        DIR *rf = opendir("/sys/class/rfkill");
+        DIR *rf = opendir(rooted("/sys/class/rfkill", path, sizeof(path)));
         struct dirent *entry;
         while (rf && (entry = readdir(rf))) {
-            char path[320], kind[32] = "", soft[8] = "1";
-            snprintf(path, sizeof(path), "/sys/class/rfkill/%.200s/type", entry->d_name);
-            if (!read_first_line(path, kind, sizeof(kind)) || strncmp(kind, "bluetooth", 9) != 0) continue;
-            snprintf(path, sizeof(path), "/sys/class/rfkill/%.200s/soft", entry->d_name);
-            if (read_first_line(path, soft, sizeof(soft)) && soft[0] != '0') state->bt_on = 0;
+            char rel[320], full[480], kind[32] = "", soft[8] = "1";
+            snprintf(rel, sizeof(rel), "/sys/class/rfkill/%.200s/type", entry->d_name);
+            if (!read_first_line(rooted(rel, full, sizeof(full)), kind, sizeof(kind)) ||
+                strncmp(kind, "bluetooth", 9) != 0)
+                continue;
+            snprintf(rel, sizeof(rel), "/sys/class/rfkill/%.200s/soft", entry->d_name);
+            if (read_first_line(rooted(rel, full, sizeof(full)), soft, sizeof(soft)) && soft[0] != '0') state->bt_on = 0;
         }
         if (rf) closedir(rf);
     }

@@ -519,7 +519,7 @@ private:
             return;
 
         if (wifi_iface.empty())
-            wifi_iface = "wlan0";
+            wifi_iface = cp0::network::find_wifi_interface();
 
         output.clear();
         if (cp0_process_commands::capture_argv_with_timeout(
@@ -533,7 +533,7 @@ private:
         }
 
         output.clear();
-        if (cp0_process_commands::capture_argv_with_timeout(
+        if (!wifi_iface.empty() && cp0_process_commands::capture_argv_with_timeout(
                 {"ip", "-4", "-o", "addr", "show", wifi_iface}, output, 2000) == 0) {
             cp0_copy_string(st.ip, sizeof(st.ip), cp0::network::parse_ipv4_address(output));
         }

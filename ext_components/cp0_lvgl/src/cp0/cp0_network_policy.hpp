@@ -36,5 +36,8 @@ void apply_active_wifi(const std::string &output, Status &status);
 std::string parse_ipv4_address(const std::string &output);
 bool parse_radio_enabled(const std::string &output);
 std::string first_active_connection(const std::string &output);
+// The Wi-Fi interface by its kernel name (wlan0, wlp2s0, wlx...): the /sys/class/net entries that have a wireless
+// directory, an up one first; "" when there is none. sysfs_root prefixes the path (host tests); "" = the real one.
+std::string find_wifi_interface(const std::string &sysfs_root = std::string());
 
 } // namespace cp0::network

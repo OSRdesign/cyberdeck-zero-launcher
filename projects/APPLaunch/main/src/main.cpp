@@ -9,6 +9,7 @@
 #include "ui/input_presence.hpp"
 #include "ui/launcher_media_controls.h"
 #include "ui/settings/settings_session_model.hpp"
+#include "ui/status_feed.hpp"
 #include "ui/ui.h"
 #include "ui/ui_screensaver.h"
 
@@ -39,9 +40,14 @@ int main(void)
         SLOGI("[BOOT] cp0_lvgl initialized");
         launcher_ui::init();
         ui_screensaver_init();
+        // The Wi-Fi, Bluetooth and battery values the home grid shows, published for the status strip of apps.
+        status_feed::start();
         return true;
     };
-    options.teardown = []() { launcher_ui::deinit(); };
+    options.teardown = []() {
+        status_feed::stop();
+        launcher_ui::deinit();
+    };
     // Settings > System > Quit to desktop (desktop boards) ends the main loop: teardown, then exit status 0, and
     // applaunch-desktop.service gives the screen back to the desktop (settings_session_model.hpp).
     launcher_session::set_wake(&cp0_lvgl_wake);

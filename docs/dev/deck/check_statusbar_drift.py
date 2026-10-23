@@ -4,7 +4,7 @@
     python check_statusbar_drift.py [--apps-repo PATH]
 
 The launcher owns ext_components/cp0_lvgl/{include,src/cp0}/cp0_statusbar.[ch]. Apps that draw the same bar without
-LVGL's cp0_lvgl component keep a copy (COPIES: viz1090's display bridge, Mesh Hop). Apps that link cp0_lvgl (their
+LVGL's cp0_lvgl component keep a copy (COPIES: viz1090's display bridge). Apps that link cp0_lvgl (their
 SConstruct REQUIREMENTS list 'cp0_lvgl') use the shared cp0::ui::StatusStrip instead and have no copy at all: for them
 "no copy" is the expected state, and a copy is reported as one to delete. Copies found anywhere else under apps/ are
 compared too and reported as not listed. Line endings (CRLF / LF) are ignored. The apps repo is found next to the
@@ -27,7 +27,6 @@ SOURCES = {                                                                     
 }
 COPIES = [                                                                       # folders in the apps repo holding copies
     "apps/viz1090/build",
-    "apps/mesh-hop/src/main/ui",
 ]
 SKIP_DIRS = {".git", "SDK", "github_source", "dist", "node_modules"}           # never app sources
 LINKS_CP0_LVGL = re.compile(r"""REQUIREMENTS\s*\+?=\s*\[[^\]]*['"]cp0_lvgl['"]""")

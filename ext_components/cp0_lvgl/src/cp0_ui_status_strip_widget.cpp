@@ -9,6 +9,7 @@
 
 #include "cp0_ui_widgets.hpp"
 
+#include "cp0_app_contract.h"
 #include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_status_strip.h"
 
@@ -80,6 +81,20 @@ cp0_statusbar_t *renderer()
 StatusSource default_status_source()
 {
     return [](cp0_statusbar_state_t &state) {
+        // The launcher's own values first (status.state, report 032): what the home grid shows. Its file is trusted only
+        // while the launcher process is alive; otherwise what sysfs says.
+        cp0_app_status_t feed;
+        if (cp0_app_status_read(nullptr, &feed) == 0) {
+            cp0_ui_status_set_wifi(&state, feed.wifi, feed.wifi_pct);
+            state.bt_on = feed.bt != CP0_APP_BT_OFF;
+            state.bt_connected = feed.bt == CP0_APP_BT_CONNECTED;
+            if (feed.battery >= 0) {
+                state.battery = 1;
+                state.battery_pct = feed.battery > 100 ? 100 : feed.battery;
+                state.battery_charging = feed.battery_charging;
+            }
+            return;
+        }
         cp0_statusbar_state_t read{};
         cp0_statusbar_read_state(&read);
         cp0_ui_status_set_wifi(&state, read.wifi_up, read.wifi_pct);
