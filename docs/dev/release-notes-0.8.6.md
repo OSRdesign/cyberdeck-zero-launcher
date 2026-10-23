@@ -34,7 +34,7 @@ channel `release`.
 <!-- branding-allow-end -->
 
 **Verified:** unit tests including ASan/UBSan; builds for arm64 and amd64 with 0 warnings; installed on the HackBerry
-CM5 and the FZ-M1 tablet, where the owner checked `board.state`, the `cyberdeckzero-ctl` verbs, `beep` and `toast`.
+CM5 and the FZ-M1 tablet, where `board.state` and the `cyberdeckzero-ctl` verbs were read over ssh and the owner heard `beep` and saw `toast`.
 
 **Known limits**
 
