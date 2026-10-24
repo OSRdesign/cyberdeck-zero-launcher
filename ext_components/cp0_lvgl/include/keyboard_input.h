@@ -91,6 +91,13 @@ int cp0_keyboard_get_lvgl_keypad_intercept(void);
  * launcher turns it on before init_input(); the thread reads it when it starts. */
 void cp0_keyboard_set_read_all_keyboards(int enable);
 int cp0_keyboard_get_read_all_keyboards(void);
+/* Device builds, task c-7: with read_all_keyboards, also read the media-key devices (cp0_keyboard_presence.h: devices
+ * that are not keyboards but have volume, mute or brightness keys, e.g. a tablet's buttons). Only their media keys
+ * come through (cp0_media_keys.h), one press seen by two devices counts once, they are never grabbed and never
+ * count as a keyboard. Off by default (an app built on cp0_lvgl is unchanged); the launcher turns it on before
+ * init_input(). The external app runner and the launcher's multitasking reader follow it too. */
+void cp0_keyboard_set_read_media_keys(int enable);
+int cp0_keyboard_get_read_media_keys(void);
 /* Device builds, multitasking P-b (task 015): EVIOCGRAB on (1) or off (0) on every keyboard fd the keyboard thread
  * has open, and on the ones it opens later while on. The thread keeps reading them; other readers (a hidden app) get
  * nothing. Paused keyboards (keyboard_pause) have no fd open, so no grab. Any thread; returns the fds affected. */

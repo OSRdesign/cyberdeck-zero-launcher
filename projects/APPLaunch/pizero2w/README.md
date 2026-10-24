@@ -44,8 +44,8 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
 | Launcher | **Settings > Launcher** shows or hides the built-in tiles, the **Store** included (it needs a keyboard, so a touch-only board can hide it; shown by default, `APPLAUNCH_LAUNCHER_STORE_TOGGLE` in `settings_hw_profile.hpp`). Hiding the Store tile does not affect Settings > Apps. |
-| Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the inherited matrix keymap); the Bluetooth keyboard re-attaches after sleep. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
-| Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip or Alt+Tab open "Open apps", Super goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases of 640x480 and more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
+| Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the inherited matrix keymap); the Bluetooth keyboard re-attaches after sleep. Volume, mute and brightness keys work from any device that has them, a keyboard or not (a tablet's buttons, the ACPI video bus, a headset's buttons: media-key devices, `docs/APP-CONTRACT.md` section 14), on the launcher's pages and inside apps; such a device never counts as a keyboard. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
+| Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip, Alt+Tab, Super tapped twice (within 0.45 s) or held 0.6 s open "Open apps", Super tapped once goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases of 640x480 and more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
 
 ## Install on a Pi
 
@@ -148,7 +148,9 @@ as an appliance: run `install.sh` again (the FZ-M1 with Armbian's XFCE:
 [Desktop on the FZ-M1 tablet](#desktop-on-the-fz-m1-tablet-armbian-xfce)).
 
 **Known limits.** The FZ-M1's touch reports at most two contacts: the three-finger switcher gesture cannot fire there;
-use the clock long-press or Alt+Tab (the terminal's on-screen keyboard has Alt). The battery (`BAT1`) shows in the
+use the clock long-press, the Windows button pressed twice (its button cannot be held: it reports press and release at once), or Alt+Tab (the terminal's on-screen keyboard has Alt). Its
+volume and brightness buttons are not on a keyboard device; the launcher reads them anyway (media-key devices,
+`docs/APP-CONTRACT.md` section 14). The battery (`BAT1`) shows in the
 status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
 Launcher shows it again if wanted.
 
@@ -159,9 +161,12 @@ with the bundle and is **on by default** when the launcher's logical canvas is 6
 DSI at 800x480, the HackBerry CM5 at 720x720, the Pi 5 HyperPixel at 800x480). On smaller canvases (the Pi 3A+ SPI
 panel at 480x320, 320x170) it is off and the launcher behaves as before.
 
-- **Open apps:** three fingers held still for 1 s anywhere, a 0.5 s long-press on the clock / status strip, or Alt+Tab
-  on a keyboard (release Alt to switch); Super goes to the home grid. The switcher has a card per open app, Home and
-  Close all; a green dot on a home tile marks an app open in the background.
+- **Open apps:** three fingers held still for 1 s anywhere, a 0.5 s long-press on the clock / status strip, Alt+Tab
+  on a keyboard (release Alt to switch), or Super (a tablet's Windows button) tapped twice within 0.45 s or held 0.6 s
+  alone; Super tapped once goes to the home grid at once (the second tap then opens the switcher with that app first).
+  Super with another key (Super+L, the FZ-M1's rotation lock Super+F14) does none of these; F14 is reserved for a later
+  feature. The switcher has a card per open app, Home and Close all; a green dot on a home tile marks an app
+  open in the background.
 - **Apps** declare `X-Background=run` or `=freeze` in their `.desktop` file (`docs/APP-CONTRACT.md` section 13; the app
   side is `cp0_app_lifecycle` in `ext_components/cp0_lvgl`). An app that declares nothing is paused behind a
   "Close <app>?" sheet (Close / Keep) instead of being kept.
@@ -183,7 +188,7 @@ panel at 480x320, 320x170) it is off and the launcher behaves as before.
   `echo close-all > /run/user/$(id -u)/applaunch/multitask.ctl` closes every app the launcher keeps.
 - **Known limits:** the HackBerry CM5's touch reports at most two contacts, so there it is Alt+Tab only (which does
   nothing while an app without `X-Background` is in front), and its first-run hint still says "Hold three fingers".
-  The FZ-M1 tablet has the same two-contact limit (clock long-press or Alt+Tab).
+  The FZ-M1 tablet has the same two-contact limit (clock long-press, the Windows button pressed twice, or Alt+Tab).
   viz1090 does not support multitasking and can hang on three-finger touches (hold Esc 3 s closes it). Net Toolbox
   stays a legacy app.
 

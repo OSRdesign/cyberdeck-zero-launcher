@@ -211,16 +211,18 @@ struct TestInput : InputPort {
 struct FifoKeys : KeyPort {
     std::string path;
     std::string path2; /* a second keyboard ("" = none) */
+    std::string path3; /* task c-7: a media-key device, the tablet's buttons ("" = none) */
     Recorder &rec;
     cp0_esc_key_watch::Sources sources;
-    FifoKeys(std::string p, Recorder &r, std::string p2 = std::string())
-        : path(std::move(p)), path2(std::move(p2)), rec(r)
+    FifoKeys(std::string p, Recorder &r, std::string p2 = std::string(), std::string p3 = std::string())
+        : path(std::move(p)), path2(std::move(p2)), path3(std::move(p3)), rec(r)
     {
     }
     void open() override
     {
         sources.open(path.c_str());
         if (!path2.empty()) sources.open(path2.c_str());
+        if (!path3.empty()) sources.open(path3.c_str(), true);
         rec.add("keys open");
     }
     void close() override
@@ -353,13 +355,14 @@ struct Rig {
     std::unique_ptr<Supervisor> sup;
     int kw = -1;  /* the "keyboard": every reader's FIFO stays open (no EOF) */
     int kw2 = -1; /* a second keyboard */
+    int kw3 = -1; /* task c-7: a media-key device (the tablet's volume and Windows buttons) */
     int tw = -1;  /* the "touch screen" (P-c) */
 
     /* fast: a 5 ms tick for the pumped scenarios; false keeps the launcher's defaults (the cost scenario) */
     explicit Rig(SupervisorConfig cfg = SupervisorConfig(), const std::string &tag = "rig", bool fast = true,
                  bool with_touch = false)
         : fb(g_dir + "/fb-" + tag + ".raw"), ui(fb, rec), input(rec, g_dir + "/app-in-"),
-          keys_fifo(make_fifo("keys-" + tag)), keys(keys_fifo, rec, make_fifo("keys2-" + tag))
+          keys_fifo(make_fifo("keys-" + tag)), keys(keys_fifo, rec, make_fifo("keys2-" + tag), make_fifo("keys3-" + tag))
     {
         cfg.guardian = false;
         (void)fast; /* the pumped scenarios call run_once() themselves; the cost scenario runs the thread */
@@ -373,6 +376,7 @@ struct Rig {
         sup->set_log_sink([this](const std::string &l) { rec.add("log " + l); });
         kw = writer(keys_fifo);
         kw2 = writer(keys.path2);
+        kw3 = writer(keys.path3);
         if (with_touch) {
             const std::string touch_fifo = make_fifo("touch-" + tag);
             tw = writer(touch_fifo);
@@ -385,6 +389,7 @@ struct Rig {
         sup.reset();
         if (kw >= 0) ::close(kw);
         if (kw2 >= 0) ::close(kw2);
+        if (kw3 >= 0) ::close(kw3);
         if (tw >= 0) ::close(tw);
     }
     /* run the loop until cond() or timeout */
@@ -1395,6 +1400,311 @@ void scenario_pd_hint()
     }
 }
 
+/* Task c-7 (owner decision 2026-10-24): the Windows key held 0.6 s opens the switcher, read from evdev while an app is in
+ * front; a tap stays Home; Win+F14 (the FZ-M1's rotation-lock button) and Super+key do nothing; a media-key device (the
+ * tablet's buttons) gives its volume keys only: its Alt, Tab, Esc and (c7.4) Super are no keys. The i8042 keyboard's
+ * Super as the tablet sends it (auto-repeat, a copy on Intel Virtual Buttons) and the journal lines of the hold. */
+void scenario_super_hold()
+{
+    std::printf("== c-7: Super held 0.6 s in an app opens the switcher; a tap is Home; Win+F14, Super+A nothing; a "
+                "media-key device's keys\n");
+    Rig r(pd_config(), "sup");
+    App a = make_app("supa");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    r.pump_for(150);
+    r.rec.clear();
+    key(r.kw, KEY_LEFTMETA, 1); /* the rotation-lock button: Super, F14 down / up, then Super held */
+    key(r.kw, KEY_F14, 1);
+    key(r.kw, KEY_F14, 0);
+    r.pump_for(900);
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(100);
+    check("Win+F14 held 0.9 s: no switcher", !r.rec.has("log Super held") && !r.rec.has("ui switcher open"));
+    check("... not Home either, the app stays", !r.rec.has("log Super / Home key") && r.state("supa") == "foreground",
+          r.status());
+    key(r.kw, KEY_LEFTMETA, 1);
+    key(r.kw, KEY_A, 1);
+    key(r.kw, KEY_A, 0);
+    r.pump_for(900);
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(100);
+    check("Super+A held: nothing", !r.rec.has("log Super held") && r.state("supa") == "foreground", r.status());
+    /* the media-key device: Alt+Tab and Esc held from it are not keys (no session, no Esc hold) */
+    key(r.kw3, KEY_LEFTALT, 1);
+    key(r.kw3, KEY_TAB, 1);
+    key(r.kw3, KEY_TAB, 0);
+    key(r.kw3, KEY_LEFTALT, 0);
+    key(r.kw3, KEY_ESC, 1);
+    r.pump_for(700);
+    key(r.kw3, KEY_ESC, 0);
+    r.pump_for(50);
+    check("a media-key device: no Alt+Tab session, no Esc held",
+          !r.rec.has("log session (evdev)") && !r.rec.has("keys esc 1") && !r.rec.has("ui esc_hint 1") &&
+              r.state("supa") == "foreground",
+          r.status());
+    /* Super held alone */
+    const std::uint64_t t0 = Supervisor::now_ms();
+    key(r.kw, KEY_LEFTMETA, 1);
+    check("Super held: the switcher opens", r.pump(2500, [&] { return r.rec.has("ui switcher open"); }), r.status());
+    const std::uint64_t dt = Supervisor::now_ms() - t0;
+    check("at 0.6 s, not before", dt >= kSuperHoldMs - 10 && dt < 1500, std::to_string(dt) + " ms");
+    check("log: Super held 600 ms", r.rec.has("log Super held 600 ms"));
+    check("the app is hidden first (as G1)",
+          r.rec.has("log switcher (Super): hiding supa first") && r.state("supa") == "hidden-frozen", r.status());
+    check("the app is listed (in front, selected)", r.rec.has("ui switcher open n=1 supa:hidden-frozen* sel=0 session=0"),
+          last_with(r, "ui switcher"));
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(200);
+    check("its release is no Home: the switcher stays",
+          !r.rec.has("log Super / Home key") && status_field(r.status(), "", "switcher") == "open", r.status());
+    /* not an Alt+Tab session: nothing commits or closes it when Super goes up; it stays until the user acts */
+    r.pump_for(1200);
+    check("still open 1.4 s after the release, no session, nothing closed it",
+          status_field(r.status(), "", "switcher") == "open" && !r.rec.has("ui switcher close") &&
+              !r.rec.has("session=1") && r.state("supa") == "hidden-frozen",
+          r.status());
+    /* a second hold (the launcher's key filter now: the launcher is in front) leaves it as Esc does */
+    r.sup->launcher_switch_event(SwitchEvent::Switcher);
+    check("a second Super hold closes it: back to the app",
+          r.pump(2000, [&] { return r.rec.has("log switcher: cancelled by Super (back to supa)") &&
+                                    r.state("supa") == "foreground"; }),
+          r.status());
+    r.pump_for(300);
+    /* hold again; Esc on the switcher closes it */
+    r.rec.clear();
+    key(r.kw, KEY_LEFTMETA, 1);
+    check("held again: open", r.pump(2500, [&] { return r.rec.has("ui switcher open"); }), r.status());
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(100);
+    r.sup->switcher_cancel();
+    check("Esc on the switcher: back to the app", r.pump(2000, [&] { return r.state("supa") == "foreground"; }),
+          r.status());
+    r.pump_for(300);
+    /* hold again; a card picked (Enter on the selected card, or a tap) resumes that app */
+    r.rec.clear();
+    key(r.kw, KEY_LEFTMETA, 1);
+    check("held a third time: open", r.pump(2500, [&] { return r.rec.has("ui switcher open"); }), r.status());
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(100);
+    r.sup->switcher_pick(app_id(r, "supa"));
+    check("a card picked: that app is resumed, the switcher goes",
+          r.pump(2000, [&] { return r.state("supa") == "foreground" && r.rec.has("ui switcher close app_next=1"); }),
+          r.status());
+    r.pump_for(300);
+    /* a tap: Home, as before */
+    r.rec.clear();
+    key(r.kw, KEY_LEFTMETA, 1);
+    r.pump_for(120);
+    key(r.kw, KEY_LEFTMETA, 0);
+    check("Super tapped: Home", r.pump(2000, [&] { return r.state("supa") == "hidden-frozen"; }) &&
+                                    r.rec.has("log Super / Home key"),
+          r.status());
+    check("... and no switcher", !r.rec.has("ui switcher open") && !r.rec.has("log Super held"));
+    /* c7.4: Super from a media-key device (Intel Virtual Buttons declares it) is not taken: held there, nothing */
+    r.sup->command("switch supa");
+    check("resumed", r.pump(2000, [&] { return r.state("supa") == "foreground"; }), r.status());
+    r.pump_for(300);
+    r.rec.clear();
+    key(r.kw3, KEY_LEFTMETA, 1);
+    r.pump_for(900);
+    key(r.kw3, KEY_LEFTMETA, 0);
+    r.pump_for(150);
+    check("a media-key device's Super: neither hold nor Home",
+          !r.rec.has("ui switcher open") && !r.rec.has("log Super") && r.state("supa") == "foreground", r.status());
+    /* the tablet as it is (journal of 0.8.7-c7.3, 2026-10-24): the i8042 keyboard sends Super down, the kernel's
+     * auto-repeat (value 2) from 250 ms every 30 ms, Super up 3 s later; Intel Virtual Buttons may send its own copy, held
+     * or as a quick tap. The hold opens the switcher at 0.6 s, whatever the repeats and the copies. */
+    const auto hold_like_the_tablet = [&](int ms, int copy) { /* copy: 0 none, 1 held on kw3, 2 a tap on kw3 */
+        const std::uint64_t t0 = Supervisor::now_ms();
+        key(r.kw, KEY_LEFTMETA, 1);
+        if (copy == 1) key(r.kw3, KEY_LEFTMETA, 1);
+        if (copy == 2) {
+            key(r.kw3, KEY_LEFTMETA, 1);
+            key(r.kw3, KEY_LEFTMETA, 0);
+        }
+        std::uint64_t next_repeat = t0 + 250;
+        while (Supervisor::now_ms() < t0 + static_cast<std::uint64_t>(ms)) {
+            if (Supervisor::now_ms() >= next_repeat) {
+                send_event(r.kw, EV_KEY, KEY_LEFTMETA, 2);
+                send_event(r.kw, EV_SYN, SYN_REPORT, 0);
+                next_repeat += 30;
+            }
+            r.sup->run_once();
+            ::usleep(5000);
+        }
+        key(r.kw, KEY_LEFTMETA, 0);
+        if (copy == 1) key(r.kw3, KEY_LEFTMETA, 0);
+        r.pump_for(150);
+    };
+    static const char *copies[] = {"alone", "with a held copy on Intel Virtual Buttons", "with a tap on Intel Virtual Buttons"};
+    for (int copy = 0; copy < 3; ++copy) {
+        const std::string tag = std::string("i8042 Super held 3 s with auto-repeat, ") + copies[copy];
+        r.rec.clear();
+        hold_like_the_tablet(3000, copy);
+        check(tag + ": the switcher opened", r.rec.has("ui switcher open n=1 supa:hidden-frozen*"), last_with(r, "ui switcher"));
+        check(tag + ": the journal tells the story",
+              r.rec.has("log Super down: the switcher in 600 ms if held alone") && r.rec.has("log Super hold fired"),
+              last_with(r, "log Super"));
+        int opened = 0;
+        for (const std::string &l : r.rec.get())
+            if (l.find("log switcher: opened by Super") == 0) ++opened;
+        check(tag + ": opened once, no Home, still open after the release",
+              opened == 1 && !r.rec.has("Super / Home key") && status_field(r.status(), "", "switcher") == "open",
+              std::to_string(opened) + " " + r.status());
+        r.sup->switcher_cancel();
+        r.pump(2000, [&] { return r.state("supa") == "foreground"; });
+        r.pump_for(300);
+    }
+    /* a tap with auto-repeat never reached (120 ms): Home, as before, and the journal says so */
+    r.rec.clear();
+    hold_like_the_tablet(120, 0);
+    check("a 120 ms tap: Home, logged as a tap", r.pump(2000, [&] { return r.state("supa") == "hidden-frozen"; }) &&
+                                                     r.rec.has("log Super up after") && r.rec.has("ms: Home (a tap)"),
+          last_with(r, "log Super"));
+    r.sup->command("switch supa");
+    r.pump(2000, [&] { return r.state("supa") == "foreground"; });
+    r.pump_for(300);
+    /* Super with another key while held: cancelled, and the journal names the key */
+    r.rec.clear();
+    key(r.kw, KEY_LEFTMETA, 1);
+    r.pump_for(100);
+    key(r.kw, KEY_F14, 1);
+    key(r.kw, KEY_F14, 0);
+    r.pump_for(800);
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(100);
+    check("Win+F14: the hold is cancelled, named in the journal",
+          r.rec.has("log Super hold cancelled: code 184 pressed while Super was down") &&
+              r.rec.has("nothing (Super with another key)") && r.state("supa") == "foreground",
+          last_with(r, "log Super"));
+    /* back to a switcher to go on: the hold, as above */
+    hold_like_the_tablet(800, 0);
+    r.pump(1000, [&] { return r.rec.has("ui switcher open"); });
+    /* the launcher in front: the key filter's Super hold reaches the supervisor as a Switch request */
+    r.sup->switcher_home();
+    r.pump(1000, [&] { return r.rec.has("ui switcher close"); });
+    r.rec.clear();
+    r.sup->launcher_switch_event(SwitchEvent::Switcher);
+    check("from the launcher's key filter: the switcher with the app resident",
+          r.pump(1000, [&] { return r.rec.has("log Super held 600 ms (launcher)") && r.rec.has("ui switcher open"); }),
+          r.status());
+    r.sup->stop();
+}
+
+/* Task c-7.5 (owner decision 2026-10-24): the FZ-M1's Windows button is a pulse (down and up 1 ms apart on the i8042
+ * keyboard), so it cannot be held: two taps within 450 ms (press to press) open the switcher. The first tap goes home at
+ * once from the app (as before); the second usually comes after the hand-over, through the launcher's key filter
+ * (launcher_super_tap here), or through the supervisor's reader while the app is still hiding. */
+void scenario_super_double_tap()
+{
+    std::printf("== c-7.5: Super double tap (the tablet's pulse): switcher; slow, triple, chord, duplicate, while hiding\n");
+    Rig r(pd_config(), "dtap");
+    App a = make_app("dta");
+    r.sup->launch(spec_for(a, r.fb.path, Background::Freeze));
+    check("started", r.pump(3000, [&] { return app_logged(a, "rec=start"); }));
+    r.pump_for(150);
+    const auto pulse = [&](int fd) { /* down and up 1 ms apart, as the tablet sends them */
+        key(fd, KEY_LEFTMETA, 1);
+        ::usleep(1000);
+        key(fd, KEY_LEFTMETA, 0);
+    };
+    const auto back_to_app = [&]() {
+        r.sup->command("switch dta");
+        r.pump(2000, [&] { return r.state("dta") == "foreground"; });
+        r.pump_for(600); /* the tap window passes */
+    };
+    /* first tap in the app: Home at once */
+    r.rec.clear();
+    const std::uint64_t t0 = Supervisor::now_ms(); /* the pulse is read within a pump step (5 ms) of this */
+    pulse(r.kw);
+    check("first tap: Home at once", r.pump(2000, [&] { return r.state("dta") == "hidden-frozen"; }) &&
+                                         r.rec.has("log Super / Home key"),
+          r.status());
+    /* the second, 250 ms after the first's press, read by the launcher (the supervisor's reader is closed by then) */
+    while (Supervisor::now_ms() < t0 + 150) r.pump_for(10);
+    r.sup->launcher_super_tap(t0 + 250);
+    check("second tap 250 ms later: double tap -> switcher",
+          r.pump(1000, [&] { return r.rec.has("ms after the previous: double tap -> switcher"); }),
+          last_with(r, "log Super tap"));
+    check("the switcher: the app just left, first and In front",
+          r.pump(1000, [&] { return r.rec.has("ui switcher open n=1 dta:hidden-frozen* sel=0 session=0"); }),
+          last_with(r, "ui switcher"));
+    check("log: opened by Super (from dta)", r.rec.has("log switcher: opened by Super with 1 app (from dta)"));
+    /* a third tap right after: nothing */
+    r.sup->launcher_super_tap(t0 + 400);
+    r.pump_for(100);
+    check("third tap within the window: ignored, the switcher stays",
+          r.rec.has("ms after the double tap: ignored") && status_field(r.status(), "", "switcher") == "open", r.status());
+    /* a double tap over the open switcher leaves it as Esc does: back to the app */
+    const std::uint64_t t1 = Supervisor::now_ms() + 600;
+    r.pump_for(700);
+    r.sup->launcher_super_tap(t1);
+    r.pump_for(50);
+    r.sup->launcher_super_tap(t1 + 200);
+    check("a double tap over the switcher: back to the app",
+          r.pump(2000, [&] { return r.state("dta") == "foreground" && r.rec.has("log switcher: cancelled by Super (back to dta)"); }),
+          r.status());
+    r.pump_for(600);
+    /* a slow pair (600 ms): two single taps, Home then nothing; no switcher */
+    r.rec.clear();
+    pulse(r.kw);
+    r.pump(2000, [&] { return r.state("dta") == "hidden-frozen"; });
+    r.pump_for(500);
+    r.sup->launcher_super_tap(Supervisor::now_ms());
+    r.pump_for(150);
+    check("a slow pair: too late, single tap, no switcher",
+          r.rec.has("too late, single tap") && !r.rec.has("ui switcher open") && r.state("dta") == "hidden-frozen",
+          last_with(r, "log Super tap"));
+    back_to_app();
+    /* a tap then Super+A: the chord is no tap, no switcher */
+    r.rec.clear();
+    pulse(r.kw);
+    r.pump(2000, [&] { return r.state("dta") == "hidden-frozen"; });
+    r.pump_for(600);
+    back_to_app();
+    r.rec.clear();
+    key(r.kw, KEY_LEFTMETA, 1);
+    key(r.kw, KEY_A, 1);
+    key(r.kw, KEY_A, 0);
+    key(r.kw, KEY_LEFTMETA, 0);
+    r.pump_for(100);
+    pulse(r.kw);
+    r.pump(2000, [&] { return r.state("dta") == "hidden-frozen"; });
+    r.pump_for(150);
+    check("Super+A then a tap: the chord counts nothing, the tap is a first one (Home), no switcher",
+          !r.rec.has("double tap") && !r.rec.has("ui switcher open") && r.state("dta") == "hidden-frozen",
+          last_with(r, "log Super"));
+    /* the same tap reported by the launcher as well (the hand-over): counted once */
+    r.pump_for(600);
+    r.sup->launcher_super_tap(Supervisor::now_ms());
+    r.pump_for(10);
+    r.sup->launcher_super_tap(Supervisor::now_ms() - 5);
+    r.pump_for(100);
+    check("the same tap twice (hand-over): ignored once", r.rec.has("the same tap, ignored") && !r.rec.has("ui switcher open"),
+          last_with(r, "log Super tap"));
+    r.sup->stop();
+
+    /* an app that takes 250 ms to answer hide: the second tap comes while it is still hiding, on the supervisor's
+     * reader; the switcher shows once it is hidden */
+    Rig s(pd_config(), "dtsl");
+    App b = make_app("dtb");
+    s.sup->launch(spec_for(b, s.fb.path, Background::Freeze, "--ack-delay-ms 250"));
+    check("slow app started", s.pump(3000, [&] { return app_logged(b, "rec=start"); }));
+    s.pump_for(150);
+    s.rec.clear();
+    pulse(s.kw);
+    s.pump_for(120);
+    check("first tap: hiding (slow)", s.state("dtb") == "hiding", s.status());
+    pulse(s.kw);
+    check("second tap while it hides: the switcher once hidden",
+          s.pump(2500, [&] { return s.rec.has("ui switcher open n=1 dtb:hidden-frozen*"); }), s.status());
+    check("log: double tap, once dtb is hidden",
+          s.rec.has("ms after the previous: double tap -> switcher") && s.rec.has("log switcher (Super): once dtb is hidden"),
+          last_with(s, "log switcher"));
+    s.sup->stop();
+}
+
 void scenario_guardian()
 {
     /* Two apps that would outlive the supervisor without the guardian: a frozen one that ignores SIGHUP (the kernel
@@ -1472,6 +1782,10 @@ int main(int argc, char **argv)
     if (const char *only = std::getenv("MT_ONLY")) { /* MT_ONLY=cost: the loop cost measurement alone */
         if (std::string(only) == "cost") scenario_loop_cost();
         if (std::string(only) == "cancel") scenario_alt_tab_cancel_deck();
+        if (std::string(only) == "super") { /* MT_ONLY=super: task c-7 alone */
+            scenario_super_hold();
+            scenario_super_double_tap();
+        }
         if (std::string(only) == "pd") { /* MT_ONLY=pd: the P-d scenarios alone */
             scenario_pd_switcher_from_app();
             scenario_pd_cancel();
@@ -1507,6 +1821,8 @@ int main(int argc, char **argv)
     scenario_pd_legacy_sheet();
     scenario_pd_alt_tab();
     scenario_pd_hint();
+    scenario_super_hold();
+    scenario_super_double_tap();
     scenario_guardian();
     scenario_loop_cost();
     std::printf("test_supervisor_host: %d passed, %d failed\n", g_pass, g_fail);

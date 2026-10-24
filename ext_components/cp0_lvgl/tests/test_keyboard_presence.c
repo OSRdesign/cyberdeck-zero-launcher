@@ -630,9 +630,244 @@ static void test_ignore_list(const char *fixture)
     CHECK(cp0_kbd_presence_enumerate(fixture, 64, &read_list) == 2);
 }
 
+/* ---------------------------------------------------------------- media-key devices (task c-7) */
+
+static int list_has(const cp0_kbd_presence_list_t *list, const char *path, const char *name)
+{
+    for (unsigned i = 0; i < list->count; i++)
+        if (strcmp(list->devices[i].path, path) == 0 && strcmp(list->devices[i].name, name) == 0) return 1;
+    return 0;
+}
+
+/* Every device seen on the Pi boards: the media-key devices are the two keyboards' Consumer Control siblings (the
+ * HackBerry's and the 2.4G receiver's) and the speaker's AVRCP node. Not: every keyboard (their media keys come with
+ * them), the System Control siblings and the power keys (KEY_POWER only), the RTL2832U IR receiver and the three HDMI CEC
+ * devices (rc-core receivers, although their keymaps have MUTE / VOLUMEUP), applaunch-vkbd (virtual), the touch panel. */
+static void test_media_all_boards(const char *fixture)
+{
+    size_t len = 0;
+    const char *text = read_text(fixture, &len);
+    cp0_kbd_presence_list_t media;
+    CHECK(cp0_kbd_presence_parse_media(text, len, 64, &media) == 3);
+    CHECK(media.count == 3);
+    CHECK(strcmp(media.devices[0].path, "/dev/input/event3") == 0);
+    CHECK(strcmp(media.devices[0].name, "ZitaoTech HACKBerryPiQ20 Consumer Control") == 0);
+    CHECK(strcmp(media.devices[1].path, "/dev/input/event6") == 0);
+    CHECK(strcmp(media.devices[1].name, "2.4G Composite Devic Consumer Control") == 0);
+    CHECK(strcmp(media.devices[2].path, "/dev/input/event11") == 0);
+    CHECK(strcmp(media.devices[2].name, "XWF-M18-M28-M38 (AVRCP)") == 0);
+    CHECK(media.devices[2].bus == CP0_KBD_PRESENCE_BUS_BLUETOOTH);
+    CHECK(cp0_kbd_presence_parse_media(text, len, 64, NULL) == 3);
+    /* the keyboard and pointer lists are what they were before media-key devices existed */
+    cp0_kbd_presence_list_t keyboards, pointers, again;
+    CHECK(cp0_kbd_presence_enumerate_lists(fixture, 64, &keyboards, &pointers, &again) == 5);
+    check_fixture_list(&keyboards);
+    CHECK(pointers.count == 2 && cp0_kbd_presence_list_equal(&again, &media));
+    CHECK(cp0_kbd_presence_enumerate_lists(fixture, 64, NULL, NULL, &again) == 5 && again.count == 3);
+    again.count = 7;
+    CHECK(cp0_kbd_presence_enumerate_lists("/nonexistent/devices", 64, &keyboards, &pointers, &again) == -1);
+    CHECK(keyboards.count == 0 && pointers.count == 0 && again.count == 0);
+}
+
+/* The FZ-M1 tablet as it is (tests/fixtures/proc_bus_input_devices_fzm1_full.txt: the whole /proc/bus/input/devices of
+ * the owner's tablet, 2026-10-24, the BIOS sending the volume buttons as KEY_VOLUMEUP / DOWN, a Telink 2.4 GHz keyboard
+ * and mouse plugged in). */
+static void test_media_fzm1(const char *fixture, const char *older)
+{
+    size_t len = 0;
+    const char *text = read_text(fixture, &len);
+    cp0_kbd_presence_list_t keyboards, media, pointers;
+    /* keyboards: the built-in i8042 one (where the Windows button and Win+F14 arrive) and the Telink receiver's */
+    CHECK(cp0_kbd_presence_parse(text, len, 64, &keyboards) == 2);
+    CHECK(list_has(&keyboards, "/dev/input/event2", "AT Translated Set 2 keyboard"));
+    CHECK(list_has(&keyboards, "/dev/input/event6", "Telink Wireless Receiver"));
+    CHECK(keyboards.devices[0].bus == 0x0011);
+    /* media-key devices: the receiver's consumer control, the ACPI video bus (brightness), Intel Virtual Buttons (volume,
+     * Windows, rotation lock, power) and Panasonic Laptop Support (volume, mute, brightness), in file order */
+    CHECK(cp0_kbd_presence_parse_media(text, len, 64, &media) == 4);
+    CHECK(strcmp(media.devices[0].path, "/dev/input/event4") == 0);
+    CHECK(strcmp(media.devices[0].name, "Telink Wireless Receiver Consumer Control") == 0);
+    CHECK(strcmp(media.devices[1].path, "/dev/input/event8") == 0);
+    CHECK(strcmp(media.devices[1].name, "Video Bus") == 0);
+    CHECK(strcmp(media.devices[2].path, "/dev/input/event9") == 0);
+    CHECK(strcmp(media.devices[2].name, "Intel Virtual Buttons") == 0);
+    CHECK(strcmp(media.devices[3].path, "/dev/input/event10") == 0);
+    CHECK(strcmp(media.devices[3].name, "Panasonic Laptop Support") == 0);
+    CHECK(media.devices[1].bus == 0x0019 && media.devices[3].bus == 0x0019);
+    /* not media: the two ACPI power buttons, the mouse, the System Control sibling (power / sleep / wake only), the Sharp
+     * touch panel, the headphone jack switch (no keys) */
+    CHECK(cp0_kbd_presence_parse_pointers(text, len, 64, &pointers) == 1);
+    CHECK(list_has(&pointers, "/dev/input/event3", "Telink Wireless Receiver Mouse"));
+    /* the bits behind it, as the tablet prints them */
+    const char *vbtn = "2000000000000 0 0 0 0 1000000000000 0 201c000000000000 0";
+    CHECK(bit(vbtn, 64, 114) && bit(vbtn, 64, 115) && bit(vbtn, 64, 125) && bit(vbtn, 64, 116) && bit(vbtn, 64, 0x231));
+    CHECK(!bit(vbtn, 64, 113) && !bit(vbtn, 64, 224));
+    const char *pana = "7ff0000 0 0 0 800000000000 0 0 1100300002000 104000 e000000000000 0";
+    CHECK(bit(pana, 64, 113) && bit(pana, 64, 114) && bit(pana, 64, 115) && bit(pana, 64, 224) && bit(pana, 64, 225));
+    CHECK(!bit(pana, 64, 125));
+    CHECK(bit("3e000b00000000 0 0 0", 64, 224) && bit("3e000b00000000 0 0 0", 64, 225));
+
+    /* the tablet's profile (APPLAUNCH_KBD_IGNORE=bus:0011): the i8042 keyboard is read but not counted, the media-key
+     * devices are read and never counted; "drop:" leaves one out */
+    CHECK(setenv(CP0_KBD_IGNORE_ENV, "bus:0011", 1) == 0);
+    cp0_kbd_presence_list_t counted, read_media;
+    CHECK(cp0_kbd_presence_enumerate_lists(fixture, 64, &keyboards, NULL, &read_media) == 2);
+    CHECK(cp0_kbd_presence_counted(&keyboards, "bus:0011", &counted) == 1);
+    CHECK(strcmp(counted.devices[0].name, "Telink Wireless Receiver") == 0);
+    CHECK(cp0_kbd_presence_list_equal(&read_media, &media));
+    CHECK(setenv(CP0_KBD_IGNORE_ENV, "bus:0011, drop:Video Bus", 1) == 0);
+    CHECK(cp0_kbd_presence_enumerate_lists(fixture, 64, &keyboards, NULL, &read_media) == 2);
+    CHECK(read_media.count == 3 && !list_has(&read_media, "/dev/input/event8", "Video Bus"));
+    CHECK(setenv(CP0_KBD_IGNORE_ENV, "drop:bus:0019", 1) == 0); /* every ACPI / platform device */
+    CHECK(cp0_kbd_presence_enumerate_lists(fixture, 64, &keyboards, NULL, &read_media) == 2);
+    CHECK(read_media.count == 1 && strcmp(read_media.devices[0].name, "Telink Wireless Receiver Consumer Control") == 0);
+    CHECK(unsetenv(CP0_KBD_IGNORE_ENV) == 0);
+
+    /* the tablet as the owner runs it (0.8.7-c7.1 test, 2026-10-24): no USB keyboard, only the built-in i8042 one, which
+     * the profile's bus:0011 keeps from counting. The same file without the Telink receiver's blocks: one keyboard read
+     * and none counted, the three platform media-key devices, no pointer */
+    static char solo[65536];
+    size_t solo_len = 0;
+    size_t block = 0; /* where the current device block starts */
+    int telink = 0;
+    for (size_t at = 0; at < len;) {
+        size_t eol = at;
+        while (eol < len && text[eol] != '\n') eol++;
+        const size_t next = eol < len ? eol + 1 : len;
+        const int blank = eol == at || (eol == at + 1 && text[at] == '\r');
+        for (size_t i = at; i + 6 <= eol && !telink; i++) telink = memcmp(text + i, "Telink", 6) == 0;
+        if (blank || next == len) { /* a block ends with its blank line (or the file) */
+            if (!telink) {
+                memcpy(solo + solo_len, text + block, next - block);
+                solo_len += next - block;
+            }
+            block = next;
+            telink = 0;
+        }
+        at = next;
+    }
+    CHECK(cp0_kbd_presence_parse(solo, solo_len, 64, &keyboards) == 1);
+    CHECK(strcmp(keyboards.devices[0].name, "AT Translated Set 2 keyboard") == 0);
+    CHECK(cp0_kbd_presence_counted(&keyboards, "bus:0011", &counted) == 0); /* the on-screen keyboard shows */
+    CHECK(cp0_kbd_presence_parse_media(solo, solo_len, 64, &media) == 3);
+    CHECK(strcmp(media.devices[0].name, "Video Bus") == 0 && strcmp(media.devices[1].name, "Intel Virtual Buttons") == 0 &&
+          strcmp(media.devices[2].name, "Panasonic Laptop Support") == 0);
+    CHECK(cp0_kbd_presence_parse_pointers(solo, solo_len, 64, &pointers) == 0);
+
+    /* the earlier FZ-M1 capture (tests/fixtures/proc_bus_input_devices_fzm1.txt: the x-a probe, without the platform
+     * button devices): the video bus only */
+    text = read_text(older, &len);
+    CHECK(cp0_kbd_presence_parse_media(text, len, 64, &media) == 1);
+    CHECK(strcmp(media.devices[0].path, "/dev/input/event4") == 0 && strcmp(media.devices[0].name, "Video Bus") == 0);
+}
+
+/* the rule's edges on made-up blocks */
+static void test_media_rule_edges(void)
+{
+    const char *full = "1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe";
+    char text[8192];
+    cp0_kbd_presence_list_t list;
+    snprintf(text, sizeof(text),
+             /* a keyboard with media keys: a keyboard, never a media-key device as well */
+             "I: Bus=0003\nN: Name=\"kbd\"\nH: Handlers=kbd event1\nB: KEY=%s\n\n"
+             /* volume up alone */
+             "I: Bus=0003\nN: Name=\"knob\"\nH: Handlers=kbd event2\nB: KEY=8000000000000 0\n\n"
+             /* a lone bit in word 6: KEY 384, not a media key */
+             "I: Bus=0019\nN: Name=\"far\"\nH: Handlers=kbd event3\nB: KEY=1 0 0 0 0 0 0\n\n"
+             /* virtual, the launcher's own, no node, rc-core: none */
+             "I: Bus=0006\nN: Name=\"virtual\"\nH: Handlers=kbd event4\nB: KEY=e000000000000 0\n\n"
+             "I: Bus=0003\nN: Name=\"applaunch-media\"\nH: Handlers=kbd event5\nB: KEY=e000000000000 0\n\n"
+             "I: Bus=0003\nN: Name=\"no node\"\nH: Handlers=kbd\nB: KEY=e000000000000 0\n\n"
+             "I: Bus=0003\nN: Name=\"ir\"\nS: Sysfs=/devices/platform/x/usb3/3-2/rc/rc1/input12\nH: Handlers=kbd event6\n"
+             "B: KEY=e000000000000 0\n\n"
+             /* KEY_POWER and KEY_PLAYPAUSE only (a headset without volume keys): no */
+             "I: Bus=0005\nN: Name=\"play\"\nH: Handlers=kbd event7\nB: KEY=1000000000 10000000000000 0\n\n"
+             /* mute alone, CRLF, and a plain Sysfs path */
+             "I: Bus=0005\r\nN: Name=\"mute\"\r\nS: Sysfs=/devices/virtual/input/input30\r\nH: Handlers=kbd event8\r\n"
+             "B: KEY=2000000000000 0\r\n",
+             full);
+    /* knob: bit 115 (word 1 bit 51), mute: bit 113 (word 1 bit 49) */
+    CHECK(cp0_kbd_presence_parse_media(text, strlen(text), 64, &list) == 2);
+    CHECK(strcmp(list.devices[0].name, "knob") == 0 && strcmp(list.devices[1].name, "mute") == 0);
+    CHECK(cp0_kbd_presence_parse(text, strlen(text), 64, &list) == 1 && strcmp(list.devices[0].name, "kbd") == 0);
+    /* brightness down alone as a 32-bit reader prints it (word 7 bit 0 = 224); the same words read as 64-bit: bit 448 */
+    snprintf(text, sizeof(text), "I: Bus=0019\nN: Name=\"dim32\"\nH: Handlers=kbd event3\nB: KEY=1 0 0 0 0 0 0 0\n");
+    CHECK(cp0_kbd_presence_parse_media(text, strlen(text), 32, &list) == 1);
+    CHECK(strcmp(list.devices[0].path, "/dev/input/event3") == 0);
+    CHECK(cp0_kbd_presence_parse_media(text, strlen(text), 64, &list) == 0);
+
+    /* more than the list holds: all counted, 16 listed; the readers open the first CP0_KBD_PRESENCE_MAX_MEDIA */
+    size_t used = 0;
+    for (int i = 0; i < 20; i++)
+        used += (size_t)snprintf(text + used, sizeof(text) - used,
+                                 "I: Bus=0003\nN: Name=\"cc %d\"\nH: Handlers=kbd event%d\nB: KEY=e000000000000 0\n\n", i,
+                                 40 + i);
+    CHECK(cp0_kbd_presence_parse_media(text, used, 64, &list) == 20);
+    CHECK(list.count == CP0_KBD_PRESENCE_MAX_DEVICES && CP0_KBD_PRESENCE_MAX_MEDIA <= CP0_KBD_PRESENCE_MAX_DEVICES);
+}
+
+/* hot-plug of a media-key device (a Bluetooth headset connects): its own generation; the keyboard generation and the
+ * keyboard listeners do not move, so the on-screen keyboard policy and input.state are untouched */
+static void test_media_watcher(void)
+{
+    char root[] = "/tmp/cp0-media-presence-XXXXXX";
+    CHECK(mkdtemp(root) != NULL);
+    char devices[600];
+    snprintf(devices, sizeof(devices), "%s/devices", root);
+    write_devices(devices, 1);
+    cp0_kbd_presence_options_t poll_only = {devices, "/nonexistent-dev-input", 60, 1000, 100, 64};
+    cp0_kbd_presence_watcher_t *w = cp0_kbd_presence_watcher_start(&poll_only);
+    CHECK(w != NULL);
+    cp0_kbd_presence_list_t list;
+    CHECK(cp0_kbd_presence_watcher_media_generation(w) == 1);
+    CHECK(cp0_kbd_presence_watcher_media_snapshot(w, &list) == 1 && list.count == 0);
+    listener_log_t log = {PTHREAD_MUTEX_INITIALIZER, 0, 0, 0};
+    CHECK(cp0_kbd_presence_watcher_add_listener(w, listener, &log) == 0 && log_calls(&log) == 1);
+
+    char tmp[700];
+    snprintf(tmp, sizeof(tmp), "%s.new", devices);
+    FILE *f = fopen(tmp, "w");
+    CHECK(f != NULL);
+    fputs("I: Bus=0005 Vendor=04e8 Product=7021 Version=0001\nN: Name=\"M4 Keyboard\"\nH: Handlers=sysrq kbd leds "
+          "event10 \nB: KEY=1000000000007 ff9f207ac14057ff febeffdfffefffff fffffffffffffffe\n\n"
+          "I: Bus=0005 Vendor=0000 Product=0000 Version=0000\nN: Name=\"Headset (AVRCP)\"\n"
+          "S: Sysfs=/devices/virtual/input/input31\nH: Handlers=kbd event12 \nB: PROP=0\nB: EV=100007\n"
+          "B: KEY=400000000c0000 104200000000 0 10300 41ea00002400 1e378000000000 f810000010000ffc\nB: REL=0\n\n",
+          f);
+    fclose(f);
+    CHECK(rename(tmp, devices) == 0);
+    unsigned gen = 0;
+    for (int i = 0; i < 200 && gen < 2; i++) {
+        sleep_ms(10);
+        gen = cp0_kbd_presence_watcher_media_generation(w);
+    }
+    CHECK(gen == 2);
+    CHECK(cp0_kbd_presence_watcher_media_snapshot(w, &list) == 2 && list.count == 1);
+    CHECK(strcmp(list.devices[0].path, "/dev/input/event12") == 0);
+    CHECK(cp0_kbd_presence_watcher_generation(w) == 1 && log_calls(&log) == 1);
+    CHECK(cp0_kbd_presence_watcher_pointer_generation(w) == 1);
+
+    write_devices(devices, 1); /* it goes away again */
+    for (int i = 0; i < 200 && gen < 3; i++) {
+        sleep_ms(10);
+        gen = cp0_kbd_presence_watcher_media_generation(w);
+    }
+    CHECK(gen == 3);
+    CHECK(cp0_kbd_presence_watcher_media_snapshot(w, &list) == 3 && list.count == 0);
+    CHECK(cp0_kbd_presence_watcher_generation(w) == 1 && log_calls(&log) == 1);
+    cp0_kbd_presence_watcher_remove_listener(w, listener, &log);
+    cp0_kbd_presence_watcher_stop(w);
+    CHECK(cp0_kbd_presence_watcher_media_generation(NULL) == 0);
+    CHECK(cp0_kbd_presence_watcher_media_snapshot(NULL, &list) == 0 && list.count == 0);
+
+    char cmd[700];
+    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", root);
+    CHECK(system(cmd) == 0);
+}
+
 int main(int argc, char **argv)
 {
-    CHECK(argc == 3); /* the fixture paths: every board, the FZ-M1 tablet */
+    CHECK(argc == 4); /* the fixture paths: every board, the FZ-M1 tablet (keyboards), the FZ-M1 tablet in full */
     test_bitmap_decoder();
     test_fixture(argv[1]);
     test_ignore_list(argv[2]);
@@ -641,6 +876,10 @@ int main(int argc, char **argv)
     test_timer();
     test_watcher();
     test_pointer_watcher();
+    test_media_all_boards(argv[1]);
+    test_media_fzm1(argv[3], argv[2]);
+    test_media_rule_edges();
+    test_media_watcher();
     printf("test_keyboard_presence: PASS\n");
     return 0;
 }

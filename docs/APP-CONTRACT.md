@@ -140,7 +140,7 @@ gen=4
 
 | Key | Meaning |
 |---|---|
-| `keyboards` | real keyboards present now |
+| `keyboards` | real keyboards present now. A device with volume, mute or brightness keys but no letters (a tablet's buttons, a headset) never counts (section 14) |
 | `bt_keyboards` | of them, Bluetooth |
 | `last_seen` | unix seconds of the last time `keyboards > 0` (0 = never since boot) |
 | `kb_gone`, `bt_gone` | **monotonic** seconds (`CLOCK_MONOTONIC`, same in every process of the boot) when the keyboard / Bluetooth keyboard count last dropped to 0; `0` = never |
@@ -436,7 +436,10 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
   group continued) or closed. A `run` app that cannot stop drawing must not declare `run`.
 - **No framebuffer write while hidden.** The launcher draws the home grid or the switcher over your last frame.
 - **Alt+Tab and Super are the launcher's.** You see Alt go down and the Tab with it: do not act on Tab with Alt held
-  (the helper drops it), and do not give Super or three fingers held still a meaning of your own.
+  (the helper drops it), and do not give Super or three fingers held still a meaning of your own. Super tapped alone
+  hides the app (home) at once; from launcher 0.8.7 a **second tap within 0.45 s** (press to press), or Super **held
+  0.6 s** with no other key pressed meanwhile, opens the switcher (below, "Gestures"). Super+another key is none of
+  these: a chord the launcher leaves alone.
 - **On `show`:** read and drop whatever input is still pending (until `EAGAIN`), **treat every key as released and
   reset the modifiers** (re-read `EVIOCGKEY` if you track key state: the Alt+Tab that hid you showed you Alt going down
   but never up), reset the pointer state, repaint the whole screen, resume input, answer `ack <n>`.
@@ -478,6 +481,15 @@ must not do while hidden). Esc at an app's root still quits (D5); nothing in the
   is in front the launcher reads the touch screen **passively** (a second file descriptor, never `EVIOCGRAB`): the app
   still gets every touch, including the three fingers. When G1 fires the fingers are still down: `hide` arrives in
   the middle of a press; cancel it (no click) as the `hide` obligation says, and ignore the touches until `show`.
+- **Super double tap** (launcher 0.8.7 and later): two taps of Super (a tablet's Windows button, or the Super key of
+  any keyboard) whose presses are at most 0.45 s apart open the switcher. The first tap acts at once as a single tap
+  (the app is hidden, home); the second opens the switcher with that app first, marked *In front* (Esc goes back to
+  it). A third tap within 0.45 s starts nothing; a double tap while the switcher is up leaves it as Esc does. The
+  FZ-M1's Windows button reports press and release at the same instant, so on that tablet the double tap is the way.
+- **Super held 0.6 s** (a keyboard that reports how long a key is held) does what G1 does too: the app is hidden and
+  the switcher opens, an app without `X-Background` gets the sheet. Any other key pressed while Super is down cancels
+  the hold and the tap, and that key is not taken from the app (Super+L; the FZ-M1's rotation-lock button, which sends
+  Super+F14). The launcher reads Super passively, as every key: the app sees it.
 - Do not give three or more fingers a meaning of your own (a four-finger contact cancels G1, but three fingers held
   still are the launcher's). One- and two-finger gestures (pinch, pan, two-thumb typing) stay the app's.
 - G2 in an app is the app's own: a long-press on its status strip sends `switcher` (an app on `cp0_lvgl` with the
@@ -526,6 +538,17 @@ Limits (all per client process, answered `err limit`): `beep` and `toast` one pe
 ### The volume, brightness and mute keys inside an app
 
 The launcher reads the keyboards while a fullscreen app is in front and acts on `KEY_VOLUMEUP`, `KEY_VOLUMEDOWN`, `KEY_MUTE`, `KEY_BRIGHTNESSUP` and `KEY_BRIGHTNESSDOWN` itself, as it does on its own pages (the same step, the same saved level; no rebuild of the app is needed). **These keys are the launcher's, like Alt+Tab: an app must not act on them too**, or the step doubles. The keys still reach the app (the launcher only reads them). Nothing is drawn on screen: the user hears the change, and the app may show the level from `status.state` (section 5b). On a board without the hardware (`sound=0`, `backlight=none`) they do nothing, as on the launcher's pages. A compat app runs inside the launcher's window, whose key handling already covers them.
+
+**Media-key devices** (launcher 0.8.7 and later). Volume and brightness buttons are often not on a keyboard device. The launcher also reads every input device that is **not a keyboard** (it lacks A, Z, Enter or Space) but has one of the five keys above: a tablet's buttons (on the FZ-M1 "Panasonic Laptop Support" and "Intel Virtual Buttons"), the ACPI "Video Bus" (brightness keys), a keyboard's "Consumer Control" node, a Bluetooth headset's or remote's AVRCP node. The rule, by capability only:
+
+- From such a device the launcher takes **only the five keys**; every other key of it (Esc, Enter, arrows, letters, power, F14, Super) is ignored: it cannot type, navigate or close an app. The Windows key of a tablet is read from its keyboard device (the FZ-M1's i8042 keyboard), not from a buttons device that declares it too (Intel Virtual Buttons). It works on the launcher's pages and while any app is in front, exactly like a keyboard's volume keys.
+- It **never counts as a keyboard**: `input.state` (`keyboards=`, `vkb=`) and the on-screen keyboard rule are unchanged by it.
+- It is **never grabbed** (such a device may also carry the power button, which the system must keep seeing) and never forwarded to a wrapped (compat) app; an app that opens the device itself sees its keys, as for a keyboard.
+- One press reported by two devices counts **once** (the FZ-M1 declares its volume buttons on two devices; Super may come from two keyboards): for these five keys and Super a press from a second device while the first holds the key, or less than 80 ms after the first's press, is dropped with its release.
+- HDMI CEC and infrared receivers (the kernel's remote-control devices, `/rc/` in their sysfs path) are not read: their remotes are not the board's buttons.
+- `APPLAUNCH_KBD_IGNORE` applies: a `drop:` entry (`drop:Video Bus`, `drop:bus:0019`) keeps a device from being read; a plain entry changes nothing (it is never counted anyway). `APPLAUNCH_KEYBOARD_SCAN=0` reads neither. Devices that come and go (a headset connecting) are picked up like keyboards.
+
+**Reserved:** `KEY_F14`. The FZ-M1's rotation-lock button sends Super+F14 (in the BIOS's "Rotation lock" mode); a later launcher may give it a meaning. Today the launcher does nothing with it and it reaches the page or the app like any key; do not give it a meaning of your own.
 
 ### Degrade rules
 

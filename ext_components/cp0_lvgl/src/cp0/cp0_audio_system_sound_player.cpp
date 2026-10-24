@@ -50,8 +50,12 @@ class Cp0SystemSoundPlayer::Impl
 {
 public:
     Impl()
-        : worker_(&Impl::worker_loop, this)
     {
+        /* The worker uses every member (cache_, sounds_, sound_initialized_, the engine): it starts only once all of them
+         * are constructed. Started from the member initializer list (worker_ is declared before cache_), it could run
+         * decode_cache() before cache_ existed; the constructor then reset cache_ under it and decode_sound() wrote
+         * through cache_[1] of a null vector (task c-7: SIGSEGV 0.6 s after start on the FZ-M1, "segfault at c8"). */
+        worker_ = std::thread(&Impl::worker_loop, this);
     }
 
     ~Impl()

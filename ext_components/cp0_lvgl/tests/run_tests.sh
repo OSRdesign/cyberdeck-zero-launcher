@@ -36,6 +36,16 @@ trap 'rm -f "$binary" "$esc_state_object" "$caps_object" "$power_supply_object"'
     "$root/tests/test_audio_system_sound_player.cpp" -ldl -lm -o "$binary"
 "$binary"
 
+# Task c-7 (0.8.7-c7.1 died 0.6 s after start on the FZ-M1): the player's worker thread runs first, as the tablet's
+# scheduler made it, and must not touch a member the constructor has not built yet (real WAV files decoded)
+"${CXX:-c++}" -std=c++17 -g -Wall -Wextra -Werror -pthread \
+    -I"$root/include" -I"$root/src/cp0" \
+    -I"$root/../Miniaudio/include" \
+    -I"$root/../../SDK/github_source/eventpp/include" \
+    "$root/src/cp0/cp0_audio_system_sound_player.cpp" \
+    "$root/tests/test_audio_sound_player_start.cpp" -ldl -lm -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/include" "$root/tests/test_async_testable_utils.cpp" -o "$binary"
 "$binary"
@@ -262,11 +272,29 @@ trap 'rm -f "$binary" "$esc_state_object" "$caps_object" "$power_supply_object"'
     -I"$root/include" "$root/tests/test_esc_exit_policy.cpp" -o "$binary"
 "$binary"
 
-# Esc-hold watcher of external apps: every keyboard, hotplug, unplug while held, no fd leak
+# Esc-hold watcher of external apps: every keyboard, hotplug, unplug while held, no fd leak; task c-7: the media-key
+# devices (their media keys only, never Esc nor Super) and one press seen by two sources counted once
+media_keys_object="${TMPDIR:-/tmp}/cp0_media_keys.$$.o"
+"${CC:-cc}" -std=c11 -Wall -Wextra -Werror -I"$root/src/cp0" \
+    -c "$root/src/cp0/cp0_media_keys.c" -o "$media_keys_object"
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src/cp0" \
-    "$root/src/cp0/cp0_esc_key_watch.cpp" \
+    "$root/src/cp0/cp0_esc_key_watch.cpp" "$media_keys_object" \
     "$root/tests/test_esc_key_watch.cpp" -o "$binary"
+"$binary"
+rm -f "$media_keys_object"
+
+# Task c-7: the keys a media-key device delivers and the dedupe across devices, on a fake clock (ASan + UBSan when the
+# compiler has them)
+media_san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+if ! printf 'int main(void){return 0;}\n' | "${CC:-cc}" -x c $media_san - -o "$binary" 2>/dev/null; then
+    echo "NOTE media keys test without sanitizers (no ASan/UBSan runtime)"
+    media_san=""
+fi
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $media_san \
+    -I"$root/src/cp0" \
+    "$root/src/cp0/cp0_media_keys.c" \
+    "$root/tests/test_media_keys.c" -o "$binary"
 "$binary"
 
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror -pthread \
@@ -513,13 +541,15 @@ TSAN_OPTIONS="halt_on_error=1" "$binary"
     -I"$root/include" \
     "$root/src/cp0/cp0_keyboard_presence.c" \
     "$root/tests/test_keyboard_presence.c" -o "$binary"
-"$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt" "$root/tests/fixtures/proc_bus_input_devices_fzm1.txt"
+"$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt" "$root/tests/fixtures/proc_bus_input_devices_fzm1.txt" \
+    "$root/tests/fixtures/proc_bus_input_devices_fzm1_full.txt"
 
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -pthread -fsanitize=thread -g \
     -I"$root/include" \
     "$root/src/cp0/cp0_keyboard_presence.c" \
     "$root/tests/test_keyboard_presence.c" -o "$binary"
-TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt" "$root/tests/fixtures/proc_bus_input_devices_fzm1.txt"
+TSAN_OPTIONS="halt_on_error=1" "$binary" "$root/tests/fixtures/proc_bus_input_devices_all_boards.txt" "$root/tests/fixtures/proc_bus_input_devices_fzm1.txt" \
+    "$root/tests/fixtures/proc_bus_input_devices_fzm1_full.txt"
 
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/src/cp0" \

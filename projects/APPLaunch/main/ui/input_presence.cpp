@@ -132,6 +132,9 @@ void configure()
     const char *scan = std::getenv("APPLAUNCH_KEYBOARD_SCAN");
     const bool off = scan && scan[0] == '0';
     cp0_keyboard_set_read_all_keyboards(off ? 0 : 1);
+    // Task c-7: the volume / brightness buttons that are not on a keyboard (a tablet's buttons, the ACPI video bus, a
+    // keyboard's consumer-control node, a headset): read for those keys only, never counted as a keyboard
+    cp0_keyboard_set_read_media_keys(off ? 0 : 1);
     if (off) SLOGI("[KBD] APPLAUNCH_KEYBOARD_SCAN=0: reading LV_LINUX_KEYBOARD_DEVICE only");
 }
 
