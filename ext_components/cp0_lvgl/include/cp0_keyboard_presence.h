@@ -16,6 +16,15 @@
  * keyboard's consumer-control sibling. Decided by capability only, never by name or udev tag (the HackBerry's pad has
  * PROP=0 and only ID_INPUT_MOUSE). A combined node (keys and a pointer on one node) is in both lists.
  *
+ * The same scan also lists the media-key devices (task c-7): a "media-key device" is an input device that has an event
+ * node, is NOT a real keyboard, reports at least one of KEY_MUTE (113), KEY_VOLUMEDOWN (114), KEY_VOLUMEUP (115),
+ * KEY_BRIGHTNESSDOWN (224) or KEY_BRIGHTNESSUP (225), is not on the virtual bus, is not named "applaunch-..." and is not a
+ * receiver of the kernel's remote-control core (its S: Sysfs path holds "/rc/rc": HDMI CEC, IR receivers such as the
+ * RTL2832U's, whose remotes are not the board's buttons). The FZ-M1 tablet's "Panasonic Laptop Support" and "Intel Virtual
+ * Buttons", the ACPI "Video Bus", a keyboard's "Consumer Control" sibling, a Bluetooth headset's or remote's AVRCP node.
+ * The launcher reads them for those keys only (cp0_media_keys.h); they never count as a keyboard (the keyboard list, its
+ * generation and its listeners do not change for them). Decided by capability, never by name.
+ *
  * The list is read from /proc/bus/input/devices. Its bitmaps are hexadecimal words, most significant first,
  * leading zero words and leading zero digits left out; a word is as wide as a C long of the READING process
  * (the kernel prints 32-bit words to a 32-bit process on a 64-bit kernel), so the default word size is
@@ -43,6 +52,7 @@ extern "C" {
 #define CP0_KBD_PRESENCE_POLL_MS     2000u /* safety rescan even without any inotify event */
 
 #define CP0_KBD_PRESENCE_BUS_BLUETOOTH 0x0005u /* BUS_BLUETOOTH: a keyboard that can sleep and drop its node */
+#define CP0_KBD_PRESENCE_MAX_MEDIA   8     /* media-key devices a reader opens at most (the first of the list) */
 
 typedef struct {
     char path[CP0_KBD_PRESENCE_PATH_SIZE]; /* "/dev/input/event4" */
@@ -87,8 +97,9 @@ int cp0_kbd_presence_list_equal(const cp0_kbd_presence_list_t *a, const cp0_kbd_
  *     state file): the on-screen keyboard shows when no other keyboard is there;
  *   - an entry prefixed "drop:" (drop:bus:0011, drop:<name>): the device is left out of the keyboard list altogether,
  *     neither counted nor read (a barcode scanner that must not type into the launcher). Drop wins over a plain entry.
- * cp0_kbd_presence_enumerate(_all) and the watcher apply the drop entries of the environment's list; the parse
- * functions above do not (pure). */
+ * cp0_kbd_presence_enumerate(_all, _lists) and the watcher apply the drop entries of the environment's list; the parse
+ * functions above do not (pure). A media-key device (below) is never counted anyway: a plain entry changes nothing for
+ * it, a "drop:" entry keeps it from being read (drop:Video Bus, drop:bus:0019). */
 #define CP0_KBD_IGNORE_ENV "APPLAUNCH_KBD_IGNORE"
 
 typedef enum {
@@ -132,6 +143,17 @@ int cp0_kbd_presence_parse_pointers(const char *text, size_t len, unsigned word_
  * cannot be read (both counts are then 0). Either list may be NULL. */
 int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *keyboards,
                                    cp0_kbd_presence_list_t *pointers);
+
+/* ---- media-key devices (see the top of this file) ------------------------------------------------------------------- */
+
+/* Like cp0_kbd_presence_parse(), for the media-key devices: fills `out` (may be NULL) and returns how many the text lists.
+ * Pure: the ignore list is not applied. */
+int cp0_kbd_presence_parse_media(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out);
+/* The three lists from one read of the devices file (NULL = /proc). Returns the number of keyboards, or -1 when the file
+ * cannot be read (every count is then 0). Any list may be NULL. The environment's "drop:" entries of
+ * APPLAUNCH_KBD_IGNORE apply to the keyboards and to the media-key devices. */
+int cp0_kbd_presence_enumerate_lists(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *keyboards,
+                                     cp0_kbd_presence_list_t *pointers, cp0_kbd_presence_list_t *media);
 
 /* ---- rescan timing (pure; the watcher thread drives it with CLOCK_MONOTONIC milliseconds) -------- */
 
@@ -192,6 +214,10 @@ unsigned cp0_kbd_presence_watcher_snapshot(cp0_kbd_presence_watcher_t *watcher, 
 unsigned cp0_kbd_presence_watcher_pointer_generation(const cp0_kbd_presence_watcher_t *watcher);
 unsigned cp0_kbd_presence_watcher_pointer_snapshot(cp0_kbd_presence_watcher_t *watcher,
                                                    cp0_kbd_presence_list_t *out);
+/* The media-key devices of the same scans, as the pointers: their own generation (1 after the first scan; keyboard
+ * listeners are not called for a media-key device change). Lock free / thread safe. */
+unsigned cp0_kbd_presence_watcher_media_generation(const cp0_kbd_presence_watcher_t *watcher);
+unsigned cp0_kbd_presence_watcher_media_snapshot(cp0_kbd_presence_watcher_t *watcher, cp0_kbd_presence_list_t *out);
 /* Up to 4 listeners. Returns 0, or -1 when the table is full. */
 int cp0_kbd_presence_watcher_add_listener(cp0_kbd_presence_watcher_t *watcher,
                                           cp0_kbd_presence_listener_t listener, void *user);

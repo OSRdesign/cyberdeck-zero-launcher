@@ -265,6 +265,7 @@ int Supervisor::next_timeout_ms()
     at(model_.next_deadline());
     if (raw_open_) {
         at(now + 1000); /* keyboards that appear (a Bluetooth keyboard waking up) are attached within 1 s */
+        at(raw_keys_.hold_due()); /* a Super hold opens the switcher when its time comes, not at the next key */
         if (esc_down_ && esc_press_ms_ != 0 && model_.front() != kNoApp && !esc_fired_)
             at(esc_press_ms_ + (esc_hint_ ? cp0_esc_exit_policy::TERMINATE_DELAY_MS : cp0_esc_exit_policy::HINT_DELAY_MS));
     }
@@ -363,6 +364,14 @@ void Supervisor::launcher_switch_event(SwitchEvent event)
     Request r;
     r.kind = Request::Kind::Switch;
     r.event = event;
+    post(std::move(r));
+}
+
+void Supervisor::launcher_super_tap(std::uint64_t press_ms)
+{
+    Request r;
+    r.kind = Request::Kind::SuperTap;
+    r.value = static_cast<long>(press_ms);
     post(std::move(r));
 }
 
@@ -487,6 +496,7 @@ void Supervisor::handle(const Request &r)
     case Request::Kind::Close: execute(model_.close(r.id, now)); break;
     case Request::Kind::CloseAll: execute(model_.close_all(now)); break;
     case Request::Kind::Switch: switch_event(r.event, false); break;
+    case Request::Kind::SuperTap: super_tap(static_cast<std::uint64_t>(r.value), false); break;
     case Request::Kind::Memory:
         log("fake MemAvailable " + std::to_string(r.value) + " kB");
         execute(model_.memory(r.value, now));
@@ -565,11 +575,13 @@ void Supervisor::execute_one(const Action &a, std::deque<Action> &more)
             keys_.open();
             raw_open_ = true;
             raw_keys_.reset();
+            super_down_ms_ = 0;
             esc_down_ = false;
         } else if (!a.value && raw_open_) {
             keys_.close();
             raw_open_ = false;
             raw_keys_.reset();
+            super_down_ms_ = 0;
             if (esc_down_) keys_.esc_state(0);
             esc_down_ = false;
         }
@@ -784,8 +796,28 @@ void Supervisor::poll_reaping(std::uint64_t now)
 void Supervisor::on_raw_key(void *context, int code, int value)
 {
     auto *self = static_cast<Supervisor *>(context);
-    const SwitchResult r = self->raw_keys_.key(static_cast<unsigned>(code), value);
-    if (r.event != SwitchEvent::None) self->raw_events_.push_back(r.event);
+    const std::uint64_t t = now_ms();
+    const std::uint64_t due_before = self->raw_keys_.hold_due();
+    const SwitchResult r = self->raw_keys_.key(static_cast<unsigned>(code), value, t);
+    if (r.event != SwitchEvent::None) self->raw_events_.push_back(r);
+    /* task c-7: the Super key's story in the journal (the tablet's Windows key): down, the hold, up, and why */
+    const bool super = code == static_cast<int>(keys::kLeftMeta) || code == static_cast<int>(keys::kRightMeta);
+    if (super && value == 1) {
+        self->super_down_ms_ = t;
+        self->super_fired_ = false;
+        self->log(std::string("Super down: ") + (self->raw_keys_.hold_due() != 0
+                                                     ? "the switcher in " + std::to_string(kSuperHoldMs) + " ms if held alone"
+                                                     : "no hold (Alt is held or an Alt+Tab session runs)"));
+    } else if (super && value == 0 && self->super_down_ms_ != 0) {
+        const std::uint64_t held = t - self->super_down_ms_;
+        self->log("Super up after " + std::to_string(held) + " ms: " +
+                  (r.event == SwitchEvent::Home ? std::string("Home (a tap)")
+                   : self->super_fired_         ? std::string("its hold opened the switcher")
+                                                : std::string("nothing (Super with another key)")));
+        self->super_down_ms_ = 0;
+    } else if (!super && value == 1 && due_before != 0 && self->raw_keys_.hold_due() == 0) {
+        self->log("Super hold cancelled: " + switch_key_name(static_cast<unsigned>(code)) + " pressed while Super was down");
+    }
     /* the key trace of a session (deck finding, build pb.2: Esc with Alt held did not cancel there; the log must show
      * what the keyboard really sent): every press and release from the key that starts a session to 2 s after it
      * ends. Nothing is logged outside sessions (no typed text in the journal). */
@@ -809,8 +841,17 @@ void Supervisor::poll_keys(std::uint64_t now)
             esc_fired_ = false;
         }
     }
-    const std::vector<SwitchEvent> events = raw_events_;
-    for (const SwitchEvent ev : events) switch_event(ev, true);
+    const std::vector<SwitchResult> events = raw_events_;
+    for (const SwitchResult &ev : events) {
+        if (ev.event == SwitchEvent::Home && ev.super_tap) super_tap(ev.tap_ms, true); /* task c-7.5 */
+        else switch_event(ev.event, true);
+    }
+    /* task c-7: Super held alone (a keyboard that reports how long it is held) opens the switcher */
+    if (raw_keys_.tick(now) == SwitchEvent::Switcher) {
+        super_fired_ = true;
+        log("Super hold fired " + std::to_string(super_down_ms_ ? now - super_down_ms_ : 0) + " ms after the press");
+        switch_event(SwitchEvent::Switcher, true);
+    }
 
     /* today's Esc policy on the app in front: hint at 500 ms, SIGTERM at 3 s (SIGKILL 3 s later, by the model) */
     const bool app_in_front = model_.front() != kNoApp;
@@ -882,6 +923,13 @@ void Supervisor::switch_event(SwitchEvent event, bool raw)
         }
         return;
     }
+    if (event == SwitchEvent::Switcher) { /* task c-7: Super held alone, as G1 / G2 */
+        if (session_.active) return;
+        log("Super held " + std::to_string(kSuperHoldMs) + " ms" + (raw ? "" : " (launcher)"));
+        taps_.reset(); /* a hold is no tap: the next tap is a first one */
+        open_switcher("Super");
+        return;
+    }
     if (event == SwitchEvent::Start || event == SwitchEvent::StartReverse) {
         if (session_.active) return;
         const AppId front = model_.front();
@@ -940,6 +988,66 @@ void Supervisor::switch_event(SwitchEvent event, bool raw)
         break;
     default: break;
     }
+}
+
+/* Task c-7.5 (owner decision 2026-10-24: the FZ-M1's Windows button is a pulse, it cannot be held). A Super tap from
+ * either reader. The first acts at once, as before: Home from an app, nothing on the launcher. The second, its press at
+ * most kSuperDoubleTapMs after the first's, opens the switcher as G1 does: with the app the first tap sent home as its
+ * origin (listed first, "In front"; Esc goes back to it), after its hide when it is still hiding; over an open switcher
+ * (or sheet) it leaves it as Esc does. A third tap within the window starts nothing. */
+void Supervisor::super_tap(std::uint64_t press_ms, bool raw)
+{
+    dirty_ = true;
+    if (session_.active) return;
+    const std::string from = raw ? "" : " (launcher)";
+    const TapVerdict verdict = taps_.tap(press_ms);
+    const std::string gap = std::to_string(taps_.gap());
+    switch (verdict) {
+    case TapVerdict::Duplicate:
+        log("Super tap" + from + " " + gap + " ms from the previous: the same tap, ignored");
+        return;
+    case TapVerdict::Ignored:
+        log("Super tap" + from + " " + gap + " ms after the double tap: ignored");
+        return;
+    case TapVerdict::Double:
+        log("Super tap" + from + " " + gap + " ms after the previous: double tap -> switcher");
+        double_tap_switcher();
+        return;
+    case TapVerdict::First:
+        break;
+    }
+    if (taps_.too_late()) log("Super tap" + from + " " + gap + " ms after the previous: too late, single tap");
+    const AppId front = model_.front();
+    tap_app_ = front;
+    if (front != kNoApp) {
+        log("Super / Home key");
+        execute(model_.go_launcher(now_ms()));
+    } else {
+        log("Super tap" + from + " on the launcher: nothing (a second one within " + std::to_string(kSuperDoubleTapMs) +
+            " ms opens the switcher)");
+    }
+}
+
+void Supervisor::double_tap_switcher()
+{
+    const AppId front = model_.front();
+    const Entry *tapped = model_.find(tap_app_);
+    const bool usual = !config_.switcher_ui || switcher_.open || switcher_.wanted || sheet_ != kNoApp || !tapped;
+    if (!usual && front != kNoApp && front == tap_app_ && tapped->state == State::Hiding) {
+        /* the first tap's hide is not done yet: the switcher shows once the launcher is in front, as G1's */
+        switcher_.wanted = true;
+        switcher_.origin = front;
+        switcher_.source = "Super";
+        log("switcher (Super): once " + tapped->spec.name + " is hidden");
+        return;
+    }
+    if (!usual && front == kNoApp && is_hidden(tapped->state) && model_.resident_count() > 0) {
+        switcher_.origin = tap_app_; /* the app just left: first, "In front", Esc goes back to it */
+        switcher_.source = "Super";
+        post_switcher(true);
+        return;
+    }
+    open_switcher("Super"); /* an app in front, the launcher alone, or a switcher / sheet to leave */
 }
 
 void Supervisor::end_session(AppId target)
@@ -1382,6 +1490,7 @@ void Supervisor::go_launcher() {}
 void Supervisor::close(AppId) {}
 void Supervisor::close_all() {}
 void Supervisor::launcher_switch_event(SwitchEvent) {}
+void Supervisor::launcher_super_tap(std::uint64_t) {}
 void Supervisor::fake_memory(long) {}
 void Supervisor::command(const std::string &) {}
 void Supervisor::launcher_gesture(const std::string &, const std::string &, bool) {}

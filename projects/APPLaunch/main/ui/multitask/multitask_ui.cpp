@@ -96,6 +96,7 @@ public:
     {
         if (open_) return;
         presence_ = cp0_keyboard_get_read_all_keyboards() ? cp0_kbd_presence_shared_acquire() : nullptr;
+        media_ = presence_ && cp0_keyboard_get_read_media_keys(); /* task c-7: the media-key devices too */
         attach();
         open_ = true;
         app_media::raw_session(true);
@@ -112,7 +113,9 @@ public:
     int poll(Listener listener, void *context) override
     {
         if (!open_) return -1;
-        if (cp0_kbd_presence_watcher_generation(presence_) != seen_ || multitask::Supervisor::now_ms() >= next_attach_)
+        if (cp0_kbd_presence_watcher_generation(presence_) != seen_ ||
+            (media_ && cp0_kbd_presence_watcher_media_generation(presence_) != seen_media_) ||
+            multitask::Supervisor::now_ms() >= next_attach_)
             attach();
         /* report 035: the volume, brightness and mute keys are the launcher's even while an app is in front */
         Tee tee = {listener, context};
@@ -147,13 +150,20 @@ private:
             list.count = 0;
             seen_ = cp0_kbd_presence_watcher_snapshot(presence_, &list);
             for (unsigned i = 0; i < list.count; ++i) sources_.open(list.devices[i].path);
+            if (media_) { /* their media keys only (not Esc nor Super); never grabbed (cp0_esc_key_watch.hpp) */
+                seen_media_ = cp0_kbd_presence_watcher_media_snapshot(presence_, &list);
+                for (unsigned i = 0; i < list.count && i < CP0_KBD_PRESENCE_MAX_MEDIA; ++i)
+                    sources_.open(list.devices[i].path, true);
+            }
         }
         next_attach_ = multitask::Supervisor::now_ms() + 1000; /* the supervisor wakes at least once a second */
     }
 
     cp0_esc_key_watch::Sources sources_;
     cp0_kbd_presence_watcher_t *presence_ = nullptr;
+    bool media_ = false;
     unsigned seen_ = 0;
+    unsigned seen_media_ = 0;
     std::uint64_t next_attach_ = 0;
     bool open_ = false;
 };
@@ -233,6 +243,7 @@ void exec_child(const char *, bool) {}
 Hooks s_hooks;
 lv_timer_t *s_bridge = nullptr;
 bool s_app_front = false;
+std::uint64_t s_launcher_front_ms = 0; /* when the launcher last took the panel back (task c-7) */
 bool s_overlay = false;        /* the Alt+Tab text is on the panel */
 std::string s_overlay_text;    /* the Alt+Tab text wanted ("" = none); shown once the launcher is in front */
 std::string s_overlay_shown;   /* the text last put on the toast for it */
@@ -303,6 +314,7 @@ lv_obj_t *active_besides(lv_obj_t *ours)
 void close_switcher_screen()
 {
     if (!s_switcher) return;
+    std::fprintf(stderr, "[mt] switcher screen down\n");
     leave_screen(s_switcher->screen(), s_switcher_prev);
     s_switcher.reset();
     restore_keypad();
@@ -339,6 +351,8 @@ void show_switcher(const multitask::SwitcherInfo &info)
         s_switcher_prev = active_besides(s_switcher->screen());
         lv_screen_load(s_switcher->screen()); /* while an app is still in front it is drawn when the launcher is */
         detach_keypad();
+        std::fprintf(stderr, "[mt] switcher screen up: %zu card(s), from %s%s\n", info.cards.size(),
+                     info.source.empty() ? "-" : info.source.c_str(), s_app_front ? " (shown once the launcher is in front)" : "");
     }
     std::vector<CardView> cards;
     for (const multitask::SwitcherCard &c : info.cards) {
@@ -355,6 +369,23 @@ void show_switcher(const multitask::SwitcherInfo &info)
         s_switcher_session = info.session;
         if (!s_app_front) cp0_display_set_touch_swallow(info.session ? 1 : 2);
     }
+}
+
+/* Task c-7 (FZ-M1, 0.8.7-c7.2): the supervisor's switcher is open but another screen is in front of the panel (seen on
+ * the tablet after a Super hold: the home grid, the switcher open in the supervisor's status; not reproduced off the
+ * board). The switcher is put back in front and the log says what was there, so the state the user sees is always the
+ * state the supervisor acts on. Never while an app is in front (the switcher waits for the launcher then). */
+void keep_switcher_in_front()
+{
+    if (!s_switcher || s_app_front) return;
+    lv_obj_t *ours = s_switcher->screen();
+    lv_display_t *display = lv_obj_get_display(ours);
+    lv_obj_t *active = display ? lv_display_get_screen_active(display) : nullptr;
+    if (!display || active == ours) return;
+    std::fprintf(stderr, "[mt] switcher screen was not in front (screen %p with %u children was): put back\n",
+                 static_cast<void *>(active), active ? static_cast<unsigned>(lv_obj_get_child_count(active)) : 0u);
+    lv_screen_load(ours);
+    detach_keypad();
 }
 
 /* The sheet over the frozen app's frame: only its box is drawn (the native clip), the supervisor already wrote the
@@ -506,6 +537,7 @@ void process_events()
         case UiEvent::Kind::LauncherFront:
             /* also after a refused launch: undoes what the launch prepared (loading overlay, input group) */
             s_app_front = false;
+            s_launcher_front_ms = multitask::Supervisor::now_ms(); /* task c-7: a Super still held is not a new press */
             if (s_hooks.launcher_front) s_hooks.launcher_front(e.flag);
             if (s_switcher || s_sheet) detach_keypad(); /* the hook gave the keypad the page's group back */
             hand_over_gestures();
@@ -535,6 +567,7 @@ void process_events()
     }
     /* an Alt+Tab session on the switcher: touch ignored (as P-b's text), also once the launcher took the panel back */
     if (s_switcher && s_switcher_session && !s_app_front) cp0_display_set_touch_swallow(1);
+    keep_switcher_in_front();
     refresh_toast();
     tune_bridge();
 }
@@ -550,12 +583,83 @@ void bridge_cb(lv_timer_t *)
     process_events();
 }
 
+/* Task c-7: the Super hold while the launcher is in front. Its keys come one by one through the key filter, so a one-shot
+ * timer fires at the hold's due time (paused otherwise); the supervisor then opens the switcher as for G1 / G2. */
+lv_timer_t *s_super_hold = nullptr;
+/* A Super press the launcher reads within this long after it took the panel back may be the key still held from the app
+ * (the hold that opened the switcher there): it starts no hold (which would close the switcher again). Its release is
+ * still a tap: since c7.5 the second tap of a double tap comes this soon. */
+constexpr std::uint64_t kSuperHandOverMs = 400;
+std::uint64_t s_filter_super_ms = 0; /* when Super went down on the launcher's keyboard (0: up), for the log */
+bool s_filter_super_fired = false;   /* ... and its hold opened the switcher */
+
+void arm_super_hold()
+{
+    if (!s_super_hold) return;
+    const std::uint64_t due = s_filter_keys.hold_due();
+    if (due == 0) {
+        lv_timer_pause(s_super_hold);
+        return;
+    }
+    const std::uint64_t now = multitask::Supervisor::now_ms();
+    lv_timer_set_period(s_super_hold, due > now ? static_cast<uint32_t>(due - now) : 1);
+    lv_timer_reset(s_super_hold);
+    lv_timer_resume(s_super_hold);
+}
+
+void super_hold_cb(lv_timer_t *timer)
+{
+    lv_timer_pause(timer);
+    /* an app in front reads its own keys (the supervisor's reader has the hold then); a wrapped app in the compat window
+     * cannot be hidden (D12), as for G1 */
+    if (!s_sup || s_app_front || (s_switcher_ui && native_ui::external_app_running())) return;
+    const std::uint64_t now = multitask::Supervisor::now_ms();
+    if (s_filter_keys.tick(now) == multitask::SwitchEvent::Switcher) {
+        s_filter_super_fired = true;
+        std::fprintf(stderr, "[mt] session key (launcher): Super held -> switcher (hold fired %llu ms after the press)\n",
+                     static_cast<unsigned long long>(s_filter_super_ms ? now - s_filter_super_ms : 0));
+        s_sup->launcher_switch_event(multitask::SwitchEvent::Switcher);
+    } else {
+        arm_super_hold(); /* not due yet (the timer ran early) or cancelled meanwhile */
+    }
+}
+
 /* LVGL thread, launcher in front: Alt+Tab is consumed (and handed to the supervisor) only while an app is resident */
 int key_filter(const struct key_item *item)
 {
     if (item && s_sup) {
         const int value = item->key_state == KBD_KEY_PRESSED ? 1 : item->key_state == KBD_KEY_RELEASED ? 0 : 2;
-        multitask::SwitchResult r = s_filter_keys.key(item->key_code, value);
+        const std::uint64_t now_ms = multitask::Supervisor::now_ms();
+        const std::uint64_t due_before = s_filter_keys.hold_due();
+        multitask::SwitchResult r = s_filter_keys.key(item->key_code, value, now_ms);
+        const bool super = item->key_code == multitask::keys::kLeftMeta || item->key_code == multitask::keys::kRightMeta;
+        /* task c-7: the Super key's story in the journal, as the supervisor's for an app in front */
+        if (super && value == 1) {
+            s_filter_super_ms = now_ms;
+            s_filter_super_fired = false;
+            if (now_ms - s_launcher_front_ms < kSuperHandOverMs) {
+                /* maybe the key still held from the app: no hold from it; its release still counts as a tap (c7.5: the
+                 * second tap of a double tap often comes this soon) */
+                std::fprintf(stderr, "[mt] session key (launcher): Super down %llu ms after the hand-over: no hold from it\n",
+                             static_cast<unsigned long long>(now_ms - s_launcher_front_ms));
+                s_filter_keys.block_hold();
+            } else {
+                std::fprintf(stderr, "[mt] session key (launcher): Super down: %s\n",
+                             s_filter_keys.hold_due() ? "the switcher in 600 ms if held alone"
+                                                      : "no hold (Alt is held or an Alt+Tab session runs)");
+            }
+        } else if (super && value == 0 && s_filter_super_ms != 0) {
+            std::fprintf(stderr, "[mt] session key (launcher): Super up after %llu ms: %s\n",
+                         static_cast<unsigned long long>(now_ms - s_filter_super_ms),
+                         r.event == multitask::SwitchEvent::Home ? "a tap (to the supervisor, for the double tap)"
+                         : s_filter_super_fired                 ? "its hold opened the switcher"
+                                                                : "nothing (Super with another key, or ignored)");
+            s_filter_super_ms = 0;
+        } else if (!super && value == 1 && due_before != 0 && s_filter_keys.hold_due() == 0) {
+            std::fprintf(stderr, "[mt] session key (launcher): Super hold cancelled: %s pressed while Super was down\n",
+                         multitask::switch_key_name(item->key_code).c_str());
+        }
+        arm_super_hold();
         /* nothing to switch to, or (P-d) a wrapped app runs in the compat window (it cannot be hidden): the key belongs
          * to the page / the app */
         if ((r.event == multitask::SwitchEvent::Start || r.event == multitask::SwitchEvent::StartReverse) &&
@@ -565,6 +669,9 @@ int key_filter(const struct key_item *item)
         }
         if (r.event != multitask::SwitchEvent::None && r.event != multitask::SwitchEvent::Home)
             s_sup->launcher_switch_event(r.event);
+        /* task c-7.5: a Super tap goes to the supervisor, which counts the double tap over both readers (a tap alone does
+         * nothing on the launcher, as before) */
+        if (r.event == multitask::SwitchEvent::Home && r.super_tap) s_sup->launcher_super_tap(r.tap_ms);
         /* the session key trace, as the supervisor's for sessions read from evdev (see Supervisor::on_raw_key) */
         static std::uint64_t trace_until = 0;
         const std::uint64_t now = multitask::Supervisor::now_ms();
@@ -672,6 +779,8 @@ bool start(Hooks hooks)
     s_sup->set_touch_port(s_touch.get());
 
     s_bridge = lv_timer_create(bridge_cb, 1000, nullptr); /* the fallback; events come through the loop hook */
+    s_super_hold = lv_timer_create(super_hold_cb, multitask::kSuperHoldMs, nullptr); /* task c-7 */
+    if (s_super_hold) lv_timer_pause(s_super_hold);
     cp0_lvgl_set_loop_hook(&loop_hook);
     s_prev_filter = cp0_keyboard_get_key_filter();
     cp0_keyboard_set_key_filter(key_filter);
@@ -732,6 +841,10 @@ void stop()
     if (s_bridge) {
         lv_timer_delete(s_bridge);
         s_bridge = nullptr;
+    }
+    if (s_super_hold) {
+        lv_timer_delete(s_super_hold);
+        s_super_hold = nullptr;
     }
     s_sup.reset();
     s_touch.reset();

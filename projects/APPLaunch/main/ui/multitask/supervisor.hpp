@@ -247,6 +247,8 @@ public:
     void close_all();
     /* An Alt+Tab / Super event read by the launcher's key filter (launcher in front). */
     void launcher_switch_event(SwitchEvent event);
+    /* Task c-7.5: a Super tap read by the launcher's key filter (press time on now_ms()'s clock), for the double tap. */
+    void launcher_super_tap(std::uint64_t press_ms);
     /* A fake MemAvailable reading (dev FIFO "memory <kB>"; tests). */
     void fake_memory(long kb);
     /* One line of the dev control FIFO (also used by tests): home, switch X, close X, close-all, status, memory N, and
@@ -299,7 +301,8 @@ private:
         bool show_waiting = false;
     };
     struct Request {
-        enum class Kind { Launch, Resume, Home, Close, CloseAll, Switch, Memory, Command, Gesture, Screen } kind = Kind::Home;
+        enum class Kind { Launch, Resume, Home, Close, CloseAll, Switch, Memory, Command, Gesture, Screen, SuperTap } kind =
+            Kind::Home;
         AppSpec spec;
         AppId id = kNoApp;
         SwitchEvent event = SwitchEvent::None;
@@ -328,6 +331,9 @@ private:
     void poll_keys(std::uint64_t now);
     void poll_fifo();
     void switch_event(SwitchEvent event, bool raw);
+    /* Task c-7.5: a Super tap (either reader): Home at once from an app, the second within kSuperDoubleTapMs the switcher */
+    void super_tap(std::uint64_t press_ms, bool raw);
+    void double_tap_switcher();
     void end_session(AppId target);
     std::string session_text() const;
     std::string session_selection() const;
@@ -365,12 +371,16 @@ private:
     Model model_;
     std::map<AppId, Runtime> runtime_;
     SwitchKeys raw_keys_;
+    std::uint64_t super_down_ms_ = 0; /* task c-7: when Super went down on the raw reader (0: up), for the log */
+    bool super_fired_ = false;        /* ... and its hold opened the switcher */
     bool raw_open_ = false;
     bool dirty_ = true; /* the status file and the resident list need writing */
     int next_timeout_ms();
     Session session_;
     std::uint64_t trace_until_ms_ = 0; /* the session key trace goes on 2 s after a session ended */
-    std::vector<SwitchEvent> raw_events_;
+    std::vector<SwitchResult> raw_events_;
+    SuperTaps taps_;            /* task c-7.5: the double tap, over both readers */
+    AppId tap_app_ = kNoApp;    /* the app the last first tap sent home */
     bool esc_down_ = false;
     std::uint64_t esc_press_ms_ = 0; /* the Esc-hold policy of today: hint at 500 ms, SIGTERM at 3 s */
     bool esc_hint_ = false;

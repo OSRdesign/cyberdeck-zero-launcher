@@ -78,12 +78,20 @@ int run(const char *command, bool keep_root)
     cp0_kbd_presence_list_t presence_list;
     presence_list.count = 0;
     unsigned seen_generation = cp0_kbd_presence_watcher_generation(presence);
+    // task c-7: the launcher's volume / brightness buttons that are not on a keyboard (media keys only, never Esc)
+    const bool media_keys = presence && cp0_keyboard_get_read_media_keys();
+    unsigned seen_media_generation = media_keys ? cp0_kbd_presence_watcher_media_generation(presence) : 0;
     cp0_esc_key_watch::Sources esc_sources;
     const auto attach_keyboards = [&]() {
         esc_sources.open(keyboard_device());
         if (presence) {
             seen_generation = cp0_kbd_presence_watcher_snapshot(presence, &presence_list);
             for (unsigned i = 0; i < presence_list.count; ++i) esc_sources.open(presence_list.devices[i].path);
+        }
+        if (media_keys) {
+            seen_media_generation = cp0_kbd_presence_watcher_media_snapshot(presence, &presence_list);
+            for (unsigned i = 0; i < presence_list.count && i < CP0_KBD_PRESENCE_MAX_MEDIA; ++i)
+                esc_sources.open(presence_list.devices[i].path, true);
         }
     };
     attach_keyboards();
@@ -132,7 +140,9 @@ int run(const char *command, bool keep_root)
 
         // New keyboards as soon as the presence list changes; every 500 ms the ones not open yet (a sleeping
         // Bluetooth keyboard, udev permissions not set yet).
-        if (cp0_kbd_presence_watcher_generation(presence) != seen_generation || monotonic_ms() >= next_reopen_ms) {
+        if (cp0_kbd_presence_watcher_generation(presence) != seen_generation ||
+            (media_keys && cp0_kbd_presence_watcher_media_generation(presence) != seen_media_generation) ||
+            monotonic_ms() >= next_reopen_ms) {
             next_reopen_ms = monotonic_ms() + 500;
             attach_keyboards();
         }

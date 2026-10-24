@@ -20,13 +20,16 @@
 extern "C" {
 #endif
 
-#define CP0_KBD_SOURCES_MAX 17 /* the presence list (16) + the explicit LV_LINUX_KEYBOARD_DEVICE */
+/* the presence list (16) + the media-key devices read (CP0_KBD_PRESENCE_MAX_MEDIA, 8) + the explicit
+ * LV_LINUX_KEYBOARD_DEVICE */
+#define CP0_KBD_SOURCES_MAX 25
 #define CP0_KBD_SOURCES_NODE_SIZE 32
 #define CP0_KBD_SOURCES_GRACE_MS 1500u
 
 typedef struct {
     int used;
     int rejected;     /* the backend refused the node (not a keyboard): skipped until the list changes */
+    int media;        /* a media-key device (cp0_media_keys.h): only its media keys are delivered; set by the caller */
     char node[CP0_KBD_SOURCES_NODE_SIZE]; /* "/dev/input/eventN" */
     void *dev;        /* live device, NULL while it is away */
     void *ref;        /* the caller's reference on the last device of this node, to drop its record later */

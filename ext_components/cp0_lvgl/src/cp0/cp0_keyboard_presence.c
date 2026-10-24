@@ -27,8 +27,12 @@
 enum { PRESENCE_KEY_ENTER = 28, PRESENCE_KEY_A = 30, PRESENCE_KEY_Z = 44, PRESENCE_KEY_SPACE = 57 };
 /* evdev codes the pointer rule looks at */
 enum { PRESENCE_REL_X = 0, PRESENCE_REL_Y = 1, PRESENCE_BTN_LEFT = 0x110, PRESENCE_BTN_TOUCH = 0x14a };
+/* evdev codes that make a media-key device (task c-7) */
+static const unsigned presence_media_codes[] = {113 /* MUTE */, 114 /* VOLUMEDOWN */, 115 /* VOLUMEUP */,
+                                                224 /* BRIGHTNESSDOWN */, 225 /* BRIGHTNESSUP */};
 #define PRESENCE_BUS_VIRTUAL 0x0006u
 #define PRESENCE_HUB_PREFIX "applaunch-"
+#define PRESENCE_RC_CORE "/rc/rc" /* in the S: Sysfs path of an rc-core receiver (HDMI CEC, IR) */
 
 /* ============================================================
  *  Parser
@@ -106,14 +110,18 @@ int cp0_ptr_caps_is_pointer(const cp0_ptr_caps_t *c)
 
 typedef struct {
     unsigned word_bits;
-    cp0_kbd_presence_list_t *out;     /* keyboards */
-    cp0_kbd_presence_list_t *ptr_out; /* pointers */
+    cp0_kbd_presence_list_t *out;       /* keyboards */
+    cp0_kbd_presence_list_t *ptr_out;   /* pointers */
+    cp0_kbd_presence_list_t *media_out; /* media-key devices */
     int total;
     int ptr_total;
+    int media_total;
     /* the device block being read */
     int is_virtual;
     unsigned bus;
     int has_keys;
+    int has_media;
+    int rc_core;
     cp0_ptr_caps_t caps;
     char event[16];
     char name[CP0_KBD_PRESENCE_NAME_SIZE];
@@ -124,21 +132,26 @@ static void parser_reset_block(presence_parser_t *p)
     p->is_virtual = 0;
     p->bus = 0;
     p->has_keys = 0;
+    p->has_media = 0;
+    p->rc_core = 0;
     memset(&p->caps, 0, sizeof(p->caps));
     p->event[0] = '\0';
     p->name[0] = '\0';
 }
 
 static void parser_init(presence_parser_t *p, unsigned word_bits, cp0_kbd_presence_list_t *out,
-                        cp0_kbd_presence_list_t *ptr_out)
+                        cp0_kbd_presence_list_t *ptr_out, cp0_kbd_presence_list_t *media_out)
 {
     p->word_bits = word_bits ? word_bits : cp0_kbd_presence_native_word_bits();
     p->out = out;
     p->ptr_out = ptr_out;
+    p->media_out = media_out;
     p->total = 0;
     p->ptr_total = 0;
+    p->media_total = 0;
     if (out) out->count = 0;
     if (ptr_out) ptr_out->count = 0;
+    if (media_out) media_out->count = 0;
     parser_reset_block(p);
 }
 
@@ -166,7 +179,21 @@ static void parser_flush(presence_parser_t *p)
         list_add(p->ptr_out, p);
         p->ptr_total++;
     }
+    /* a media-key device: never a keyboard as well (a keyboard's own media keys come with it) */
+    if (p->event[0] != '\0' && p->has_media && !p->has_keys && !p->is_virtual && !hub && !p->rc_core) {
+        list_add(p->media_out, p);
+        p->media_total++;
+    }
     parser_reset_block(p);
+}
+
+/* 1 when [s, s + n) contains `needle` */
+static int contains(const char *s, size_t n, const char *needle)
+{
+    const size_t k = strlen(needle);
+    for (size_t i = 0; k <= n && i <= n - k; i++)
+        if (memcmp(s + i, needle, k) == 0) return 1;
+    return 0;
 }
 
 static int line_starts(const char *line, size_t len, const char *prefix, size_t *prefix_len)
@@ -228,6 +255,11 @@ static void parser_line(presence_parser_t *p, const char *line, size_t len)
                       cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_KEY_SPACE);
         p->caps.btn_left = cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_BTN_LEFT);
         p->caps.btn_touch = cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, PRESENCE_BTN_TOUCH);
+        p->has_media = 0;
+        for (size_t i = 0; i < sizeof(presence_media_codes) / sizeof(presence_media_codes[0]) && !p->has_media; i++)
+            p->has_media = cp0_kbd_presence_bitmap_bit(bitmap, bitmap_len, p->word_bits, presence_media_codes[i]);
+    } else if (line_starts(line, len, "S: Sysfs=", &skip)) {
+        p->rc_core = contains(line + skip, len - skip, PRESENCE_RC_CORE);
     } else if (line_starts(line, len, "B: REL=", &skip)) {
         p->caps.rel_x = cp0_kbd_presence_bitmap_bit(line + skip, len - skip, p->word_bits, PRESENCE_REL_X);
         p->caps.rel_y = cp0_kbd_presence_bitmap_bit(line + skip, len - skip, p->word_bits, PRESENCE_REL_Y);
@@ -251,7 +283,7 @@ static void parse_text(presence_parser_t *p, const char *text, size_t len)
 int cp0_kbd_presence_parse(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out)
 {
     presence_parser_t p;
-    parser_init(&p, word_bits, out, NULL);
+    parser_init(&p, word_bits, out, NULL, NULL);
     parse_text(&p, text, len);
     return p.total;
 }
@@ -259,21 +291,36 @@ int cp0_kbd_presence_parse(const char *text, size_t len, unsigned word_bits, cp0
 int cp0_kbd_presence_parse_pointers(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out)
 {
     presence_parser_t p;
-    parser_init(&p, word_bits, NULL, out);
+    parser_init(&p, word_bits, NULL, out, NULL);
     parse_text(&p, text, len);
     return p.ptr_total;
 }
 
+int cp0_kbd_presence_parse_media(const char *text, size_t len, unsigned word_bits, cp0_kbd_presence_list_t *out)
+{
+    presence_parser_t p;
+    parser_init(&p, word_bits, NULL, NULL, out);
+    parse_text(&p, text, len);
+    return p.media_total;
+}
+
 int cp0_kbd_presence_enumerate(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *out)
 {
-    return cp0_kbd_presence_enumerate_all(proc_path, word_bits, out, NULL);
+    return cp0_kbd_presence_enumerate_lists(proc_path, word_bits, out, NULL, NULL);
 }
 
 int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *out,
                                    cp0_kbd_presence_list_t *pointers)
 {
+    return cp0_kbd_presence_enumerate_lists(proc_path, word_bits, out, pointers, NULL);
+}
+
+int cp0_kbd_presence_enumerate_lists(const char *proc_path, unsigned word_bits, cp0_kbd_presence_list_t *out,
+                                     cp0_kbd_presence_list_t *pointers, cp0_kbd_presence_list_t *media)
+{
     if (out) out->count = 0;
     if (pointers) pointers->count = 0;
+    if (media) media->count = 0;
     const char *ignore = getenv(CP0_KBD_IGNORE_ENV);
     cp0_kbd_presence_list_t local;
     if (!out && ignore && ignore[0]) out = &local; /* the drop entries need the list to count right */
@@ -284,7 +331,7 @@ int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp
     }
 
     presence_parser_t p;
-    parser_init(&p, word_bits, out, pointers);
+    parser_init(&p, word_bits, out, pointers, media);
     char chunk[2048];
     char line[512]; /* the longest real line, a 32-bit KEY bitmap, is about 230 bytes */
     size_t line_len = 0;
@@ -295,6 +342,7 @@ int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp
             close(fd);
             if (out) out->count = 0;
             if (pointers) pointers->count = 0;
+            if (media) media->count = 0;
             return -1;
         }
         if (n == 0) break;
@@ -311,7 +359,10 @@ int cp0_kbd_presence_enumerate_all(const char *proc_path, unsigned word_bits, cp
     if (line_len > 0) parser_line(&p, line, line_len);
     parser_flush(&p);
     /* the board profile's "drop:" entries are neither counted nor read (cp0_keyboard_presence.h, ignore list) */
-    if (ignore && ignore[0]) p.total -= (int)cp0_kbd_presence_drop(out, ignore);
+    if (ignore && ignore[0]) {
+        p.total -= (int)cp0_kbd_presence_drop(out, ignore);
+        (void)cp0_kbd_presence_drop(media, ignore);
+    }
     return p.total;
 }
 
@@ -472,17 +523,20 @@ struct cp0_kbd_presence_watcher {
     int wake_fd;
     atomic_int stop;
 
-    pthread_mutex_t list_lock;          /* guards list and pointers */
+    pthread_mutex_t list_lock;          /* guards list, pointers and media */
     cp0_kbd_presence_list_t list;
     atomic_uint generation;
     cp0_kbd_presence_list_t pointers;   /* pointer navigation (cp0_pointer_nav.h) */
     atomic_uint pointer_generation;
+    cp0_kbd_presence_list_t media;      /* media-key devices (task c-7) */
+    atomic_uint media_generation;
 
     pthread_mutex_t listener_lock;      /* guards listeners and serialises their calls */
     struct cp0_kbd_presence_listener_slot listeners[PRESENCE_MAX_LISTENERS];
 
     cp0_kbd_presence_list_t scratch;    /* watcher thread only */
     cp0_kbd_presence_list_t ptr_scratch;
+    cp0_kbd_presence_list_t media_scratch;
 };
 
 static uint64_t presence_monotonic_ms(void)
@@ -503,7 +557,8 @@ static void watcher_notify(cp0_kbd_presence_watcher_t *w, const cp0_kbd_presence
 static void watcher_scan(cp0_kbd_presence_watcher_t *w)
 {
     /* an unreadable file keeps the previous lists */
-    if (cp0_kbd_presence_enumerate_all(w->proc_path, w->word_bits, &w->scratch, &w->ptr_scratch) < 0) return;
+    if (cp0_kbd_presence_enumerate_lists(w->proc_path, w->word_bits, &w->scratch, &w->ptr_scratch, &w->media_scratch) < 0)
+        return;
     unsigned gen = 0;
     pthread_mutex_lock(&w->list_lock);
     const int changed = !cp0_kbd_presence_list_equal(&w->list, &w->scratch);
@@ -514,6 +569,10 @@ static void watcher_scan(cp0_kbd_presence_watcher_t *w)
     if (!cp0_kbd_presence_list_equal(&w->pointers, &w->ptr_scratch)) {
         w->pointers = w->ptr_scratch; /* keyboard listeners are not told: they list keyboards */
         atomic_fetch_add_explicit(&w->pointer_generation, 1u, memory_order_acq_rel);
+    }
+    if (!cp0_kbd_presence_list_equal(&w->media, &w->media_scratch)) {
+        w->media = w->media_scratch; /* not a keyboard change either */
+        atomic_fetch_add_explicit(&w->media_generation, 1u, memory_order_acq_rel);
     }
     pthread_mutex_unlock(&w->list_lock);
     if (changed) watcher_notify(w, &w->scratch, gen);
@@ -584,6 +643,7 @@ cp0_kbd_presence_watcher_t *cp0_kbd_presence_watcher_start(const cp0_kbd_presenc
     atomic_init(&w->stop, 0);
     atomic_init(&w->generation, 0u);
     atomic_init(&w->pointer_generation, 0u);
+    atomic_init(&w->media_generation, 0u);
     pthread_mutex_init(&w->list_lock, NULL);
     pthread_mutex_init(&w->listener_lock, NULL);
 
@@ -597,9 +657,10 @@ cp0_kbd_presence_watcher_t *cp0_kbd_presence_watcher_start(const cp0_kbd_presenc
     }
     if (w->wake_fd < 0) goto fail;
 
-    (void)cp0_kbd_presence_enumerate_all(w->proc_path, w->word_bits, &w->list, &w->pointers);
+    (void)cp0_kbd_presence_enumerate_lists(w->proc_path, w->word_bits, &w->list, &w->pointers, &w->media);
     atomic_store_explicit(&w->generation, 1u, memory_order_release);
     atomic_store_explicit(&w->pointer_generation, 1u, memory_order_release);
+    atomic_store_explicit(&w->media_generation, 1u, memory_order_release);
 
     if (pthread_create(&w->thread, NULL, watcher_main, w) != 0) goto fail;
     return w;
@@ -663,6 +724,25 @@ unsigned cp0_kbd_presence_watcher_pointer_snapshot(cp0_kbd_presence_watcher_t *w
     pthread_mutex_lock(&w->list_lock);
     *out = w->pointers;
     const unsigned gen = atomic_load_explicit(&w->pointer_generation, memory_order_acquire);
+    pthread_mutex_unlock(&w->list_lock);
+    return gen;
+}
+
+unsigned cp0_kbd_presence_watcher_media_generation(const cp0_kbd_presence_watcher_t *w)
+{
+    if (!w) return 0;
+    return atomic_load_explicit((atomic_uint *)&w->media_generation, memory_order_acquire);
+}
+
+unsigned cp0_kbd_presence_watcher_media_snapshot(cp0_kbd_presence_watcher_t *w, cp0_kbd_presence_list_t *out)
+{
+    if (!w || !out) {
+        if (out) out->count = 0;
+        return 0;
+    }
+    pthread_mutex_lock(&w->list_lock);
+    *out = w->media;
+    const unsigned gen = atomic_load_explicit(&w->media_generation, memory_order_acquire);
     pthread_mutex_unlock(&w->list_lock);
     return gen;
 }
@@ -753,6 +833,17 @@ unsigned cp0_kbd_presence_watcher_pointer_generation(const cp0_kbd_presence_watc
     return 0;
 }
 unsigned cp0_kbd_presence_watcher_pointer_snapshot(cp0_kbd_presence_watcher_t *watcher, cp0_kbd_presence_list_t *out)
+{
+    (void)watcher;
+    if (out) out->count = 0;
+    return 0;
+}
+unsigned cp0_kbd_presence_watcher_media_generation(const cp0_kbd_presence_watcher_t *watcher)
+{
+    (void)watcher;
+    return 0;
+}
+unsigned cp0_kbd_presence_watcher_media_snapshot(cp0_kbd_presence_watcher_t *watcher, cp0_kbd_presence_list_t *out)
 {
     (void)watcher;
     if (out) out->count = 0;

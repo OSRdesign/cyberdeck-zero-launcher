@@ -213,6 +213,81 @@ void test_key_listener()
     ::close(writer);
 }
 
+// Task c-7: a media-key device (the tablet's volume buttons) gives its media keys only, never Esc nor Super; one press
+// seen by two sources reaches the listener once; a keyboard is unchanged.
+void test_media_sources()
+{
+    const std::string kbd = make_fifo("at-kbd");
+    const std::string vbtn = make_fifo("vbtn");
+    const std::string pana = make_fifo("pana");
+    const int kbd_w = plug(kbd);
+    const int vbtn_w = plug(vbtn);
+    const int pana_w = plug(pana);
+    cp0_esc_key_watch::Sources sources;
+    assert(sources.open(kbd.c_str()));
+    assert(sources.open(vbtn.c_str(), true));
+    assert(sources.open(pana.c_str(), true));
+    assert(!sources.open(vbtn.c_str(), false)); // one node, one source, whatever it is opened as
+    assert(sources.count() == 3);
+    Seen seen;
+    // everything a consumer-control or button node may also send: dropped, Esc never held by it
+    key(vbtn_w, KEY_ESC, 1);
+    key(vbtn_w, KEY_A, 1);
+    key(vbtn_w, KEY_A, 0);
+    key(vbtn_w, KEY_ENTER, 1);
+    key(vbtn_w, KEY_ENTER, 0);
+    key(vbtn_w, KEY_POWER, 1);
+    key(vbtn_w, KEY_POWER, 0);
+    key(vbtn_w, KEY_F14, 1);
+    key(vbtn_w, KEY_F14, 0);
+    assert(sources.poll(listen, &seen) == -1);
+    assert(seen.log.empty() && !sources.esc_held());
+    key(vbtn_w, KEY_ESC, 0);
+    assert(sources.poll(listen, &seen) == -1 && seen.log.empty());
+    // the volume button reported by both platform devices: once
+    key(vbtn_w, KEY_VOLUMEUP, 1);
+    key(pana_w, KEY_VOLUMEUP, 1);
+    key(vbtn_w, KEY_VOLUMEUP, 0);
+    key(pana_w, KEY_VOLUMEUP, 0);
+    assert(sources.poll(listen, &seen) == -1);
+    assert(seen.log == "115:1 115:0 ");
+    // the next press (later than the dedupe window) counts again; Super from a media-key device does not (c7.4: Intel
+    // Virtual Buttons' copy of the tablet's Windows key would end the i8042 keyboard's hold)
+    ::usleep((CP0_MEDIA_KEYS_DEDUPE_MS + 20) * 1000);
+    seen.log.clear();
+    key(pana_w, KEY_VOLUMEDOWN, 1);
+    key(pana_w, KEY_VOLUMEDOWN, 0);
+    key(vbtn_w, KEY_LEFTMETA, 1);
+    key(vbtn_w, KEY_LEFTMETA, 0);
+    assert(sources.poll(listen, &seen) == -1);
+    assert(seen.log == "114:1 114:0 ");
+    // the keyboard: every key as before, Esc held
+    seen.log.clear();
+    ::usleep((CP0_MEDIA_KEYS_DEDUPE_MS + 20) * 1000);
+    key(kbd_w, KEY_LEFTMETA, 1);
+    key(kbd_w, KEY_F14, 1);
+    key(kbd_w, KEY_F14, 0);
+    key(kbd_w, KEY_LEFTMETA, 0);
+    key(kbd_w, KEY_ESC, 1);
+    assert(sources.poll(listen, &seen) == 1);
+    assert(seen.log == "125:1 184:1 184:0 125:0 1:1 ");
+    key(kbd_w, KEY_ESC, 0);
+    assert(sources.poll() == 0);
+    // a media-key device that leaves while it holds the key: the other one is not blocked
+    ::usleep((CP0_MEDIA_KEYS_DEDUPE_MS + 20) * 1000);
+    seen.log.clear();
+    key(vbtn_w, KEY_MUTE, 1);
+    assert(sources.poll(listen, &seen) == -1 && seen.log == "113:1 ");
+    ::close(vbtn_w);
+    assert(sources.poll(listen, &seen) == 0 && sources.count() == 2); // gone: Esc not held (it never could be)
+    ::usleep((CP0_MEDIA_KEYS_DEDUPE_MS + 20) * 1000);
+    key(pana_w, KEY_MUTE, 1);
+    key(pana_w, KEY_MUTE, 0);
+    assert(sources.poll(listen, &seen) == -1 && seen.log == "113:1 113:1 113:0 ");
+    ::close(pana_w);
+    ::close(kbd_w);
+}
+
 } // namespace
 
 int main()
@@ -226,6 +301,7 @@ int main()
     test_no_fd_leak();
     test_capacity();
     test_key_listener();
+    test_media_sources();
     const std::string cleanup = "rm -rf '" + g_dir + "'";
     if (std::system(cleanup.c_str()) != 0) return 1;
     std::printf("test_esc_key_watch: OK\n");

@@ -40,6 +40,7 @@
 #include "../cp0_keyboard_text.h"
 #include "cp0_keyboard_presence.h"
 #include "cp0_keyboard_sources.h"
+#include "cp0_media_keys.h"
 #include "cp0_pointer_reader.h"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
@@ -77,6 +78,19 @@ void cp0_keyboard_set_read_all_keyboards(int enable)
 int cp0_keyboard_get_read_all_keyboards(void)
 {
     return atomic_load_explicit(&g_read_all_keyboards, memory_order_acquire) ? 1 : 0;
+}
+
+/* Task c-7: read the media-key devices too (cp0_media_keys.h). Only the launcher turns it on. */
+static atomic_bool g_read_media_keys = false;
+
+void cp0_keyboard_set_read_media_keys(int enable)
+{
+    atomic_store_explicit(&g_read_media_keys, enable != 0, memory_order_release);
+}
+
+int cp0_keyboard_get_read_media_keys(void)
+{
+    return atomic_load_explicit(&g_read_media_keys, memory_order_acquire) ? 1 : 0;
 }
 
 /* The pointer reader stops while the keyboard is paused (an external app reads the devices itself). */
@@ -205,6 +219,27 @@ static pthread_mutex_t g_grab_mutex = PTHREAD_MUTEX_INITIALIZER;
 static int g_grab_fds[KBD_GRAB_MAX];
 static int g_grab_count;
 static int g_grab_wanted;
+/* Task c-7: the nodes of the media-key devices the thread reads (published by kbd_reconcile, under g_grab_mutex). Their
+ * fds are never grabbed: such a device can also carry the power button (Intel Virtual Buttons: KEY_POWER), which
+ * systemd-logind must keep seeing, and a hidden app never gets them from the launcher anyway. */
+static char g_media_nodes[CP0_KBD_SOURCES_MAX][CP0_KBD_SOURCES_NODE_SIZE];
+static unsigned g_media_node_count;
+
+/* "/dev/input/event9" and "event9" are one node: compare the last path component */
+static const char *node_base(const char *path)
+{
+    const char *slash = path ? strrchr(path, '/') : NULL;
+    return slash ? slash + 1 : (path ? path : "");
+}
+
+/* caller holds g_grab_mutex */
+static int media_node_locked(const char *path)
+{
+    const char *base = node_base(path);
+    for (unsigned i = 0; i < g_media_node_count; i++)
+        if (strcmp(node_base(g_media_nodes[i]), base) == 0) return 1;
+    return 0;
+}
 
 static void grab_fd(int fd, int on)
 {
@@ -239,10 +274,13 @@ static int open_restricted(const char *path, int flags, void *user_data) {
     }
     /* Keyboard grabbing is off by default so other programs can read the same input device while APPLaunch is
      * running. Multitasking P-b grabs these fds only while the launcher is in front with an app hidden
-     * (cp0_keyboard_set_grab): the launcher still reads them, the hidden app gets nothing. */
+     * (cp0_keyboard_set_grab): the launcher still reads them, the hidden app gets nothing. A media-key device is
+     * never grabbed (g_media_nodes). */
     pthread_mutex_lock(&g_grab_mutex);
-    if (g_grab_count < KBD_GRAB_MAX) g_grab_fds[g_grab_count++] = fd;
-    if (g_grab_wanted) grab_fd(fd, 1);
+    if (!media_node_locked(path)) {
+        if (g_grab_count < KBD_GRAB_MAX) g_grab_fds[g_grab_count++] = fd;
+        if (g_grab_wanted) grab_fd(fd, 1);
+    }
     pthread_mutex_unlock(&g_grab_mutex);
     return fd;
 }
@@ -282,6 +320,10 @@ struct kbd_ctx {
     bool fn_pressed;
     uint64_t fn_pressed_at_ms;
     unsigned int input_context_generation;
+
+    /* task c-7: media-key devices read (the launcher), their keys filtered and one press across devices counted once */
+    bool read_media;
+    cp0_media_keys_t media_keys;
 };
 
 static uint64_t monotonic_ms(void)
@@ -669,11 +711,14 @@ static struct libinput_device *keyboard_try_add(struct libinput *li, const char 
 
 /* The nodes to read: the explicit device (LV_LINUX_KEYBOARD_DEVICE, e.g. the /dev/input/bt-keyboard symlink,
  * resolved to its event node so that it never doubles a listed keyboard) and, when a presence watcher runs,
- * every real keyboard it lists. */
-static unsigned kbd_wanted_nodes(const char *explicit_path, cp0_kbd_presence_watcher_t *watcher,
-                                 cp0_kbd_presence_list_t *list, char (*wanted)[CP0_KBD_SOURCES_NODE_SIZE])
+ * every real keyboard it lists, then (read_media, task c-7) the first CP0_KBD_PRESENCE_MAX_MEDIA media-key devices,
+ * media[i] = 1 for those. A node already wanted as a keyboard is not added again as a media-key device. */
+static unsigned kbd_wanted_nodes(const char *explicit_path, cp0_kbd_presence_watcher_t *watcher, bool read_media,
+                                 cp0_kbd_presence_list_t *list, char (*wanted)[CP0_KBD_SOURCES_NODE_SIZE],
+                                 unsigned char *media)
 {
     unsigned n = 0;
+    memset(media, 0, CP0_KBD_SOURCES_MAX);
     char resolved[PATH_MAX];
     if (explicit_path && explicit_path[0] && access(explicit_path, R_OK) == 0 &&
         realpath(explicit_path, resolved) != NULL) {
@@ -692,7 +737,37 @@ static unsigned kbd_wanted_nodes(const char *explicit_path, cp0_kbd_presence_wat
         for (unsigned i = 0; i < list->count && n < CP0_KBD_SOURCES_MAX; i++)
             snprintf(wanted[n++], CP0_KBD_SOURCES_NODE_SIZE, "%s", list->devices[i].path);
     }
+    if (watcher && read_media) {
+        cp0_kbd_presence_list_t media_list;
+        cp0_kbd_presence_watcher_media_snapshot(watcher, &media_list);
+        for (unsigned i = 0; i < media_list.count && i < CP0_KBD_PRESENCE_MAX_MEDIA && n < CP0_KBD_SOURCES_MAX; i++) {
+            int seen = 0;
+            for (unsigned k = 0; k < n && !seen; k++) seen = strcmp(wanted[k], media_list.devices[i].path) == 0;
+            if (seen) continue;
+            media[n] = 1;
+            snprintf(wanted[n++], CP0_KBD_SOURCES_NODE_SIZE, "%s", media_list.devices[i].path);
+        }
+    }
     return n;
+}
+
+/* The wanted index of `node` (its first occurrence), -1 when it is not wanted. */
+static int kbd_wanted_index(const char (*wanted)[CP0_KBD_SOURCES_NODE_SIZE], unsigned count, const char *node)
+{
+    for (unsigned i = 0; i < count; i++)
+        if (strcmp(wanted[i], node) == 0) return (int)i;
+    return -1;
+}
+
+/* Publishes the media-key nodes for open_restricted (no grab on them). */
+static void kbd_publish_media_nodes(const char (*wanted)[CP0_KBD_SOURCES_NODE_SIZE], const unsigned char *media,
+                                    unsigned count)
+{
+    pthread_mutex_lock(&g_grab_mutex);
+    g_media_node_count = 0;
+    for (unsigned i = 0; i < count; i++)
+        if (media[i]) snprintf(g_media_nodes[g_media_node_count++], CP0_KBD_SOURCES_NODE_SIZE, "%s", wanted[i]);
+    pthread_mutex_unlock(&g_grab_mutex);
 }
 
 /* Open the wanted nodes no device reads yet, and drop libinput's record of devices that went away and were
@@ -702,8 +777,10 @@ static int kbd_reconcile(struct kbd_ctx *kc, const char *explicit_path, cp0_kbd_
                          cp0_kbd_presence_list_t *list)
 {
     char wanted[CP0_KBD_SOURCES_MAX][CP0_KBD_SOURCES_NODE_SIZE];
-    const unsigned count = kbd_wanted_nodes(explicit_path, watcher, list, wanted);
+    unsigned char media[CP0_KBD_SOURCES_MAX];
+    const unsigned count = kbd_wanted_nodes(explicit_path, watcher, kc->read_media, list, wanted, media);
     const char (*wanted_c)[CP0_KBD_SOURCES_NODE_SIZE] = (const char (*)[CP0_KBD_SOURCES_NODE_SIZE])wanted;
+    kbd_publish_media_nodes(wanted_c, media, count);
     cp0_kbd_sources_plan_t plan;
     cp0_kbd_sources_plan(&kc->sources, wanted_c, count, monotonic_ms(), CP0_KBD_SOURCES_GRACE_MS, &plan);
 
@@ -715,6 +792,7 @@ static int kbd_reconcile(struct kbd_ctx *kc, const char *explicit_path, cp0_kbd_
             libinput_path_remove_device(ref);
             libinput_device_unref(ref);
         }
+        cp0_media_keys_forget(&kc->media_keys, plan.purge[i]);
         cp0_kbd_sources_free(&kc->sources, plan.purge[i]);
     }
     for (unsigned i = 0; i < plan.add_count; i++) {
@@ -725,12 +803,21 @@ static int kbd_reconcile(struct kbd_ctx *kc, const char *explicit_path, cp0_kbd_
             if (status == KBD_ADD_NOT_KEYBOARD) (void)cp0_kbd_sources_reject(&kc->sources, node);
             continue; /* missing or not readable yet (udev permissions): retried */
         }
-        if (cp0_kbd_sources_track(&kc->sources, node, libinput_device_ref(dev)) < 0) {
+        const int slot = cp0_kbd_sources_track(&kc->sources, node, libinput_device_ref(dev));
+        if (slot < 0) {
             libinput_path_remove_device(dev);
             libinput_device_unref(dev);
             continue;
         }
-        SLOGI("Keyboard attached (%s, %s)", node, libinput_device_get_name(dev));
+        kc->sources.slot[slot].media = media[plan.add[i]];
+        if (media[plan.add[i]]) SLOGI("Media keys attached (%s, %s)", node, libinput_device_get_name(dev));
+        else SLOGI("Keyboard attached (%s, %s)", node, libinput_device_get_name(dev));
+    }
+    /* a node keeps the kind the presence list gives it now (an eventN number reused by another device) */
+    for (int i = 0; i < CP0_KBD_SOURCES_MAX; i++) {
+        cp0_kbd_source_t *slot = &kc->sources.slot[i];
+        const int at = slot->used ? kbd_wanted_index(wanted_c, count, slot->node) : -1;
+        if (at >= 0) slot->media = media[at];
     }
     return cp0_kbd_sources_settled(&kc->sources, wanted_c, count);
 }
@@ -744,8 +831,17 @@ static void kbd_on_device_added(struct kbd_ctx *kc, struct libinput_device *adde
     snprintf(node, sizeof(node), "/dev/input/%s", libinput_device_get_sysname(added));
     void *release = NULL;
     switch (cp0_kbd_sources_on_added(&kc->sources, node, added, &release)) {
+    case CP0_KBD_ADDED_NEW: {
+        /* a node libinput brought back by itself that is not tracked: its kind from the media-key nodes published */
+        const int slot = cp0_kbd_sources_find_dev(&kc->sources, added);
+        pthread_mutex_lock(&g_grab_mutex);
+        if (slot >= 0) kc->sources.slot[slot].media = media_node_locked(node);
+        pthread_mutex_unlock(&g_grab_mutex);
+        libinput_device_ref(added);
+        if (release) libinput_device_unref((struct libinput_device *)release);
+        break;
+    }
     case CP0_KBD_ADDED_ADOPT:
-    case CP0_KBD_ADDED_NEW:
         libinput_device_ref(added);
         if (release) libinput_device_unref((struct libinput_device *)release);
         break;
@@ -780,7 +876,11 @@ void *keyboard_read_thread(void *argv) {
         watcher = cp0_kbd_presence_shared_acquire();
         if (!watcher) SLOGW("[KBD] keyboard presence watcher unavailable: reading %s only", device_path);
     }
+    /* Task c-7: the launcher also reads the media-key devices (volume / brightness buttons that are not on a keyboard) */
+    kc.read_media = watcher && cp0_keyboard_get_read_media_keys();
+    cp0_media_keys_init(&kc.media_keys);
     unsigned seen_generation = cp0_kbd_presence_watcher_generation(watcher);
+    unsigned seen_media_generation = kc.read_media ? cp0_kbd_presence_watcher_media_generation(watcher) : 0;
 
     /* A keyboard may not be present yet (Bluetooth); the loop below keeps
      * retrying and re-attaches after a disconnect. */
@@ -818,8 +918,8 @@ void *keyboard_read_thread(void *argv) {
     pthread_mutex_lock(&g_libinput_mutex);
     g_libinput = kc.li;
     pthread_mutex_unlock(&g_libinput_mutex);
-    SLOGI("Start listening for keyboard input (%s%s)", device_path,
-          watcher ? " and every keyboard found" : "");
+    SLOGI("Start listening for keyboard input (%s%s%s)", device_path,
+          watcher ? " and every keyboard found" : "", kc.read_media ? ", media keys of other devices" : "");
 
     while (!atomic_load_explicit(&keyboard_shutdown_requested,
                                  memory_order_acquire)) {
@@ -848,23 +948,42 @@ void *keyboard_read_thread(void *argv) {
                     struct libinput_event_keyboard *kev =
                         libinput_event_get_keyboard_event(ev);
                     uint32_t code = libinput_event_keyboard_get_key(kev);
-                    if (fn_alias != 0 && code == fn_alias) code = KEY_FN;
                     enum libinput_key_state ks =
                         libinput_event_keyboard_get_key_state(kev);
-                    process_key(&kc, code,
-                                ks == LIBINPUT_KEY_STATE_PRESSED ? 1 : 0);
+                    const int pressed = ks == LIBINPUT_KEY_STATE_PRESSED ? 1 : 0;
+                    /* task c-7: a media-key device delivers its media keys (and Super) only, and one press seen by
+                     * two devices counts once (cp0_media_keys.h); untracked devices count as keyboards (id 63) */
+                    int deliver = 1;
+                    if (kc.read_media) {
+                        struct libinput_device *from = libinput_event_get_device(ev);
+                        const int slot = cp0_kbd_sources_find_dev(&kc.sources, from);
+                        const int media = slot >= 0 && kc.sources.slot[slot].media;
+                        deliver = cp0_media_keys_filter(&kc.media_keys, slot >= 0 ? slot : CP0_MEDIA_KEYS_SOURCES - 1,
+                                                        media, code, pressed, monotonic_ms());
+                        /* c7.4: the journal says which device sent the launcher's keys and when */
+                        if (cp0_media_key_watched(code))
+                            SLOGI("[KBD] key %u %s from %s%s", code, pressed ? "down" : "up",
+                                  from ? libinput_device_get_sysname(from) : "?",
+                                  deliver ? "" : media && !cp0_media_key_passes(code) ? ": dropped (not a media key)"
+                                                                                     : ": dropped (the same press from another device)");
+                    }
+                    if (fn_alias != 0 && code == fn_alias) code = KEY_FN;
+                    if (deliver) process_key(&kc, code, pressed);
                 } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_ADDED) {
                     /* our own add, or libinput's re-add after a resume */
                     kbd_on_device_added(&kc, libinput_event_get_device(ev));
                 } else if (libinput_event_get_type(ev) == LIBINPUT_EVENT_DEVICE_REMOVED) {
                     struct libinput_device *removed = libinput_event_get_device(ev);
-                    if (cp0_kbd_sources_on_removed(&kc.sources, removed, monotonic_ms()) >= 0) {
+                    const int gone = cp0_kbd_sources_on_removed(&kc.sources, removed, monotonic_ms());
+                    if (gone >= 0) {
+                        cp0_media_keys_forget(&kc.media_keys, gone);
                         /* One of our keyboards went away (Bluetooth sleep, unplug, or a suspend; libinput has
                          * already released its pressed keys). It is not re-added for
                          * CP0_KBD_SOURCES_GRACE_MS: libinput re-adds it itself after a resume, and adding
                          * it here too would open the node twice and deliver every key twice. */
                         repeat_stop(&kc);
-                        SLOGI("Keyboard removed (%s); waiting for it", libinput_device_get_sysname(removed));
+                        SLOGI("%s removed (%s); waiting for it", kc.sources.slot[gone].media ? "Media keys" : "Keyboard",
+                              libinput_device_get_sysname(removed));
                         if (next_rescan_ms > monotonic_ms() + KBD_RESCAN_MS)
                             next_rescan_ms = monotonic_ms() + KBD_RESCAN_MS;
                     }
@@ -876,10 +995,13 @@ void *keyboard_read_thread(void *argv) {
          * is pending: a node not open yet (asleep, udev permissions not set yet) or a removal grace. */
         {
             const unsigned generation = cp0_kbd_presence_watcher_generation(watcher);
+            const unsigned media_generation = kc.read_media ? cp0_kbd_presence_watcher_media_generation(watcher) : 0;
             const uint64_t now = monotonic_ms();
-            if (generation != seen_generation || now >= next_rescan_ms) {
-                if (generation != seen_generation) cp0_kbd_sources_clear_rejected(&kc.sources);
+            const int changed = generation != seen_generation || media_generation != seen_media_generation;
+            if (changed || now >= next_rescan_ms) {
+                if (changed) cp0_kbd_sources_clear_rejected(&kc.sources);
                 seen_generation = generation;
+                seen_media_generation = media_generation;
                 const int settled = kbd_reconcile(&kc, device_path, watcher, &presence);
                 next_rescan_ms = settled ? UINT64_MAX : now + KBD_RESCAN_MS;
             }
