@@ -268,6 +268,62 @@ run --dry-run
 check "the Freenove panel on a Pi 5: unknown (not pi4b-dsi)" 'has "board: unknown" && ! has "board: pi4b-dsi"'
 check "install.sh writes no fbcon= argument anywhere" '! grep -n "fbcon=" "$INSTALL" | grep -v "^[0-9]*:[[:space:]]*#" | grep -q .'
 
+# --- the PDA profile (report 038, phase S2): the DSI panel turned to portrait 480x800, only with --board
+R=$(root pi3a-wsdsi43)
+run --dry-run
+check "wsdsi43 portrait: never detected (the DSI panel alone stays pi3a-wsdsi43)" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "pi3a-wsdsi43-portrait"'
+run --dry-run --board pi3a-wsdsi43-portrait
+check "wsdsi43 portrait dry-run: forced, profile planned, nothing written" '[ $RC = 0 ] && has "board: pi3a-wsdsi43-portrait (forced" && has "pi3a-wsdsi43-portrait: write" && has "APPLAUNCH_LOGICAL=480x800" && [ ! -e "$R/etc" ]'
+check "wsdsi43 portrait dry-run: config.txt left alone, cmdline only, the DSI backlight rule" 'has "boot config: cmdline cursor/consoleblank only" && ! has "PWM backlight overlay +" && has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of 10-0045)"'
+run --board-only --board pi3a-wsdsi43-portrait
+P="$R/etc/applaunch/board.conf"
+check "wsdsi43 portrait board-only: profile and the sysfs backlight rule written" '[ $RC = 0 ] && [ -f "$P" ] && [ -f "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" ] && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+EXPECT='APPLAUNCH_BOARD=pi3a-wsdsi43-portrait
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=480x800
+APPLAUNCH_ROTATE=90
+APPLAUNCH_PANEL_MM=94x56
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(grep -v '^#' "$P")
+if [ "$GOT" = "$EXPECT" ]; then ok "wsdsi43 portrait profile: exact keys and values (480x800, rotate 90, no compat scale, fixed-pixel tiles hidden)"; else ko "wsdsi43 portrait profile: exact keys and values (480x800, rotate 90, no compat scale, fixed-pixel tiles hidden)" "$GOT"; fi
+# shellcheck disable=SC1090
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_BOARD $APPLAUNCH_LOGICAL $APPLAUNCH_ROTATE $APPLAUNCH_PANEL_MM ${APPLAUNCH_COMPAT_SCALE:-none}" ) )
+check "wsdsi43 portrait profile: valid sh syntax, no APPLAUNCH_COMPAT_SCALE" '[ "$GOT" = "pi3a-wsdsi43-portrait 480x800 90 94x56 none" ]'
+check "wsdsi43 portrait profile: APPLAUNCH_HIDE_TILES names exactly IP Panel, Snake, Tank and the Store (the landscape DSI profile has none)" '[ "$(sed -n "s/^APPLAUNCH_HIDE_TILES=//p" "$P")" = "app_IP_Panel,app_Game,app_Tank,app_Store" ]'
+check "wsdsi43 portrait profile: only KEY=VALUE or comment lines, the 90/270 choice explained" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && grep -q "^# 90: .*270: " "$P"'
+check "wsdsi43 portrait profile: the install.sh header and checksum of the body (a generated profile)" 'grep -q "^# Board profile for the launcher, written by install.sh (board: pi3a-wsdsi43-portrait)" "$P" && [ "$(sed -n "s/^# applaunch-profile-sum: //p" "$P")" = "$(sed "1,3d" "$P" | cksum | cut -d" " -f1-2)" ]'
+SUM1=$(cksum < "$P")
+run --board-only --board pi3a-wsdsi43-portrait
+check "wsdsi43 portrait second run: idempotent" '[ $RC = 0 ] && has "pi3a-wsdsi43-portrait: $P already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && [ ! -e "$P.bak" ]'
+# the landscape profile's text did not change with the portrait variant: its checksum line is v0.8.7's, so an installed
+# pi3a-wsdsi43 board.conf stays "already up to date" (a changed body would rewrite every DSI board's profile)
+R2="$TMP/wsdsi43-landscape"; rm -rf "$R2"; cp -R "$FIX/pi3a-wsdsi43" "$R2"   # a second tree: root() would reuse $R's
+OUT=$(SYSROOT="$R2" sh "$INSTALL" --board-only 2>&1)
+check "wsdsi43 landscape profile body unchanged since v0.8.7 (checksum 833775195 571)" 'grep -qx "# applaunch-profile-sum: 833775195 571" "$R2/etc/applaunch/board.conf"'
+check "wsdsi43 landscape profile: no APPLAUNCH_HIDE_TILES (every tile shown, as before)" '! grep -q APPLAUNCH_HIDE_TILES "$R2/etc/applaunch/board.conf"'
+# the hand-edited 270 is kept by later installs, and --force puts the generated 90 back
+sed -i 's/^APPLAUNCH_ROTATE=90$/APPLAUNCH_ROTATE=270/' "$P"
+EDITED=$(cksum < "$P")
+run --board-only --board pi3a-wsdsi43-portrait
+check "wsdsi43 portrait edited to 270: kept without --force" 'has "edited by hand: kept" && [ "$(cksum < "$P")" = "$EDITED" ] && [ ! -e "$P.bak" ]'
+run --board-only --board pi3a-wsdsi43-portrait --force
+check "wsdsi43 portrait edited + --force: generated again, .bak keeps 270" '[ "$(cksum < "$P")" = "$SUM1" ] && grep -q "^APPLAUNCH_ROTATE=270" "$P.bak"'
+# an install without --board detects the landscape panel: the generated portrait profile is replaced (kept as .bak)
+rm -f "$P.bak"
+run --board-only
+check "wsdsi43 portrait, a later install without --board: landscape again, the portrait profile kept as .bak" '[ $RC = 0 ] && has "pi3a-wsdsi43: update" && grep -q "^APPLAUNCH_LOGICAL=800x480$" "$P" && grep -q "^APPLAUNCH_BOARD=pi3a-wsdsi43-portrait$" "$P.bak"'
+# the portrait profile needs the DSI panel too
+R=$(root pi3a-luckfox35)
+run --dry-run --board pi3a-wsdsi43-portrait
+check "--board pi3a-wsdsi43-portrait on the SPI board: refused, exit 1" '[ $RC = 1 ] && has "--board pi3a-wsdsi43-portrait: no 800x480 \"vc4drmfb\""'
+
 # --- unknown board (a CM5 uConsole: DSI panel, no profile): facts printed, nothing written, install stops
 R=$(root unknown-cm5-uconsole)
 run --dry-run

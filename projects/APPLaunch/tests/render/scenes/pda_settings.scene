@@ -1,0 +1,58 @@
+# The PDA profile (report 038 S2) on the profile pda (480x800 = the Pi 3A+ DSI turned, 480x640 = a 3.5" panel turned):
+# native Settings with its page titles whole beside the narrowed status strip (expect_text: not cut with dots, as
+# "Setti..." was with the 320 px strip), the Screen section and its DarkTime list, then System > Keyboard test with the
+# fallback on-screen keyboard (APPLAUNCH_OSK=force: the harness has no presence watcher). Every header is checked
+# against the home grid's (run.sh header). Goldens at both sizes.
+title pda settings
+sizes 480x640 480x800
+profile pda
+env APPLAUNCH_DEV 1
+env APPLAUNCH_OSK force
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+config dark_time 60
+home
+header home
+launch Settings
+shot pda_settings_root
+header pda_settings_root Settings
+expect_text Settings
+key ENTER
+shot pda_settings_screen
+header pda_settings_screen "Settings > Screen" "Screen"
+expect_text end Screen
+key DOWN
+key ENTER
+shot pda_settings_darktime
+header pda_settings_darktime "Settings > Screen > DarkTime" "Screen > DarkTime" DarkTime
+expect_text end DarkTime
+key ESC
+key ESC
+# System is the last section (Up wraps there); in it, from the end: Shutdown, Reboot, Keyboard test, On-screen keyboard
+key UP
+key ENTER
+shot pda_settings_system
+header pda_settings_system "Settings > System" System
+expect_text end System
+key UP
+key UP
+key UP
+key ENTER
+tapkey h
+tapkey i
+# the development page's title "Keyboard test" whole: the 18 px title of a narrow canvas (report 040; at 32 px it was
+# cut beside the 230 px strip)
+shot pda_osk_letters
+header pda_osk_letters "Keyboard test"
+expect_text "Keyboard test"
+tapkey 123
+shot pda_osk_123
+# the Number field: its number pad is the full key area wide on a portrait canvas (keys about 148 px at 480 wide, the
+# digits at 26 px; report 040 section 11)
+tapkey abc
+tapkey Tab
+tapkey 4
+tapkey 2
+shot pda_osk_numpad

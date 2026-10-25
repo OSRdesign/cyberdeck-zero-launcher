@@ -2,7 +2,8 @@
 
 Renders the native shell (home grid, status strip, stock-app toolbar, Calculator, screensaver, toasts) and
 the native Settings pages to PNG at any logical screen size, on the PC, with no board and no
-SDL. Goldens at 640x480 (deck) and 480x320 (Pi 3A+) catch any changed pixel, so the responsive-shell
+SDL. Goldens at 640x480 (deck) and 480x320 (Pi 3A+), and at 480x640 and 480x800 for the PDA scenes (`pda_*`, profile
+`pda`, report 038 S2), catch any changed pixel, so the responsive-shell
 work (task 014, P1b onwards) can be checked without a person at a board.
 
 ## Run
@@ -26,7 +27,7 @@ flock /tmp/wsl-build.lock bash run.sh      # build + render all scenes + compare
 | `run.sh render [scene ...]` | render into `out/<WxH>/<shot>.png`, one contact sheet per scene in `out/sheets/<scene>.png` |
 | `run.sh compare` | compare `out/` with `golden/`; diff images in `out/diff/<WxH>/` (changed pixels red). Shots of a review-only scene (listed in `out/<WxH>/review.list`) need no golden |
 | `run.sh header` | every page header cut by a scene's `header` command against the home grid's: the status strip rectangle pixel-identical (`render-harness compare`) and the title label at the same origin |
-| `run.sh golden` | copy `out/640x480` and `out/480x320` into `golden/` (a deliberate baseline change, commit it) |
+| `run.sh golden` | copy `out/640x480`, `out/480x320`, `out/480x640` and `out/480x800` into `golden/` (a deliberate baseline change, commit it) |
 | `run.sh validate` | compare the harness with real device captures (see Fidelity) |
 | `run.sh twice` | render everything twice and check the PNGs are byte-identical |
 | `run.sh contract` | app contract 1 (`docs/APP-CONTRACT.md`): builds the host `tools/dev/app-contract-probe`, renders the `metrics` scene, then runs the probe in `--report` mode with the per-launch environment the launcher's builder wrote (`out/<WxH>/metrics.{compat,fullscreen}.env`) against `out/<WxH>/runtime/applaunch` (plus an `input.state` fixture, `vkb=force`), and checks size, class, density, rotation, canvas, window, scale and the keyboard rule against the layout service (`out/<WxH>/metrics.facts`); also the degrade cases (no environment, nothing). Reports: `out/<WxH>/contract.*.txt` |
@@ -61,6 +62,7 @@ Each size runs in its own forked process (the display manager is process-wide). 
 | 640x480 | `deck` (no board.conf) | 640x480 XRGB8888, no rotation, no physical size (11.3 px/mm default), compat 2x at (0,0) |
 | 480x320 | `pi3a` (board.conf of the Pi 3A+: `APPLAUNCH_BOARD`, rotate 90, compat scale 1, `APPLAUNCH_PANEL_MM=79x49`, gpio backlight) | 320x480 RGB565, turned 90 deg clockwise, compat 1x at (80,25) |
 | others | `generic` | WxH XRGB8888, no rotation, reports the physical size of the size's density (`var.width/height` in mm), compat window placed by the layout service (`cp0_ui_metrics`) |
+| 480x640, 480x800 with `profile pda` (the PDA scenes) | `pda` (report 038 S2: the board.conf of `pi3a-wsdsi43-portrait`: `APPLAUNCH_BOARD`, rotate 90; `APPLAUNCH_PANEL_MM` 94x56 at 480x800, the 4.3" DSI, and 71x53 at 480x640, a 3.5" 640x480 panel) | the landscape panel (800x480 / 640x480) RGB565, turned 90 deg clockwise to the portrait canvas, compat 1x |
 
 `XDG_RUNTIME_DIR` is `out/<WxH>/runtime`, so the `screen.state` the display manager publishes lands there.
 
@@ -76,7 +78,7 @@ runs at those sizes only.
 |---|---|
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes to render (default the five above) |
 | `review` | the scene's shots are for review only: no golden is expected (nor made by `run.sh golden`) at 640x480 / 480x320 |
-| `profile deck\|pi3a\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
+| `profile deck\|pi3a\|pda\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings`, `Calculator`, `SSH` and `CLI` (the terminal page, on the fake PTY) open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
 | `battery off\|mains\|PCT discharging\|charging\|full\|notcharging` | the fake `power_supply` tree the launcher reads (`APPLAUNCH_POWER_SUPPLY_ROOT` = `out/<WxH>/runtime/power_supply`, set at boot, emptied before every scene: never the host's battery): nothing (the Pi boards, the default), an AC adapter alone, or the FZ-M1's `ADP1` + `BAT1` (energy units: 26.64 of 33.3 Wh, 7.412 V, 6.54 W discharging, 12 W charging). Status strip: `wait 2100` after a change; Settings > Battery's row follows the tree when Settings opens |
@@ -91,6 +93,7 @@ runs at those sizes only.
 | `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys, `SPACE` for the space bar; a label with `#` in quotes: `"#+="`), or on the text field under the field label LABEL |
 | `ptyout TEXT`, `ptyprompt TEXT`, `ptyexit`, `ptylog NAME` | the fake PTY of the terminal pages (`src/harness_services.cpp`, no process): what the program prints next (`\n` = CR LF, `\e` = Esc); the prompt the fake shell prints after Enter and ^C; the program exits; what the terminal did with the PTY (open, every write as bytes, resize, close) as `out/<WxH>/NAME.txt`. Writes are echoed as a cooked tty and a shell would (^C: "^C" and a new prompt, ^D: "exit" and the end) |
 | `listdemo compact\|comfortable ROWS [readonly] [separators] [wrap] [kinds] [empty TEXT...]`, `listdemo update` | a `cp0::ui::CompactList` page (Page scaffold, status strip, the list in the page body, an input group on the keypad) with demo rows: Compact = a system monitor (sections, value tones, long labels), Comfortable = 3 serial ports or a 12-row settings menu; `kinds`: a device page with every row affordance (Edit, Open, Info with a Normal and a Bad value, Action idle, one Unspecified, a long label and a long value beside a chevron, an Action running with a value last; Compact adds a section first); an activation writes "Activated LABEL" into the title. `update` refreshes the values in place (`set_rows`, same rows); `value\|row INDEX normal\|ok\|warn\|bad\|muted TEXT` sets one row's value and tone through `set_value` / `update_row`; `kind\|setkind INDEX unspecified\|info\|open\|edit\|action\|action-running` sets one row's affordance through `update_row` (`kind`) or the live refresh `set_rows` with the other rows unchanged (`setkind`) |
+| `listtitle PART...` | the list demo page's title path (`Page::set_title`), one word per part; a quoted word may itself be a breadcrumb (`"Net Toolbox > Diagnosis"`) |
 | `expect_rows LABEL...` | fail the scene unless the list holding the visible row label LABEL (the first one: a native Settings roller, its rows scrolled out of view included) shows exactly these rows in this order |
 | `expect_color TEXT RRGGBB` | fail the scene unless a visible label shows TEXT with text colour RRGGBB and pixels of that colour are drawn in its box |
 | `expect_chevron LABEL yes\|no` | fail the scene unless the list row of the visible label LABEL shows a row-affordance chevron (`yes`: grey with pixels drawn, right of the row's texts and inside the row, its pixels centred on the row's middle within 1.5 px, a font larger than the label's, the row at the list's item height) or none (`no`) |
@@ -109,6 +112,15 @@ runs at those sizes only.
 | `dots NAME...` | these tiles' apps are left open (`native_ui::set_resident_apps`; tiles have the Exec line `tile:NAME`) |
 | `tapitem ITEM [edge]`, `expect_event TEXT`, `expect_targets` | a tap on `card0..3`, `close0..3` (an X), `home`, `closeall`, `keep`, `sheetclose` (`edge`: 2 px inside the corner of its touch target farthest from what is drawn); fail unless the last thing the switcher / sheet reported is TEXT (`pick NAME`, `close NAME`, `home`, `close-all`, `cancel`, `keep`, `sheet-close`); fail unless every touch target shown is at least 7 mm both ways and the cards and the bar stay inside the panel, apart |
 | `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, the per-launch environment of both modes, `screen.state`) as `out/<WxH>/NAME.txt`; for `run.sh contract` also `NAME.compat.env` / `NAME.fullscreen.env` (the panel variables + `app_launch_env::export_for_current()`, as `export ...;` lines) and `NAME.facts` (size, class, ppmm, rot, compat window, scale) |
+
+PDA scenes (report 038 S2, profile `pda`, goldens at 480x640 and 480x800): `pda_home` (home grid, a compat app in its
+1x window, the terminal with the fallback keyboard), `pda_settings` (titles whole beside the narrow strip, Screen,
+DarkTime, System, the keyboard test page), `pda_switcher` (the switcher on the portrait panels, targets, taps, name
+wrap), `pda_titles` (report 040: the 18 px narrow title with the longest titles whole, Date & Time, Set Manually,
+On-screen keyboard, Keyboard test, and a breadcrumb, as a path and as one string, showing its last part only);
+`pda_switcher_dense` (review only: 480x640 at the deck's 11.3 px/mm, the name starting under the X). The
+`metrics` scene also renders 480x640 and 480x800 with that profile and writes `metrics.turned.env` there (what a
+landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe.
 
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),

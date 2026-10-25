@@ -51,6 +51,8 @@ extern "C" {
 #define CP0_UI_COMPAT_H 170
 #define CP0_UI_FONT_MIN_PX 8           /* builtin Montserrat: every even size 8..48 (lv_conf, all boards) */
 #define CP0_UI_FONT_MAX_PX 48
+#define CP0_UI_NARROW_BELOW_W 600      /* a computed canvas narrower than this (480x640, 480x800) draws the status
+                                        * strip at 72 %; see also cp0_ui_narrow_header() */
 
 /* Screen class from the logical size (w x h, a = w/h), first rule that matches:
  *   Portrait  a < 0.8                      (D12: not supported; computed so nothing breaks)
@@ -131,10 +133,11 @@ typedef struct {
     int pad;              /* grid padding and gap */
     int tile_w, tile_h;   /* rows fit exactly under the status bar (computed sizes: see cp0_ui_metrics.c) */
     int top_extra;        /* computed sizes: extra space above the first row (grid centred vertically), else 0 */
-    int status_pct;       /* scale of the clock / Wi-Fi / Bluetooth strip */
+    int status_pct;       /* scale of the clock / Wi-Fi / Bluetooth strip (72, the Compact one, on a computed canvas
+                           * under 600 px wide: the portrait 480x640 / 480x800, report 038) */
     int status_top;       /* y of the clock pill inside the bar */
     int status_w;         /* width of the strip canvas */
-    int title_x, title_y, title_px;
+    int title_x, title_y, title_px; /* title_px 18 where cp0_ui_narrow_header(), title_y centred on the same line */
     int tile_radius, tile_border, tile_border_sel;
     int icon, icon_top;
     int label_px, label_bottom, label_inset;
@@ -189,6 +192,12 @@ int cp0_ui_font_snap(int px);
  * byte-identical result. Returns 0, or -1 (out untouched) when w or h is not positive. */
 int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_src_t density_src, int compat_cap,
                            cp0_ui_metrics_t *out);
+
+/* The narrow page header (report 040): a computed canvas under CP0_UI_NARROW_BELOW_W wide drawn with the deck's shell
+ * (400 px high or more: the portrait 480x640 / 480x800, not 320x170). Its title is 18 px (shell.title_px) and a
+ * breadcrumb title shows its last part only (cp0_ui_roller_page_t.title_last_only). 0 for NULL and everywhere else,
+ * the pinned 640x480 and 480x320 included. */
+int cp0_ui_narrow_header(const cp0_ui_metrics_t *m);
 
 /* The metrics of the running native display, set once by the display manager (NULL before). */
 void cp0_ui_metrics_set_current(const cp0_ui_metrics_t *m);

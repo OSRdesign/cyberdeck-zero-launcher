@@ -1179,7 +1179,9 @@ lv_display_t *cp0_dpi_scaled_create(void)
     g.native = lv_display_create(g.lw, g.lh);
     lv_display_set_color_format(g.native, cf);
     {
-        const size_t lines = 96;
+        /* portrait canvas (the PDA profile): the whole frame in one chunk (report 040: a 96-line strip drew the home grid
+         * in 9 chunks, each walking every object; 480x800 RGB565 = 768 KB instead of 92 KB). Landscape keeps 96 lines. */
+        const size_t lines = g.lh > g.lw ? (size_t)g.lh : 96;
         const size_t sz = (size_t)g.lw * lines * g.bpp;
         uint8_t *buf = malloc(sz);
         if (!buf) return NULL;

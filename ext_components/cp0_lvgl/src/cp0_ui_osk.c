@@ -117,7 +117,10 @@ static int osk_layout(const cp0_ui_metrics_t *m, int alt, cp0_ui_osk_layout_t *o
 
     l.row_w = 10 * l.key_w + 9 * l.gap;
     l.row_x = (l.w - l.row_w) / 2;
-    l.pad_w = 3 * l.key_w + 2 * l.gap;
+    /* number pad: 3 letter keys wide, but on a portrait canvas (taller than wide) the full key area wide: 3 keys of
+     * (area - 2 gaps) / 3, the digits drawn larger (pad_label_px, the widget) */
+    l.pad_key_w = l.h > l.w ? imax(l.key_w, (l.row_w - 2 * l.gap) / 3) : l.key_w;
+    l.pad_w = 3 * l.pad_key_w + 2 * l.gap;
     l.pad_x = (l.w - l.pad_w) / 2;
 
     /* Esc, Tab, Ctrl (, Alt): 9 mm (the OSK keeps its own size, not the 7 mm TARGET token), at least one key, at most
@@ -285,7 +288,7 @@ int cp0_ui_osk_place_keys(const cp0_ui_osk_layout_t *l, cp0_ui_osk_page_t page, 
      * edges follow the cumulated units so a full row ends exactly at the area's right edge */
     const int area_x = page == CP0_UI_OSK_PAGE_NUMPAD ? l->pad_x : l->row_x;
     const int area_w = page == CP0_UI_OSK_PAGE_NUMPAD ? l->pad_w : l->row_w;
-    const int pitch = l->key_w + l->gap;
+    const int pitch = (page == CP0_UI_OSK_PAGE_NUMPAD ? l->pad_key_w : l->key_w) + l->gap;
     int row = 1;
     int first = 0;
     for (int i = 0; i < count && n >= 0; ++i) {

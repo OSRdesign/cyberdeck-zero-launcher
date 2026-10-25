@@ -82,6 +82,11 @@ CONFIG_V9_5_LV_FONT_DEFAULT_MONTSERRAT_14=y
 CONFIG_V9_5_LV_USE_FREETYPE=y
 CONFIG_V9_5_LV_FREETYPE_CACHE_FT_GLYPH_CNT=512
 
+# Image cache (report 040): decoded icons are kept (up to 1 MB) and their headers (32), so the home grid does not
+# decode every icon again for each draw chunk of each frame
+CONFIG_V9_5_LV_CACHE_DEF_SIZE=1048576
+CONFIG_V9_5_LV_IMAGE_HEADER_CACHE_DEF_CNT=32
+
 
 
 CONFIG_V9_5_LV_USE_EXT_DATA=y

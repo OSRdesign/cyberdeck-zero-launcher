@@ -273,8 +273,40 @@ static void test_place_keys(void)
           p[18].key->kind == CP0_UI_OSK_K_ENTER);
     CHECK_EQ(p[17].x, l.pad_x + l.key_w + l.gap);
 
+    /* portrait canvases: the pad is the full key area wide (3 keys of (area - 2 gaps) / 3), landscape keeps 3 letter keys */
+    const int pw[][3] = {{480, 800, 854}, {480, 640, 904}};
+    for (size_t s = 0; s < sizeof(pw) / sizeof(pw[0]); ++s) {
+        const cp0_ui_metrics_t mp = metrics(pw[s][0], pw[s][1], pw[s][2]);
+        cp0_ui_osk_layout_t lp;
+        CHECK_EQ(cp0_ui_osk_layout(&mp, &lp), 0);
+        CHECK_EQ(lp.pad_key_w, (lp.row_w - 2 * lp.gap) / 3);
+        CHECK(lp.pad_key_w >= 140 && lp.pad_key_w <= 152);
+        CHECK(lp.pad_key_w > lp.key_w);
+        CHECK_EQ(lp.pad_w, 3 * lp.pad_key_w + 2 * lp.gap);
+        CHECK(lp.pad_w <= lp.row_w && lp.row_w - lp.pad_w <= 2);
+        CHECK_EQ(lp.pad_x, (lp.w - lp.pad_w) / 2);
+        n = cp0_ui_osk_place_keys(&lp, CP0_UI_OSK_PAGE_NUMPAD, p, CP0_UI_OSK_MAX_KEYS);
+        CHECK_EQ(n, 7 + 12);
+        CHECK_EQ(p[7].x, lp.pad_x);
+        CHECK_EQ(p[7].w, lp.pad_key_w);
+        CHECK_EQ(p[9].x + p[9].w, lp.pad_x + lp.pad_w);
+        CHECK_EQ(p[17].x, lp.pad_x + lp.pad_key_w + lp.gap);
+        CHECK_EQ(lp.height, lp.border + 2 * lp.pad_y + lp.util_h + 4 * (lp.gap + lp.key_h));
+        /* the letter pages are untouched by the pad */
+        n = cp0_ui_osk_place_keys(&lp, CP0_UI_OSK_PAGE_LETTERS, p, CP0_UI_OSK_MAX_KEYS);
+        CHECK(n > 0);
+    }
+    {   /* landscape and square: pad_key_w is the letter key */
+        const cp0_ui_metrics_t ml = metrics(800, 480, 920), mq = metrics(720, 720, 1000);
+        cp0_ui_osk_layout_t a, b;
+        cp0_ui_osk_layout(&ml, &a);
+        cp0_ui_osk_layout(&mq, &b);
+        CHECK_EQ(a.pad_key_w, a.key_w);
+        CHECK_EQ(b.pad_key_w, b.key_w);
+    }
+
     /* every page at every size fits the key table */
-    const int sizes[][3] = {{480, 320, 0}, {800, 480, 920}, {720, 720, 1000}, {1280, 720, 1160}};
+    const int sizes[][3] = {{480, 320, 0}, {800, 480, 920}, {720, 720, 1000}, {1280, 720, 1160}, {480, 800, 854}, {480, 640, 904}};
     for (size_t s = 0; s < sizeof(sizes) / sizeof(sizes[0]); ++s) {
         const cp0_ui_metrics_t ms = metrics(sizes[s][0], sizes[s][1], sizes[s][2] ? sizes[s][2] : ppmm_pi3a());
         cp0_ui_osk_layout_t ls;

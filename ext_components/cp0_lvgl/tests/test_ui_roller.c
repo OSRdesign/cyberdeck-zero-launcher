@@ -166,6 +166,9 @@ static void check_page(const expected_page_t *e)
     CHECK_EQ(p.strip_y, 0);
     CHECK_EQ(p.strip_left, e->strip_left);
     CHECK_EQ(p.title_max_w, e->title_max_w);
+    /* report 040: a breadcrumb title shows its last part only on a narrow header (the portrait 480 px wide panels) */
+    CHECK_EQ(p.title_last_only, cp0_ui_narrow_header(&m));
+    CHECK_EQ(p.title_last_only, e->w == 480 && e->h >= 640);
     /* the Esc: a 9 mm toolbar key wide (not the 7 mm TARGET, never smaller than it), as high but inside the bar's
      * margins, centred on the pill's line, SPACE_M left of the strip's Bluetooth icon, never over the title */
     CHECK_EQ(p.esc_w, cp0_ui_mm_px(m.ppmm_x100, CP0_UI_TOOLBAR_KEY_MM_X10, CP0_UI_TOOLBAR_KEY_FLOOR_PX));
@@ -223,8 +226,32 @@ static void test_page_layout(void)
         {800, 480, 920, 584, 56, 453, 487, 8, 40, 424, 120, 560, 64, 180, 28, 26, 35, 760},
         {720, 720, 1000, 504, 64, 362, 398, 12, 40, 656, 80, 560, 70, 293, 30, 28, 39, 680},
         {1280, 720, 1160, 1064, 64, 908, 944, 12, 40, 656, 320, 640, 81, 287, 36, 32, 45, 1240},
+        /* report 038 S2, the PDA profile: the portrait panels draw the strip at 72 % (230 px from x 250, its icon from
+         * 325), so the title gets 196 / 192 px instead of 135 / 131 with the 320 px strip of the deck's scale */
+        {480, 800, 854, 325, 56, 196, 232, 8, 40, 744, 16, 448, 60, 342, 26, 24, 33, 440},
+        {480, 640, 900, 325, 56, 192, 228, 8, 40, 584, 16, 448, 63, 260, 28, 26, 35, 440},
     };
     for (size_t i = 0; i < sizeof(pages) / sizeof(pages[0]); ++i) check_page(&pages[i]);
+
+    /* the strip title budget on a 480 px wide portrait panel, at the densities of report 038 (3.5-4" 640x480 panels
+     * turned, the 4.3" DSI turned, the deck's 11.3 px/mm): at least 170 px for the 32 px title ("Settings", "Open apps"
+     * fit; the 100 % strip left 131-135 px and cut them) */
+    {
+        static const int portrait_ppmm[][2] = {{640, 790}, {640, 900}, {640, 1130}, {800, 854}};
+        for (size_t i = 0; i < sizeof(portrait_ppmm) / sizeof(portrait_ppmm[0]); ++i) {
+            cp0_ui_metrics_t pm;
+            cp0_ui_roller_page_t pp;
+            CHECK_EQ(cp0_ui_metrics_compute(480, portrait_ppmm[i][0], 90, portrait_ppmm[i][1], CP0_UI_DENSITY_PANEL_MM,
+                                            0, &pm), 0);
+            CHECK_EQ(pm.shell.status_w, 230);
+            CHECK_EQ(cp0_ui_roller_page(&pm, 480 - 230 + 75, &pp), 0);
+            CHECK(pp.title_max_w >= 170);
+            CHECK(pp.title_x + pp.title_max_w < pp.esc_x);
+            CHECK_EQ(pp.title_px, 18); /* report 040: "On-screen keyboard" is about 186 px at 18 */
+            CHECK(pp.title_last_only);
+            CHECK_EQ(pp.esc_h, 40); /* the header's Esc keeps its height: the bar and its margin are unchanged */
+        }
+    }
 
     /* no measured strip: the Esc goes SPACE_M left of the strip canvas */
     cp0_ui_metrics_t m;

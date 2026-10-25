@@ -45,7 +45,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
 | Launcher | **Settings > Launcher** shows or hides the built-in tiles, the **Store** included (it needs a keyboard, so a touch-only board can hide it; shown by default, `APPLAUNCH_LAUNCHER_STORE_TOGGLE` in `settings_hw_profile.hpp`). Hiding the Store tile does not affect Settings > Apps. |
 | Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the inherited matrix keymap); the Bluetooth keyboard re-attaches after sleep. Volume, mute and brightness keys work from any device that has them, a keyboard or not (a tablet's buttons, the ACPI video bus, a headset's buttons: media-key devices, `docs/APP-CONTRACT.md` section 14), on the launcher's pages and inside apps; such a device never counts as a keyboard. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
-| Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip, Alt+Tab, Super tapped twice (within 0.45 s) or held 0.6 s open "Open apps", Super tapped once goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases of 640x480 and more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
+| Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip, Alt+Tab, Super tapped twice (within 0.45 s) or held 0.6 s open "Open apps", Super tapped once goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases whose short side is 480 or more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
 
 ## Install on a Pi
 
@@ -157,9 +157,10 @@ Launcher shows it again if wanted.
 ## Multitasking
 
 New in v0.8.0 (task 015, `docs/dev/reports/026-multitasking-study.md`). Nothing to install or configure: it comes
-with the bundle and is **on by default** when the launcher's logical canvas is 640x480 or more (the deck, the Pi 3A+
-DSI at 800x480, the HackBerry CM5 at 720x720, the Pi 5 HyperPixel at 800x480). On smaller canvases (the Pi 3A+ SPI
-panel at 480x320, 320x170) it is off and the launcher behaves as before.
+with the bundle and is **on by default** when the short side of the launcher's logical canvas is 480 or more (the
+deck, the Pi 3A+ DSI at 800x480 or turned to 480x800 by the PDA profile, the HackBerry CM5 at 720x720, the Pi 5
+HyperPixel at 800x480). On smaller canvases (the Pi 3A+ SPI panel at 480x320, 320x170) it is off and the launcher
+behaves as before.
 
 - **Open apps:** three fingers held still for 1 s anywhere, a 0.5 s long-press on the clock / status strip, Alt+Tab
   on a keyboard (release Alt to switch), or Super (a tablet's Windows button) tapped twice within 0.45 s or held 0.6 s
@@ -202,6 +203,7 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
 | `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
+| `pi3a-wsdsi43-portrait`: the same board and panel turned to portrait, the PDA profile ([below](#pda-portrait-on-the-43-dsi-panel)) | never detected: only `--board pi3a-wsdsi43-portrait` (the panel must be there, as for `pi3a-wsdsi43`) | `board.conf`: as `pi3a-wsdsi43` but `APPLAUNCH_LOGICAL=480x800`, `APPLAUNCH_ROTATE=90` and no `APPLAUNCH_COMPAT_SCALE`; the same backlight line and rule, config.txt and cmdline.txt as `pi3a-wsdsi43` |
 | `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
 | `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer`; config.txt only with `--pwm-backlight` (below) |
 | `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
@@ -220,6 +222,55 @@ Do not use the generic `dtoverlay=vc4-kms-dsi-7inch`: it also lights this 4.3" p
 shakes (from the boot on; a known kernel/firmware issue with this panel). Remove leftover lines of an earlier panel as
 well, such as the SPI panel's overlay or an `fbcon=map:...,rotate:...` argument in cmdline.txt (install.sh never adds
 an `fbcon=` argument). The detection does not depend on the overlay: it reads the DSI connector and the framebuffer.
+
+### PDA: portrait on the 4.3" DSI panel
+
+The PDA profile (report 038, phase S2; `docs/dev/reports/040-pda-s2.md`) shows the launcher in portrait on the Pi 3A+
+with the Waveshare 4.3" DSI panel: 480x800 at 8.5 px/mm, held upright like a PDA. It is never detected (the same
+panel is `pi3a-wsdsi43`, landscape, when install.sh detects it): choose it with
+
+```
+sudo ./install.sh --board pi3a-wsdsi43-portrait        # the whole install, or
+sudo ./install.sh --board pi3a-wsdsi43-portrait --board-only   # only board.conf (and the backlight rule)
+systemctl --user restart cyberdeckzero.service
+```
+
+- **Which side up:** `APPLAUNCH_ROTATE=90` puts the panel's right edge (as it sits in landscape) at the top: turn the
+  device a quarter turn counter-clockwise from landscape. For the other side up (the cable on the other side), edit
+  `/etc/applaunch/board.conf` to `APPLAUNCH_ROTATE=270` and restart the launcher; touch follows either way (`buffer`).
+  A later `install.sh --board pi3a-wsdsi43-portrait` keeps the edited file (`--force` puts 90 back, the old file kept as
+  `board.conf.bak`).
+- **Pass `--board pi3a-wsdsi43-portrait` every time you run install.sh** (an update from a new bundle too): without it
+  install.sh detects `pi3a-wsdsi43` and replaces a generated portrait profile with the landscape one (the portrait one
+  is kept as `board.conf.bak`). A hand-edited `board.conf` is kept either way.
+- **Back to landscape:** `sudo ./install.sh --board-only` (detects `pi3a-wsdsi43`), then restart the launcher.
+
+What works in this phase:
+
+- the home grid (3 columns), Settings, the dialogs, lists, the switcher and the terminal on the 480x800 canvas; the
+  status strip is drawn smaller (the Compact scale, 230 px) so the page titles have room;
+- multitasking: on, as on the deck (the rule is now "the short side is at least 480");
+- terminal apps (`Terminal=true`); stock (compat) apps that are not terminals are hidden on a portrait screen (below);
+- fullscreen apps (Mesh Hop, RSS Reader, Net Toolbox, System Monitor, Serial Console, viz1090 ...) are shown and run
+  **turned**: full screen in landscape 800x480 (the panel's own orientation, rotate 0; rotate 180 with
+  `APPLAUNCH_ROTATE=270`), and you turn the device while they run. They need no change: the launcher gives each one the
+  landscape canvas on its command line (docs/APP-CONTRACT.md, section 3, "Portrait launcher"). An app that declares
+  `X-Portrait` (none does yet) gets the portrait canvas instead;
+- text: a Bluetooth or USB keyboard, else the fallback on-screen keyboard (the deck's rule).
+- the portrait profile hides the fixed-pixel tiles by default (`APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store`:
+  IP Panel, Snake, Tank and the Store are 320x170 pages that would sit small at the top of a 480x800 screen); Settings >
+  Launcher turns each one on, and what is saved there wins over the profile. Desktop apps that are neither fullscreen
+  nor a terminal (fixed-pixel apps such as LAN Scan, Wi-Fi Survey, MeshZero) are not listed on a portrait launcher at all
+  (docs/APP-CONTRACT.md, section 3); responsive fullscreen apps and the terminal apps are;
+- the number pad of the on-screen keyboard is the full width of the key area on a portrait canvas (keys about 148 px,
+  digits at 26 px).
+
+Not yet:
+
+- no writing zone ("Strokes", handwriting at the bottom of the panel): phases S1 and S3; until then text is typed;
+- a turned app hidden behind the switcher shows its dimmed frame sideways;
+- long page titles are still cut with dots beside the narrower strip (for example "Keyboard test", "Network Time");
+- no native portrait app yet (S4, S5).
 
 The Pi 5 and HackBerry values are the ones `tools/boards/board.py test-start` used on those boards. Their panels' size
 in mm is not measured yet (task 014), so their profiles have no `APPLAUNCH_PANEL_MM` and the layout uses its default
@@ -291,8 +342,8 @@ not type into the launcher).
 The `pi3a-luckfox35`, `pi3a-wsdsi43` and `pi4b-dsi` profiles also set `LV_LINUX_FBDEV_DEVICE` to the same framebuffer and
 `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y=0`, so the deck's touch axes from the service do not apply.
 
-- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `pi3a-wsdsi43`, `pi4b-dsi`, `pi5-hyperpixel4`,
-  `hackberry-cm5`; the panel's framebuffer must be there), or `--board zero2w` for no profile.
+- **Force a profile:** `sudo ./install.sh --board pi3a-luckfox35` (or `pi3a-wsdsi43`, `pi3a-wsdsi43-portrait`,
+  `pi4b-dsi`, `pi5-hyperpixel4`, `hackberry-cm5`; the panel's framebuffer must be there), or `--board zero2w` for no profile.
   `sudo ./install.sh --board-only` only (re)writes the profile and the backlight rule.
 - **Hand edits** are kept: a re-run leaves an edited `board.conf` alone; `--force` replaces it and keeps the old one
   as `board.conf.bak`. Restart the launcher after an edit: `systemctl --user restart cyberdeckzero.service` (desktop

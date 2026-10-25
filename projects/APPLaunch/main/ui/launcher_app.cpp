@@ -50,14 +50,15 @@ app::app(std::string name,
          bool sysplause,
          bool run_as_root,
          bool fullscreen,
-         multitask::Background background)
+         multitask::Background background,
+         bool turned)
     : Name(std::move(name)), Icon(std::move(icon)), Exec(exec)
 {
-    launch = [exec = std::move(exec), terminal, sysplause, run_as_root, fullscreen, background,
+    launch = [exec = std::move(exec), terminal, sysplause, run_as_root, fullscreen, background, turned,
               app_name = Name](Launch *owner) {
         if (!owner || exec.empty()) return;
         if (terminal) owner->launch_Exec_in_terminal(exec, sysplause);
-        else owner->launch_Exec(exec, run_as_root, fullscreen, app_name, background);
+        else owner->launch_Exec(exec, run_as_root, fullscreen, app_name, background, turned);
     };
 }
 

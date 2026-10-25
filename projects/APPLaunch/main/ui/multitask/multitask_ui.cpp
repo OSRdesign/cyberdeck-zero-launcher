@@ -759,8 +759,8 @@ bool start(Hooks hooks)
     cp0_g1_init(&s_g1, &cfg.touch.params, cfg.touch.w, cfg.touch.h, cfg.touch.ppmm_x100);
     cp0_g2_init(&s_g2, &g2, cfg.touch.ppmm_x100);
     s_g1_on = cfg.touch.g1;
-    /* P-d: the switcher screen, the legacy sheet, the grid's dots and the first-run hint on 640x480 and larger; smaller
-     * canvases keep the P-b / P-c stand-ins */
+    /* P-d: the switcher screen, the legacy sheet, the grid's dots and the first-run hint where the short side is 480
+     * and more; smaller canvases keep the P-b / P-c stand-ins */
     s_switcher_ui = multitask::switcher_fits(cfg.touch.w, cfg.touch.h);
     cfg.switcher_ui = s_switcher_ui;
     if (s_switcher_ui) {
@@ -816,7 +816,7 @@ bool start(Hooks hooks)
                      cfg.touch.h, cfg.hint_text.c_str(),
                      cfg.hint_path.empty() ? "(not remembered: no HOME)" : ("(" + cfg.hint_path + ")").c_str());
     else
-        std::fprintf(stderr, "[mt] switcher screen (P-d): off (%dx%d is under 640x480: the P-b / P-c stand-ins)\n",
+        std::fprintf(stderr, "[mt] switcher screen (P-d): off (%dx%d: short side under 480, the P-b / P-c stand-ins)\n",
                      cfg.touch.w, cfg.touch.h);
     /* screen.state says how many contacts the panel tracks (study 6.4; only with the flag on) */
     cp0_ui_state_set_touch_slots(slots);

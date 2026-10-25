@@ -88,6 +88,28 @@ bool desktop_min_size_fits(int min_w, int min_h, bool has_screen, int screen_w, 
     return screen_w >= min_w && screen_h >= min_h;
 }
 
+bool desktop_portrait_screen(int screen_w, int screen_h)
+{
+    return screen_w > 0 && screen_h > screen_w;
+}
+
+DesktopFit desktop_fit(const DesktopEntry &entry, bool has_screen, int screen_w, int screen_h)
+{
+    if (!has_screen) return DesktopFit::Native;
+    /* a portrait launcher shows responsive fullscreen apps and terminal apps only: a compat app that is not a
+     * terminal is a fixed 320x170 page (report 040, S2 owner decision), too small at the top of a tall screen */
+    if (!entry.fullscreen && !entry.terminal && desktop_portrait_screen(screen_w, screen_h)) return DesktopFit::Hidden;
+    if (!entry.fullscreen || !desktop_portrait_screen(screen_w, screen_h))
+        return desktop_min_size_fits(entry.min_w, entry.min_h, true, screen_w, screen_h) ? DesktopFit::Native
+                                                                                         : DesktopFit::Hidden;
+    const bool declares_portrait = entry.portrait_w > 0 && entry.portrait_h > 0;
+    if (declares_portrait && desktop_min_size_fits(entry.portrait_w, entry.portrait_h, true, screen_w, screen_h))
+        return DesktopFit::Native;
+    /* landscape only, or a portrait minimum larger than this panel: turned, X-MinSize against the landscape canvas */
+    return desktop_min_size_fits(entry.min_w, entry.min_h, true, screen_h, screen_w) ? DesktopFit::Turned
+                                                                                     : DesktopFit::Hidden;
+}
+
 std::optional<DesktopEntry> parse_desktop_entry(std::string_view contents)
 {
     DesktopEntry entry;
@@ -124,6 +146,13 @@ std::optional<DesktopEntry> parse_desktop_entry(std::string_view contents)
             if (!parse_desktop_min_size(value, w, h)) w = h = 0; // unparsable: no restriction
             entry.min_w = w;
             entry.min_h = h;
+        }
+        else if (key == "X-Portrait") {
+            int w = 0;
+            int h = 0;
+            if (!parse_desktop_min_size(value, w, h)) w = h = 0; // unparsable: landscape only
+            entry.portrait_w = w;
+            entry.portrait_h = h;
         }
         else if (key == "X-Background") entry.background = std::move(value);
         else if (key == "Hidden" || key == "NoDisplay") hidden = hidden || parse_bool(value);

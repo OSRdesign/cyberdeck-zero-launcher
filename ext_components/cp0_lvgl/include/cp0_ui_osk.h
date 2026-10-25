@@ -16,7 +16,7 @@
  *             allows, the four arrows at the right; (1) q..p; (2) a..l; (3) Shift z..m Backspace; (4) 123, ',', space,
  *             '.', Enter. The 123 page has
  *             1..0 on row 1 and symbols below, '#+=' a second symbol page, 'abc' goes back. A Number field gets the
- *             number pad (1-9, Backspace 0 Enter; 3 key widths, centred) under the same utility row.
+ *             number pad (1-9, Backspace 0 Enter; 3 key widths, centred; the full key area on a portrait canvas) under the same utility row.
  *   modifiers one-shot Shift, Ctrl and Alt: a tap arms (highlighted), a second tap within CP0_UI_OSK_DOUBLE_TAP_MS
  *             locks (Caps lock / Ctrl lock / Alt lock), a tap on a locked modifier turns it off; the next character
  *             key uses and drops an armed modifier.
@@ -95,6 +95,7 @@ typedef struct {
     int alt;           /* 1: Alt after Ctrl in the utility row (a terminal's keyboard, cp0_ui_osk_layout_alt) */
     int row_x, row_w;  /* key area: 10 keys and 9 gaps, centred on the screen */
     int pad_x, pad_w;  /* number pad: 3 keys and 2 gaps, centred */
+    int pad_key_w;     /* one number pad key: a letter key, on a portrait canvas (h > w) a third of the key area */
     int label_px;      /* key labels (even px) */
     int small_px;      /* utility and page-toggle labels (even px) */
     int cap;           /* the class height cap, px */

@@ -89,4 +89,85 @@ int main()
     assert(desktop_min_size_fits(640, 480, false, 0, 0));
     assert(desktop_min_size_fits(640, 480, false, 320, 170));
     assert(desktop_min_size_fits(0, 0, true, 320, 170));
+
+    // X-Portrait (report 038 S2, the PDA profile): the same WxH syntax; absent or malformed = landscape only
+    const auto portrait = parse_desktop_entry(
+        "[Desktop Entry]\nName=A\nExec=a\nX-Fullscreen=true\nX-MinSize=640x480\nX-Portrait = 480x420 \n");
+    assert(portrait && portrait->portrait_w == 480 && portrait->portrait_h == 420);
+    assert(portrait->min_w == 640 && portrait->min_h == 480); // X-MinSize keeps its landscape meaning
+    const auto portrait_upper = parse_desktop_entry("[Desktop Entry]\nName=A\nExec=a\nX-Portrait=480X800\n");
+    assert(portrait_upper && portrait_upper->portrait_w == 480 && portrait_upper->portrait_h == 800);
+    assert(defaults->portrait_w == 0 && defaults->portrait_h == 0);
+    for (const char *bad : {"480", "480x", "x420", "0x420", "480x0", "480x420x1", "4 8 0x420", "-480x420", "480*420"}) {
+        const auto e = parse_desktop_entry(std::string("[Desktop Entry]\nName=A\nExec=a\nX-Portrait=") + bad + "\n");
+        assert(e && e->portrait_w == 0 && e->portrait_h == 0);
+    }
+    const auto portrait_last = parse_desktop_entry(
+        "[Desktop Entry]\nName=A\nExec=a\nX-Portrait=480x420\nX-Portrait=wide\n");
+    assert(portrait_last && portrait_last->portrait_w == 0); // the last line wins, as for X-MinSize
+
+    // the launch rule: landscape apps turned on a portrait launcher, X-MinSize against the landscape canvas
+    assert(!desktop_portrait_screen(640, 480) && !desktop_portrait_screen(720, 720) && !desktop_portrait_screen(0, 0));
+    assert(desktop_portrait_screen(480, 640) && desktop_portrait_screen(480, 800) && desktop_portrait_screen(320, 480));
+    DesktopEntry full;
+    full.fullscreen = true;
+    full.min_w = 640;
+    full.min_h = 480;
+    DesktopEntry compat = full;
+    compat.fullscreen = false;
+    DesktopEntry portrait_app = full;
+    portrait_app.portrait_w = 480;
+    portrait_app.portrait_h = 420;
+    DesktopEntry no_min = full;
+    no_min.min_w = no_min.min_h = 0;
+    // a landscape or square launcher: as before (X-MinSize against the canvas), X-Portrait ignored
+    assert(desktop_fit(full, true, 640, 480) == DesktopFit::Native);
+    assert(desktop_fit(full, true, 800, 480) == DesktopFit::Native);
+    assert(desktop_fit(full, true, 480, 320) == DesktopFit::Hidden);
+    assert(desktop_fit(portrait_app, true, 480, 320) == DesktopFit::Hidden);
+    assert(desktop_fit(full, true, 720, 720) == DesktopFit::Native);
+    assert(desktop_fit(compat, true, 480, 320) == DesktopFit::Hidden);
+    assert(desktop_fit(full, false, 0, 0) == DesktopFit::Native); // no metrics (stock / SDL): shown, as before
+    // a portrait launcher, landscape app: turned when X-MinSize fits the panel seen in landscape
+    assert(desktop_fit(full, true, 480, 800) == DesktopFit::Turned);  // 800x480 >= 640x480
+    assert(desktop_fit(full, true, 480, 640) == DesktopFit::Turned);  // 640x480 >= 640x480
+    assert(desktop_fit(full, true, 480, 600) == DesktopFit::Hidden);  // 600x480 < 640x480
+    assert(desktop_fit(full, true, 320, 480) == DesktopFit::Hidden);  // 480x320 < 640x480
+    assert(desktop_fit(no_min, true, 480, 800) == DesktopFit::Turned); // no minimum: still landscape only, turned
+    assert(desktop_fit(no_min, true, 320, 480) == DesktopFit::Turned);
+    // ... an app with X-Portrait: native (the portrait canvas) when it fits, else turned, else hidden
+    assert(desktop_fit(portrait_app, true, 480, 800) == DesktopFit::Native);
+    assert(desktop_fit(portrait_app, true, 480, 640) == DesktopFit::Native);
+    DesktopEntry tall = portrait_app;
+    tall.portrait_h = 700;
+    assert(desktop_fit(tall, true, 480, 800) == DesktopFit::Native);
+    assert(desktop_fit(tall, true, 480, 640) == DesktopFit::Turned); // 480x640 < 480x700: turned 640x480
+    DesktopEntry tall_big = tall;
+    tall_big.min_w = 800;
+    assert(desktop_fit(tall_big, true, 480, 640) == DesktopFit::Hidden); // neither canvas fits
+    // ... a compat app is never turned; a portrait launcher hides one that is not a terminal (fixed-pixel: LAN Scan,
+    // Wi-Fi Survey, MeshZero), whatever its X-MinSize (report 040)
+    assert(desktop_fit(compat, true, 480, 800) == DesktopFit::Hidden);
+    DesktopEntry compat_small = compat;
+    compat_small.min_w = 320;
+    compat_small.min_h = 170;
+    assert(desktop_fit(compat_small, true, 480, 800) == DesktopFit::Hidden);
+    assert(desktop_fit(compat_small, true, 480, 640) == DesktopFit::Hidden);
+    DesktopEntry compat_none = compat;
+    compat_none.min_w = compat_none.min_h = 0;
+    assert(desktop_fit(compat_none, true, 320, 480) == DesktopFit::Hidden);
+    // a terminal app stays (it runs in the launcher's terminal page): X-MinSize against the canvas, as before
+    DesktopEntry term = compat_small;
+    term.terminal = true;
+    assert(desktop_fit(term, true, 480, 800) == DesktopFit::Native);
+    DesktopEntry term_big = term;
+    term_big.min_w = 640;
+    term_big.min_h = 480;
+    assert(desktop_fit(term_big, true, 480, 800) == DesktopFit::Hidden);
+    // a fullscreen app is not affected (turned / native as above); landscape, square and no metrics neither
+    assert(desktop_fit(full, true, 480, 800) == DesktopFit::Turned);
+    assert(desktop_fit(compat_small, true, 800, 480) == DesktopFit::Native);
+    assert(desktop_fit(compat_small, true, 720, 720) == DesktopFit::Native);
+    assert(desktop_fit(compat_none, true, 640, 480) == DesktopFit::Native);
+    assert(desktop_fit(compat_small, false, 0, 0) == DesktopFit::Native);
 }

@@ -119,6 +119,7 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
     p.esc_radius = s->tb_radius;
     p.esc_text_px = s->tb_text_px;
     p.title_max_w = imax(0, p.esc_x - space_m - p.title_x);
+    p.title_last_only = cp0_ui_narrow_header(m);
 
     /* body */
     p.body_y = p.header_h;

@@ -458,6 +458,13 @@ Profile make_profile(const std::string &name, const Size &size)
                  {"APPLAUNCH_COMPAT_SCALE", "1"},
                  {"APPLAUNCH_PANEL_MM", "79x49"}, /* as install.sh writes it */
                  {"APPLAUNCH_BACKLIGHT", "gpio:/sys/class/backlight/backlight_gpio"}};
+    } else if (name == "pda") { /* report 038 S2, pi3a-wsdsi43-portrait: a landscape RGB565 panel turned 90 deg clockwise
+                                 * to the portrait canvas; 480x800 = the Waveshare 4.3" DSI (94x56 mm, as install.sh
+                                 * writes it), 480x640 = a 3.5" 640x480 panel (71x53 mm, 9.0 px/mm) */
+        p.pw = size.h, p.ph = size.w, p.bpp = 16, p.rot = 90;
+        p.env = {{"APPLAUNCH_BOARD", "pi3a-wsdsi43-portrait"}, {"APPLAUNCH_ROTATE", "90"}};
+        if (size == Size{480, 800}) p.env["APPLAUNCH_PANEL_MM"] = "94x56";
+        else if (size == Size{480, 640}) p.env["APPLAUNCH_PANEL_MM"] = "71x53";
     } else { /* "deck" (no board.conf, the Zero 2 W) and "generic": XRGB8888, no rotation */
         p.pw = size.w, p.ph = size.h, p.bpp = 32, p.rot = 0;
     }
@@ -1381,7 +1388,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             run.ppmm = to_int(w[1], run.ppmm);
             run.ppmm_explicit = true;
         } else if (cmd == "env" && w.size() == 3) run.profile.env[w[1]] = w[2];
-        else return fail(scene, line, "usage: profile deck|pi3a|generic, ppmm N, env KEY VALUE");
+        else return fail(scene, line, "usage: profile deck|pi3a|pda|generic, ppmm N, env KEY VALUE");
         return true;
     }
     /* fixture state: may come before or after boot */
@@ -1987,6 +1994,13 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             return fail(scene, line, "usage: sudoprompt open|busy|wrong|close (open first)");
         }
         settle(400);
+    } else if (cmd == "listtitle") {
+        /* listtitle PART...: the list demo page's title path (Page::set_title), one word per part; a quoted word may
+         * itself be a breadcrumb ("Net Toolbox > Diagnosis", as an app writing its path as one string) */
+        if (w.size() < 2) return fail(scene, line, "usage: listtitle PART...");
+        if (!g_list_demo.page) return fail(scene, line, "listtitle needs a list page (listdemo compact N first)");
+        g_list_demo.page->set_title(std::vector<std::string>(w.begin() + 1, w.end()));
+        settle(200);
     } else if (cmd == "listdemo") {
         /* listdemo compact|comfortable ROWS [readonly] [separators] [wrap] [empty TEXT...]: a CompactList page;
          * listdemo update: refresh the values in place (a live list's set_rows) */
@@ -2130,6 +2144,12 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         const std::string base = run.out_dir + "/" + run.size.name() + "/" + w[1];
         std::ofstream(base + ".compat.env") << panel_exports << "; " << compat_env << "\n";
         std::ofstream(base + ".fullscreen.env") << panel_exports << "; " << full_env << "\n";
+        /* report 038 S2: on a portrait canvas, what a landscape fullscreen app run turned gets (desktop_fit Turned) */
+        if (m->h > m->w) {
+            const std::string turned_env = app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, true);
+            report += "launch turned     " + turned_env + "\n";
+            std::ofstream(base + ".turned.env") << panel_exports << "; " << turned_env << "\n";
+        }
         /* the layout service's own numbers, for run.sh contract to check what the probe read against */
         std::ofstream(base + ".facts") << "size=" << m->w << "x" << m->h << "\nclass=" << cp0_ui_class_name(m->cls)
                                        << "\nppmm=" << m->ppmm_x100 << "\nrot=" << m->rot << "\ncompat=" << m->compat.x

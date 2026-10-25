@@ -60,6 +60,10 @@ static const cp0_ui_shell_t k_shell_compact = {
 #define GRID_TILE_MM_X10 200      /* ... target tile 20 mm ... */
 #define GRID_TILE_FLOOR_PX 120    /* ... at least 120 px */
 #define MAX_MM_X10 100000         /* 10 m: anything larger is a driver's "unknown" */
+#define NARROW_STRIP_BELOW_W CP0_UI_NARROW_BELOW_W /* report 038 S2: a canvas narrower than this (480 px wide portrait panels) ... */
+#define NARROW_STRIP_PCT 72       /* ... draws the status strip at the Compact scale (230 px), so page titles fit ... */
+#define NARROW_TITLE_PX 18        /* ... and the title at 18 px: the longest page title, "On-screen keyboard" (about 186
+                                   * px), fits the 192-196 px left of the Esc at 480 wide (report 040 section 7) */
 
 static int imin(int a, int b) { return a < b ? a : b; }
 static int imax(int a, int b) { return a > b ? a : b; }
@@ -346,6 +350,12 @@ static void shell_fill(cp0_ui_preset_t preset, int w, int h, cp0_ui_shell_t *s)
 
 /* ------------------------------------------------------------------ compute */
 
+int cp0_ui_narrow_header(const cp0_ui_metrics_t *m)
+{
+    return m && m->preset == CP0_UI_PRESET_COMPUTED && m->w < CP0_UI_NARROW_BELOW_W &&
+           m->shell_preset == CP0_UI_PRESET_DECK;
+}
+
 int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_src_t density_src, int compat_cap,
                            cp0_ui_metrics_t *out)
 {
@@ -388,6 +398,21 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
                                                         : CP0_UI_PRESET_DECK;
     shell_fill(m.shell_preset, w, h, &m.shell);
     if (m.preset == CP0_UI_PRESET_COMPUTED) shell_computed_grid(&k_class[m.cls], w, h, m.ppmm_x100, &m.shell);
+    /* a narrow computed canvas (480x640, 480x800): the strip at the Compact scale; when it is also 400 px high or more
+     * (cp0_ui_narrow_header: the deck's shell, so not 320x170) the title at NARROW_TITLE_PX, moved down by half the
+     * size it lost so it stays centred on the same line; the bar, its top margin and the Esc unchanged (the pinned
+     * 640x480 and 480x320 never get here) */
+    if (m.preset == CP0_UI_PRESET_COMPUTED && w < NARROW_STRIP_BELOW_W) {
+        if (m.shell.status_pct > NARROW_STRIP_PCT) {
+            m.shell.status_pct = NARROW_STRIP_PCT;
+            m.shell.status_w = CP0_UI_COMPAT_W * NARROW_STRIP_PCT / 100;
+            m.tok[CP0_TOK_STATUS_PCT] = NARROW_STRIP_PCT;
+        }
+        if (cp0_ui_narrow_header(&m) && m.shell.title_px > NARROW_TITLE_PX) {
+            m.shell.title_y += (m.shell.title_px - NARROW_TITLE_PX) / 2;
+            m.shell.title_px = NARROW_TITLE_PX;
+        }
+    }
 
     if (m.preset != CP0_UI_PRESET_COMPUTED) {
         m.tok[CP0_TOK_TOOLBAR_H] = m.preset == CP0_UI_PRESET_DECK ? PINNED_TOOLBAR_DECK : PINNED_TOOLBAR_COMPACT;

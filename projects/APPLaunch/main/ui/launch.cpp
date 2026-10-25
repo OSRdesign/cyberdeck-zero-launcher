@@ -184,7 +184,7 @@ void Launch::launch_Exec_in_terminal(const std::string &exec, bool sysplause,
 }
 
 void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscreen, const std::string &name,
-                         multitask::Background background)
+                         multitask::Background background, bool turned)
 {
     // Pi port: run the stock (320x170 framebuffer) app in the scaled compat window. The UI stays
     // alive while it runs; this returns immediately and the callback brings the home grid back.
@@ -202,7 +202,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
     }
     // Multitasking P-b (multitasking on): a full-screen app runs under the supervisor and this returns at once
     if (fullscreen && multitask_ui::active()) {
-        launch_fullscreen_supervised(exec, keep_root, name, background);
+        launch_fullscreen_supervised(exec, keep_root, name, background, turned);
         return;
     }
     // external apps own the framebuffer; keep the compat chrome (a full-screen app on the Pi port
@@ -222,8 +222,10 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
     lv_timer_enable(false);
     // The app contract (cp0_app_contract.h): a fullscreen app learns its mode, the whole logical screen as window and
     // canvas, and where the state files are. Without layout metrics (stock build, SDL) the command is unchanged.
+    // Turned (a landscape app on a portrait launcher, report 038 S2): the panel's landscape canvas and its rotation.
+    if (turned) SLOGI("Launching %s turned: the panel's landscape canvas", exec.c_str());
     const std::string command =
-        fullscreen ? app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen) + exec : exec;
+        fullscreen ? app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned) + exec : exec;
     int result = -1;
     try {
         cp0_signal_process_api(
@@ -410,10 +412,10 @@ void Launch::app_registry_changed_cb(void *user_data) noexcept
 // suspends the display (no launcher pixel after that), starts the app (or resumes it: one instance per Exec) and
 // this returns. mt_app_front() / mt_launcher_front() run on this thread when the panel changes hands.
 void Launch::launch_fullscreen_supervised(const std::string &exec, bool keep_root, const std::string &name,
-                                          multitask::Background background)
+                                          multitask::Background background, bool turned)
 {
-    SLOGI("Launching external app under the supervisor: %s (keep_root=%d, X-Background=%s)", exec.c_str(),
-          keep_root, multitask::background_name(background));
+    SLOGI("Launching external app under the supervisor: %s (keep_root=%d, X-Background=%s%s)", exec.c_str(),
+          keep_root, multitask::background_name(background), turned ? ", turned" : "");
     const bool resume = multitask_ui::is_resident(exec);
     if (!resume) ui_loading::show("Loading..."); // a resumed app gets its own last frame back at once
     lv_disp_t *disp = lv_disp_get_default();
@@ -421,9 +423,9 @@ void Launch::launch_fullscreen_supervised(const std::string &exec, bool keep_roo
     LVGL_RUN_FLAGE = 0;
     mt_release_input_group();
     lv_refr_now(disp);
-    // The app contract (cp0_app_contract.h) as in the legacy path; the lifecycle variables, when the app declares
-    // X-Background, are added by the supervisor.
-    const std::string command = app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen) + exec;
+    // The app contract (cp0_app_contract.h) as in the legacy path (turned included); the lifecycle variables, when the
+    // app declares X-Background, are added by the supervisor.
+    const std::string command = app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned) + exec;
     multitask_ui::launch(name.empty() ? exec : name, exec, command, keep_root, background);
 }
 

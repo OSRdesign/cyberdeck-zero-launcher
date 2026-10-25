@@ -206,9 +206,17 @@ void Page::set_title_override(const void *owner, const char *text)
     show_caption();
 }
 
-void Page::apply_title(const std::vector<std::string> &path)
+void Page::apply_title(const std::vector<std::string> &full_path)
 {
-    if (!title_ || path.empty()) return;
+    if (!title_ || full_path.empty()) return;
+    std::vector<std::string> path = full_path;
+    if (layout_.title_last_only) {
+        /* a narrow canvas: the last part only, also of one string written as a breadcrumb ("Net Toolbox > Diagnosis") */
+        std::string last = path.back();
+        const size_t sep = last.rfind(" > ");
+        if (sep != std::string::npos && sep + 3 < last.size()) last.erase(0, sep + 3);
+        path.assign(1, last);
+    }
     const lv_font_t *font = lv_obj_get_style_text_font(title_, LV_PART_MAIN);
     for (size_t first = 0; first < path.size(); ++first) {
         std::string text;

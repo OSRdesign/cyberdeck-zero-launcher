@@ -40,6 +40,7 @@ struct DesktopAppCandidate
     std::filesystem::file_time_type::rep modified_time{};
     bool has_modified_time = false;
     std::size_t directory_sequence = 0;
+    bool turned = false; /* desktop_fit() Turned: a landscape app on a portrait launcher */
 };
 
 bool contains_exec(const std::list<app> &apps, const std::string &exec)
@@ -199,12 +200,24 @@ void launcher_append_desktop_apps(std::list<app> &apps)
                 continue;
             }
             // X-MinSize (app contract 1): hidden, like Hidden=true, on a screen smaller than the app needs. The
-            // launcher's own metrics (the home grid's); none (stock / SDL builds) = shown.
+            // launcher's own metrics (the home grid's); none (stock / SDL builds) = shown. On a portrait launcher
+            // (report 038 S2) a fullscreen app without X-Portrait runs turned: X-MinSize against the landscape canvas.
             const cp0_ui_metrics_t *screen = cp0_ui_metrics_current();
-            if (!desktop_min_size_fits(entry->min_w, entry->min_h, screen != nullptr, screen ? screen->w : 0,
-                                       screen ? screen->h : 0)) {
-                std::fprintf(stderr, "applications_load: hide %s (X-MinSize %dx%d > screen %dx%d)\n",
-                             path.c_str(), entry->min_w, entry->min_h, screen->w, screen->h);
+            const DesktopFit fit =
+                desktop_fit(*entry, screen != nullptr, screen ? screen->w : 0, screen ? screen->h : 0);
+            if (fit == DesktopFit::Hidden) {
+                if (!entry->fullscreen && !entry->terminal && desktop_portrait_screen(screen->w, screen->h))
+                    std::fprintf(stderr, "applications_load: hide %s (fixed-pixel app on a portrait screen %dx%d)\n",
+                                 path.c_str(), screen->w, screen->h);
+                else if (entry->fullscreen && desktop_portrait_screen(screen->w, screen->h))
+                    std::fprintf(stderr,
+                                 "applications_load: hide %s (X-Portrait %dx%d > screen %dx%d, X-MinSize %dx%d > "
+                                 "turned %dx%d)\n",
+                                 path.c_str(), entry->portrait_w, entry->portrait_h, screen->w, screen->h,
+                                 entry->min_w, entry->min_h, screen->h, screen->w);
+                else
+                    std::fprintf(stderr, "applications_load: hide %s (X-MinSize %dx%d > screen %dx%d)\n",
+                                 path.c_str(), entry->min_w, entry->min_h, screen->w, screen->h);
                 continue;
             }
 
@@ -242,6 +255,7 @@ void launcher_append_desktop_apps(std::list<app> &apps)
             // last-write time is the install/update order for custom apps.
             candidate.has_modified_time = read_modified_time(path, candidate.modified_time);
             candidate.directory_sequence = directory_sequence++;
+            candidate.turned = fit == DesktopFit::Turned;
             candidates.push_back(std::move(candidate));
         }
 
@@ -297,7 +311,7 @@ void launcher_append_desktop_apps(std::list<app> &apps)
             apps.emplace_back(candidate.entry.name, candidate.icon_path, candidate.entry.exec,
                               candidate.entry.terminal, candidate.entry.sysplause, false,
                               candidate.entry.fullscreen,
-                              multitask::parse_background(candidate.entry.background));
+                              multitask::parse_background(candidate.entry.background), candidate.turned);
             ++appended;
         }
         launcher_app_registry_commit_dynamic_refresh();

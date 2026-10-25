@@ -26,6 +26,7 @@ namespace {
 
 constexpr const char *kTextFace = "Montserrat-Medium.ttf"; /* labels that may be non-ASCII (euro, pound, yen) */
 constexpr const char *kShiftFace = "DejaVuSans.ttf";        /* the Shift arrow (U+21E7) */
+constexpr int kPadDigitPx = 26;                          /* digits of the portrait number pad */
 constexpr const char *kShiftGlyph = "\xe2\x87\xa7";
 
 const lv_font_t *text_font(int px)
@@ -168,6 +169,9 @@ void OnScreenKeyboard::style_key(Key &key)
 
     // label: letters follow Shift; control keys draw LVGL symbols (builtin font), names in the smaller size
     const lv_font_t *font = text_font(layout_.label_px);
+    // portrait number pad (keys a third of the width wide): the digits at 26 px
+    if (k->kind == CP0_UI_OSK_K_CHAR && state_.page == CP0_UI_OSK_PAGE_NUMPAD && layout_.pad_key_w > layout_.key_w)
+        font = text_font(kPadDigitPx);
     char upper[2] = {0, 0};
     const char *label = k->label ? k->label : k->text;
     switch (k->kind) {
