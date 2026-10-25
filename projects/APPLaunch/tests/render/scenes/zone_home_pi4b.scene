@@ -1,0 +1,13 @@
+# The home grid on the Pi 4B's portrait 5" DSI (108x65 mm: 7.4 px/mm against the Pi 3A+'s 8.57 in zone_home), the
+# writing zone's band hidden (report 042): three columns on both panels. Golden at 480x800.
+title zone home pi4b
+sizes 480x800
+profile pda
+env APPLAUNCH_PANEL_MM 108x65
+apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+expect_zone hidden
+shot zone_home_pi4b
