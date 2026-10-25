@@ -10,6 +10,7 @@
     "quirks: no_environ = an ssh command string containing the word 'environ' drops the connection (Pi 3A+): board.py refuses such a command.",
     "pi3a and pi3a-dsi are the same Pi 3A+ (same host) with one panel or the other: pi3a = Luckfox 3.5in SPI (install.sh profile pi3a-luckfox35),",
     "      pi3a-dsi = Waveshare 4.3in DSI (profile pi3a-wsdsi43; the panel mounted since 2026-10-13). Use the entry of the panel that is mounted.",
+    "pi4b = Raspberry Pi 4 Model B with the Freenove 5in DSI panel (install.sh profile pi4b-dsi).",
     "arch: the bundle the board takes (default arm64): fzm1 (Panasonic FZ-M1 mk2 tablet, x86_64, Armbian on Ubuntu 26.04, report 028) is amd64;",
     "      its test_env is install.sh's pc profile (pc-fzm1-2). Since 2026-10-22 it has Armbian's XFCE with lightdm and the desktop variant of install.sh: a desktop board.",
     "dm (desktop boards, default lightdm): the display manager's unit without .service that test-start stops and test-stop starts again.",
@@ -85,6 +86,32 @@
         "APPLAUNCH_STD_KEYBOARD": "1"
       },
       "quirks": ["no_environ"]
+    },
+    "pi4b": {
+      "host": "192.168.68.167",
+      "user": "osrde",
+      "kind": "service",
+      "fb": {"device": "/dev/fb0", "width": 800, "height": 480, "bpp": 16, "format": "RGB565"},
+      "rotate": 0,
+      "test_env": {
+        "APPLAUNCH_DISPLAY": "dpi-scaled",
+        "APPLAUNCH_BOARD": "pi4b-dsi",
+        "APPLAUNCH_FB": "/dev/fb0",
+        "LV_LINUX_FBDEV_DEVICE": "/dev/fb0",
+        "APPLAUNCH_LOGICAL": "800x480",
+        "APPLAUNCH_ROTATE": "0",
+        "APPLAUNCH_COMPAT_SCALE": "2",
+        "APPLAUNCH_PANEL_MM": "108x65",
+        "APPLAUNCH_TOUCH_DEV": "auto",
+        "APPLAUNCH_TOUCH_ORIENT": "buffer",
+        "APPLAUNCH_BACKLIGHT": "sysfs:/sys/class/backlight/10-0045",
+        "APPLAUNCH_DIM_PERCENT": "20",
+        "APPLAUNCH_TOUCH_SWAP_XY": "0",
+        "APPLAUNCH_TOUCH_INVERT_X": "0",
+        "APPLAUNCH_TOUCH_INVERT_Y": "0",
+        "APPLAUNCH_STD_KEYBOARD": "1"
+      },
+      "quirks": []
     },
     "pi5": {
       "host": "192.168.68.175",

@@ -181,9 +181,9 @@ check "wsdsi43 with a 1024x600 DSI panel: unknown" 'has "board: unknown"'
 R=$(root pi3a-wsdsi43); echo 640,480 > "$R/sys/class/graphics/fb0/virtual_size"
 run --dry-run
 check "wsdsi43 with an 800x480 mode but another framebuffer size: unknown" 'has "board: unknown"'
-R=$(root pi3a-wsdsi43); printf 'Raspberry Pi 4 Model B Rev 1.5\n' > "$R/proc/device-tree/model"
+R=$(root pi3a-wsdsi43); printf 'Raspberry Pi 3 Model B Plus Rev 1.3\n' > "$R/proc/device-tree/model"
 run --dry-run
-check "the DSI panel on another model (Pi 4): unknown, the deck's boot config as before for an unknown model" 'has "board: unknown" && has "boot config: PWM backlight overlay"'
+check "the DSI panel on another model (Pi 3 B+): unknown, the deck's boot config as before for an unknown model" 'has "board: unknown" && has "boot config: PWM backlight overlay"'
 # both panels at once on a 3A+: not guessed, the reason given; --board chooses
 R=$(root pi3a-wsdsi43)
 cp -R "$FIX/pi3a-luckfox35/sys/class/drm/card0-SPI-1" "$R/sys/class/drm/card1-SPI-1"
@@ -202,6 +202,70 @@ R=$(root pi3a-luckfox35)
 run --dry-run --board pi3a-wsdsi43
 check "--board pi3a-wsdsi43 on the SPI board: refused, exit 1" '[ $RC = 1 ] && has "no 800x480 \"vc4drmfb\""'
 check "the SPI board is still pi3a-luckfox35" 'run --dry-run; has "board: pi3a-luckfox35" && ! has "pi3a-wsdsi43"'
+
+# --- Pi 4 Model B with the Freenove 5" DSI panel: same KMS framebuffer vc4drmfb 800x480 on fb0, connector on card1,
+# backlight regulator 10-0045 (probe 2026-10-25)
+R=$(root pi4b-dsi)
+run --dry-run
+check "pi4b-dsi dry-run: exit 0, board pi4b-dsi" '[ $RC = 0 ] && has "board: pi4b-dsi" && ! has "pi3a-wsdsi43"'
+check "pi4b-dsi dry-run: fb0, the DSI connector on card1 and the regulator seen" 'has "drm card1-DSI-1: connected, first mode 800x480" && has "/dev/fb0: name \"vc4drmfb\", size 800,480, 16 bpp" && has "backlight: 10-0045"'
+check "pi4b-dsi dry-run: profile planned, backlight of the DSI regulator, dim level 20" 'has "pi4b-dsi: write" && has "APPLAUNCH_FB=/dev/fb0" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045" && has "APPLAUNCH_DIM_PERCENT=20"'
+check "pi4b-dsi dry-run: config.txt left alone, cmdline arguments only, no gpio rule" 'has "boot config: cmdline cursor/consoleblank only" && ! has "PWM backlight overlay +" && ! has "92-applaunch-backlight-gpio"'
+check "pi4b-dsi dry-run: nothing written" '[ ! -e "$R/etc" ]'
+run --board-only
+P="$R/etc/applaunch/board.conf"
+check "pi4b-dsi board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+BLR="$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"
+check "pi4b-dsi board-only: udev rule lets the video group set the DSI backlight levels" '[ -f "$BLR" ] && grep -q "KERNEL==\"10-0045\"" "$BLR"'
+EXPECT='APPLAUNCH_BOARD=pi4b-dsi
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+APPLAUNCH_PANEL_MM=108x65
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+APPLAUNCH_DIM_PERCENT=20
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(grep -v '^#' "$P")
+if [ "$GOT" = "$EXPECT" ]; then ok "pi4b-dsi profile: exact keys and values (the board's working profile)"; else ko "pi4b-dsi profile: exact keys and values (the board's working profile)" "$GOT"; fi
+# shellcheck disable=SC1090
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_FB $APPLAUNCH_LOGICAL $APPLAUNCH_ROTATE $APPLAUNCH_COMPAT_SCALE $APPLAUNCH_BACKLIGHT $APPLAUNCH_DIM_PERCENT" ) )
+check "pi4b-dsi profile: valid sh syntax" '[ "$GOT" = "/dev/fb0 800x480 0 2 sysfs:/sys/class/backlight/10-0045 20" ]'
+check "pi4b-dsi profile: only KEY=VALUE or comment lines, no fbcon" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && ! grep -qi fbcon "$P"'
+SUM1=$(cksum < "$P")
+run --board-only
+check "pi4b-dsi second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && [ ! -e "$P.bak" ]'
+sed -i 's/^APPLAUNCH_DIM_PERCENT=20/APPLAUNCH_DIM_PERCENT=25/' "$P"
+EDITED=$(cksum < "$P")
+run --board-only
+check "pi4b-dsi hand-edited: kept without --force" 'has "pi4b-dsi: $P was edited by hand: kept" && [ "$(cksum < "$P")" = "$EDITED" ] && [ ! -e "$P.bak" ]'
+run --board-only --force
+check "pi4b-dsi hand-edited + --force: replaced, .bak kept" '[ "$(cksum < "$P")" = "$SUM1" ] && grep -q "^APPLAUNCH_DIM_PERCENT=25" "$P.bak"'
+# auto-detection needs the 800x480 DSI panel and its regulator; otherwise unknown, config.txt still left alone
+R=$(root pi4b-dsi); echo disconnected > "$R/sys/class/drm/card1-DSI-1/status"
+run --dry-run
+check "pi4b-dsi with the DSI connector disconnected: unknown, config.txt left alone, would stop" 'has "board: unknown" && has "Raspberry Pi 4 Model B" && has "would stop here" && has "boot config: cmdline cursor/consoleblank only"'
+R=$(root pi4b-dsi); rm -rf "$R/sys/class/backlight/10-0045"
+run --dry-run
+check "pi4b-dsi without the 10-0045 regulator: unknown, config.txt left alone" 'has "board: unknown" && has "boot config: cmdline cursor/consoleblank only"'
+run --dry-run --board pi4b-dsi
+check "pi4b-dsi without the regulator, --board pi4b-dsi: profile without a backlight line" '[ $RC = 0 ] && has "board: pi4b-dsi (forced" && ! has "APPLAUNCH_BACKLIGHT=" && has "APPLAUNCH_DIM_PERCENT=20"'
+R=$(root pi4b-dsi); echo 1024x600 > "$R/sys/class/drm/card1-DSI-1/modes"; echo 1024,600 > "$R/sys/class/graphics/fb0/virtual_size"
+run --dry-run
+check "pi4b-dsi with a 1024x600 DSI panel: unknown" 'has "board: unknown"'
+run --dry-run --board pi4b-dsi
+check "--board pi4b-dsi without its 800x480 fb: refused, exit 1" '[ $RC = 1 ] && has "no 800x480 \"vc4drmfb\""'
+# the Pi 3A+ DSI board is still pi3a-wsdsi43, and pi4b-dsi is the Pi 4's only
+R=$(root pi3a-wsdsi43)
+check "the Pi 3A+ DSI board is still pi3a-wsdsi43" 'run --dry-run; has "board: pi3a-wsdsi43" && ! has "pi4b-dsi"'
+R=$(root pi4b-dsi); printf 'Raspberry Pi 5 Model B Rev 1.0\n' > "$R/proc/device-tree/model"
+run --dry-run
+check "the Freenove panel on a Pi 5: unknown (not pi4b-dsi)" 'has "board: unknown" && ! has "board: pi4b-dsi"'
 check "install.sh writes no fbcon= argument anywhere" '! grep -n "fbcon=" "$INSTALL" | grep -v "^[0-9]*:[[:space:]]*#" | grep -q .'
 
 # --- unknown board (a CM5 uConsole: DSI panel, no profile): facts printed, nothing written, install stops
@@ -796,6 +860,18 @@ check "fake DSI install: cmdline.txt gets the two console arguments only, backup
 check "fake DSI install: the hand-written profile kept, no gpio rule, reboot for the console settings only" '[ "$(cksum < "$R/etc/applaunch/board.conf")" = "$HAND" ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && has "edited by hand: kept" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ] && has "reboot now so the console settings apply" && ! has "PWM backlight and"'
 fullboot
 check "fake DSI install, second run: boot files unchanged, nothing to migrate" '[ $RC = 0 ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && [ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && has "nothing to migrate" && ! has "reboot now"'
+
+# the Pi 4 B + Freenove 5" DSI panel, a fresh install with the board's boot configuration (the panel found by
+# display_auto_detect, no DSI overlay line): config.txt is not touched, never the deck's PWM backlight overlay
+R=$(root pi4b-dsi)
+mkdir -p "$R/boot/firmware/overlays"
+printf 'dtparam=audio=on\ndisplay_auto_detect=1\ndtoverlay=vc4-kms-v3d\nmax_framebuffers=2\n[all]\nenable_uart=1\n' > "$R/boot/firmware/config.txt"
+printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+CFG_SUM=$(cksum < "$R/boot/firmware/config.txt")
+fullboot
+check "fake pi4b-dsi install: exit 0, profile written with the dim level" '[ $RC = 0 ] && has "profile pi4b-dsi" && grep -q "^APPLAUNCH_DIM_PERCENT=20$" "$R/etc/applaunch/board.conf"'
+check "fake pi4b-dsi install: config.txt untouched (no backup, no overlay, no dtc)" '[ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && [ ! -e "$R/boot/firmware/config.txt.bak-applaunch" ] && [ ! -e "$R/boot/firmware/overlays/waveshare-pwm-backlight.dtbo" ] && ! called "dtc " && has "pi4b-dsi: config.txt left as it is"'
+check "fake pi4b-dsi install: cmdline.txt gets the two console arguments only" '[ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && ! grep -q fbcon "$R/boot/firmware/cmdline.txt"'
 
 # the Pi 5 + HyperPixel 4's PWM backlight (report 030, c-4): config.txt is left alone without --pwm-backlight; with it
 # the overlay is built, its line goes right after the HyperPixel one (config.txt backed up first) and a reboot is asked

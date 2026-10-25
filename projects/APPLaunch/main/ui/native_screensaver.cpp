@@ -25,7 +25,6 @@
 
 namespace {
 
-constexpr int kDimPercent = 10;
 constexpr uint32_t kIdleCheckMs = 500;
 // The clock's size and place come from model/screensaver_clock_layout.hpp: the deck's 640x480 design scaled by
 // min(w / 640, h / 480) (task 014 P4).
@@ -136,7 +135,7 @@ void activate()
     s_saved_backlight = cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_GPIO_ONOFF ||
                                 cp0_backlight_profile_kind() == CP0_BACKLIGHT_KIND_NONE
                             ? -1
-                            : launcher_media_controls::dim_backlight(kDimPercent);
+                            : launcher_media_controls::dim_backlight(launcher_media_controls::idle_dim_percent());
     // The compat window is drawn straight to the panel: stop that so the overlay covers everything.
     if (cp0_display_get_mode() == CP0_DISPLAY_MODE_COMPAT) cp0_display_set_blackout(1);
     update_clock(nullptr);

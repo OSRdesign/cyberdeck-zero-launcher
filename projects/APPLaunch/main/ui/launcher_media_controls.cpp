@@ -12,6 +12,7 @@
 #include "model/setup_value_policy.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 
 namespace {
@@ -288,6 +289,23 @@ int dim_backlight(int percent)
     if (previous <= target) return previous; // already at least that dark: leave it alone
     if (write_backlight_raw(target) < 0) return -1;
     return previous;
+}
+
+int parse_dim_percent(const char *text)
+{
+    if (!text || !*text) return kDefaultDimPercent;
+    int value = 0;
+    for (const char *p = text; *p; ++p) {
+        if (*p < '0' || *p > '9' || p - text >= 3) return kDefaultDimPercent;
+        value = value * 10 + (*p - '0');
+    }
+    return value >= 1 && value <= 100 ? value : kDefaultDimPercent;
+}
+
+int idle_dim_percent()
+{
+    static const int percent = parse_dim_percent(std::getenv("APPLAUNCH_DIM_PERCENT"));
+    return percent;
 }
 
 void restore_backlight(int raw)
