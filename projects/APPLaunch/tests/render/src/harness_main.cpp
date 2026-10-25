@@ -1466,6 +1466,35 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         else return fail(scene, line, "usage: profile deck|pi3a|pda|generic, ppmm N, env KEY VALUE");
         return true;
     }
+    if (cmd == "strokesuser") {
+        /* strokesuser: the writing zone's user overlay is out/<WxH>/runtime/config/strokes-user.txt, empty at the start
+         * (the Strokes training page saves it there, and its capture log strokes-training.txt next to it; report 042) */
+        if (run.booted) return fail(scene, line, "strokesuser must come before the first drawing command");
+        const std::string dir = runtime_path(run, "config");
+        remove_tree(dir);
+        mkdirs(dir);
+        run.profile.env["APPLAUNCH_STROKES_USER"] = dir + "/strokes-user.txt";
+        return true;
+    }
+    if (cmd == "expect_file") {
+        /* expect_file NAME [lines N] [has TEXT]: a file of out/<WxH>/runtime/config exists (with N lines starting with
+         * "# training" when lines is given; containing TEXT when has is given) */
+        if (w.size() != 2 && w.size() != 4) return fail(scene, line, "usage: expect_file NAME [lines N|has TEXT]");
+        std::ifstream in(runtime_path(run, "config/" + w[1]));
+        if (!in) return fail(scene, line, "expect_file: no " + w[1]);
+        const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        if (w.size() == 4 && w[2] == "lines") {
+            int n = 0;
+            for (std::size_t at = 0; (at = content.find("# training ", at)) != std::string::npos; ++at) n++;
+            if (n != to_int(w[3])) return fail(scene, line, "expect_file: " + std::to_string(n) + " training lines");
+        } else if (w.size() == 4 && w[2] == "has") {
+            if (content.find(w[3]) == std::string::npos) return fail(scene, line, "expect_file: no \"" + w[3] + "\"");
+        } else if (w.size() == 4) {
+            return fail(scene, line, "usage: expect_file NAME [lines N|has TEXT]");
+        }
+        std::printf("expect_file ok: %s\n", w[1].c_str());
+        return true;
+    }
     /* fixture state: may come before or after boot */
     if (cmd == "clock") {
         int hh = 0, mm = 0, year = 2026, month = 10, day = 10;

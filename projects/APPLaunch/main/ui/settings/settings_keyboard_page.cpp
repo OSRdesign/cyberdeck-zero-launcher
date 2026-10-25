@@ -7,6 +7,7 @@
 #include "settings_keyboard_page.hpp"
 
 #include "settings_native_mode.hpp"
+#include "settings_strokes_page.hpp"
 
 #include "../launcher_osk.hpp"
 
@@ -122,6 +123,9 @@ void append_entries(Tree &tree, const NodeIter &system)
     NodeIter keyboard = tree.append_child(system, SettingEntry{"On-screen keyboard", settings_keyboard_choice_page_factory});
     tree.append_child(keyboard, SettingEntry{"Auto"}); /* index 0 = launcher_osk::kAuto */
     tree.append_child(keyboard, SettingEntry{"Off"});  /* index 1 = launcher_osk::kOff */
+    /* the PDA writing zone's training (report 042), next to the keyboard's entries: the rows counted from the end of
+     * the section (Shutdown, Reboot, Keyboard test) stay where they were */
+    settings_strokes::append_entry(tree, system);
     if (settings_ui::dev_pages())
         tree.append_child(system, SettingEntry{"Keyboard test", settings_keyboard_test_factory, PageType::Normal});
 }

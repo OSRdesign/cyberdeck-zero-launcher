@@ -1,0 +1,52 @@
+# Settings > System > Strokes training (report 042, PDA phase S6) on the profile pda: the page keeps the writing zone's
+# band shown and takes its strokes. The first glyph is b (the letters refused at the owner's first board test come
+# first): its shape as a guide (light ink, a green dot where it starts), "Draw b (1/4)". Attempts written in the letters
+# box: a lower-case b (recognised: green), a d (read as d: amber), a scribble (refused: red); the Reset all dialog,
+# cancelled (the focus stays on Reset all); a fourth b ends the glyph: its templates go to the user overlay
+# (out/<WxH>/runtime/config, strokesuser), the tables are loaded again, the page moves on to p; every attempt is in the
+# capture log. Finish starts the re-test
+# (b once more), then the summary: recognised before (the training attempts) and after (the re-test).
+# Goldens at both sizes.
+title strokes training
+sizes 480x640 480x800
+profile pda
+strokesuser
+apps Settings Store CLI SSH Calculator
+clock 21:04 2026-10-25
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+expect_text "Draw b  (1/4)"
+shot strokes_training
+stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
+stroke letters 60,30 60,117 61,111 61,104 62,95 62,90 63,84 64,78 64,73 65,64 67,57 69,51 72,45 76,42 82,40 87,41 94,41 101,43 106,45 111,48 115,52 119,56 121,62 122,67 123,73 124,80 124,88 124,96 123,103 122,109 120,114 116,119 110,123 105,125 100,126 94,128 89,129 82,129 75,129 69,130 63,130
+stroke letters 40,40 120,45 43,100 130,110 50,44
+expect_text "Draw b  (4/4)"
+shot strokes_training_attempts
+key RIGHT
+key RIGHT
+key RIGHT
+key ENTER
+shot strokes_training_reset
+key ESC
+stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
+expect_text "Draw p  (1/4)"
+expect_file strokes-user.txt has "# strokes-training b letters: 4 written, 2 recognised"
+expect_file strokes-training.txt lines 4
+shot strokes_training_next
+key RIGHT
+key ENTER
+expect_text "Check b  (1/1)"
+shot strokes_training_retest
+stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
+expect_text "Summary"
+expect_file strokes-training.txt lines 5
+shot strokes_training_summary

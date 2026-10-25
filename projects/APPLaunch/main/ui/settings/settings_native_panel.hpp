@@ -11,6 +11,7 @@
  *   Bluetooth     Paired Devices, Scan, Alias (settings_native_bluetooth_page.cpp)
  *   Apps          Settings > Apps, its Apps and Sources tabs (settings_native_apps_page.cpp)
  *   TimeZone      Date & Time > Time zone, the two-level zone picker (settings_native_timezone_page.cpp)
+ *   StrokesTraining  System > Strokes training, the PDA writing zone's training (settings_strokes_page.cpp)
  *
  * The host hides its roller and takes it out of the input group while a panel is up; the panel puts its own widgets
  * in the group. Esc on the panel's widgets calls `back` (the host's back, posted), and the host first asks the panel

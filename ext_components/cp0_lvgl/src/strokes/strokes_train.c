@@ -424,6 +424,11 @@ const strokes_train_attempt *strokes_train_last(const strokes_train *s)
     return s && s->last.verdict != STROKES_TRAIN_NONE ? &s->last : NULL;
 }
 
+int strokes_train_last_item(const strokes_train *s)
+{
+    return s && s->last.verdict != STROKES_TRAIN_NONE ? s->last_item : -1;
+}
+
 void strokes_train_set_personal_only(strokes_train *s, int on)
 {
     if (s)
@@ -514,7 +519,28 @@ static float score_against(const strokes_table *chosen, const strokes_config *cf
     return 0.0f;
 }
 
-/* The glyph's attempts become its block: the misses always, the recognised ones only when they add a shape. */
+/* 1 when another attempt of the glyph has the shape of attempt k (it would read k as the glyph): a miss the user wrote
+ * once only (a slip, a scribble) is not a way they write the glyph. */
+static int supported(const strokes_train *s, const strokes_train_item *it, int k, char lines[][STK_N * 24 + 96],
+                     const int *usable)
+{
+    for (int j = 0; j < s->n_att; ++j) {
+        if (j == k || !usable[j])
+            continue;
+        strokes_table *one = strokes_table_new();
+        strokes_error err;
+        float sc = 0.0f;
+        if (one && strokes_table_add_text(one, lines[j], "attempt", &err) == 0)
+            sc = score_against(one, &s->cfg, it, s->pts[k], s->npts[k]);
+        strokes_table_free(one);
+        if (sc >= s->cfg.min_score)
+            return 1;
+    }
+    return 0;
+}
+
+/* The glyph's attempts become its block: the misses the user wrote at least twice the same way, and the recognised
+ * attempts only when they add a shape (not near a shipped variant nor an attempt already taken). */
 static unsigned close_glyph(strokes_train *s)
 {
     const int i = s->cur;
@@ -523,22 +549,33 @@ static unsigned close_glyph(strokes_train *s)
     sbuf lines = {0};
     sb_str(&lines, "");
     int added = 0, recognised = 0;
+    char line_of[STROKES_TRAIN_REPS][STK_N * 24 + 96];
+    int usable[STROKES_TRAIN_REPS];
+    for (int k = 0; k < s->n_att; ++k) {
+        /* a tap, too short: no shape */
+        usable[k] = strokes_template_line(s->t, &s->cfg, it->id, it->set, s->pts[k], s->npts[k], line_of[k],
+                                          sizeof line_of[k]) >= 0;
+        recognised += s->att[k].verdict == STROKES_TRAIN_OK;
+    }
     for (int pass = 0; pass < 2; ++pass) {
         for (int k = 0; k < s->n_att && chosen; ++k) {
             const strokes_train_attempt *a = &s->att[k];
-            if (pass == 0 && a->verdict == STROKES_TRAIN_OK)
-                recognised++;
-            char line[STK_N * 24 + 96];
-            if (strokes_template_line(s->t, &s->cfg, it->id, it->set, s->pts[k], s->npts[k], line, sizeof line) < 0)
-                continue; /* a tap, too short: no shape */
+            if (!usable[k])
+                continue;
+            const int ok = a->verdict == STROKES_TRAIN_OK;
             if (pass == 0) {
-                if (a->verdict == STROKES_TRAIN_OK && a->score >= STROKES_TRAIN_DUP_SCORE)
+                if (ok && a->score >= STROKES_TRAIN_DUP_SCORE)
                     continue; /* the shipped variants know this shape */
+                if (!ok && !supported(s, it, k, line_of, usable))
+                    continue; /* written once that way */
                 if (score_against(chosen, &s->cfg, it, s->pts[k], s->npts[k]) >= STROKES_TRAIN_DUP_SCORE)
                     continue; /* near an attempt already taken */
             } else if (added > 0 || !s->personal_only) {
                 break; /* the second pass only fills an empty personal-only block */
+            } else if (!ok && !supported(s, it, k, line_of, usable)) {
+                continue;
             }
+            const char *line = line_of[k];
             strokes_error err;
             if (strokes_table_add_text(chosen, line, "attempt", &err) != 0)
                 continue;

@@ -10,6 +10,7 @@
 #include "settings_hw_profile.hpp"
 #include "settings_keyboard_page.hpp"
 #include "settings_pointer_page.hpp"
+#include "settings_strokes_page.hpp"
 #include "settings_native_host.hpp"
 #include "settings_native_mode.hpp"
 #include "settings_session.hpp"
@@ -629,6 +630,8 @@ SettingsNativePage settings_native_page(const NodeIter &node)
     const SettingPageFactory &factory = node->page_factory;
     if (!factory) return SettingsNativePage::None;
     if (factory_is(factory, settings_keyboard_test_factory)) return SettingsNativePage::KeyboardTest;
+    // report 042: the PDA writing zone's training
+    if (factory_is(factory, settings_strokes_training_factory)) return SettingsNativePage::StrokesTraining;
     // task 014 P3a: the read-only pages
     if (factory_is(factory, settings_t12b_about_page_factory)) return SettingsNativePage::About;
     if (factory_is(factory, settings_account_page_factory)) return SettingsNativePage::User;

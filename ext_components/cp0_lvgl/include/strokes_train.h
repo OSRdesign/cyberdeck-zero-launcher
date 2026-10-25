@@ -10,9 +10,11 @@
  * user writes it STROKES_TRAIN_REPS times; every attempt is classified in the glyph's own set (strokes_classify, the
  * recogniser's own path: a punctuation glyph without its tap) and judged: recognised, refused, or another glyph. After
  * the last attempt the attempts become PERSONAL templates of that glyph in the user overlay (the overlay format of
- * tools/strokes/README.md, lines from strokes_template_line()): every usable attempt the recogniser missed (refused or
- * read as another glyph), and the recognised ones only when they are not near an existing variant (score under
- * STROKES_TRAIN_DUP_SCORE) nor near an attempt already taken, so the overlay stays small. The templates are added to the
+ * tools/strokes/README.md, lines from strokes_template_line()): the attempts the recogniser missed (refused or read as
+ * another glyph) that the user wrote at least twice the same way (another attempt reads it as the glyph: a shape
+ * written once is a slip or a scribble, not kept), and the recognised ones only when they are not near an existing
+ * variant (score under STROKES_TRAIN_DUP_SCORE); none near an attempt already taken, so the overlay stays small. The
+ * templates are added to the
  * shipped ones (the glyph's score is its best variant's); with personal_only the block starts with "replace <id> <set>"
  * and only the user's templates stay (report 042 section 6: not the default).
  *
@@ -119,8 +121,9 @@ int strokes_train_progress(const strokes_train *s);
 int strokes_train_retest_count(const strokes_train *s);
 /* TRAINING: attempt k (0..progress-1) of the current glyph. */
 const strokes_train_attempt *strokes_train_attempt_at(const strokes_train *s, int k);
-/* The last attempt judged (training or re-test). */
+/* The last attempt judged (training or re-test), and the item it was for (-1 before the first). */
 const strokes_train_attempt *strokes_train_last(const strokes_train *s);
+int strokes_train_last_item(const strokes_train *s);
 
 /* One stroke for the current glyph (the points of one contact, drop-outs healed into it). TRAINING: judged and kept;
  * the last one adds the glyph's templates and moves on (EV_OVERLAY | EV_MOVED). RETEST: judged, next glyph (the last:

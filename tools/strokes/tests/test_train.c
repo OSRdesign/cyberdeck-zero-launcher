@@ -282,6 +282,23 @@ static void test_session(void)
     strokes_train_free(s);
     strokes_table_free(t2);
 
+    /* a miss written once (a slip, a scribble) is not kept; written twice the same way it is */
+    s = strokes_train_new(t, NULL, "e", NULL);
+    strokes_point zz2[5] = {{0, 0, 0}, {80, 5, 20000}, {3, 60, 40000}, {90, 70, 60000}, {10, 4, 80000}};
+    for (int k = 0; k < STROKES_TRAIN_REPS - 1; ++k) {
+        n = clean_points(t, "e", STROKES_SET_LETTERS, pts, 512);
+        strokes_train_stroke(s, pts, n);
+    }
+    strokes_train_stroke(s, zz2, 5);
+    CHECK(strokes_train_last_item(s) == 0 && strokes_train_last(s)->verdict == STROKES_TRAIN_REFUSED);
+    CHECK(strstr(strokes_train_overlay(s), STROKES_TRAIN_MARK "e letters: 4 written, 3 recognised, 0 added"));
+    strokes_train_free(s);
+    s = strokes_train_new(t, NULL, "e", NULL);
+    for (int k = 0; k < STROKES_TRAIN_REPS; ++k)
+        strokes_train_stroke(s, zz2, 5);
+    CHECK(strstr(strokes_train_overlay(s), STROKES_TRAIN_MARK "e letters: 4 written, 0 recognised, 1 added"));
+    strokes_train_free(s);
+
     /* a tap is no shape: it is judged, never a template */
     s = strokes_train_new(t, NULL, "e", NULL);
     strokes_point tap[2] = {{50, 50, 0}, {50.5f, 50, 60000}};
