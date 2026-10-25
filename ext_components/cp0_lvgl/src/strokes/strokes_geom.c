@@ -257,7 +257,8 @@ void stk_features(const stk_vec *p, int n, stk_feat *f)
         t[nt++] = a;
         f->turn += a;
     }
-    /* Corners: windows of three vertices turning more than STK_CORNER_DEG; a cluster counts once. */
+    /* Corners: windows of three vertices turning more than STK_CORNER_DEG; a cluster counts once. The sharpest
+     * window is the stroke's sharpest turn (gate sharp=). */
     float lim = STK_CORNER_DEG * STK_PI / 180.0f;
     int in_corner = 0;
     for (int i = 0; i < nt; ++i) {
@@ -266,6 +267,8 @@ void stk_features(const stk_vec *p, int n, stk_feat *f)
             w += t[i - 1];
         if (i + 1 < nt)
             w += t[i + 1];
+        if (fabsf(w) > f->sharp)
+            f->sharp = fabsf(w);
         if (fabsf(w) > lim) {
             if (!in_corner)
                 f->corners++;

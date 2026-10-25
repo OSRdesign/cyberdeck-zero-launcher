@@ -19,6 +19,7 @@
 #             MODE_SHIFT | MODE_CAPS | MODE_PUNCT | MODE_EXT, ACCENT_GRAVE | ACCENT_ACUTE | ACCENT_CIRCUMFLEX |
 #             ACCENT_TILDE | ACCENT_DIAERESIS | ACCENT_RING (a dead accent for the next letter)
 #   gates     start=<cells> end=<cells> line=<dir|no|any> closed=yes|no|any turn=cw|ccw corners=N[-M] dirs=<numpad>
+#             sharp=DEG[-DEG] (the sharpest turn over three of the 32 points, degrees: a V point against a U)
 #             cells: tl tc tr ml mc mr bl bc br, rows t m b, columns l c r, * (all); unset gates come from the template
 #   template  x,y points (0..100 on the longer side, y down; only the shape counts), or the word tap
 # Several lines with the same id and set are variants of one glyph (the best variant counts).

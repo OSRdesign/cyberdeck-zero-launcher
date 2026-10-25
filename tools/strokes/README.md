@@ -127,6 +127,10 @@ and digits sets only (after a prefix only backspace, which leaves the prefix wit
 prefix keeps it; upper-casing covers the Latin-1 letters; the punctuation and extended modes stay on until
 backspace or a box change (owner decision 2026-10-25, see Modes). Every 0.1.0 call keeps its signature.
 
+0.2.1 (report 041 section 12): the gate `sharp=` in the table format (an older library refuses a table that uses
+it: the tables and the library ship together) and the b, u and v variants of the shipped table. The API is
+unchanged.
+
 ## Glyph table
 
 Plain text, one line per variant, fields separated by spaces or tabs, `#` at the start of a line for comments:
@@ -159,19 +163,24 @@ far away is open. The parser refuses a template that fails its own gates.
 | `closed=` | `yes` (end within 0.32 of the start), `no` (at least 0.15 away), `any` |
 | `turn=` | `cw` or `ccw`, optionally `:DEG` (default 90): net turning of at least DEG degrees in that sense |
 | `corners=` | `N` or `N-M`: sharp turns (more than 65 degrees over three of the 32 points) |
+| `sharp=` | `DEG` (at least) or `DEG-DEG` (a range), degrees: the sharpest turn of the stroke, the largest turning over three consecutive of the 32 points (a V's point turns 130-180, a u's round bottom 50-110) |
 | `dirs=` | numpad digits (`6` right, `3` down-right, `2` down, `1` down-left, `4` left, `7` up-left, `8` up, `9` up-right): each must appear in this order in the stroke's chain code, within 45 degrees |
 
-### The shipped set (93 glyphs; optional section 14 more)
+### The shipped set (93 glyphs, 103 templates; optional section 14 more)
 
 The strokes of the classic one-stroke alphabet as its reference chart draws them (report 039 section 13 cites the
 chart and shows the traced templates): start point, direction, loops, corners and retraces included, one template per
 glyph because the chart shows one way to write each. Letters type lower case; a shift gesture first makes the next
-letter upper case. Contact sheets of the templates: report 039 section 13.
+letter upper case. Contact sheets of the templates: report 039 section 13. Since the first board test (report 041
+section 12) b, u and v also have natural variants after the chart's line: b 6 (the lower-case b, also with a wide
+bowl or drawn on from the foot of the stem; the chart's B with a full stem, with a bigger lower bump, or written up
+the stem from the bottom), v 3 (a plain V, a short flick, a wide V: only with a sharp point, gate `sharp=`), u 1 (a
+narrow u: only with a round bottom and from the top left).
 
 | Glyph | Stroke |
 |---|---|
 | a | up from bottom-left to a rounded top, down to bottom-right (no bar) |
-| b | stem down, back up the stem, two bumps to the right, ending bottom-left going left |
+| b | stem down, back up the stem, two bumps to the right, ending bottom-left going left (variants: a lower-case b, stem down then a bowl to the right; a B up the stem from the bottom) |
 | c | from top-right, counter-clockwise over the top and round to bottom-right |
 | d | stem down, back up the stem, one bump to the right, ending bottom-left going left |
 | e | from top-right, a counter-clockwise bowl to a point in the middle, a second bowl ending bottom-right |
@@ -191,7 +200,7 @@ letter upper case. Contact sheets of the templates: report 039 section 13.
 | s | from top-right over the top, across, round the bottom, ending bottom-left |
 | t | right along the top, then down the right side |
 | u | down, round the bottom, up to top-right |
-| v | down to a point, up, a short flick to the right at the top |
+| v | down to a point, up, a short flick to the right at the top (variants: a plain V with a sharp point, no flick) |
 | w | down, round, up to a point a third down, down, round, up to top-right |
 | x | **two strokes**: the extended prefix (a line down-right), then a line down-left (glyph `x` of the ext set) |
 | y | down, round to the right, up to top-right, back down the same line below the base, a clockwise loop, out up-right |
@@ -398,8 +407,10 @@ a board prints the real number.
   3 mm, tap 1.5 mm / 250 ms, min_score 0.80, margin 0.04) are first guesses from synthetic strokes.
 - Weakest in the synthetic test (report 039 section 13.4): q against o (the tail is a third of the width; about
   91 %), then enter, r, g and e (98 %). Under the harsh generator the straight lines (i, 1, `'`, `-`, `\`, `/`, `!`)
-  and the retraced or looped shapes (b, r, y, `®`, `%`) lose most. The shipped table has no explicit gates: every
-  gate comes from its template.
+  and the retraced or looped shapes (b, r, y, `®`, `%`) lose most. The shipped table's only explicit gates are on the
+  u and v variants (`sharp=`, `start=`); every other gate comes from its template.
+- The b variants share the stem and its retrace with d: under the harsh generator d loses about 6 points (rejected,
+  not wrong); a narrow u and a V with a rounded point remain the closest pair (report 041 section 12).
 - One contact only; no multi-stroke glyph other than the two prefixes (X = the extended prefix + x, caps lock = two
   shifts).
 - At report rates below 60 Hz a two-frame drop-out exceeds 50 ms and splits the stroke: raise `heal_ms` for such panels.

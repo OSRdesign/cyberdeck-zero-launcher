@@ -5,8 +5,8 @@
 # or follows a replace / remove directive. The whole file is refused if one line is wrong, and the shipped table then
 # stays as it is.
 
-# 1. One more way to write v: a rounded bottom and no flick to the right at the top (the shipped v stays too; the
-#    best variant counts).
+# 1. One more way to write v: a rounded bottom and no flick to the right at the top (the shipped v and its variants
+#    stay too; the best variant counts).
 v      letters  v              start=tl end=tr corners=0-3   0,0 30,85 50,100 70,85 100,0
 
 # 2. My own k: replace the shipped variant (the loop) by an angle bracket (lines written by the S6 training screen

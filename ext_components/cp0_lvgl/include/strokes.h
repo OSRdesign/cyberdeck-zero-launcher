@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define STROKES_VERSION "0.2.0"
+#define STROKES_VERSION "0.2.1"
 #define STROKES_ID_MAX 16  /* glyph id incl. the terminating NUL */
 #define STROKES_MAX_CAND 4 /* candidates kept in a result */
 #define STROKES_DIRS_MAX 24 /* chain code string incl. NUL */

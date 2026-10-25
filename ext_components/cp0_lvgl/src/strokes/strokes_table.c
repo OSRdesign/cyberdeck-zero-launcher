@@ -428,6 +428,18 @@ static int parse_gate(const char *tok, stk_gates *g, char *msg, size_t msz)
             g->cmin = g->cmax = (int8_t)a;
         } else
             bad = 1;
+    } else if (strcmp(key, "sharp") == 0) {
+        /* sharp=MIN | MIN-MAX: the sharpest turn over three consecutive vertices, degrees (at most 3 x 180) */
+        int a, b;
+        char extra;
+        if (sscanf(v, "%d-%d%c", &a, &b, &extra) == 2 && a >= 0 && b >= a && b >= 1 && b <= 540) {
+            g->sharp_min = (float)a * STK_PI / 180.0f;
+            g->sharp_max = (float)b * STK_PI / 180.0f;
+        } else if (sscanf(v, "%d%c", &a, &extra) == 1 && a >= 0 && a <= 540) {
+            g->sharp_min = (float)a * STK_PI / 180.0f;
+            g->sharp_max = 3.0f * STK_PI;
+        } else
+            bad = 1;
     } else if (strcmp(key, "dirs") == 0) {
         size_t n = strlen(v);
         bad = n == 0 || n >= sizeof g->dirs;

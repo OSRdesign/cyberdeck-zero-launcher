@@ -34,10 +34,18 @@ static strokes_table *fresh(void)
 static void shipped_table(void)
 {
     /* 25 letters (x is two strokes: the extended prefix, then x of the ext set), 10 digits, 6 gestures, the 33
-     * punctuation glyphs and the 19 common extended ones: 93 glyphs, one template each (the chart shows one way) */
+     * punctuation glyphs and the 19 common extended ones: 93 glyphs, one template each (the chart shows one way),
+     * plus the natural variants of b (6), v (3) and u (1) added after the first board test (report 041 section 12) */
     strokes_table *t = test_table();
     CHECK(strokes_table_glyph_count(t) == 93);
-    CHECK(strokes_table_template_count(t) == 93);
+    CHECK(strokes_table_template_count(t) == 93 + 6 + 3 + 1);
+    for (int i = 0; i < strokes_table_glyph_count(t); ++i) {
+        char id[STROKES_ID_MAX];
+        int set, nv;
+        strokes_table_glyph_info(t, i, id, &set, &nv);
+        int want = strcmp(id, "b") == 0 ? 7 : strcmp(id, "v") == 0 ? 4 : strcmp(id, "u") == 0 ? 2 : 1;
+        CHECKF(nv == want, "%s: %d variants", id, nv);
+    }
     for (char c = 'a'; c <= 'z'; ++c) {
         char id[2] = {c, 0};
         CHECKF(has_glyph(t, id, c == 'x' ? STROKES_SET_EXT : STROKES_SET_LETTERS, NULL), "letter %s", id);
@@ -102,6 +110,12 @@ static void bad_lines(void)
         {"x letters x turn=cw:abc 0,0 1,1\n", "bad value"},
         {"x letters x corners=3-1 0,0 1,1\n", "bad value"},
         {"x letters x dirs=55 0,0 1,1\n", "bad value"},
+        {"x letters x sharp=120-90 0,0 1,1\n", "bad value"},
+        {"x letters x sharp=0-0 0,0 1,1\n", "bad value"},
+        {"x letters x sharp=600 0,0 1,1\n", "bad value"},
+        {"x letters x sharp=abc 0,0 1,1\n", "bad value"},
+        {"x letters x sharp=-5 0,0 1,1\n", "bad value"},
+        {"v letters v sharp=150 0,0 50,0 50,100\n", "fails its own gates"},
         {"x letters x 0,0\n", "at least 2"},
         {"x letters x 0,0 0,0\n", "no length"},
         {"x letters x 1,2,3 4,5\n", "bad point"},
@@ -313,7 +327,7 @@ static void example_overlay(void)
     int g0 = strokes_table_glyph_count(t), v = 0;
     CHECKF(strokes_table_add_file(t, "share/overlay-example.txt", &err) == 0, "%s:%d %s", err.source, err.line, err.msg);
     CHECK(strokes_table_glyph_count(t) == g0 - 1 && !has_glyph(t, "pound", STROKES_SET_EXT, NULL));
-    CHECK(has_glyph(t, "v", STROKES_SET_LETTERS, &v) && v == 2);
+    CHECK(has_glyph(t, "v", STROKES_SET_LETTERS, &v) && v == 4 + 1); /* the shipped 4 and the example's */
     CHECK(has_glyph(t, "k", STROKES_SET_LETTERS, &v) && v == 1);
     strokes_table_free(t);
 }
