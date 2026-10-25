@@ -56,13 +56,13 @@ python board.py status     deck
   and `install` ran again (install.sh switches back).
 - `install --force` passes `--force` to install.sh (an unknown board without a profile, or replacing a hand-edited
   `/etc/applaunch/board.conf`). Other install.sh options: `--install-arg=--no-default-source` (with `=`).
-- **Pi 3A+:** a command string containing `environ` drops the ssh connection; `board.py` refuses to send one (quirk
+- **Pi 3A+ (and Pi 4 B, below):** a command string containing `environ` drops the ssh connection; `board.py` refuses to send one (quirk
   `no_environ` in `boards.json`), before anything on the board is stopped. `pi3a` and `pi3a-dsi` are the same board
   with its SPI panel or its DSI panel (install.sh profiles `pi3a-luckfox35` and `pi3a-wsdsi43`): use the entry of the
   panel that is mounted (the DSI panel since 2026-10-13).
-- **Pi 4 B (`pi4b`, install.sh profile `pi4b-dsi`):** its ssh session was seen dropping on some command strings
-  (perhaps the Pi 3A+'s `environ` quirk; unverified, so no quirk is set). It logs undervoltage warnings with its
-  current supply.
+- **Pi 4 B (`pi4b`, install.sh profile `pi4b-dsi`):** the same `environ` quirk as the Pi 3A+ (verified 2026-10-25:
+  a command string containing the word in any case, `EnvironmentFile` for one, drops the ssh connection), so its entry
+  has `no_environ` too. It logs undervoltage warnings with its current supply.
 - **Pi 3A+ `/tmp` is a 208 MB tmpfs.** The bundle is about 54 MB and `upload` unpacks it there, so an earlier bundle or `/tmp/applaunch-bundle` left behind makes `upload` fail with "No space left on device" (or paramiko `OSError: Failure`). Remove the old files (`rm -rf /tmp/applaunch-bundle /tmp/applaunch-upload.tar.gz /tmp/b05 /tmp/bundle*.tar.gz`) and upload again.
 - Never `pkill -f` over ssh (kills the ssh shell); `board.py` uses `pkill -x cyberdeckzero` (the whole binary name is
   the process name: 13 characters), and the earlier binary's process name for a board not migrated yet.

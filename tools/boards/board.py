@@ -41,7 +41,7 @@ Board kinds (boards.json):
   variant), then set its kind to "desktop" (and "dm" when it is not lightdm) in boards.json.
 
 Quirks encoded here:
-  - Pi 3A+ (quirk no_environ): an ssh command string containing the word "environ" drops the connection. board.py
+  - Pi 3A+ and Pi 4 B (quirk no_environ): an ssh command string containing the word "environ" drops the connection. board.py
     refuses to send one to such a board (dry run included). Note EnvironmentFile= in a unit file and /proc/PID/environ.
   - never `pkill -f` over ssh (it kills the ssh shell itself): `pkill -x cyberdeckzero` (the comm name: 13 characters,
     the whole binary name), and the earlier binary's 15-character comm name (OLD_LAUNCHER_COMM) for a board still on
