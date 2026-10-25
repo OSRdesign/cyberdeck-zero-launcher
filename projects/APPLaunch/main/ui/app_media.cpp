@@ -58,8 +58,6 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
-constexpr int kDimPercent = 10; /* as the clock screensaver */
-
 std::mutex g_ops; /* every level read and write */
 std::atomic<unsigned> g_generation{0};
 
@@ -153,7 +151,7 @@ void tick_dim()
     if (!active || dark <= 0 || now - g_activity_ms.load() < static_cast<long long>(dark) * 1000) return;
     try {
         std::lock_guard<std::mutex> ops(g_ops);
-        const int raw = launcher_media_controls::dim_backlight(kDimPercent);
+        const int raw = launcher_media_controls::dim_backlight(launcher_media_controls::idle_dim_percent()); /* as the clock screensaver */
         if (raw > 0) {
             g_dimmed = true;
             g_dim_raw = raw;

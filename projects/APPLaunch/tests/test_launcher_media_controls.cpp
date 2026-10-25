@@ -9,6 +9,7 @@
 #include "hal_lvgl_bsp.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <functional>
 #include <iterator>
 #include <list>
@@ -258,6 +259,24 @@ int main()
     assert(backlight_value == 0);
     backlight_write_failed = false;
     assert(config_writes == previous_config_writes);
+
+    // The idle dim level of the board profile (APPLAUNCH_DIM_PERCENT): an integer 1..100, else the default 10.
+    using launcher_media_controls::parse_dim_percent;
+    assert(launcher_media_controls::kDefaultDimPercent == 10);
+    assert(parse_dim_percent(nullptr) == 10);
+    assert(parse_dim_percent("") == 10);
+    assert(parse_dim_percent("20") == 20);
+    assert(parse_dim_percent("1") == 1);
+    assert(parse_dim_percent("100") == 100);
+    assert(parse_dim_percent("020") == 20);
+    for (const char *bad : {"0", "101", "-5", "+20", " 20", "20 ", "20%", "abc", "2.5", "1000", "0020", "99999999999"})
+        assert(parse_dim_percent(bad) == 10);
+    // read from the environment once, on first use
+    setenv("APPLAUNCH_DIM_PERCENT", "20", 1);
+    assert(launcher_media_controls::idle_dim_percent() == 20);
+    setenv("APPLAUNCH_DIM_PERCENT", "50", 1);
+    assert(launcher_media_controls::idle_dim_percent() == 20);
+    unsetenv("APPLAUNCH_DIM_PERCENT");
 
     return 0;
 }
