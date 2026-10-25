@@ -300,9 +300,8 @@ struct Service {
     lv_timer_t *poll = nullptr;
     bool apply_armed = false;
     std::function<bool()> zone_input; /* the PDA writing zone is the text input (report 042) ... */
-    ZoneShow zone_show;               /* ... and shows instead of the keyboard */
+    std::function<void(bool)> zone_show; /* ... and shows instead of the keyboard */
     bool zone_shown = false;
-    const void *zone_field = nullptr; /* the field it shows for */
 };
 
 constexpr uint32_t kPolicyPollMs = 250;
@@ -328,10 +327,9 @@ void notify(int keyboard_h)
 void zone_set(bool show)
 {
     Service &s = service();
-    if (show == s.zone_shown && (!show || s.zone_field == s.owner)) return;
+    if (show == s.zone_shown) return;
     s.zone_shown = show;
-    s.zone_field = show ? s.owner : nullptr;
-    if (s.zone_show) s.zone_show(show, s.type, s.multiline, show ? s.owner : nullptr);
+    if (s.zone_show) s.zone_show(show);
 }
 
 void hide_now(bool release)
@@ -510,7 +508,7 @@ void set_reserved_inset(int px)
     notify(s.keyboard ? s.keyboard->height() : 0);
 }
 
-void set_zone(std::function<bool()> zone_input, ZoneShow show)
+void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> show)
 {
     Service &s = service();
     zone_set(false);

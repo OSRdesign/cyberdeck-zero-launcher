@@ -36,25 +36,13 @@ bool shown()
     return active() && cp0_zone_ui_shown() != 0;
 }
 
-bool writing()
-{
-    return active() && cp0_zone_ui_vis() == CP0_ZONE_VIS_WRITE;
-}
-
 void bind()
 {
     if (!active()) return;
     cp0_zone_ui_set_vis_listener(on_shown);
     /* the band is the text input while the launcher is in front: it shows where the keyboard would */
     cp0::ui::osk::set_zone([] { return active() && !s_app_front; },
-                           [](bool show, cp0::ui::TextType type, bool multiline, const void *field) {
-                               if (show) /* a password field opens the band on the keyboard (report 042) */
-                                   cp0_zone_ui_set_field(type == cp0::ui::TextType::Password ? CP0_ZONE_FIELD_PASSWORD
-                                                         : type == cp0::ui::TextType::Number ? CP0_ZONE_FIELD_NUMBER
-                                                                                             : CP0_ZONE_FIELD_TEXT,
-                                                         multiline ? 1 : 0, field);
-                               cp0_zone_ui_set_text_wanted(show ? 1 : 0);
-                           });
+                           [](bool show) { cp0_zone_ui_set_text_wanted(show ? 1 : 0); });
 }
 
 void set_app_front(bool front)
@@ -101,7 +89,6 @@ namespace launcher_zone {
 
 bool active() { return false; }
 bool shown() { return false; }
-bool writing() { return false; }
 void bind() {}
 void set_app_front(bool) {}
 bool app_front() { return false; }

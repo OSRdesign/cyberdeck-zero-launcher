@@ -22,10 +22,9 @@ static int imin(int a, int b) { return a < b ? a : b; }
 
 /* ------------------------------------------------------------------ layout */
 
-/* the strip keys' widths, in tenths of an arrow key (the mockup's Tab 1.3, Ctrl 1.5, Shift 1.5, Alt 1.2, the four
- * arrows 1, Enter 1.8, narrowed for the keyboard key (report 042): Tab 1.1, Ctrl 1.3, Shift 1.3, Alt 1.1, the arrows 1,
- * the keyboard key 1.1, Enter 1.4: the arrows keep their 4 mm on 480 px) */
-static const int k_strip_weight[CP0_ZONE_KEY__COUNT] = {11, 13, 13, 11, 10, 10, 10, 10, 11, 14};
+/* the strip keys' widths, in tenths of an arrow key (the mockup: Tab 1.3, Ctrl 1.5, Shift 1.5, Alt 1.2, the four
+ * arrows 1, Enter 1.8) */
+static const int k_strip_weight[CP0_ZONE_KEY__COUNT] = {13, 15, 15, 12, 10, 10, 10, 10, 18};
 
 int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
 {
@@ -80,42 +79,20 @@ int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
     return 0;
 }
 
-cp0_zone_vis_t cp0_zone_vis(const cp0_zone_show_t *s)
+int cp0_zone_shown(const cp0_zone_show_t *s)
 {
-    if (!s || (!s->text && !s->pinned)) return CP0_ZONE_VIS_HIDDEN;
-    if (s->pinned) return CP0_ZONE_VIS_WRITE; /* Strokes training writes */
-    if (s->field_choice >= 0) return s->field_choice ? CP0_ZONE_VIS_KEYS : CP0_ZONE_VIS_WRITE;
-    return s->password || s->prefer_keys ? CP0_ZONE_VIS_KEYS : CP0_ZONE_VIS_WRITE;
+    return s && (s->text || s->pinned) ? 1 : 0;
 }
 
-void cp0_zone_show_toggle(cp0_zone_show_t *s)
+int cp0_zone_inset(const cp0_zone_layout_t *l, int shown)
 {
-    if (!s || s->pinned) return;
-    const int keys = cp0_zone_vis(s) == CP0_ZONE_VIS_KEYS;
-    if (s->password || s->field_choice >= 0) {
-        s->field_choice = keys ? 0 : 1; /* this field only */
-    } else {
-        s->prefer_keys = !keys; /* the session's choice */
-        s->field_choice = -1;
-    }
+    return l && shown ? l->band_h : 0;
 }
 
-void cp0_zone_show_field(cp0_zone_show_t *s, int password)
+cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int shown, int x, int y)
 {
-    if (!s) return;
-    s->password = password ? 1 : 0;
-    s->field_choice = -1;
-}
-
-int cp0_zone_inset(const cp0_zone_layout_t *l, int vis)
-{
-    return l && vis != CP0_ZONE_VIS_HIDDEN ? l->band_h : 0;
-}
-
-cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int vis, int x, int y)
-{
-    if (!l || vis == CP0_ZONE_VIS_HIDDEN || y < l->strip_y) return CP0_ZONE_HIT_APP;
-    if (y < l->write_y || vis == CP0_ZONE_VIS_KEYS) return CP0_ZONE_HIT_BAND; /* the strip, the band's keyboard */
+    if (!l || !shown || y < l->strip_y) return CP0_ZONE_HIT_APP;
+    if (y < l->write_y) return CP0_ZONE_HIT_BAND; /* the strip */
     return x < l->divider_x ? CP0_ZONE_HIT_LETTERS : CP0_ZONE_HIT_DIGITS;
 }
 
@@ -153,7 +130,7 @@ static int within_heal(const cp0_zone_router_t *r, const cp0_touch_contact_t *c,
     return dx * dx + dy * dy <= (long long)r->heal_px * r->heal_px;
 }
 
-cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int vis, int swallow,
+cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int shown, int swallow,
                                 const cp0_touch_frame_t *f, cp0_zone_pen_t *pen)
 {
     pen_set(pen, CP0_ZONE_PEN_NONE, 0, 0, 0, f ? f->t_us : 0);
@@ -191,7 +168,7 @@ cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l
             return r->owner;
         }
         r->has_up = 0;
-        const cp0_zone_hit_t hit = cp0_zone_hit(l, vis, c->x, c->y);
+        const cp0_zone_hit_t hit = cp0_zone_hit(l, shown, c->x, c->y);
         if (hit == CP0_ZONE_HIT_APP) {
             r->owner = CP0_ZONE_OWNER_APP;
         } else if (hit == CP0_ZONE_HIT_BAND) {

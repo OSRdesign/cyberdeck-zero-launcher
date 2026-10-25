@@ -171,49 +171,17 @@ static void test_hit(void)
     CHECK_EQ(cp0_zone_hit(&l, 1, 322, 700), CP0_ZONE_HIT_DIGITS);
     CHECK_EQ(cp0_zone_hit(&l, 1, 479, 799), CP0_ZONE_HIT_DIGITS);
 
-    /* the band's keyboard in the boxes' place (report 042): all of the band is the band's pointer's */
-    CHECK_EQ(cp0_zone_hit(&l, CP0_ZONE_VIS_KEYS, 100, 600), CP0_ZONE_HIT_BAND);
-    CHECK_EQ(cp0_zone_hit(&l, CP0_ZONE_VIS_KEYS, 400, 799), CP0_ZONE_HIT_BAND);
-    CHECK_EQ(cp0_zone_hit(&l, CP0_ZONE_VIS_KEYS, 100, 481), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_inset(&l, CP0_ZONE_VIS_KEYS), 318);
-    /* the keyboard key between the arrows and Enter, the arrows still 4 mm wide */
-    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_MODE].x, l.strip_key[CP0_ZONE_KEY_RIGHT].x + l.strip_key[CP0_ZONE_KEY_RIGHT].w + l.gap);
-    CHECK(l.strip_key[CP0_ZONE_KEY_RIGHT].w * 100 >= 4 * l.ppmm_x100);
-
-    /* why it shows and what: a text field wanting input, a page pinning it (Strokes training: the boxes) */
-    cp0_zone_show_t s = {0, 0, 0, 0, -1};
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_HIDDEN);
+    /* why it shows: a text field wanting input, a page pinning it (Strokes training) */
+    cp0_zone_show_t s = {0, 0};
+    CHECK_EQ(cp0_zone_shown(&s), 0);
     s.text = 1;
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_WRITE);
+    CHECK_EQ(cp0_zone_shown(&s), 1);
     s.text = 0;
     s.pinned = 1;
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_WRITE);
-    cp0_zone_show_toggle(&s); /* nothing while pinned */
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_WRITE);
-    s.pinned = 0;
+    CHECK_EQ(cp0_zone_shown(&s), 1);
     s.text = 1;
-    CHECK_EQ(cp0_zone_vis(NULL), CP0_ZONE_VIS_HIDDEN);
-    /* the keyboard key: the session's choice for ordinary fields */
-    cp0_zone_show_toggle(&s);
-    CHECK(s.prefer_keys == 1 && cp0_zone_vis(&s) == CP0_ZONE_VIS_KEYS);
-    cp0_zone_show_field(&s, 0); /* another ordinary field: the session's choice holds */
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_KEYS);
-    cp0_zone_show_toggle(&s);
-    CHECK(s.prefer_keys == 0 && cp0_zone_vis(&s) == CP0_ZONE_VIS_WRITE);
-    /* a password field opens on the keyboard; its toggle holds for that field only */
-    cp0_zone_show_field(&s, 1);
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_KEYS);
-    cp0_zone_show_toggle(&s);
-    CHECK(s.field_choice == 0 && s.prefer_keys == 0 && cp0_zone_vis(&s) == CP0_ZONE_VIS_WRITE);
-    cp0_zone_show_toggle(&s);
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_KEYS);
-    cp0_zone_show_field(&s, 0); /* back to an ordinary field: the session's choice (the boxes) */
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_WRITE);
-    s.prefer_keys = 1;
-    cp0_zone_show_field(&s, 1);
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_KEYS);
-    s.text = 0;
-    CHECK_EQ(cp0_zone_vis(&s), CP0_ZONE_VIS_HIDDEN);
+    CHECK_EQ(cp0_zone_shown(&s), 1);
+    CHECK_EQ(cp0_zone_shown(NULL), 0);
 }
 
 /* ------------------------------------------------------------------ the router */

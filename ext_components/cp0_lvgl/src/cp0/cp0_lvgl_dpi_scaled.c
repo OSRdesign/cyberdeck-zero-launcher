@@ -104,7 +104,7 @@ static struct {
     lv_display_t *disp;
     lv_indev_t *indev;
     cp0_zone_router_t router;
-    volatile int vis; /* cp0_zone_vis_t: hidden, the writing boxes, the keyboard (report 042) */
+    volatile bool shown;
     volatile bool repaint; /* someone wrote over the band (an app's frame, a backdrop): redraw it */
 } zone;
 static struct { volatile bool active; int x, y, w, h; } overlay; /* compat coordinates */
@@ -201,7 +201,7 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
         return;
     }
     /* the writing zone's band, while it shows, covers the native display's bottom rows */
-    if (zone.on && zone.vis && area->y1 + h > zone.l.strip_y) h = zone.l.strip_y - area->y1;
+    if (zone.on && zone.shown && area->y1 + h > zone.l.strip_y) h = zone.l.strip_y - area->y1;
     if (h <= 0) {
         fb_end();
         lv_display_flush_ready(disp);
@@ -246,7 +246,7 @@ static void flush_zone(lv_display_t *disp, const lv_area_t *area, uint8_t *px_ma
         lv_display_flush_ready(disp);
         return;
     }
-    if (zone.vis) {
+    if (zone.shown) {
         cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
         cp0_fbo_blit(&g.out, area->x1, zone.l.strip_y + area->y1, w, h, px_map, w * g.bpp);
     }
@@ -491,7 +491,7 @@ static void deliver_frame(void *ctx, const cp0_touch_frame_t *raw)
         cp0_touch_frame_t zf = f;
         if (!tc.rd.monotonic) zf.t_us = zone_clock_us();
         cp0_zone_pen_t pen;
-        (void)cp0_zone_route(&zone.router, &zone.l, zone.vis, swallow_mode != 0, &zf, &pen);
+        (void)cp0_zone_route(&zone.router, &zone.l, zone.shown ? 1 : 0, swallow_mode != 0, &zf, &pen);
         if (pen.kind != CP0_ZONE_PEN_NONE) cp0_zone_ui_pen(&pen);
     }
     if (frame_cb && frame_cb(&f, f.t_us)) swallow_gesture();
@@ -795,15 +795,15 @@ static void init_touch(void)
 
 /* The writing zone's band was shown or hidden (a text field wants input, a page pins it: cp0_zone_ui.h): the native
  * display redraws the rows the band gave back, the band draws itself. */
-static void zone_vis_changed(int vis)
+static void zone_vis_changed(int shown)
 {
-    zone.vis = vis;
-    if (!zone.vis && g.native) {
+    zone.shown = shown != 0;
+    if (!zone.shown && g.native) {
         const lv_area_t rows = {0, zone.l.strip_y, g.lw - 1, g.lh - 1};
         lv_obj_invalidate_area(lv_display_get_screen_active(g.native), &rows);
         lv_obj_invalidate_area(lv_display_get_layer_top(g.native), &rows);
     }
-    if (zone.vis && zone.disp) lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
+    if (zone.shown && zone.disp) lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
 }
 
 /* -------------------------------------------------------------- public API */
@@ -1347,7 +1347,7 @@ lv_display_t *cp0_dpi_scaled_create(void)
 
     /* the writing zone's band (report 041): its own display at the bottom of the panel, drawn in one chunk */
     if (zone.on) {
-        zone.vis = CP0_ZONE_VIS_HIDDEN;
+        zone.shown = false;
         zone.disp = lv_display_create(g.lw, zone.l.band_h);
         lv_display_set_color_format(zone.disp, cf);
         const size_t sz = (size_t)g.lw * (size_t)zone.l.band_h * g.bpp;
