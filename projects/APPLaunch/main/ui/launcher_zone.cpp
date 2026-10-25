@@ -76,6 +76,11 @@ void repaint()
     cp0_zone_ui_reset_input(); /* a stroke or a held strip key from before the app is not finished now */
 }
 
+void close_strip()
+{
+    if (active()) cp0_zone_ui_set_strip_open(0);
+}
+
 } // namespace launcher_zone
 
 #else // SDL simulator and non-Linux builds: no writing zone
@@ -88,6 +93,7 @@ void set_app_front(bool) {}
 bool app_front() { return false; }
 void set_blank(bool) {}
 void repaint() {}
+void close_strip() {}
 
 } // namespace launcher_zone
 

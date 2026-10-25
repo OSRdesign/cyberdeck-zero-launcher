@@ -22,6 +22,7 @@
 #include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
 #include "launcher_toast.h"
+#include "launcher_zone.hpp"
 #include "native_ui.hpp"
 #include "ui_screensaver.h"
 
@@ -349,6 +350,7 @@ void show_switcher(const multitask::SwitcherInfo &info)
         };
         s_switcher.reset(new SwitcherScreen(std::move(events)));
         s_switcher_prev = active_besides(s_switcher->screen());
+        launcher_zone::close_strip(); /* the PDA writing zone's key strip would cover the switcher's bar (report 041) */
         lv_screen_load(s_switcher->screen()); /* while an app is still in front it is drawn when the launcher is */
         detach_keypad();
         std::fprintf(stderr, "[mt] switcher screen up: %zu card(s), from %s%s\n", info.cards.size(),

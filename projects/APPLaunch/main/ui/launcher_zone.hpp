@@ -33,4 +33,7 @@ void set_blank(bool on);
 /* After an app drew over the whole panel without the display being suspended (the blocking fullscreen path). */
 void repaint();
 
+/* The key strip closes (a screen that does not leave its row free comes up: the multitasking switcher). */
+void close_strip();
+
 } // namespace launcher_zone
