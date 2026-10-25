@@ -243,6 +243,33 @@ static int is_end_row(const cp0_ui_osk_key_t *k)
     return k->width_x10 == 0;
 }
 
+int cp0_ui_osk_char_key(const char *utf8, uint32_t *code, int *shift)
+{
+    if (code) *code = 0;
+    if (shift) *shift = 0;
+    if (!utf8 || !utf8[0]) return 0;
+    if (utf8[0] >= 'A' && utf8[0] <= 'Z' && utf8[1] == '\0') { /* an upper-case letter: its key with Shift */
+        const char lower[2] = {(char)(utf8[0] - 'A' + 'a'), '\0'};
+        if (!cp0_ui_osk_char_key(lower, code, NULL)) return 0;
+        if (shift) *shift = 1;
+        return 1;
+    }
+    const cp0_ui_osk_page_t pages[] = {CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_PAGE_SYMBOLS, CP0_UI_OSK_PAGE_SYMBOLS2};
+    for (size_t p = 0; p < sizeof(pages) / sizeof(pages[0]); ++p) {
+        int count = 0;
+        const cp0_ui_osk_key_t *keys = page_keys(pages[p], &count);
+        for (int i = 0; keys && i < count; ++i) {
+            const cp0_ui_osk_key_t *k = &keys[i];
+            if (k->kind != CP0_UI_OSK_K_CHAR || is_end_row(k) || !k->text || k->code == 0) continue;
+            if (strcmp(k->text, utf8) != 0) continue;
+            if (code) *code = k->code;
+            if (shift) *shift = k->shift;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int cp0_ui_osk_is_hold_key(const cp0_ui_osk_key_t *key)
 {
     return key && (key->kind == CP0_UI_OSK_K_ESC || key->kind == CP0_UI_OSK_K_BACKSPACE ||

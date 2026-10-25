@@ -158,6 +158,12 @@ typedef struct {
 /* 1 for the keys that act while held (Esc, Backspace, arrows): press on finger down, release owed. */
 int cp0_ui_osk_is_hold_key(const cp0_ui_osk_key_t *key);
 
+/* The US layout key of a character, from the keyboard's own tables (the PDA writing zone types through it, report
+ * 041): 1 and *code = its KEY_*, *shift = 1 when the US layout needs Shift for it ('A' = KEY_A + Shift, '!' = KEY_1 +
+ * Shift, ' ' = KEY_SPACE); 0 (code 0, shift 0) for a character no US key types (the euro sign, an accented letter):
+ * it is sent as text alone. code / shift may be NULL. */
+int cp0_ui_osk_char_key(const char *utf8, uint32_t *code, int *shift);
+
 /* Places the keys of a page: fills out[0..n-1] (row by row, left to right) and returns n, or -1. */
 int cp0_ui_osk_place_keys(const cp0_ui_osk_layout_t *l, cp0_ui_osk_page_t page, cp0_ui_osk_place_t *out, int max);
 
