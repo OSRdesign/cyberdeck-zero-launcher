@@ -63,7 +63,8 @@ int turned_rotation(int launcher_rot);
  * without metrics or when the canvas is not portrait. */
 bool turned_from_metrics(const cp0_ui_metrics_t *m, const char *runtime_dir, Input *out);
 
-/* export_command() for the running launcher (cp0_ui_metrics_current(), XDG_RUNTIME_DIR); "" when there are no
+/* export_command() for the running launcher (fullscreen: cp0_ui_metrics_panel(), the whole panel; compat:
+ * cp0_ui_metrics_current(), the window as drawn; XDG_RUNTIME_DIR); "" when there are no
  * metrics (a build without the dpi-scaled backend, the SDL simulator): no contract there, the command stays as it was.
  * turned (fullscreen, desktop_fit() said Turned): turned_from_metrics(); on a canvas that is not portrait the plain
  * fullscreen variables. */
