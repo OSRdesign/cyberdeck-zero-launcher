@@ -13,10 +13,10 @@
  *   | app area (the native display: |
  *   | the whole panel)              |
  *   +-------------------------------+ strip_y      (while the band shows; hidden, the app area reaches the bottom)
- *   | Tab Ctrl Shift Alt < ^ v > Ent|   the key strip: pad, a key_h high key
+ *   |Tab Ctrl Shift Alt < ^ v > K Ent|  the key strip: pad, a key_h high key (K: the keyboard key)
  *   +-------------------------------+ write_y
- *   | letters box     | digits box  |   the writing zone, write_h high (a third of the panel), the boxes inset by pad
- *   +-------------------------------+ h
+ *   | letters box     | digits box  |   the writing zone, write_h high (a third of the panel), the boxes inset by pad;
+ *   +-------------------------------+ h  or, in its place, the on-screen keyboard (vis KEYS, report 042 section 13)
  *
  * The band behaves like the fallback on-screen keyboard: it shows while a text field wants input and the keyboard's
  * policy allows it (cp0::ui::osk::set_zone: the same triggers, the terminal pages included) or while a page pins it
@@ -30,11 +30,16 @@
  * write in; the cap, from pda.6, gives 480x640 187 px instead of a third's 213; a panel whose cap is under 6 pad gets no
  * zone); the letters box takes 68 % of the boxes' width.
  *
- * Input rule: where the band is shown it is the text input (input.state vkb=zone, no fallback keyboard). A contact that
- * starts in the writing zone is a pen stroke for the recogniser (strokes.h) and never reaches the app; one that starts
- * on the strip is the band's; one that starts in the app area (or anywhere while the band is hidden) is the app's, as
- * before. Only the first contact of a touch writes: a second finger cancels the stroke (a three-finger gesture is never
- * a stroke).
+ * The keyboard key of the strip swaps the writing boxes for the on-screen keyboard's keys (an exact input: passwords, a
+ * sudo prompt in the terminal) and back; the choice holds for the session. A password field opens the band on the
+ * keyboard by itself (cp0_zone_vis); its own toggle holds for that field only.
+ *
+ * Input rule: where the band is shown it is the text input (input.state vkb=zone while the writing boxes show, the
+ * usual keyboard rule while the keyboard shows; never the fallback keyboard on the app area). A contact that starts in
+ * the writing zone is a pen stroke for the recogniser (strokes.h) and never reaches the app; one that starts on the strip
+ * or the band's keyboard is the band's; one that starts in the app area (or anywhere while the band is hidden) is the
+ * app's, as before. Only the first contact of a touch writes: a second finger cancels the stroke (a three-finger gesture
+ * is never a stroke).
  */
 #ifndef CP0_ZONE_H
 #define CP0_ZONE_H
@@ -83,6 +88,7 @@ typedef enum {
     CP0_ZONE_KEY_UP,
     CP0_ZONE_KEY_DOWN,
     CP0_ZONE_KEY_RIGHT,
+    CP0_ZONE_KEY_MODE,  /* the writing boxes <-> the on-screen keyboard (report 042) */
     CP0_ZONE_KEY_ENTER,
     CP0_ZONE_KEY__COUNT
 } cp0_zone_key_t;
@@ -115,28 +121,45 @@ typedef struct {
  * NULL, the panel is not portrait (h <= w) or the room above the band would be under CP0_ZONE_MIN_APP_H. */
 int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out);
 
-/* Why the band shows (report 042): a text field wants input (the on-screen keyboard's policy, cp0::ui::osk), a page
- * pins it (Strokes training). Either one: shown. */
+/* What the band shows (report 042). */
+typedef enum {
+    CP0_ZONE_VIS_HIDDEN = 0,
+    CP0_ZONE_VIS_WRITE = 1, /* the strip and the writing boxes */
+    CP0_ZONE_VIS_KEYS = 2,  /* the strip and the on-screen keyboard in the boxes' place */
+} cp0_zone_vis_t;
+
+/* Why the band shows and what it shows (report 042): a text field wants input (the on-screen keyboard's policy,
+ * cp0::ui::osk) or a page pins it (Strokes training: always the writing boxes); the field is a password one; the
+ * session's choice of the keyboard key; that key's choice for this field only (-1 none, 0 boxes, 1 keyboard). */
 typedef struct {
     int text;
     int pinned;
+    int password;
+    int prefer_keys;
+    int field_choice;
 } cp0_zone_show_t;
 
-/* 1 when the band shows for s. */
-int cp0_zone_shown(const cp0_zone_show_t *s);
+/* HIDDEN when nothing wants the band; WRITE when a page pins it; else the field's choice, else KEYS for a password
+ * field, else the session's choice. */
+cp0_zone_vis_t cp0_zone_vis(const cp0_zone_show_t *s);
+/* The keyboard key was tapped: on a password field (or one with its own choice) that field's choice flips, else the
+ * session's (the field's own choice dropped). Nothing while a page pins the band. */
+void cp0_zone_show_toggle(cp0_zone_show_t *s);
+/* Another field (or none) asks now: its own choice is dropped. */
+void cp0_zone_show_field(cp0_zone_show_t *s, int password);
 
 /* The rows of the app area the band covers (shown: band_h, else 0): what the pages leave free, the on-screen
  * keyboard's inset. */
-int cp0_zone_inset(const cp0_zone_layout_t *l, int shown);
+int cp0_zone_inset(const cp0_zone_layout_t *l, int vis);
 
 typedef enum {
     CP0_ZONE_HIT_APP = 0, /* above the band, or the band hidden */
-    CP0_ZONE_HIT_BAND,    /* the strip row: the band's own pointer */
+    CP0_ZONE_HIT_BAND,    /* the strip row, the band's keyboard (vis KEYS): the band's own pointer */
     CP0_ZONE_HIT_LETTERS, /* the writing zone, left of divider_x */
     CP0_ZONE_HIT_DIGITS,  /* the writing zone, right of it */
 } cp0_zone_hit_t;
 
-cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int shown, int x, int y);
+cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int vis, int x, int y);
 
 /* ------------------------------------------------------------------ touch routing */
 
@@ -144,7 +167,7 @@ typedef enum {
     CP0_ZONE_OWNER_NONE = 0, /* no contact down */
     CP0_ZONE_OWNER_APP,      /* the touch started in the app area: the app's pointers, as before */
     CP0_ZONE_OWNER_PEN,      /* it started in the writing zone: the recogniser's (never the app's) */
-    CP0_ZONE_OWNER_BAND,     /* it started on the strip: the band's pointer */
+    CP0_ZONE_OWNER_BAND,     /* it started on the strip or the band's keyboard: the band's pointer */
     CP0_ZONE_OWNER_IGNORED,  /* nobody's until every contact is up (swallowed, cancelled, several fingers at once) */
 } cp0_zone_owner_t;
 
@@ -179,10 +202,10 @@ typedef struct {
  * itself, the router only keeps such a press away from the app). */
 void cp0_zone_router_init(cp0_zone_router_t *r, int heal_ms, int heal_px);
 
-/* One frame of the touch screen (contacts in panel logical px), shown: the band is shown. swallow: a new touch belongs
+/* One frame of the touch screen (contacts in panel logical px), vis: what the band shows. swallow: a new touch belongs
  * to nobody (the screensaver, the touch that woke it or closed an app): it is IGNORED. Fills *pen (kind NONE when the
  * recogniser gets nothing) and returns the owner after this frame. */
-cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int shown, int swallow,
+cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int vis, int swallow,
                                 const cp0_touch_frame_t *f, cp0_zone_pen_t *pen);
 
 /* A gesture took the contacts (multitasking G1 / G2): a stroke in progress is cancelled (*pen CANCEL, else NONE) and the

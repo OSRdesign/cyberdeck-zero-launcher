@@ -5,8 +5,9 @@
  * itself (the key strip, the letters and digits boxes, the recogniser) lives in the display backend
  * (cp0_display_zone_active(), cp0_zone_ui.h); here are the parts that are the launcher's:
  *   - the input rule (launcher_osk): while the launcher is in front the band is the text input instead of the fallback
- *     keyboard: it shows where the keyboard would (a text field asks and the keyboard's policy allows it), input.state
- *     says vkb=zone while it shows; a fullscreen app in front (run turned, without the band) gets the usual rule;
+ *     keyboard: it shows where the keyboard would (a text field asks and the keyboard's policy allows it; a password
+ *     field opens it on its keyboard, report 042), input.state says vkb=zone while the writing boxes show (the usual
+ *     rule while its keyboard shows); a fullscreen app in front (run turned, without the band) gets the usual rule;
  *   - a page may keep the band shown (Strokes training: set_pinned);
  *   - the screensaver draws the band black.
  * Nothing happens without the zone (every board but the PDA profile) or outside the Pi display backend. LVGL thread.
@@ -17,8 +18,9 @@ namespace launcher_zone {
 
 /* The writing zone exists (APPLAUNCH_PDA=1 on a portrait panel, the dpi-scaled backend). */
 bool active();
-/* The band is shown now. */
+/* The band is shown now; it shows the writing boxes (not the keyboard in their place, report 042). */
 bool shown();
+bool writing();
 
 /* Once (Launch::bind_ui): the band shows instead of the fallback keyboard (cp0::ui::osk::set_zone) and the input rule
  * is published again whenever it is shown or hidden. */

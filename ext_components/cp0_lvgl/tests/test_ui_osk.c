@@ -766,8 +766,40 @@ static void test_alt_events(void)
     CHECK(n == 2 && e[0].mods == 0 && e[0].utf8[0] == '\0');
 }
 
+/* Report 042: the keyboard in the PDA writing zone's band, in place of the writing boxes (267 px at 480x800, 187 at
+ * 480x640): the keys as wide as the usual layout's, every row inside the box, the terminal's Alt kept. */
+static void test_fit_layout(void)
+{
+    static const int sizes[][4] = {{480, 800, 854, 267}, {480, 640, 904, 187}};
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+        const cp0_ui_metrics_t m = metrics(sizes[i][0], sizes[i][1], sizes[i][2]);
+        cp0_ui_osk_layout_t usual, fit, alt;
+        CHECK_EQ(cp0_ui_osk_layout(&m, &usual), 0);
+        CHECK_EQ(cp0_ui_osk_layout_fit(&m, 0, 51, sizes[i][3], &fit), 0);
+        CHECK_EQ(fit.y, 51);
+        CHECK_EQ(fit.height, sizes[i][3]);
+        CHECK_EQ(fit.key_w, usual.key_w);
+        CHECK(fit.key_h >= CP0_UI_OSK_KEY_MIN_PX);
+        CHECK(fit.border + 2 * fit.pad_y + fit.util_h + 4 * (fit.gap + fit.key_h) <= fit.height);
+        CHECK(fit.border + 2 * fit.pad_y + fit.util_h + 4 * (fit.gap + fit.key_h + 1) > fit.height - 2);
+        cp0_ui_osk_place_t places[CP0_UI_OSK_MAX_KEYS];
+        const int n = cp0_ui_osk_place_keys(&fit, CP0_UI_OSK_PAGE_LETTERS, places, CP0_UI_OSK_MAX_KEYS);
+        CHECK(n > 30);
+        for (int k = 0; k < n; k++) CHECK(places[k].y >= 0 && places[k].y + places[k].h <= fit.height);
+        CHECK_EQ(cp0_ui_osk_layout_fit(&m, 1, 0, sizes[i][3], &alt), 0);
+        CHECK_EQ(alt.alt, 1);
+        printf("fit %dx%d in %d px: keys %dx%d, utility %d, labels %d/%d\n", m.w, m.h, sizes[i][3], fit.key_w, fit.key_h,
+               fit.util_h, fit.label_px, fit.small_px);
+    }
+    cp0_ui_osk_layout_t none;
+    const cp0_ui_metrics_t m = metrics(480, 800, 854);
+    CHECK_EQ(cp0_ui_osk_layout_fit(&m, 0, 0, 0, &none), -1);
+    CHECK_EQ(cp0_ui_osk_layout_fit(NULL, 0, 0, 200, &none), -1);
+}
+
 int main(void)
 {
+    test_fit_layout();
     test_layout_sizes();
     test_place_keys();
     test_alt_layout();

@@ -731,9 +731,11 @@ void set_reserved_inset(int px);
 
 /* The PDA writing zone (report 042): while zone_input() is true the zone is the text input instead of this keyboard.
  * Where the keyboard would show (a field requested it, the policy allows it, and the field's screen is the one shown),
- * show(true) is called instead and no keyboard is built; show(false) when that ends (released, dismissed, not allowed
- * any more, another screen in front, zone_input() false). Without it (the default) the keyboard works as before. */
-void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> show);
+ * show(true, the field's type, multi-line, the field) is called instead and no keyboard is built (again when another
+ * field asks); show(false, ..., NULL) when that ends (released, dismissed, not allowed any more, another screen in
+ * front, zone_input() false). Without it (the default) the keyboard works as before. */
+using ZoneShow = std::function<void(bool show, TextType type, bool multiline, const void *field)>;
+void set_zone(std::function<bool()> zone_input, ZoneShow show);
 /* Asks the policy again on the next cycle (a screen came up over the field: the multitasking switcher). */
 void reevaluate();
 

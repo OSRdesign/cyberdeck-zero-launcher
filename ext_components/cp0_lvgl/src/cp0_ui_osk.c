@@ -156,6 +156,25 @@ int cp0_ui_osk_layout_alt(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
     return osk_layout(m, 1, out);
 }
 
+int cp0_ui_osk_layout_fit(const cp0_ui_metrics_t *m, int alt, int y, int height, cp0_ui_osk_layout_t *out)
+{
+    cp0_ui_osk_layout_t l;
+    if (!out || height <= 0 || osk_layout(m, alt, &l) != 0) return -1;
+    /* the tallest keys that fit the box (the 6.5 mm token is no limit here; the minimum is) */
+    const int rows_h = height - l.border - 2 * l.pad_y - 4 * l.gap; /* 4 rows and the utility row (80 % of one) */
+    l.key_h = imax(CP0_UI_OSK_KEY_MIN_PX, rows_h * 100 / (400 + CP0_UI_OSK_UTIL_PCT));
+    while (l.key_h > CP0_UI_OSK_KEY_MIN_PX && total_height(&l, l.key_h) > height) l.key_h--;
+    while (total_height(&l, l.key_h + 1) <= height) l.key_h++;
+    l.util_h = (l.key_h * CP0_UI_OSK_UTIL_PCT + 50) / 100;
+    l.height = height;
+    l.y = y;
+    l.cap = height;
+    l.label_px = imax(12, even_px(imin(l.key_w, l.key_h) * CP0_UI_OSK_LABEL_PCT / 10));
+    l.small_px = imax(12, even_px(l.label_px * CP0_UI_OSK_SMALL_PCT / 10));
+    *out = l;
+    return 0;
+}
+
 /* ------------------------------------------------------------------ pages */
 
 #define CH(t, c) {CP0_UI_OSK_K_CHAR, t, t, c, 0, 10, CP0_UI_OSK_PAGE_LETTERS}

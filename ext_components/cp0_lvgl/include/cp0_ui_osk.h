@@ -115,6 +115,11 @@ int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);
 /* The same for a terminal's keyboard: Alt after Ctrl. The utility keys keep their width when the arrows still fit,
  * else they narrow (never under one key) so that the arrows stay; with no room even then, no arrows (as without Alt). */
 int cp0_ui_osk_layout_alt(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);
+/* The keyboard in a box `height` px high whose top is at y (the PDA writing zone's band shows it instead of the writing
+ * boxes, report 042): the keys as wide as cp0_ui_osk_layout's (alt: a terminal's keyboard), as high as the box allows
+ * (the key height token is no limit, CP0_UI_OSK_KEY_MIN_PX is); height = the box, the class cap ignored. -1 (out
+ * untouched) when m is NULL, the screen empty or height <= 0. */
+int cp0_ui_osk_layout_fit(const cp0_ui_metrics_t *m, int alt, int y, int height, cp0_ui_osk_layout_t *out);
 
 /* ------------------------------------------------------------------ pages and keys */
 

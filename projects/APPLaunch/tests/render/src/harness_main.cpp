@@ -1095,14 +1095,14 @@ void read_touch_now()
         }
 }
 
-/* The writing zone's rectangle NAME (report 041, 042): a strip key (Tab Ctrl Shift Alt Left Up Down Right Enter) or a
- * box (letters digits), panel coordinates. false when there is no such thing. */
+/* The writing zone's rectangle NAME (report 041, 042): a strip key (Tab Ctrl Shift Alt Left Up Down Right Kbd Enter;
+ * Kbd: the keyboard key) or a box (letters digits), panel coordinates. false when there is no such thing. */
 bool zone_rect(const std::string &name, cp0_zone_rect_t *out)
 {
     const cp0_zone_layout_t *l = cp0_zone_ui_layout();
     if (!l) return false;
-    static const char *const keys[CP0_ZONE_KEY__COUNT] = {"Tab", "Ctrl", "Shift", "Alt", "Left",
-                                                         "Up",  "Down", "Right", "Enter"};
+    static const char *const keys[CP0_ZONE_KEY__COUNT] = {"Tab", "Ctrl",  "Shift", "Alt", "Left",
+                                                         "Up",  "Down", "Right", "Kbd", "Enter"};
     for (int i = 0; i < CP0_ZONE_KEY__COUNT; ++i)
         if (name == keys[i]) return *out = l->strip_key[i], true;
     if (name == "letters") return *out = l->letters, true;
@@ -2038,7 +2038,8 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         settle(400);
     } else if (cmd == "tapkey") {
         /* tapkey LABEL: a tap through the touch path on the centre of the on-screen keyboard key whose label is LABEL
-         * (the native display's top layer). SHIFT, ENTER, BACKSPACE, LEFT, UP, DOWN, RIGHT name the symbol keys. */
+         * (the native display's top layer, else the keyboard in the writing zone's band, report 042). SHIFT, ENTER,
+         * BACKSPACE, LEFT, UP, DOWN, RIGHT name the symbol keys. */
         if (w.size() != 2) return fail(scene, line, "usage: tapkey LABEL");
         static const std::map<std::string, std::string> symbols = {
             {"SHIFT", "\xe2\x87\xa7"}, {"ENTER", LV_SYMBOL_NEW_LINE}, {"BACKSPACE", LV_SYMBOL_BACKSPACE},
@@ -2048,10 +2049,30 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         const auto symbol = symbols.find(w[1]);
         const std::string text = symbol != symbols.end() ? symbol->second : w[1];
         lv_obj_t *label = find_label(lv_display_get_layer_top(cp0_display_native()), {text});
+        int y_off = 0;
+        if (!label && cp0_zone_ui_vis() == CP0_ZONE_VIS_KEYS) {
+            /* the keyboard in the writing zone's band (report 042): its display's row 0 is the panel's strip_y */
+            label = find_label(cp0_zone_ui_screen(), {text});
+            y_off = cp0_zone_ui_layout()->strip_y;
+        }
         lv_obj_t *key = label ? lv_obj_get_parent(label) : nullptr;
         if (!key) return fail(scene, line, "no on-screen keyboard key labelled " + w[1]);
         lv_area_t area;
         lv_obj_get_coords(key, &area);
+        const int x = (area.x1 + area.x2) / 2, y = y_off + (area.y1 + area.y2) / 2;
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(400);
+    } else if (cmd == "tapbutton") {
+        /* tapbutton TEXT: a tap through the touch path on the centre of the object holding the first visible label TEXT
+         * on the native display's screen (a button of a native page, a cell of the Strokes training picker) */
+        if (w.size() != 2) return fail(scene, line, "usage: tapbutton TEXT");
+        lv_obj_t *label = find_label(lv_display_get_screen_active(cp0_display_native()), {w[1]});
+        lv_obj_t *button = label ? lv_obj_get_parent(label) : nullptr;
+        if (!button) return fail(scene, line, "no visible label " + w[1]);
+        lv_area_t area;
+        lv_obj_get_coords(button, &area);
         const int x = (area.x1 + area.x2) / 2, y = (area.y1 + area.y2) / 2;
         touch_at(run, 1, x, y);
         settle(80);
@@ -2386,22 +2407,25 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         }
     } else if (cmd == "zonekey") {
         /* zonekey NAME [hold MS]: a tap (or a press held MS ms) through the touch path on the centre of a key of the
-         * strip (Tab Ctrl Shift Alt Left Up Down Right Enter; the band shown) */
+         * strip (Tab Ctrl Shift Alt Left Up Down Right Kbd Enter; the band shown) */
         cp0_zone_rect_t r{};
         if ((w.size() != 2 && w.size() != 4) || !zone_rect(w[1], &r) || w[1] == "letters" || w[1] == "digits")
-            return fail(scene, line, "usage: zonekey Tab|Ctrl|Shift|Alt|Left|Up|Down|Right|Enter [hold MS]");
+            return fail(scene, line, "usage: zonekey Tab|Ctrl|Shift|Alt|Left|Up|Down|Right|Kbd|Enter [hold MS]");
         const int held = w.size() == 4 && w[2] == "hold" ? std::max(0, to_int(w[3])) : 80;
         touch_at(run, 1, r.x + r.w / 2, r.y + r.h / 2);
         settle(static_cast<uint32_t>(held));
         touch_at(run, 0, r.x + r.w / 2, r.y + r.h / 2);
         settle(400);
     } else if (cmd == "expect_zone") {
-        /* expect_zone shown|hidden: the writing zone's band (the strip and the boxes, report 042) */
-        if (w.size() != 2 || (w[1] != "shown" && w[1] != "hidden")) return fail(scene, line, "usage: expect_zone shown|hidden");
+        /* expect_zone shown|hidden|writing|keys: the writing zone's band (report 042): shown at all, hidden, shown with
+         * the writing boxes, shown with the keyboard in their place */
+        if (w.size() != 2 || (w[1] != "shown" && w[1] != "hidden" && w[1] != "writing" && w[1] != "keys"))
+            return fail(scene, line, "usage: expect_zone shown|hidden|writing|keys");
         if (!cp0_zone_ui_active()) return fail(scene, line, "expect_zone: no writing zone");
-        const bool shown = cp0_zone_ui_shown() != 0;
-        if (shown != (w[1] == "shown"))
-            return fail(scene, line, std::string("expect_zone: the band is ") + (shown ? "shown" : "hidden"));
+        const int vis = cp0_zone_ui_vis();
+        const char *now = vis == CP0_ZONE_VIS_KEYS ? "keys" : vis == CP0_ZONE_VIS_WRITE ? "writing" : "hidden";
+        const bool ok = w[1] == "shown" ? vis != CP0_ZONE_VIS_HIDDEN : w[1] == now;
+        if (!ok) return fail(scene, line, std::string("expect_zone: the band is ") + now);
         std::printf("expect_zone ok: %s\n", w[1].c_str());
     } else if (cmd == "expect_vkb") {
         /* expect_vkb auto|off|force|zone: the on-screen keyboard rule launcher_osk publishes (input.state vkb=) */

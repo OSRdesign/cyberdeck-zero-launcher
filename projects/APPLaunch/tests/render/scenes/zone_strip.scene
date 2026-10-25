@@ -2,7 +2,9 @@
 # for the on-screen keyboard, so the band shows (the strip on top of the writing boxes; the terminal leaves its rows free
 # as for the keyboard). Ctrl tapped is armed (lit) for the next key; a "c" written in the letters box then sends Ctrl+C
 # (the fake shell echoes ^C and a new prompt) and Ctrl goes off; a pound sign (the extended prefix, then an l) reaches
-# the terminal as UTF-8 text (its own font draws it). Goldens at both sizes.
+# the terminal as UTF-8 text (its own font draws it). The strip's keyboard key (report 042) puts the on-screen keyboard
+# in the writing boxes' place (vkb auto: the exact keyboard, a sudo password): s, u and Enter reach the terminal as
+# keys; the key again brings the writing boxes back. Goldens at both sizes.
 title zone strip
 sizes 480x640 480x800
 profile pda
@@ -23,5 +25,16 @@ stroke letters 117,55 110,46 102,38 92,32 81,30 69,31 59,34 49,42 44,55 41,67 40
 shot zone_strip_ctrl_c
 stroke letters 60,30 145,115
 stroke letters 60,30 60,130 121,130
-ptylog zone_strip_pty
 shot zone_strip_pound
+zonekey Kbd
+expect_zone keys
+expect_vkb auto
+shot zone_strip_keys
+tapkey s
+tapkey u
+tapkey ENTER
+ptylog zone_strip_pty
+shot zone_strip_typed
+zonekey Kbd
+expect_zone writing
+expect_vkb zone

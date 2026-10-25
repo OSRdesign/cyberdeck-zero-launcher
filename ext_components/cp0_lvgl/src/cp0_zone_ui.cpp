@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -51,8 +52,13 @@ struct Ui {
     strokes_engine *engine = nullptr;
     strokes_config cfg{};
     cp0_zone_strip_t strip{};
-    cp0_zone_show_t show{}; /* why the band shows: a text field, a page pinning it (report 042) */
-    int shown = 0;
+    cp0_zone_show_t show{0, 0, 0, 0, -1}; /* why the band shows and what (report 042) */
+    int vis = CP0_ZONE_VIS_HIDDEN;
+    const void *field = nullptr; /* the text field it shows for */
+    int field_kind = CP0_ZONE_FIELD_TEXT;
+    int field_multiline = 0;
+    std::unique_ptr<cp0::ui::OnScreenKeyboard> keyboard; /* in the boxes' place (vis KEYS) */
+    int keyboard_kind = -1, keyboard_multiline = -1;    /* what it was built for */
     int hint_box = STROKES_BOX_LETTERS;
     int accent = STROKES_ACCENT_NONE;
     cp0_zone_vis_cb_t vis_cb = nullptr;
@@ -76,8 +82,9 @@ Ui &ui()
     return *u;
 }
 
-const char *const kKeyText[CP0_ZONE_KEY__COUNT] = {"Tab",         "Ctrl",          "Shift",          "Alt", LV_SYMBOL_LEFT,
-                                                   LV_SYMBOL_UP, LV_SYMBOL_DOWN, LV_SYMBOL_RIGHT, "Enter"};
+const char *const kKeyText[CP0_ZONE_KEY__COUNT] = {"Tab",         "Ctrl",          "Shift",         "Alt",
+                                                   LV_SYMBOL_LEFT, LV_SYMBOL_UP,   LV_SYMBOL_DOWN, LV_SYMBOL_RIGHT,
+                                                   LV_SYMBOL_KEYBOARD, "Enter"};
 
 bool is_arrow(int key)
 {
@@ -336,29 +343,72 @@ void timer_cb(lv_timer_t *timer)
 
 /* ------------------------------------------------------------------ the band, the strip */
 
-/* The band follows why it shows (report 042): shown, the pages leave its rows free (the on-screen keyboard's inset),
- * the display manager draws it; hidden, the strip's owed releases go out, a stroke in progress is dropped, the app area
- * reaches the bottom again. The host publishes its input rule (vkb=zone only while it shows). */
-void apply_shown()
+const char *vis_name(int vis)
+{
+    return vis == CP0_ZONE_VIS_KEYS    ? "shown, the keyboard"
+           : vis == CP0_ZONE_VIS_WRITE ? "shown, the writing boxes"
+                                       : "hidden";
+}
+
+cp0::ui::TextType text_type(int kind)
+{
+    return kind == CP0_ZONE_FIELD_PASSWORD ? cp0::ui::TextType::Password
+           : kind == CP0_ZONE_FIELD_NUMBER ? cp0::ui::TextType::Number
+                                           : cp0::ui::TextType::Text;
+}
+
+/* The on-screen keyboard in the writing boxes' place (vis KEYS): built for the field's kind (a Number field: its
+ * number pad; a terminal: Alt), as high as the writing zone, under the strip. Its keys inject like a physical keyboard's
+ * (cp0_keyboard_inject_key). */
+void build_keyboard(Ui &u)
+{
+    if (u.keyboard && u.keyboard_kind == u.field_kind && u.keyboard_multiline == u.field_multiline) return;
+    u.keyboard.reset(); /* another kind of field: its owed releases first */
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_panel();
+    cp0_ui_osk_layout_t layout;
+    if (!m || cp0_ui_osk_layout_fit(m, u.field_multiline, u.l.row_h, u.l.write_h, &layout) != 0) return;
+    layout.w = u.l.w;
+    u.keyboard = std::make_unique<cp0::ui::OnScreenKeyboard>(u.screen, layout, text_type(u.field_kind),
+                                                              u.field_multiline != 0);
+    u.keyboard_kind = u.field_kind;
+    u.keyboard_multiline = u.field_multiline;
+    if (u.blank && !lv_obj_has_flag(u.blank, LV_OBJ_FLAG_HIDDEN)) lv_obj_move_foreground(u.blank);
+}
+
+/* The band follows why it shows and what (report 042): shown, the pages leave its rows free (the on-screen keyboard's
+ * inset), the display manager draws it; the writing boxes or the keyboard in their place; hidden, the strip's owed
+ * releases go out, a stroke in progress is dropped, the app area reaches the bottom again. The host publishes its input
+ * rule (vkb=zone only while the writing boxes show). */
+void apply_vis()
 {
     Ui &u = ui();
     if (!u.active) return;
-    const int shown = cp0_zone_shown(&u.show);
-    if (shown == u.shown) return;
-    u.shown = shown;
-    if (!shown) {
-        cp0_ui_osk_event_t e[CP0_ZONE_MAX_EVENTS];
-        inject(e, cp0_zone_strip_release_all(&u.strip, e, CP0_ZONE_MAX_EVENTS));
+    const int vis = cp0_zone_vis(&u.show);
+    if (vis == CP0_ZONE_VIS_KEYS) build_keyboard(u); /* (again when another kind of field asks) */
+    if (vis == u.vis) return;
+    const int was = u.vis;
+    u.vis = vis;
+    if (was == CP0_ZONE_VIS_WRITE) { /* no writing zone now: a stroke in progress is not one */
         if (u.engine) strokes_cancel(u.engine);
         log_clear();
         ink_hide();
     }
+    if (vis != CP0_ZONE_VIS_KEYS) {
+        u.keyboard.reset(); /* its owed releases (a held arrow, Alt) go out */
+        u.keyboard_kind = u.keyboard_multiline = -1;
+    }
+    if (vis == CP0_ZONE_VIS_HIDDEN) {
+        cp0_ui_osk_event_t e[CP0_ZONE_MAX_EVENTS];
+        inject(e, cp0_zone_strip_release_all(&u.strip, e, CP0_ZONE_MAX_EVENTS));
+    }
+    if (u.key_label[CP0_ZONE_KEY_MODE])
+        lv_label_set_text(u.key_label[CP0_ZONE_KEY_MODE], vis == CP0_ZONE_VIS_KEYS ? LV_SYMBOL_EDIT : LV_SYMBOL_KEYBOARD);
     refresh_strip();
     lv_obj_invalidate(u.screen);
-    cp0::ui::osk::set_reserved_inset(cp0_zone_inset(&u.l, shown));
-    if (u.vis_cb) u.vis_cb(shown);
-    if (u.vis_listener) u.vis_listener(shown);
-    std::fprintf(stderr, "[zone] band %s\n", shown ? "shown" : "hidden");
+    cp0::ui::osk::set_reserved_inset(cp0_zone_inset(&u.l, vis));
+    if (u.vis_cb) u.vis_cb(vis);
+    if (u.vis_listener) u.vis_listener(vis);
+    std::fprintf(stderr, "[zone] band %s\n", vis_name(vis));
 }
 
 void key_cb(lv_event_t *event)
@@ -377,6 +427,11 @@ void key_cb(lv_event_t *event)
         else return;
     } else {
         if (code != LV_EVENT_CLICKED) return;
+        if (key == CP0_ZONE_KEY_MODE) { /* the writing boxes <-> the keyboard (report 042) */
+            cp0_zone_show_toggle(&u.show);
+            apply_vis();
+            return;
+        }
         n = cp0_zone_strip_up(&u.strip, key, cp0::ui::osk::multiline() ? 1 : 0, now_ms(), e, CP0_ZONE_MAX_EVENTS);
     }
     inject(e, n);
@@ -606,21 +661,50 @@ void cp0_zone_ui_pen(const cp0_zone_pen_t *pen)
 
 int cp0_zone_ui_shown(void)
 {
-    return ui().active ? ui().shown : 0;
+    return ui().active && ui().vis != CP0_ZONE_VIS_HIDDEN ? 1 : 0;
+}
+
+int cp0_zone_ui_vis(void)
+{
+    return ui().active ? ui().vis : CP0_ZONE_VIS_HIDDEN;
 }
 
 void cp0_zone_ui_set_text_wanted(int on)
 {
     Ui &u = ui();
     u.show.text = on ? 1 : 0;
-    apply_shown();
+    if (!on) u.field = nullptr;
+    apply_vis();
+}
+
+void cp0_zone_ui_set_field(int kind, int multiline, const void *field)
+{
+    Ui &u = ui();
+    if (field != u.field) cp0_zone_show_field(&u.show, kind == CP0_ZONE_FIELD_PASSWORD); /* its own choice dropped */
+    u.field = field;
+    u.field_kind = kind;
+    u.field_multiline = multiline ? 1 : 0;
+    u.show.password = kind == CP0_ZONE_FIELD_PASSWORD ? 1 : 0;
+    apply_vis();
+}
+
+void cp0_zone_ui_toggle_keys(void)
+{
+    Ui &u = ui();
+    cp0_zone_show_toggle(&u.show);
+    apply_vis();
+}
+
+lv_obj_t *cp0_zone_ui_screen(void)
+{
+    return ui().active ? ui().screen : nullptr;
 }
 
 void cp0_zone_ui_set_pinned(int on)
 {
     Ui &u = ui();
     u.show.pinned = on ? 1 : 0;
-    apply_shown();
+    apply_vis();
 }
 
 void cp0_zone_ui_set_vis_cb(cp0_zone_vis_cb_t cb)
@@ -717,6 +801,7 @@ void cp0_zone_ui_reset_input(void)
     log_clear();
     cp0_ui_osk_event_t e[CP0_ZONE_MAX_EVENTS];
     inject(e, cp0_zone_strip_release_all(&u.strip, e, CP0_ZONE_MAX_EVENTS));
+    if (u.keyboard) u.keyboard->release_all(); /* the band's keyboard: a held key's release, its modifiers off */
     ink_hide();
     refresh_mode();
     refresh_strip();
