@@ -569,7 +569,7 @@ cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting_off, in
 
 int cp0_ui_osk_policy_allows(const cp0_ui_osk_policy_t *p)
 {
-    if (!p || p->locked) return 0;
+    if (!p || p->locked || p->zone) return 0;
     return cp0_app_osk_rule(cp0_ui_osk_effective_vkb(p->env, p->setting_off, p->desktop_session), p->keyboards,
                             p->now_s, p->any_gone_s, p->bt_gone_s);
 }

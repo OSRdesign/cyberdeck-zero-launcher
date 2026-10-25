@@ -242,13 +242,15 @@ typedef struct {
     int64_t now_s;       /* monotonic seconds */
     int64_t any_gone_s;  /* when the last keyboard went away (monotonic s; 0: never) */
     int64_t bt_gone_s;   /* when the last Bluetooth keyboard went away (monotonic s; 0: never) */
+    int zone;            /* the PDA writing zone is the text input (report 041): never, whatever the rest says */
 } cp0_ui_osk_policy_t;
 
 /* The on-screen keyboard rule in force (published as input.state vkb=): env OFF -> off, env FORCE -> force, the setting
  * Off or a desktop session -> off, else auto. */
 cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting_off, int desktop_session);
 
-/* 1 when the keyboard may show for a focused text field (rules at the top of this file): never while locked, else
+/* 1 when the keyboard may show for a focused text field (rules at the top of this file): never while locked or while
+ * the writing zone is the text input (zone), else
  * cp0_app_osk_rule(cp0_ui_osk_effective_vkb(...), keyboards, now_s, any_gone_s, bt_gone_s). */
 int cp0_ui_osk_policy_allows(const cp0_ui_osk_policy_t *p);
 

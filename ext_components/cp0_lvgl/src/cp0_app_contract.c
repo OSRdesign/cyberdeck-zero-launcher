@@ -149,6 +149,7 @@ const char *cp0_app_vkb_name(cp0_app_vkb_t vkb)
     switch (vkb) {
     case CP0_APP_VKB_OFF: return "off";
     case CP0_APP_VKB_FORCE: return "force";
+    case CP0_APP_VKB_ZONE: return "zone";
     default: return "auto";
     }
 }
@@ -159,6 +160,7 @@ int cp0_app_vkb_parse(const char *s, cp0_app_vkb_t *out)
     if (strcmp(s, "auto") == 0) *out = CP0_APP_VKB_AUTO;
     else if (strcmp(s, "off") == 0) *out = CP0_APP_VKB_OFF;
     else if (strcmp(s, "force") == 0) *out = CP0_APP_VKB_FORCE;
+    else if (strcmp(s, "zone") == 0) *out = CP0_APP_VKB_ZONE;
     else return -1;
     return 0;
 }
@@ -610,7 +612,7 @@ int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb)
 
 int cp0_app_osk_rule(cp0_app_vkb_t vkb, unsigned keyboards, int64_t now_s, int64_t kb_gone_s, int64_t bt_gone_s)
 {
-    if (vkb == CP0_APP_VKB_OFF) return 0;
+    if (vkb == CP0_APP_VKB_OFF || vkb == CP0_APP_VKB_ZONE) return 0; /* zone: the writing zone is the text input */
     if (vkb == CP0_APP_VKB_FORCE) return 1;
     if (keyboards > 0) return 0;
     if (bt_gone_s > 0 && now_s - bt_gone_s < CP0_APP_OSK_BT_ASLEEP_S) return 0;

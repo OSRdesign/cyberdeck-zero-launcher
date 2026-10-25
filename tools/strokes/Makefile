@@ -30,7 +30,8 @@ LIB_DIR := $(CP0)/src/strokes
 SHARE := ../../projects/APPLaunch/APPLaunch/strokes
 
 WARN := -Wall -Wextra -Wshadow -Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes -Wcast-qual -Wvla
-BASE := -std=c99 $(OPT) -g $(SAN) $(WARN) $(WERROR) -I$(CP0)/include -I$(LIB_DIR) -Isrc         -DSTROKES_SHARE_DIR='"$(SHARE)"'
+BASE := -std=c99 $(OPT) -g $(SAN) $(WARN) $(WERROR) -I$(CP0)/include -I$(LIB_DIR) -Isrc \
+        -DSTROKES_SHARE_DIR='"$(SHARE)"'
 # the library is plain C99; the tools also use POSIX and Linux headers
 LIB_FLAGS := $(BASE) -Wpedantic
 TOOL_FLAGS := $(BASE) -D_DEFAULT_SOURCE

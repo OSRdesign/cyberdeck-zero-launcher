@@ -165,6 +165,9 @@ static void test_names(void)
     CHECK(strcmp(cp0_app_vkb_name(CP0_APP_VKB_AUTO), "auto") == 0);
     CHECK(strcmp(cp0_app_vkb_name(CP0_APP_VKB_OFF), "off") == 0);
     CHECK(strcmp(cp0_app_vkb_name(CP0_APP_VKB_FORCE), "force") == 0);
+    /* report 041: the PDA writing zone is the text input */
+    CHECK(cp0_app_vkb_parse("zone", &v) == 0 && v == CP0_APP_VKB_ZONE);
+    CHECK(strcmp(cp0_app_vkb_name(CP0_APP_VKB_ZONE), "zone") == 0);
 }
 
 /* ------------------------------------------------------------------ state files */
@@ -395,6 +398,7 @@ static void test_osk_rule(void)
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_AUTO, 1, now, 0, 0) == 0);     /* a keyboard is here */
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_OFF, 0, now, 0, 0) == 0);      /* the setting is Off */
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_FORCE, 2, now, now, now) == 1); /* forced, even with keyboards */
+    CHECK(cp0_app_osk_rule(CP0_APP_VKB_ZONE, 0, now, 0, 0) == 0);      /* the writing zone is the text input */
     /* a Bluetooth keyboard asleep for 10 minutes */
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_AUTO, 0, now, now - 599, now - 599) == 0);
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_AUTO, 0, now, now - 600, now - 600) == 1);

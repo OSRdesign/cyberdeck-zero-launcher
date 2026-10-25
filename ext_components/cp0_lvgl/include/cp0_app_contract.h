@@ -35,8 +35,9 @@
  * 3. <state dir>/input.state (same rules):
  *      v=1 keyboards=N (real keyboards present now) bt_keyboards=N (of them Bluetooth) last_seen= (unix s, the last
  *      time keyboards > 0) kb_gone= bt_gone= (monotonic s when the last keyboard / Bluetooth keyboard went away,
- *      0 = never) vkb=auto|off|force (the on-screen keyboard rule in force: Settings > System > On-screen keyboard,
- *      APPLAUNCH_OSK, off when a desktop session owns the screen) pointer=on|off (Settings > System > Pointer
+ *      0 = never) vkb=auto|off|force|zone (the on-screen keyboard rule in force: Settings > System > On-screen keyboard,
+ *      APPLAUNCH_OSK, off when a desktop session owns the screen; zone while the PDA profile's writing zone is the
+ *      text input, report 041: no on-screen keyboard then) pointer=on|off (Settings > System > Pointer
  *      navigation; missing = off) gen=
  *    An app that has text fields and no physical keyboard draws its own on-screen keyboard when
  *    cp0_app_osk_allowed() says so (the launcher never draws over a fullscreen app). An app linking cp0_lvgl that
@@ -114,6 +115,8 @@ typedef enum {
     CP0_APP_VKB_AUTO = 0, /* the F1 rule: only while no physical keyboard is present (cp0_app_osk_rule) */
     CP0_APP_VKB_OFF,      /* never */
     CP0_APP_VKB_FORCE,    /* always (development, HackBerry with APPLAUNCH_OSK=force) */
+    CP0_APP_VKB_ZONE,     /* never: the PDA profile's writing zone is the text input (report 041). A reader built
+                           * before it parses "zone" as unknown and keeps auto */
 } cp0_app_vkb_t;
 
 /* ------------------------------------------------------------------ environment */
@@ -250,12 +253,12 @@ int cp0_app_board_read(const char *path, cp0_app_board_t *out);
 /* 1 when `verb` is in board->requests. */
 int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb);
 
-const char *cp0_app_vkb_name(cp0_app_vkb_t vkb);              /* "auto", "off", "force" */
+const char *cp0_app_vkb_name(cp0_app_vkb_t vkb);              /* "auto", "off", "force", "zone" */
 int cp0_app_vkb_parse(const char *s, cp0_app_vkb_t *out);     /* 0, or -1 when unknown (out untouched) */
 
 /* ------------------------------------------------------------------ on-screen keyboard rule (F1) */
 
-/* 1 when an on-screen keyboard may show for a focused text field: off -> never, force -> always, auto -> only while no
+/* 1 when an on-screen keyboard may show for a focused text field: off and zone -> never, force -> always, auto -> only while no
  * physical keyboard is present, not within CP0_APP_OSK_BT_ASLEEP_S of a Bluetooth keyboard going away (it sleeps)
  * and not within CP0_APP_OSK_GRACE_S of any keyboard going away. Times in monotonic seconds; 0 = never. The
  * launcher's own keyboard uses exactly this rule (cp0_ui_osk_policy_allows). */
