@@ -490,7 +490,11 @@ int cp0_zone_ui_create(lv_display_t *display, const cp0_zone_layout_t *layout, i
     if (u.engine) strokes_set_mode(u.engine, 0);
     if (const char *path = std::getenv("APPLAUNCH_STROKES_LOG")) {
         if (path[0]) {
+#if defined(__linux__)
+            u.log = std::fopen(path, "ae"); /* close-on-exec: the apps the launcher starts do not inherit it */
+#else
             u.log = std::fopen(path, "a");
+#endif
             if (u.log) {
                 std::fprintf(u.log, "# strokes-corpus 1\n# written by the launcher's writing zone (APPLAUNCH_STROKES_LOG); "
                                     "format: tools/strokes/README.md \"Corpus format\"\n");
