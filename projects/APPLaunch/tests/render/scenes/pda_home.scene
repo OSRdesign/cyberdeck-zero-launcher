@@ -6,6 +6,9 @@
 title pda home
 sizes 480x640 480x800
 profile pda
+# the portrait launcher without the writing zone (report 040, S2): kept as the regression of a portrait canvas
+# without APPLAUNCH_PDA; the zone itself: the zone_* scenes (report 041)
+env APPLAUNCH_PDA 0
 env APPLAUNCH_OSK auto
 keyboards 0
 apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"

@@ -1,0 +1,20 @@
+# The multitasking switcher on the PDA profile with the writing zone (report 041): the switcher screen in the app area
+# above the band (the multitasking size rule keeps using the panel, 480 px short side), its targets at least 7 mm and
+# inside the app area; and the screensaver drawing the band black with the rest (the clock in the app area).
+# Goldens at both sizes.
+title zone switcher
+sizes 480x640 480x800
+profile pda
+apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png"
+clock 21:07 2026-10-10
+wifi 70
+bt on
+config dark_time 10
+home
+switcher "Mesh Hop=front" "RSS Reader=running" "Net Toolbox=paused"
+shot zone_switcher
+expect_targets
+switcher off
+screensaver
+wait 10600
+shot zone_screensaver

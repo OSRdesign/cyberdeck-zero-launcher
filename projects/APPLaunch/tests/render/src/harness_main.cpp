@@ -29,10 +29,12 @@
 #include "cp0_ui_metrics.h"
 #include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_overlay.h"
+#include "cp0_zone_ui.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
 
 #include "launch.h"
+#include "launcher_zone.hpp"
 #include "multitask/display_handoff.hpp"
 #include "multitask/switcher_model.hpp"
 #include "multitask/switcher_view.hpp"
@@ -45,6 +47,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -462,7 +465,9 @@ Profile make_profile(const std::string &name, const Size &size)
                                  * to the portrait canvas; 480x800 = the Waveshare 4.3" DSI (94x56 mm, as install.sh
                                  * writes it), 480x640 = a 3.5" 640x480 panel (71x53 mm, 9.0 px/mm) */
         p.pw = size.h, p.ph = size.w, p.bpp = 16, p.rot = 90;
-        p.env = {{"APPLAUNCH_BOARD", "pi3a-wsdsi43-portrait"}, {"APPLAUNCH_ROTATE", "90"}};
+        /* report 041 (S3): the writing zone, as the board profile sets it; a scene's "env APPLAUNCH_PDA 0" shows the
+         * portrait launcher without it (the S2 scenes) */
+        p.env = {{"APPLAUNCH_BOARD", "pi3a-wsdsi43-portrait"}, {"APPLAUNCH_ROTATE", "90"}, {"APPLAUNCH_PDA", "1"}};
         if (size == Size{480, 800}) p.env["APPLAUNCH_PANEL_MM"] = "94x56";
         else if (size == Size{480, 640}) p.env["APPLAUNCH_PANEL_MM"] = "71x53";
     } else { /* "deck" (no board.conf, the Zero 2 W) and "generic": XRGB8888, no rotation */
@@ -950,6 +955,10 @@ void boot(Run &run)
     setenv("APPLAUNCH_ASOUND_ROOT", runtime_path(run, "asound").c_str(), 1);
     setenv("APPLAUNCH_AMIXER", runtime_path(run, "fakebin/amixer").c_str(), 1);
     setenv("APPLAUNCH_PACTL", runtime_path(run, "fakebin/pactl").c_str(), 1);
+    /* the writing zone's recogniser (report 041): the repository's shipped tables, never a user's overlay or log */
+    setenv("APPLAUNCH_STROKES_DIR", (harness::fixtures().resource_root + "/strokes").c_str(), 1);
+    setenv("APPLAUNCH_STROKES_USER", "", 1);
+    unsetenv("APPLAUNCH_STROKES_LOG");
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
     /* screen.state lands next to the shots, never in the real runtime directory */
     const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";
@@ -1073,6 +1082,75 @@ void touch_at(const Run &run, int pressed, int x, int y)
     int px = 0, py = 0;
     cp0_fbo_logical_to_buffer(&run.view, std::clamp(x, 0, run.size.w - 1), std::clamp(y, 0, run.size.h - 1), &px, &py);
     harness_touch_report(pressed, px, py);
+}
+
+/* The display manager reads the touch device now (its pointer's read callback): the frame just reported reaches the
+ * gesture callback and the writing zone's router with the fake clock's time, one frame per read. */
+void read_touch_now()
+{
+    for (lv_indev_t *indev = lv_indev_get_next(nullptr); indev; indev = lv_indev_get_next(indev))
+        if (lv_indev_get_type(indev) == LV_INDEV_TYPE_POINTER) {
+            lv_indev_read(indev);
+            return;
+        }
+}
+
+/* The writing zone's rectangle NAME (report 041): a soft button (Home Menu Apps Keys), a strip key (Tab Ctrl Shift Alt
+ * Left Up Down Right Enter) or a box (letters digits), panel coordinates. false when there is no such thing. */
+bool zone_rect(const std::string &name, cp0_zone_rect_t *out)
+{
+    const cp0_zone_layout_t *l = cp0_zone_ui_layout();
+    if (!l) return false;
+    static const char *const buttons[CP0_ZONE_BTN__COUNT] = {"Home", "Menu", "Apps", "Keys"};
+    static const char *const keys[CP0_ZONE_KEY__COUNT] = {"Tab", "Ctrl", "Shift", "Alt", "Left",
+                                                         "Up",  "Down", "Right", "Enter"};
+    for (int i = 0; i < CP0_ZONE_BTN__COUNT; ++i)
+        if (name == buttons[i]) return *out = l->button[i], true;
+    for (int i = 0; i < CP0_ZONE_KEY__COUNT; ++i)
+        if (name == keys[i]) return *out = l->strip_key[i], true;
+    if (name == "letters") return *out = l->letters, true;
+    if (name == "digits") return *out = l->digits, true;
+    return false;
+}
+
+/* A landscape app's frame (800x480 or 640x480: the panel seen in landscape, as a turned app draws it at rotate 0,
+ * report 038 S2): a dark ground, a frame, two lines of text, written into the framebuffer as the app would. */
+void paint_turned_app(const Run &run)
+{
+    const int w = run.size.h, h = run.size.w; /* the panel in landscape */
+    Image picture;
+    picture.create(w, h, 0x16, 0x26, 0x1C);
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x)
+            if (x < 6 || y < 6 || x >= w - 6 || y >= h - 6) {
+                unsigned char *p = picture.at(x, y);
+                p[0] = 0x6C, p[1] = 0xC0, p[2] = 0x80;
+            }
+    const std::string top = "LANDSCAPE APP", middle = std::to_string(w) + "x" + std::to_string(h) + " TURNED",
+                      bottom = "NO ZONE NO STRIP";
+    draw_text(picture, (w - text_width(top, 5)) / 2, h / 2 - 80, top, 5, 0xE0, 0xF0, 0xE4);
+    draw_text(picture, (w - text_width(middle, 3)) / 2, h / 2 + 10, middle, 3, 0xA0, 0xC8, 0xAC);
+    draw_text(picture, (w - text_width(bottom, 3)) / 2, h / 2 + 50, bottom, 3, 0xA0, 0xC8, 0xAC);
+    cp0_fb_out_t landscape{};
+    size_t size = 0;
+    int stride = 0;
+    uint8_t *mem = harness_fb_memory(&size, &stride);
+    /* the app's own output stage: the buffer seen through rotate 0 (the turned app's APPLAUNCH_ROTATE) */
+    if (cp0_fbo_setup(&landscape, mem, size, stride, run.profile.bpp / 8, run.profile.pw, run.profile.ph, 0, w, h,
+                      nullptr) < 0)
+        return;
+    std::vector<uint8_t> row(static_cast<size_t>(w) * 4), scratch(static_cast<size_t>(w) * 4 * 16);
+    for (int y = 0; y < h; ++y) {
+        for (int x = 0; x < w; ++x) {
+            const unsigned char *p = picture.at(x, y);
+            row[static_cast<size_t>(x) * 4 + 0] = p[2];
+            row[static_cast<size_t>(x) * 4 + 1] = p[1];
+            row[static_cast<size_t>(x) * 4 + 2] = p[0];
+            row[static_cast<size_t>(x) * 4 + 3] = 0xFF;
+        }
+        cp0_fbo_blit_xrgb_scaled(&landscape, 0, y, w, 1, row.data(), w * 4, 1, 0, 0, 0, 0, scratch.data(),
+                                 scratch.size());
+    }
 }
 
 /* The first visible label under obj (depth first) whose text is one of texts. */
@@ -2120,11 +2198,17 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     } else if (cmd == "metrics") {
         /* what the layout service computed for this size, plus what the launcher exported to its children */
         if (w.size() != 2) return fail(scene, line, "usage: metrics NAME");
-        const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+        /* the panel (report 041: on the PDA profile the pages' own metrics are the app area above the writing zone) */
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_panel();
         char text[2048];
         if (!m || cp0_ui_metrics_describe(m, text, sizeof(text)) < 0)
             return fail(scene, line, "the display manager published no metrics");
         std::string report = text;
+        if (const cp0_ui_metrics_t *area = cp0_ui_metrics_current()) {
+            if (area->h != m->h && cp0_ui_metrics_describe(area, text, sizeof(text)) >= 0)
+                report += "app area (the pages' metrics, above the writing zone)\n" + std::string(text);
+        }
+        if (cp0_zone_ui_active()) report += std::string("zone ") + cp0_zone_ui_describe() + "\n";
         report += "environment";
         /* the panel variables every child inherits, as "export ...; " for run.sh contract (app contract 1) */
         std::string panel_exports = "export";
@@ -2235,6 +2319,87 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         for (const std::string &entry : harness::pty_log()) out << entry << "\n";
         if (!out) return fail(scene, line, "cannot write " + path);
         std::printf("%s\n", path.c_str());
+    } else if (cmd == "stroke") {
+        /* stroke letters|digits X,Y X,Y ... [hold]: a pen stroke through the touch path into the writing zone (report
+         * 041): the router, the recogniser, the ink, what it types. The points are px from the box's top-left corner;
+         * between two of them a frame every 1 mm, each read at once, 10 ms of the fake clock apart (about 100 mm/s); one
+         * point is a tap. Then the lift and 400 ms (the heal window, the result, the ink's fade), unless "hold": the
+         * pen stays down (the ink of a stroke in progress). */
+        cp0_zone_rect_t box{};
+        if (w.size() < 3 || (w[1] != "letters" && w[1] != "digits") || !zone_rect(w[1], &box))
+            return fail(scene, line, "usage: stroke letters|digits X,Y ... [hold] (profile pda: the writing zone)");
+        const bool hold = w.back() == "hold";
+        std::vector<std::pair<int, int>> pts;
+        for (std::size_t i = 2; i < w.size() - (hold ? 1 : 0); ++i) {
+            int x = 0, y = 0;
+            if (std::sscanf(w[i].c_str(), "%d,%d", &x, &y) != 2) return fail(scene, line, "stroke: bad point " + w[i]);
+            pts.emplace_back(box.x + x, box.y + y);
+        }
+        if (pts.empty()) return fail(scene, line, "stroke: no point");
+        const double step = std::max(1.0, cp0_ui_metrics_panel()->ppmm_x100 / 100.0); /* 1 mm */
+        auto frame = [&](int x, int y) {
+            touch_at(run, 1, x, y);
+            g_tick += 10;
+            read_touch_now();
+        };
+        frame(pts[0].first, pts[0].second);
+        for (std::size_t i = 1; i < pts.size(); ++i) {
+            const double dx = pts[i].first - pts[i - 1].first, dy = pts[i].second - pts[i - 1].second;
+            const int n = std::max(1, static_cast<int>(std::ceil(std::hypot(dx, dy) / step)));
+            for (int k = 1; k <= n; ++k)
+                frame(pts[i - 1].first + static_cast<int>(std::lround(dx * k / n)),
+                      pts[i - 1].second + static_cast<int>(std::lround(dy * k / n)));
+        }
+        if (hold) {
+            settle(50);
+        } else {
+            touch_at(run, 0, pts.back().first, pts.back().second);
+            g_tick += 10;
+            read_touch_now();
+            settle(400);
+        }
+    } else if (cmd == "zonekey") {
+        /* zonekey NAME [hold MS]: a tap (or a press held MS ms) through the touch path on the centre of a soft button
+         * (Home Menu Apps Keys) or a key of the strip (Tab Ctrl Shift Alt Left Up Down Right Enter; open it first) */
+        cp0_zone_rect_t r{};
+        if ((w.size() != 2 && w.size() != 4) || !zone_rect(w[1], &r) || w[1] == "letters" || w[1] == "digits")
+            return fail(scene, line, "usage: zonekey Home|Menu|Apps|Keys|Tab|Ctrl|Shift|Alt|Left|Up|Down|Right|Enter [hold MS]");
+        const int held = w.size() == 4 && w[2] == "hold" ? std::max(0, to_int(w[3])) : 80;
+        touch_at(run, 1, r.x + r.w / 2, r.y + r.h / 2);
+        settle(static_cast<uint32_t>(held));
+        touch_at(run, 0, r.x + r.w / 2, r.y + r.h / 2);
+        settle(400);
+    } else if (cmd == "expect_zone") {
+        /* expect_zone strip open|closed: the key strip's state */
+        if (w.size() != 3 || w[1] != "strip" || (w[2] != "open" && w[2] != "closed"))
+            return fail(scene, line, "usage: expect_zone strip open|closed");
+        if (!cp0_zone_ui_active()) return fail(scene, line, "expect_zone: no writing zone");
+        const bool open = cp0_zone_ui_strip_open() != 0;
+        if (open != (w[2] == "open")) return fail(scene, line, std::string("expect_zone: the strip is ") + (open ? "open" : "closed"));
+        std::printf("expect_zone ok: strip %s\n", w[2].c_str());
+    } else if (cmd == "expect_vkb") {
+        /* expect_vkb auto|off|force|zone: the on-screen keyboard rule launcher_osk publishes (input.state vkb=) */
+        if (w.size() != 2) return fail(scene, line, "usage: expect_vkb auto|off|force|zone");
+        if (fx.vkb != w[1]) return fail(scene, line, "expect_vkb: published " + fx.vkb);
+        std::printf("expect_vkb ok: %s\n", w[1].c_str());
+    } else if (cmd == "turnedapp") {
+        /* turnedapp on|off: a landscape fullscreen app run turned takes the panel (report 038 S2): the launcher is
+         * suspended as by the supervisor, the app draws its landscape frame over the whole panel (no writing zone, no
+         * strip: it has its own display backend and canvas), its keyboard rule is the usual one (launcher_zone); off:
+         * the launcher takes the panel back and draws everything again, the zone included */
+        if (w.size() != 2 || (w[1] != "on" && w[1] != "off")) return fail(scene, line, "usage: turnedapp on|off");
+        if (w[1] == "on") {
+            launcher_zone::set_app_front(true);
+            display_handoff::enter_app_front(nullptr);
+            paint_turned_app(run);
+            settle(300);
+        } else {
+            display_handoff::leave_app_front();
+            launcher_zone::set_app_front(false);
+            cp0_display_set_touch_swallow(2);
+            settle(500);
+            lv_refr_now(nullptr);
+        }
     } else if (cmd == "wait") {
         if (w.size() != 2) return fail(scene, line, "usage: wait MS");
         settle(static_cast<uint32_t>(std::max(0, to_int(w[1]))), kWaitRealUs);

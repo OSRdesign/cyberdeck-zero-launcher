@@ -368,23 +368,29 @@ for the Cortex-A53 boards (Pi Zero 2 W at 1.0 GHz, Pi 3A+ at 1.4 GHz): 10-20 tim
 (about 18 000 multiply-adds for the matcher and about 400 `hypotf`/`atan2f` calls). `build/aarch64/strokes-bench` on
 a board prints the real number.
 
-## How S3 uses it
+## How the launcher uses it (S3, report 041)
 
-- The library moves to `ext_components/cp0_lvgl` (after report 029's decoupling lands); the shipped table goes to
-  `/usr/share/APPLaunch/strokes/glyphs.txt` (and `glyphs-extra.txt`, loaded when a setting asks for the rarer
-  extended characters and the accents), the user overlay to `~/.config/applaunch/strokes-user.txt`.
-- The zone subscribes to the raw touch frames (`cp0_touch_reader`, contact 0, `CLOCK_MONOTONIC`), not to the 30 Hz LVGL
-  pointer, and calls `strokes_down/move/up` with the box of the press (letters box: `STROKES_BOX_LETTERS`, digits box:
-  `STROKES_BOX_DIGITS`) and `cfg.ppmm` from the layout service. It calls `strokes_poll` from its timer.
-- A `STROKES_CHAR` goes through the on-screen keyboard's US table (`cp0_ui_osk.c`) to `{KEY_*, Shift}` and
-  `cp0_keyboard_inject_key()`; a `STROKES_KEY` uses `strokes_key_linux_code()`. The extended set and the accents type
-  characters the US table has no key for (`©`, `é`, ...): S3 needs a text path for them (open question). `r.mode`
-  and `r.accent` drive the mode line (Shift, Caps, Punct, Ext, the pending accent); Punct and Ext stay lit until
-  backspace or a box change, so the line must show them for as long as `strokes_get_mode()` has them. A `STROKES_REJECT` flashes the ink red. `strokes_set_mode(e, 0)` when the zone opens,
-  `strokes_cancel` when it closes.
-- The ink is drawn from the frames as they arrive; recognition happens heal_ms (50 ms) after the lift.
-- S3 adds the trademark word to `tools/dev/check-branding.sh` (report 038) and keeps `make check` of this directory in
-  its own checks.
+- The library is a part of `ext_components/cp0_lvgl` (`include/strokes.h`, `src/strokes/`); the tools here build those
+  same files. The shipped tables are `/usr/share/APPLaunch/strokes/glyphs.txt` and `glyphs-extra.txt` (both loaded;
+  `APPLAUNCH_STROKES_EXTRA=0` leaves the optional section out), then the user overlay
+  `~/.config/applaunch/strokes-user.txt` (`$XDG_CONFIG_HOME` first; `APPLAUNCH_STROKES_USER` names another file, `""`
+  none); `APPLAUNCH_STROKES_DIR` moves the tables (the render harness uses the repository's). A table that is refused is
+  logged (`[zone] ... ignored`) and skipped.
+- The writing zone (`cp0_zone_ui.cpp`) gets the raw touch frames from the display manager (`cp0_touch_reader`,
+  `CLOCK_MONOTONIC` event times), routed by `cp0_zone_route()`: a touch whose first contact lands in the writing zone is
+  the pen's (`strokes_down` with the box of the press, `strokes_move`, `strokes_up`); a second contact cancels the
+  stroke (`strokes_cancel`); a press within the heal window near a lift continues the stroke wherever it lands.
+  `cfg.ppmm` is the panel's density; `strokes_poll` runs from the zone's timer (paused while idle).
+- A `STROKES_CHAR` is typed as its US key (`cp0_ui_osk_char_key()`, the on-screen keyboard's table) with its text, or as
+  text alone (key code 0) when no US key types it (`£`, `©`, `é`, ...): `cp0_keyboard_inject_key()` press + release.
+  A `STROKES_KEY` uses `strokes_key_linux_code()` with the keyboard's control text. The key strip's sticky Ctrl, Shift
+  and Alt apply to them (Ctrl+C). The mode line shows `strokes_get_mode()` (abc / Abc / ABC, Shift, Caps, Punct, Ext,
+  the pending accent) in the box of the last stroke; a `STROKES_REJECT` flashes the ink red. The modes are cleared
+  (`strokes_set_mode(e, 0)`) and a stroke in progress dropped when the panel goes to an app and comes back.
+- `APPLAUNCH_STROKES_LOG=FILE` (development) appends every stroke the zone sees to FILE in the corpus format (label `?`,
+  the recogniser's answer in a comment line before it): `strokes-replay FILE` replays the owner's real strokes.
+- The trademark word is in `tools/dev/check-branding.sh` (the whole repository but `docs/dev`); `make check` of this
+  directory is the `strokes` step of `tools/dev/check-all.sh`.
 
 ## Limits
 

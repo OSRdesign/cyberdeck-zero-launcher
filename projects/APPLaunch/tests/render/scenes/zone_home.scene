@@ -1,0 +1,21 @@
+# The PDA profile's writing zone (report 041, phase S3) on the profile pda (480x800 = the Pi 3A+ 4.3" DSI turned,
+# 480x640 = a 3.5" panel turned): the home grid in the app area above the band, the band idle (the soft buttons Home,
+# Menu, Apps, Keys; the letters box "abc" and the digits box "123"); then the Keys button opens the key strip (Keys lit,
+# the strip between the app area and the soft buttons) and closes it again (the app area's rows come back).
+# Goldens at both sizes.
+title zone home
+sizes 480x640 480x800
+profile pda
+apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+expect_vkb zone
+shot zone_home
+zonekey Keys
+expect_zone strip open
+shot zone_home_strip
+zonekey Keys
+expect_zone strip closed
+expect_same zone_home

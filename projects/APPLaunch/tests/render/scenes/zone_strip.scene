@@ -1,0 +1,29 @@
+# The PDA writing zone's key strip (report 041) in the terminal (CLI), as the mockup shows it: Keys opens the strip
+# between the app area and the soft buttons (the terminal leaves its row free, as for the on-screen keyboard), Ctrl tapped
+# is armed (lit) for the next key; a "c" written in the letters box then sends Ctrl+C (the fake shell echoes ^C and a new
+# prompt) and Ctrl goes off; a pound sign (the extended prefix, then an l) reaches the terminal as UTF-8 text (its own
+# font draws it). Keys again closes the strip. Goldens at both sizes.
+title zone strip
+sizes 480x640 480x800
+profile pda
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch CLI
+ptyout "user@pda:~$ "
+wait 300
+zonekey Keys
+expect_zone strip open
+zonekey Ctrl
+shot zone_strip_ctrl
+stroke letters 117,55 110,46 102,38 92,32 81,30 69,31 59,34 49,42 44,55 41,67 40,78 41,89 45,101 50,111 58,120 68,127 80,130 91,127 101,120 110,110 115,103
+shot zone_strip_ctrl_c
+stroke letters 60,30 145,115
+stroke letters 60,30 60,130 121,130
+ptylog zone_strip_pty
+shot zone_strip_pound
+zonekey Keys
+expect_zone strip closed
+shot zone_strip_closed

@@ -62,7 +62,7 @@ Each size runs in its own forked process (the display manager is process-wide). 
 | 640x480 | `deck` (no board.conf) | 640x480 XRGB8888, no rotation, no physical size (11.3 px/mm default), compat 2x at (0,0) |
 | 480x320 | `pi3a` (board.conf of the Pi 3A+: `APPLAUNCH_BOARD`, rotate 90, compat scale 1, `APPLAUNCH_PANEL_MM=79x49`, gpio backlight) | 320x480 RGB565, turned 90 deg clockwise, compat 1x at (80,25) |
 | others | `generic` | WxH XRGB8888, no rotation, reports the physical size of the size's density (`var.width/height` in mm), compat window placed by the layout service (`cp0_ui_metrics`) |
-| 480x640, 480x800 with `profile pda` (the PDA scenes) | `pda` (report 038 S2: the board.conf of `pi3a-wsdsi43-portrait`: `APPLAUNCH_BOARD`, rotate 90; `APPLAUNCH_PANEL_MM` 94x56 at 480x800, the 4.3" DSI, and 71x53 at 480x640, a 3.5" 640x480 panel) | the landscape panel (800x480 / 640x480) RGB565, turned 90 deg clockwise to the portrait canvas, compat 1x |
+| 480x640, 480x800 with `profile pda` (the PDA scenes) | `pda` (report 038 S2: the board.conf of `pi3a-wsdsi43-portrait`: `APPLAUNCH_BOARD`, rotate 90, `APPLAUNCH_PDA=1` (the writing zone, report 041; the `pda_*` scenes set it to 0); `APPLAUNCH_PANEL_MM` 94x56 at 480x800, the 4.3" DSI, and 71x53 at 480x640, a 3.5" 640x480 panel) | the landscape panel (800x480 / 640x480) RGB565, turned 90 deg clockwise to the portrait canvas, compat 1x; with the zone the native display is the app area (480x573 / 480x401) and the band a third display under it |
 
 `XDG_RUNTIME_DIR` is `out/<WxH>/runtime`, so the `screen.state` the display manager publishes lands there.
 
@@ -111,6 +111,10 @@ runs at those sizes only.
 | `sheet NAME`, `sheet off` | the legacy sheet "Close NAME?": the screen shown now stands for the frozen app's frame (snapshot, written back dimmed to 38 %), only the sheet's box is drawn (the native clip); the command fails unless every pixel outside the box is the dimmed frame and the box is drawn |
 | `dots NAME...` | these tiles' apps are left open (`native_ui::set_resident_apps`; tiles have the Exec line `tile:NAME`) |
 | `tapitem ITEM [edge]`, `expect_event TEXT`, `expect_targets` | a tap on `card0..3`, `close0..3` (an X), `home`, `closeall`, `keep`, `sheetclose` (`edge`: 2 px inside the corner of its touch target farthest from what is drawn); fail unless the last thing the switcher / sheet reported is TEXT (`pick NAME`, `close NAME`, `home`, `close-all`, `cancel`, `keep`, `sheet-close`); fail unless every touch target shown is at least 7 mm both ways and the cards and the bar stay inside the panel, apart |
+| `stroke letters\|digits X,Y ... [hold]` | the writing zone (report 041, profile `pda`): a pen stroke through the touch path (the router, the recogniser with the shipped tables, the ink, what it types); points in px from the box's top-left corner, a frame every 1 mm, each read at once, 10 ms of the fake clock apart; one point is a tap; then the lift and 400 ms (the heal window, the result, the fade), unless `hold` (the pen stays down: the ink of a stroke in progress; `release` lifts it) |
+| `zonekey NAME [hold MS]` | a tap (or a press held MS) through the touch path on a soft button (`Home Menu Apps Keys`) or a strip key (`Tab Ctrl Shift Alt Left Up Down Right Enter`, the strip open) |
+| `expect_zone strip open\|closed`, `expect_vkb auto\|off\|force\|zone` | fail unless the key strip is in that state; fail unless the on-screen keyboard rule launcher_osk last published (input.state `vkb=`) is that one |
+| `turnedapp on\|off` | a landscape fullscreen app run turned takes the panel (`display_handoff::enter_app_front`, the app in front for the keyboard rule) and draws a landscape test frame over the whole panel at rotate 0 as its own backend would (no zone, no strip); `off`: the launcher takes the panel back and draws everything again |
 | `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, the per-launch environment of both modes, `screen.state`) as `out/<WxH>/NAME.txt`; for `run.sh contract` also `NAME.compat.env` / `NAME.fullscreen.env` (the panel variables + `app_launch_env::export_for_current()`, as `export ...;` lines) and `NAME.facts` (size, class, ppmm, rot, compat window, scale) |
 
 PDA scenes (report 038 S2, profile `pda`, goldens at 480x640 and 480x800): `pda_home` (home grid, a compat app in its
@@ -120,7 +124,16 @@ wrap), `pda_titles` (report 040: the 18 px narrow title with the longest titles 
 On-screen keyboard, Keyboard test, and a breadcrumb, as a path and as one string, showing its last part only);
 `pda_switcher_dense` (review only: 480x640 at the deck's 11.3 px/mm, the name starting under the X). The
 `metrics` scene also renders 480x640 and 480x800 with that profile and writes `metrics.turned.env` there (what a
-landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe.
+landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe. The `pda_*` scenes run without the
+writing zone (`env APPLAUNCH_PDA 0`): the portrait launcher of S2, kept as its regression.
+
+Writing zone scenes (report 041, profile `pda` with the zone, goldens at 480x640 and 480x800): `zone_home` (the home grid
+in the app area, the band idle, the key strip opened by Keys and closed again), `zone_text` (Settings > System >
+Keyboard test written with pen strokes: the mode line after the shift gesture and after the extended prefix, "Lit £1"
+typed, a stroke in progress), `zone_strip` (the terminal with the strip open, Ctrl armed, a "c" stroke sending Ctrl+C, a
+pound sign reaching the terminal as text), `zone_turned` (a landscape app run turned: the whole panel its, no zone; the
+keyboard rule auto while it is in front, zone again after), `zone_switcher` (the switcher in the app area, its targets;
+the screensaver drawing the band black). The `metrics` scene's text adds the app area and the band at those sizes.
 
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
