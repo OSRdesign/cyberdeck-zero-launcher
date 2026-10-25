@@ -8,6 +8,7 @@
 
 #include "sample.h"
 #include "strokes.h"
+#include "tools_common.h" /* STROKES_SHARE_DIR: the shipped tables, relative to tools/strokes */
 
 #include <math.h>
 #include <stdio.h>

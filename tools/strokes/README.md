@@ -5,14 +5,15 @@ Phase **S1** of the PDA profile ([report 038](../../docs/dev/reports/038-pda-pro
 touch frames of one contact into characters, keys and mode changes, plus the PC tools that test it: a synthetic stroke
 generator and evaluation command, a capture tool for real stylus strokes, a corpus replay harness and a benchmark.
 
-Nothing here is linked into the launcher yet: S3 moves the library into `ext_components/cp0_lvgl` and draws the
-writing zone (section "How S3 uses it"). Real stylus accuracy is **not measured** yet; every number below comes from
-synthetic strokes.
+Since S3 ([report 041](../../docs/dev/reports/041-pda-s3.md)) the library itself lives in the launcher's `cp0_lvgl`
+component and draws the PDA writing zone there (section "How the launcher uses it"); this directory keeps the PC tools
+and tests, which build the very same files (no copy). Real stylus accuracy is **not measured** yet; every number below
+comes from synthetic strokes.
 
 | | |
 |---|---|
-| Library | `include/strokes.h`, `src/strokes_{geom,table,match,capture,engine}.c`, `src/strokes_internal.h` (about 30 KB of aarch64 code, no allocation after start-up, no globals) |
-| Glyph table | `share/glyphs.txt` (shipped, read-only), `share/glyphs-extra.txt` (optional section: rarer extended characters, accents), `share/overlay-example.txt` (user overlay format); `share/` mirrors `/usr/share/APPLaunch/strokes/` (and the repo's `.gitignore` ignores every `data/` directory) |
+| Library | `ext_components/cp0_lvgl/include/strokes.h`, `ext_components/cp0_lvgl/src/strokes/strokes_{geom,table,match,capture,engine}.c`, `.../src/strokes/strokes_internal.h` (about 30 KB of aarch64 code, no allocation after start-up, no globals) |
+| Glyph table | `projects/APPLaunch/APPLaunch/strokes/glyphs.txt` (shipped, read-only, installed as `/usr/share/APPLaunch/strokes/glyphs.txt`), `.../strokes/glyphs-extra.txt` (optional section: rarer extended characters, accents); `share/overlay-example.txt` here (user overlay format) |
 | Tools | `strokes-eval` (synthetic accuracy), `strokes-replay` (corpus replay), `strokes-capture` (stylus capture), `strokes-bench` (time per stroke) |
 | Tests | `tests/` (unit tests, ASan + UBSan run, end-to-end capture test, name check) |
 
@@ -21,7 +22,7 @@ synthetic strokes.
 - **Licence.** MIT, our own code. Ideas read, never copied: the resample-and-compare scheme published with the
   $1 recogniser (New BSD) and the closed-form rotation of Protractor (paper; its patents are listed as expired). No
   GPL code (xstroke) and no LGPL code (Tomoe) is read or linked; EdgeWrite's corner-sequence method (patented) is not
-  used. No Palm or ACCESS code, file, image or data: the strokes in `share/glyphs.txt` and `share/glyphs-extra.txt`
+  used. No Palm or ACCESS code, file, image or data: the strokes in `glyphs.txt` and `glyphs-extra.txt`
   are those of the classic Palm one-stroke alphabet, traced by hand from its public reference chart (report 039 cites
   it; the chart itself is not in the repository). The templates are our own drawings of those strokes, in our own
   format.
@@ -44,7 +45,8 @@ make aarch64    # static aarch64 tools for the boards (build/aarch64; aarch64-li
 
 Plain C99 for the library (`-std=c99 -Wpedantic`); the tools add POSIX and Linux headers. Warnings: `-Wall -Wextra
 -Wshadow -Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes -Wcast-qual -Wvla`, zero of them (`make check`
-builds with `-Werror`). The tests and tools run from `tools/strokes` (they read `share/glyphs.txt`; `STROKES_TABLE`
+builds with `-Werror`). The tests and tools run from `tools/strokes` (they read the shipped `glyphs.txt` from
+`../../projects/APPLaunch/APPLaunch/strokes`; `STROKES_TABLE`
 overrides).
 
 ## Design
@@ -226,7 +228,7 @@ accents wait for the next letter (a e i o u y n; other characters and keys drop 
 
 ### User overlay
 
-The same format, read after the shipped table (S3: `~/.config/applaunch/strokes-user.txt`; example:
+The same format, read after the shipped table (the launcher: `~/.config/applaunch/strokes-user.txt`; example:
 `share/overlay-example.txt`). A glyph line adds a variant (its output must equal the existing one). Two directives:
 
 - `replace <id> <set>`: drops the variants of that glyph that came from earlier files; the lines that follow in this
@@ -321,7 +323,7 @@ On the reference board (Pi 3A+, Waveshare 4.3" DSI, written in portrait):
 
 ```sh
 make aarch64                                           # on the PC: static build/aarch64/strokes-capture
-scp build/aarch64/strokes-capture share/glyphs.txt share/glyphs-extra.txt <board>:
+scp build/aarch64/strokes-capture ../../projects/APPLaunch/APPLaunch/strokes/glyphs*.txt <board>:
 # on the board, with the launcher stopped so that it does not react to the strokes
 systemctl --user stop cyberdeckzero
 ./strokes-capture --list                               # find the touch screen: /dev/input/eventN ... touch

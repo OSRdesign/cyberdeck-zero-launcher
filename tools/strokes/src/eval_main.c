@@ -16,7 +16,7 @@ static void usage(FILE *f)
 {
     fprintf(f,
             "usage: strokes-eval [options]\n"
-            "  --table FILE      glyph table (default: share/glyphs.txt)\n"
+            "  --table FILE      glyph table (default: the shipped glyphs.txt)\n"
             "  --overlay FILE    user overlay, applied after the table (repeatable)\n"
             "  --seed N          generator seed (default 1)\n"
             "  --n N             samples per glyph (default 200)\n"

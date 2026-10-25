@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: MIT
 #
-# Strokes glyph table, format 1 (tools/strokes/README.md, "Glyph table"). Shipped read-only. Read after it: the
-# optional section share/glyphs-extra.txt (rarer extended characters and the accents) and the user's own variants
-# (an overlay of the same format, ~/.config/applaunch/strokes-user.txt in S3).
+# Strokes glyph table, format 1 (tools/strokes/README.md, "Glyph table"). Shipped read-only as
+# /usr/share/APPLaunch/strokes/glyphs.txt. Read after it: the optional section glyphs-extra.txt next to this file
+# (rarer extended characters and the accents) and the user's own variants (an overlay of the same format,
+# ~/.config/applaunch/strokes-user.txt).
 #
-# The strokes are those of the classic Palm one-stroke alphabet, traced by hand from its public reference chart
+# The strokes are those of a classic one-stroke handheld alphabet, traced by hand from its public reference chart
 # (cited in docs/dev/reports/039-strokes-s1.md): start point, direction, loops, corners and retraces as the chart
 # draws them, one template per glyph (the chart shows one way to write each). The coordinates are our own drawings
-# in our own format; no Palm or ACCESS file, image or data is used or copied.
+# in our own format; no file, image or data of the alphabet's owner is used or copied.
 #
 # Letters type lower case; a shift gesture before a letter makes it upper case, two make caps lock. X takes two
 # strokes, as in the chart: the extended prefix (a line down-right), then a line down-left (glyph x of the ext set).

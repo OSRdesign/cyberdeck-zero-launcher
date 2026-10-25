@@ -63,7 +63,7 @@ static void usage(FILE *f)
             "  --panel-mm WxH       or: the panel size in mm in the writing orientation (ppmm from --size)\n"
             "  --group-ms MS        contacts closer than this are one sample (default 150)\n"
             "  --grab               grab the device while capturing (no other reader sees the touches)\n"
-            "  --table FILE         recognise each sample with this table (default share/glyphs.txt if found)\n"
+            "  --table FILE         recognise each sample with this table (default: the shipped glyphs.txt if found)\n"
             "  --no-recognise       do not recognise\n"
             "  --quiet              no prompts\n");
 }

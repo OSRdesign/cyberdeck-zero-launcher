@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * Unit tests of the Strokes recogniser and its PC tools: make test (build/host/test_strokes), make asan.
- * Run from tools/strokes (the shipped table is share/glyphs.txt; STROKES_TABLE overrides).
+ * Run from tools/strokes (the shipped table is ../../projects/APPLaunch/APPLaunch/strokes/glyphs.txt, STROKES_SHARE_DIR;
+ * STROKES_TABLE overrides).
  */
 #include "strokes_internal.h"
 #include "test.h"
@@ -16,13 +17,13 @@ static strokes_table *shipped, *full;
 const char *test_table_path(void)
 {
     const char *env = getenv("STROKES_TABLE");
-    return env && *env ? env : "share/glyphs.txt";
+    return env && *env ? env : STROKES_SHARE_DIR "/glyphs.txt";
 }
 
 const char *test_table_extra_path(void)
 {
     const char *env = getenv("STROKES_TABLE_EXTRA");
-    return env && *env ? env : "share/glyphs-extra.txt";
+    return env && *env ? env : STROKES_SHARE_DIR "/glyphs-extra.txt";
 }
 
 static strokes_table *load(const char *a, const char *b)
