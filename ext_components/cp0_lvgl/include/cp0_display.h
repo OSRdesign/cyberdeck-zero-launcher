@@ -152,6 +152,17 @@ void cp0_display_touch_map(int raw_x, int raw_y, int *x, int *y);
 const char *cp0_display_touch_path(void);
 int cp0_display_touch_slots(void);
 
+/* The PDA profile's writing zone (report 041, cp0_zone.h, cp0_zone_ui.h), APPLAUNCH_PDA=1 on a portrait canvas:
+ *  - active: 1 when the band exists. The native display is then the app area above it (cp0_ui_metrics_current()),
+ *    cp0_ui_metrics_panel() the whole panel; the band is a third LVGL display under it, drawn and touched by itself: a
+ *    touch whose first contact lands there never reaches the native or compat display (pen strokes go to the
+ *    recogniser, the strip and the soft buttons are the band's own widgets). Suspend, resume and the touch hand-over
+ *    cover it as they cover the others.
+ *  - invalidate (LVGL thread): redraw the band (after an app drew over the whole panel without the display being
+ *    suspended: the blocking fullscreen path). */
+int cp0_display_zone_active(void);
+void cp0_display_zone_invalidate(void);
+
 #ifdef __cplusplus
 }
 #endif

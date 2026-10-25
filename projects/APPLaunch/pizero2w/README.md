@@ -203,7 +203,7 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
 | `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
-| `pi3a-wsdsi43-portrait`: the same board and panel turned to portrait, the PDA profile ([below](#pda-portrait-on-the-43-dsi-panel)) | never detected: only `--board pi3a-wsdsi43-portrait` (the panel must be there, as for `pi3a-wsdsi43`) | `board.conf`: as `pi3a-wsdsi43` but `APPLAUNCH_LOGICAL=480x800`, `APPLAUNCH_ROTATE=90` and no `APPLAUNCH_COMPAT_SCALE`; the same backlight line and rule, config.txt and cmdline.txt as `pi3a-wsdsi43` |
+| `pi3a-wsdsi43-portrait`: the same board and panel turned to portrait, the PDA profile ([below](#pda-portrait-on-the-43-dsi-panel)) | never detected: only `--board pi3a-wsdsi43-portrait` (the panel must be there, as for `pi3a-wsdsi43`) | `board.conf`: as `pi3a-wsdsi43` but `APPLAUNCH_LOGICAL=480x800`, `APPLAUNCH_ROTATE=90`, `APPLAUNCH_PDA=1` (the writing zone) and no `APPLAUNCH_COMPAT_SCALE`; the same backlight line and rule, config.txt and cmdline.txt as `pi3a-wsdsi43` |
 | `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
 | `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer`; config.txt only with `--pwm-backlight` (below) |
 | `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
@@ -225,7 +225,7 @@ an `fbcon=` argument). The detection does not depend on the overlay: it reads th
 
 ### PDA: portrait on the 4.3" DSI panel
 
-The PDA profile (report 038, phase S2; `docs/dev/reports/040-pda-s2.md`) shows the launcher in portrait on the Pi 3A+
+The PDA profile (report 038, phases S2 and S3; `docs/dev/reports/040-pda-s2.md`, `041-pda-s3.md`) shows the launcher in portrait on the Pi 3A+
 with the Waveshare 4.3" DSI panel: 480x800 at 8.5 px/mm, held upright like a PDA. It is never detected (the same
 panel is `pi3a-wsdsi43`, landscape, when install.sh detects it): choose it with
 
@@ -256,7 +256,15 @@ What works in this phase:
   `APPLAUNCH_ROTATE=270`), and you turn the device while they run. They need no change: the launcher gives each one the
   landscape canvas on its command line (docs/APP-CONTRACT.md, section 3, "Portrait launcher"). An app that declares
   `X-Portrait` (none does yet) gets the portrait canvas instead;
-- text: a Bluetooth or USB keyboard, else the fallback on-screen keyboard (the deck's rule).
+- text: the **writing zone** at the bottom of the screen (report 041, phase S3; `APPLAUNCH_PDA=1` in the profile):
+  write with a pen or a finger in the letters box (left) or the digits box (right), one stroke per character (the
+  Strokes alphabet, `tools/strokes/README.md`); the soft buttons above it are Home (the home grid), Menu (Ctrl+O, an
+  app's options), Apps (the switcher) and Keys (a strip with Tab, Ctrl, Shift, Alt, the arrows and Enter; Ctrl, Shift
+  and Alt act on the next key or character, a double tap locks them). A Bluetooth or USB keyboard works as everywhere;
+  the fallback on-screen keyboard does not show while the zone is there. A landscape app run turned has no zone: its
+  own rule applies (a keyboard, else its own on-screen keyboard). `APPLAUNCH_PDA=0` in `/etc/applaunch/board.conf` shows
+  the portrait launcher without the zone (the fallback keyboard then). `APPLAUNCH_STROKES_LOG=/home/<user>/strokes.txt`
+  added to `/etc/applaunch/board.conf` records every stroke written (for tuning the recogniser, report 041).
 - the portrait profile hides the fixed-pixel tiles by default (`APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store`:
   IP Panel, Snake, Tank and the Store are 320x170 pages that would sit small at the top of a 480x800 screen); Settings >
   Launcher turns each one on, and what is saved there wins over the profile. Desktop apps that are neither fullscreen

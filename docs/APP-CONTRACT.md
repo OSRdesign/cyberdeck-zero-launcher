@@ -81,9 +81,17 @@ The built-in fixed-pixel tiles (IP Panel, Snake, Tank, Store) are hidden by defa
 `screen.state` and the process-wide `APPLAUNCH_SCREEN_*` keep describing the panel as the launcher shows it (portrait,
 `rot=90`); only a turned app's own command line says otherwise, so a turned app takes the environment first (as
 `cp0_app_env_read()` does) and does not use `screen.state`'s `w`, `h` and `rot` for its canvas. A turned app hidden
-behind the launcher's switcher (section 13) shows its dimmed frame sideways. Reserved for the writing zone of the PDA
-profile, not written by this launcher yet (report 038, phases S3 and S4): `APPLAUNCH_ZONE`, `screen.state` `orient=`
-and `zone=`, `input.state` `vkb=zone`.
+behind the launcher's switcher (section 13) shows its dimmed frame sideways.
+
+**The writing zone (report 041, phase S3).** The PDA profile (`APPLAUNCH_PDA=1` in its board profile) shows a band at the
+bottom of the portrait panel: an optional key strip, the soft buttons Home, Menu (sends Ctrl+O, the options key of
+section 10b), Apps (the switcher) and Keys, and the writing zone where the user writes with a pen (the Strokes
+recogniser). The launcher's own pages are laid out in the app area above it; the band is the launcher's and it is never
+drawn over a fullscreen app: an app run turned owns the whole panel in landscape and sees none of it. While the launcher
+is in front, `input.state` says `vkb=zone` (section 5): the zone is the text input and no on-screen keyboard is shown;
+while a fullscreen app is in front it says the usual rule. `screen.state` and the `APPLAUNCH_SCREEN_*` variables keep
+describing the whole panel. Reserved for portrait apps that draw the zone in their own process (phase S4, not written
+by this launcher yet): `APPLAUNCH_ZONE`, `screen.state` `orient=` and `zone=`.
 
 ### Panel (process-wide; always the panel, never the app's canvas)
 
@@ -172,11 +180,12 @@ gen=4
 | `bt_keyboards` | of them, Bluetooth |
 | `last_seen` | unix seconds of the last time `keyboards > 0` (0 = never since boot) |
 | `kb_gone`, `bt_gone` | **monotonic** seconds (`CLOCK_MONOTONIC`, same in every process of the boot) when the keyboard / Bluetooth keyboard count last dropped to 0; `0` = never |
-| `vkb` | the on-screen keyboard rule in force: `auto`, `off` (Settings > System > On-screen keyboard Off, or a desktop session owns the screen), `force` (`APPLAUNCH_OSK=force`, development and the HackBerry) |
+| `vkb` | the on-screen keyboard rule in force: `auto`, `off` (Settings > System > On-screen keyboard Off, or a desktop session owns the screen), `force` (`APPLAUNCH_OSK=force`, development and the HackBerry), `zone` (the PDA profile's writing zone is the text input while the launcher is in front: no on-screen keyboard; report 041) |
 | `pointer` | Settings > System > Pointer navigation: `on` or `off` (the default). See section 10b |
 | `gen` | increases on every write |
 
-A file without `vkb` (an older launcher) means `auto`; a file without `pointer` means `off`.
+A file without `vkb` (an older launcher) means `auto`; a file without `pointer` means `off`. A reader that does not know
+`zone` (an SDK copy from before report 041) keeps `auto` for it; a fullscreen app never sees `zone` while it is in front.
 
 ## 5b. `status.state`
 
@@ -364,7 +373,7 @@ int main(void)
 The launcher never draws over a fullscreen app (it has stopped drawing). An app with text fields draws **its own**
 keyboard, and only when the shared rule says so: `cp0_app_osk_allowed(&input, cp0_app_monotonic_s())` returns 1 when
 `vkb=force`, or `vkb=auto` with no physical keyboard, not within 600 s of a Bluetooth keyboard going away (it is
-probably asleep) and not within 2 s of any keyboard going away. `vkb=off` never. The launcher's own keyboard uses
+probably asleep) and not within 2 s of any keyboard going away. `vkb=off` and `vkb=zone` never. The launcher's own keyboard uses
 exactly this function, so the app and the launcher agree. Re-read `input.state` when its `gen` changes (a keyboard
 connects, the user switches the setting). The keyboard must never be the only way in: the policy is "physical
 keyboard first, fallback keyboard only when none is connected, never summoned by hand".

@@ -721,7 +721,13 @@ void dismiss();
 
 bool visible();
 lv_obj_t *owner();   /* the field the keyboard is up (or wanted) for, or NULL */
-int bottom_inset();  /* the keyboard's height while shown, else 0 */
+int bottom_inset();  /* the keyboard's height while shown, else 0 (at least the reserved inset below) */
+/* The field that asked (owner) is a multi-line one (a terminal): Tab types a tab character there. */
+bool multiline();
+/* Room the host keeps free at the bottom of the display without a keyboard (the PDA writing zone's key strip while it
+ * is open, report 041): the inset is the larger of this and the keyboard's height, so pages, the terminal and dialogs
+ * leave it free as they do for the keyboard. 0 = none (the default). */
+void set_reserved_inset(int px);
 
 /* Called with the new inset whenever it changes. Returns an id for remove_inset_listener(). */
 int add_inset_listener(std::function<void(int inset)> listener);

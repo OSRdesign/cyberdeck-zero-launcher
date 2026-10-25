@@ -294,6 +294,7 @@ struct Service {
     bool multiline = false;
     std::unique_ptr<OnScreenKeyboard> keyboard;
     int inset = 0;
+    int reserved = 0; /* the PDA writing zone's key strip while it is open (report 041): an inset without a keyboard */
     std::vector<Listener> listeners;
     int next_id = 1;
     lv_timer_t *poll = nullptr;
@@ -309,9 +310,10 @@ Service &service()
     return *s;
 }
 
-void notify(int inset)
+void notify(int keyboard_h)
 {
     Service &s = service();
+    const int inset = keyboard_h > s.reserved ? keyboard_h : s.reserved;
     if (inset == s.inset) return;
     s.inset = inset;
     const std::vector<Listener> listeners = s.listeners; /* a listener may remove itself */
@@ -469,6 +471,19 @@ lv_obj_t *owner()
 int bottom_inset()
 {
     return service().inset;
+}
+
+bool multiline()
+{
+    const Service &s = service();
+    return s.owner && s.multiline;
+}
+
+void set_reserved_inset(int px)
+{
+    Service &s = service();
+    s.reserved = px > 0 ? px : 0;
+    notify(s.keyboard ? s.keyboard->height() : 0);
 }
 
 int add_inset_listener(std::function<void(int inset)> listener)

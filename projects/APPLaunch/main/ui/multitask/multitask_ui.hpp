@@ -47,6 +47,12 @@ bool is_resident(const std::string &key);
  * its grid over it when it takes the panel back); the sheet is (the lock screen stays off: only its box is drawn). */
 bool screen_up();
 bool sheet_up();
+/* The PDA writing zone's Apps soft button (report 041), LVGL thread: opens the switcher as the three-finger hold does
+ * (source names it in the log), or closes it when it is up. false when multitasking is not running. */
+bool toggle_switcher(const char *source);
+/* Its Home soft button while the switcher is up: the switcher's own Home (the launcher, the page that was open). false
+ * when the switcher is not up. */
+bool switcher_home();
 /* Start, or resume, a fullscreen app. `key` is its .desktop Exec line (one instance per key), `command` the sh -c
  * line with the app contract's exports in front. Returns at once; the hooks run when the panel changes hands. */
 void launch(const std::string &name, const std::string &key, const std::string &command, bool keep_root,

@@ -7,6 +7,7 @@
 #include "launcher_osk.hpp"
 
 #include "input_presence.hpp"
+#include "launcher_zone.hpp"
 #include "native_ui.hpp"
 #include "ui_screensaver.h"
 
@@ -43,10 +44,18 @@ bool call_config(std::list<std::string> arguments, std::string *data = nullptr)
     return ok;
 }
 
+/* The PDA writing zone is the text input now (report 041): it exists and the launcher is in front (a fullscreen app in
+ * front runs turned, without it, and keeps the usual rule). */
+bool zone_input()
+{
+    return launcher_zone::active() && !launcher_zone::app_front();
+}
+
 /* input.state vkb=: the rule in force for apps (the app contract), the same inputs as allowed() */
 void publish_vkb()
 {
-    input_presence::set_vkb(cp0_ui_osk_effective_vkb(s_env, mode() == kOff, !native_ui::enabled()));
+    input_presence::set_vkb(zone_input() ? CP0_APP_VKB_ZONE
+                                         : cp0_ui_osk_effective_vkb(s_env, mode() == kOff, !native_ui::enabled()));
 }
 
 bool allowed()
@@ -56,6 +65,7 @@ bool allowed()
     policy.setting_off = mode() == kOff;
     policy.locked = ui_screensaver_is_active() != 0;
     policy.desktop_session = !native_ui::enabled(); /* the launcher draws the screen itself only with its backend */
+    policy.zone = zone_input() ? 1 : 0;             /* the writing zone is the text input: never the keyboard */
     const input_presence::KeyboardSnapshot keyboards = input_presence::keyboards();
     policy.keyboards = keyboards.keyboards;
     policy.now_s = keyboards.now_s;
@@ -101,6 +111,11 @@ void install()
 void dismiss()
 {
     cp0::ui::osk::dismiss();
+}
+
+void refresh()
+{
+    if (s_installed) publish_vkb();
 }
 
 } // namespace launcher_osk

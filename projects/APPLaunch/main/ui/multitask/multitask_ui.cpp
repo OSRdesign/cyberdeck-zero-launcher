@@ -712,7 +712,7 @@ bool enabled()
     static const bool on = [] {
         if (!native_ui::enabled()) return false;
         const multitask::MultitaskFlag flag = multitask::parse_multitask_flag(std::getenv("APPLAUNCH_MULTITASK"));
-        const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_panel(); /* the panel, not the PDA's app area (report 041) */
         const int w = m ? m->w : 0, h = m ? m->h : 0;
         /* off: no log line at all, as before (the protocols count `[mt]` lines) */
         s_on_reason = flag == multitask::MultitaskFlag::On ? "APPLAUNCH_MULTITASK on" : "default";
@@ -746,7 +746,7 @@ bool start(Hooks hooks)
     }
     /* P-c: touch gestures. G1 needs a panel with at least 3 slots; G2 works on any touch screen. */
     const int slots = cp0_display_touch_slots();
-    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_current();
+    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_panel(); /* the touch frames cover the whole panel */
     cfg.touch.w = metrics ? metrics->w : 640;
     cfg.touch.h = metrics ? metrics->h : 480;
     cfg.touch.ppmm_x100 = metrics ? metrics->ppmm_x100 : 1130;
@@ -878,6 +878,25 @@ bool screen_up()
 bool sheet_up()
 {
     return s_sheet != nullptr;
+}
+
+bool toggle_switcher(const char *source)
+{
+    if (!s_sup) return false;
+    if (s_switcher) {
+        s_sup->switcher_cancel();
+        return true;
+    }
+    const std::string name = source ? source : "button";
+    s_sup->launcher_gesture(name, name + " soft button", true);
+    return true;
+}
+
+bool switcher_home()
+{
+    if (!s_sup || !s_switcher) return false;
+    s_sup->switcher_home();
+    return true;
 }
 
 void launch(const std::string &name, const std::string &key, const std::string &command, bool keep_root,

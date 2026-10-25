@@ -541,7 +541,8 @@ APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0
 EOF
         ;;
-        # The PDA profile (report 038, phase S2): the same DSI panel turned to portrait, 480x800. Only with --board.
+        # The PDA profile (report 038, phases S2 and S3): the same DSI panel turned to portrait, 480x800, with the writing
+        # zone (report 041). Only with --board.
         # No APPLAUNCH_COMPAT_SCALE: 320x170 fits 1x only on a 480 px wide canvas. Landscape fullscreen apps run turned
         # (a quarter turn back from APPLAUNCH_ROTATE, full screen 800x480): the launcher sets that per launch.
         pi3a-wsdsi43-portrait)
@@ -562,6 +563,8 @@ EOF
 # the fixed-pixel built-in tiles (IP Panel, Snake, Tank: 320x170 pages; the Store) start hidden on the portrait panel;
 # Settings > Launcher shows them, and what is saved there wins
 APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store
+# the writing zone at the bottom (report 041): pen strokes, the soft buttons, the key strip; 0 = none
+APPLAUNCH_PDA=1
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 # the deck's legacy touch axes (set in its user service) must not apply here: neutral values
 APPLAUNCH_TOUCH_SWAP_XY=0
