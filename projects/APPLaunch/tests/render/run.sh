@@ -6,9 +6,9 @@
 #   run.sh            build + render + compare with golden/ + header (exit 1 on any changed pixel)
 #   run.sh build      build only (build/render-harness)
 #   run.sh render [scene ...]   render scenes (default: all) into out/, contact sheets in out/sheets/
-#   run.sh compare    compare out/ with golden/ (640x480 and 480x320), diff PNGs in out/diff/
+#   run.sh compare    compare out/ with golden/ (640x480, 480x320, the PDA's 480x640 and 480x800), diff PNGs in out/diff/
 #   run.sh header     page headers (scene command "header") against the home grid: status strip pixels, title origin
-#   run.sh golden     copy out/640x480 and out/480x320 into golden/ (a deliberate baseline change)
+#   run.sh golden     copy out/640x480, out/480x320, out/480x640 and out/480x800 into golden/ (a deliberate change)
 #   run.sh validate   compare the harness with real device captures (reference/, docs/screenshots/)
 #   run.sh twice      render everything twice and check the PNGs are byte-identical
 #   run.sh contract   app contract: the host app-contract-probe --report against the metrics scene (docs/APP-CONTRACT.md)
@@ -23,7 +23,7 @@ bin="$here/build/render-harness"
 out=${OUT:-$here/out}
 golden="$here/golden"
 jobs=${JOBS:-$(nproc)}
-golden_sizes="640x480 480x320"
+golden_sizes="640x480 480x320 480x640 480x800" # 480x640, 480x800: the PDA scenes (report 038 S2, profile pda)
 
 build() {
     mkdir -p "$here/build"
@@ -196,7 +196,7 @@ contract() {
         fi
     }
 
-    for size in 480x320 640x480 800x480 720x720 1280x720 1024x600; do
+    for size in 480x320 640x480 800x480 720x720 1280x720 1024x600 480x640 480x800; do
         dir="$out/$size"
         facts="$dir/metrics.facts"
         if [[ ! -f $facts ]]; then
@@ -250,6 +250,28 @@ contract() {
             expect "$rep" derived.osk_allowed 1
             expect "$rep" summary "$mode $canvas $window scale $scale $want_class $want_ppmm"
         done
+
+        # report 038 S2 (the PDA profile): a landscape fullscreen app on a portrait launcher runs turned; through the
+        # environment it sees the panel's landscape canvas, a quarter turn back (screen.state stays the launcher's panel)
+        if [[ -f $dir/metrics.turned.env ]]; then
+            local turned_size=${h}x${w} turned_class
+            case $turned_size in 800x480) turned_class=wide ;; 640x480) turned_class=standard ;; *) turned_class=? ;; esac
+            rep="$dir/contract.turned.txt"
+            env -i bash -c ". '$dir/metrics.turned.env' && exec '$probe' --report --no-fb --tag turned" >"$rep"
+            expect "$rep" env.ok 1
+            expect "$rep" env.screen_class "$turned_class"
+            expect "$rep" screen.size "$want_size"
+            expect "$rep" screen.rot "$want_rot"
+            expect "$rep" derived.source contract
+            expect "$rep" derived.mode fullscreen
+            expect "$rep" derived.screen "$turned_size"
+            expect "$rep" derived.rot "$(((want_rot + 270) % 360))"
+            expect "$rep" derived.class "$turned_class"
+            expect "$rep" derived.ppmm "$want_ppmm"
+            expect "$rep" derived.canvas "$turned_size"
+            expect "$rep" derived.window "0,0,$h,$w"
+            expect "$rep" derived.canvas_scale 1
+        fi
 
         # degrade: started without the contract (ssh, an older launcher) but screen.state is there
         rep="$dir/contract.nocontract.txt"

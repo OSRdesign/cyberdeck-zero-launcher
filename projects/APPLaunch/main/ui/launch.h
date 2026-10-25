@@ -120,8 +120,10 @@ struct app
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root);
     // fullscreen: the app owns the whole panel while it runs (no scaled window, no toolbar)
     // background: X-Background (task 015), used only with multitasking on
+    // turned: a landscape fullscreen app on a portrait launcher (desktop_fit() Turned, report 038 S2): it is started
+    // with the panel's landscape canvas (app_launch_env turned_from_metrics)
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause, bool run_as_root,
-        bool fullscreen, multitask::Background background = multitask::Background::None);
+        bool fullscreen, multitask::Background background = multitask::Background::None, bool turned = false);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause,
         bool run_as_root, TerminalHelpFactory help_factory);
 
@@ -160,11 +162,11 @@ private:
                                  TerminalHelpFactory help_factory = nullptr);
     void launch_Exec(const std::string &exec, bool keep_root = false, bool fullscreen = false,
                      const std::string &name = std::string(),
-                     multitask::Background background = multitask::Background::None);
+                     multitask::Background background = multitask::Background::None, bool turned = false);
     // Multitasking P-b (task 015, multitasking on): the non-blocking fullscreen path and the two hand-overs
     // of the panel the supervisor drives (LVGL thread)
     void launch_fullscreen_supervised(const std::string &exec, bool keep_root, const std::string &name,
-                                      multitask::Background background);
+                                      multitask::Background background, bool turned = false);
     void mt_app_front();
     void mt_launcher_front(bool after_exit);
     void mt_release_input_group();

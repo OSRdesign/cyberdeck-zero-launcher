@@ -65,7 +65,7 @@ lv_obj_t *add_title(lv_obj_t *parent, const char *text);
 - The battery: the strip reads it itself before the source runs (`cp0_power_supply_battery()`, `include/cp0_power_supply.h`: a Linux `power_supply` device of type Battery). A board with one shows its level glyph and percentage left of the Bluetooth glyph's place, green while charging (`cp0_ui_status_set_battery()`); a board without one (the Pi boards) shows the strip as before. `status_strip_left()` includes the battery when the board has one at its first call.
 - Call `refresh()` right after loading the screen, so the icons are current at once.
 - Fonts: `share/font/Montserrat-Medium.ttf` and `FontAwesome5-Solid+Brands+Regular.woff` through `cp0_file_path_c`, else `/usr/share/APPLaunch/share/font`. Apps do not bundle them.
-- `status_strip_left()` is the `strip_left` argument of `cp0_ui_roller_page()`: a header keeps its own controls left of it. `add_title()` is the label `Page`'s `TitleFactory` makes (shell `title_x`, `title_y`, `title_px`, gold `#F0B400`).
+- `status_strip_left()` is the `strip_left` argument of `cp0_ui_roller_page()`: a header keeps its own controls left of it. `add_title()` is the label `Page`'s `TitleFactory` makes (shell `title_x`, `title_y`, `title_px`, gold `#F0B400`). On a narrow header (`cp0_ui_narrow_header()`: the portrait 480x640 / 480x800) `title_px` is 18 and `Page::set_title()` shows only the last part of a breadcrumb, a path or one string with `" > "` (`title_last_only`).
 
 ### Lists: Roller or CompactList (`include/cp0_ui_widgets.hpp`, `include/cp0_ui_list.h`)
 

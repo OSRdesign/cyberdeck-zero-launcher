@@ -2,6 +2,8 @@
 # out/<WxH>/metrics.txt = screen class, density and its source, tokens, text sizes, compat window and
 # toolbar, the home-grid layout in use, the APPLAUNCH_SCREEN_* environment and screen.state.
 # No picture: nothing here is compared with the goldens.
+# 480x640 and 480x800: the PDA profile (report 038 S2, pi3a-wsdsi43-portrait), with the turned app's environment.
 title metrics
-sizes 480x320 640x480 800x480 720x720 1280x720 1024x600
+sizes 480x320 640x480 800x480 720x720 1280x720 1024x600 480x640 480x800
+@480x640,480x800 profile pda
 metrics metrics

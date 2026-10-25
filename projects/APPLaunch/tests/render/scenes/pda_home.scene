@@ -1,0 +1,24 @@
+# The PDA profile (report 038, phase S2: a portrait launcher, no writing zone) on the profile pda of the harness:
+# 480x800 = the Pi 3A+ Waveshare 4.3" DSI turned to portrait (pi3a-wsdsi43-portrait: an 800x480 RGB565 buffer, rotate 90,
+# 94x56 mm, 8.5 px/mm), 480x640 = a 3.5" 640x480 panel turned (71x53 mm, 9.0 px/mm). The home grid with the status
+# strip at the Compact scale (230 px), a compat app in its 1x window over the toolbar, and the terminal with the fallback
+# on-screen keyboard (no physical keyboard: the only text input of S2). Goldens at both sizes.
+title pda home
+sizes 480x640 480x800
+profile pda
+env APPLAUNCH_OSK auto
+keyboards 0
+apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+shot pda_home
+header home
+stockapp
+shot pda_stockapp
+home
+launch CLI
+ptyout "user@pda:~$ "
+wait 300
+shot pda_terminal_osk

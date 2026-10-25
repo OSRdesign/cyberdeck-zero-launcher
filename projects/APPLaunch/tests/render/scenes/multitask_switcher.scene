@@ -3,8 +3,9 @@
 # name on up to two lines, the state with its dot, the X in the corner), a free slot "Room for one more", the bar Home |
 # Close all, the blue selection. Checked: every touch target at least 7 mm and nothing outside the panel
 # (expect_targets), the header against the home grid's, taps (a card, an X at the far corner of its 7 mm target, Home,
-# Close all) and keys (Esc, Backspace, arrows, Enter) reach the right action. The switcher exists from 640x480 up
-# (smaller panels keep the P-b / P-c behaviour): 480x320 is not rendered. 1024x600 at its real 6.6 px/mm.
+# Close all) and keys (Esc, Backspace, arrows, Enter) reach the right action. The switcher exists from a short side of
+# 480 up (smaller panels keep the P-b / P-c behaviour): 480x320 is not rendered; the portrait 480x640 and 480x800 are in
+# pda_switcher.scene. 1024x600 at its real 6.6 px/mm.
 title multitask switcher
 sizes 640x480 800x480 720x720 1280x720 1024x600
 @1024x600 ppmm 660

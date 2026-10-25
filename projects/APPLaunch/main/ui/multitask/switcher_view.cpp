@@ -388,6 +388,13 @@ void SwitcherScreen::layout_text(Slot &s, const std::string &name)
         if (top + name_h_ < target_ && target_ - name_h_ + two_h <= card_h_ - kBorder)
             top = target_ - name_h_; /* the second line under the X, where it has the card's width */
         top = std::max(kBorder, top);
+        /* a narrow card (a 480 px wide portrait panel, report 038 S2): a first word wider than the line beside the X
+         * would be cut between its characters there; when it fits the card's width, the name starts under the X */
+        if (top < target_ && target_ + two_h <= card_h_ - kBorder) {
+            const std::string first_word = name.substr(0, name.find(' '));
+            const int first_w = text_width(first_word, name_font_);
+            if (first_w > width_at(top) && first_w <= width_at(target_)) top = target_;
+        }
         lines = split_line(name, name_font_, width_at(top));
     }
     const bool two = !lines.second.empty();

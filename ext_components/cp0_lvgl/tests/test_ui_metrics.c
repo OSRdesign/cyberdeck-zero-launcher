@@ -550,6 +550,51 @@ static void test_computed_grid(void)
     }
 }
 
+/* Report 038 S2 (the PDA profile): a computed canvas under 600 px wide draws the status strip at the Compact scale */
+static void test_narrow_strip(void)
+{
+    static const int narrow[][3] = {{480, 800, 854}, {480, 640, 900}, {480, 640, 1130}, {480, 640, 790},
+                                    {480, 480, 0},   {599, 800, 854}, {320, 480, 630}};
+    for (size_t i = 0; i < sizeof(narrow) / sizeof(narrow[0]); i++) {
+        const cp0_ui_metrics_t m = compute(narrow[i][0], narrow[i][1], narrow[i][2], 0);
+        CHECK(m.preset == CP0_UI_PRESET_COMPUTED);
+        CHECK_EQ(m.shell.status_pct, 72);
+        CHECK_EQ(m.shell.status_w, 230);
+        CHECK_EQ(m.tok[CP0_TOK_STATUS_PCT], 72);
+        /* the strip and the title (18 px, report 040: centred on the 32 px title's line, so 7 px lower); the bar and
+         * its top margin (the header's Esc height) stay the class's */
+        const cp0_ui_class_t cls = cp0_ui_classify(narrow[i][0], narrow[i][1]);
+        CHECK_EQ(m.shell.bar_h, cls == CP0_UI_SQUARE ? 64 : 56);
+        CHECK_EQ(m.shell.status_top, cls == CP0_UI_SQUARE ? 12 : 8);
+        CHECK_EQ(m.shell.title_px, 18);
+        CHECK_EQ(m.shell.title_y, (cls == CP0_UI_SQUARE ? 14 : 10) + 7);
+        CHECK_EQ(m.shell.title_x, 20);
+        CHECK(cp0_ui_narrow_header(&m));
+    }
+    /* 600 px and wider keep the deck's scale and title; the pinned deck and Pi 3A+ are untouched; a Compact canvas
+     * was 72 already */
+    static const int wide[][3] = {{600, 800, 854}, {800, 480, 920}, {720, 720, 1000}, {1280, 720, 1160}, {800, 600, 0}};
+    for (size_t i = 0; i < sizeof(wide) / sizeof(wide[0]); i++) {
+        const cp0_ui_metrics_t m = compute(wide[i][0], wide[i][1], wide[i][2], 0);
+        CHECK_EQ(m.shell.status_pct, 100);
+        CHECK_EQ(m.shell.status_w, 320);
+        CHECK_EQ(m.shell.title_px, 32);
+        CHECK(!cp0_ui_narrow_header(&m));
+    }
+    cp0_ui_metrics_t m = compute(640, 480, 1130, 0);
+    check_shell_deck(&m.shell, 640, 480);
+    CHECK(!cp0_ui_narrow_header(&m));
+    m = compute(480, 320, 630, 1);
+    check_shell_compact(&m.shell, 480, 320);
+    CHECK(!cp0_ui_narrow_header(&m));
+    /* 320x170: narrow but under 400 px high (the Compact shell): the strip was 72 already, the title stays 24 px */
+    m = compute(320, 170, 0, 0);
+    CHECK_EQ(m.shell.status_pct, 72);
+    CHECK_EQ(m.shell.title_px, 24);
+    CHECK(!cp0_ui_narrow_header(&m));
+    CHECK(!cp0_ui_narrow_header(NULL));
+}
+
 /* ------------------------------------------------------------------ determinism, current */
 
 static void test_determinism(void)
@@ -782,6 +827,7 @@ int main(void)
     test_odd_sizes();
     test_pinned();
     test_computed_grid();
+    test_narrow_strip();
     test_determinism();
     test_state_text();
     test_publish();

@@ -1,0 +1,70 @@
+# The PDA profile's page titles (report 040): on a canvas under 600 px wide the shared page header draws its title at
+# 18 px (the 32 px one cut "Date & Time", "Keyboard test", "Network Time" beside the narrowed status strip) and a
+# breadcrumb title shows its last part only. Every title is checked whole (expect_text) and against the home grid's
+# header (run.sh header):
+#   Settings > Date & Time, its Set Manually section, System > On-screen keyboard (the longest title, about 186 px) and
+#   the development page Keyboard test;
+#   the list demo page with a path ("Net Toolbox", "Diagnosis") and with one string written as a breadcrumb
+#   ("Net Toolbox > Diagnosis", as an app may pass it): both show "Diagnosis" only.
+# Goldens at both PDA sizes.
+title pda titles
+sizes 480x640 480x800
+profile pda
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-10-10
+wifi 70
+bt on
+ntp off
+home
+header home
+launch Settings
+# root: Up from Screen wraps to System, Up again is Date & Time
+key UP
+key UP
+key ENTER
+wait 600
+shot pda_title_datetime
+header pda_title_datetime "Date & Time"
+expect_text "Date & Time"
+# Info, Network Time (a toggle row, off), Set Manually
+key DOWN
+key DOWN
+key ENTER
+wait 600
+shot pda_title_manual
+header pda_title_manual "Set Manually"
+expect_text "Set Manually"
+key ESC
+key ESC
+# System (the last section, after Date & Time); from its end: Shutdown, Reboot, Keyboard test, On-screen keyboard
+key DOWN
+key ENTER
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 300
+shot pda_title_osk_choice
+header pda_title_osk_choice "On-screen keyboard"
+expect_text "On-screen keyboard"
+key ESC
+key DOWN
+key ENTER
+wait 300
+shot pda_title_keyboard_test
+header pda_title_keyboard_test "Keyboard test"
+expect_text "Keyboard test"
+key ESC
+key ESC
+key ESC
+listdemo comfortable 3
+listtitle "Net Toolbox" Diagnosis
+shot pda_title_crumb_path
+header pda_title_crumb_path Diagnosis
+expect_text Diagnosis
+listtitle "Net Toolbox > Diagnosis"
+shot pda_title_crumb_string
+header pda_title_crumb_string Diagnosis
+expect_text Diagnosis

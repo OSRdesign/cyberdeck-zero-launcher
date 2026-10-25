@@ -93,7 +93,7 @@ int session_item(const std::vector<AppId> &cycle, int selected, const std::vecto
 
 bool switcher_fits(int w, int h)
 {
-    return w >= 640 && h >= 480;
+    return w >= kSwitcherMinSide && h >= kSwitcherMinSide;
 }
 
 MultitaskFlag parse_multitask_flag(const char *value)

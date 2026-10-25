@@ -66,6 +66,10 @@ typedef struct {
     int inset;              /* label and value inset inside the roller: SPACE_L */
     int gap;                /* between a label and its value: SPACE_M */
     int chevron_px;         /* chevron width: 0.55 x row_h (drawn as lines, any size) */
+
+    /* a narrow header (cp0_ui_narrow_header: 480x640, 480x800): a breadcrumb title ("Net Toolbox > Diagnosis",
+     * a path or one string with " > ") shows its last part only; 0 elsewhere (the whole path when it fits) */
+    int title_last_only;
 } cp0_ui_roller_page_t;
 
 /* The roller page for the metrics m. strip_left: the screen x of the leftmost pixel the shared status strip draws

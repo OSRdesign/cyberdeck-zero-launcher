@@ -7,7 +7,7 @@
  *   - the keyboard selection: 4 card slots in a fixed 2x2 grid, then the bottom bar (Home, Close all); arrows move
  *     in the grid, Tab / Shift+Tab in reading order (only over what exists), Enter activates;
  *   - where an Alt+Tab session's selection (P-b's cycle: apps and Home) lands on the screen;
- *   - which screens get the switcher (640x480 and larger; smaller ones keep the P-b / P-c behaviour);
+ *   - which screens get the switcher (short side 480 and more; smaller ones keep the P-b / P-c behaviour);
  *   - the one-time hint's text (D15);
  *   - whether multitasking is on at all (APPLAUNCH_MULTITASK and the canvas: on by default where the switcher fits).
  */
@@ -51,8 +51,10 @@ int switcher_clamp(int item, int cards);
  * a card (it went meanwhile) selects Home. */
 int session_item(const std::vector<AppId> &cycle, int selected, const std::vector<AppId> &cards);
 
-/* The switcher screen exists on canvases of at least 640x480 (the deck, 800x480, 720x720, 1024x600, 1280x720 ...).
- * Smaller ones (480x320 and the 320x480 SPI panel turned to 480x320) keep the P-b / P-c behaviour. */
+/* The switcher screen exists on canvases whose short side is at least 480 (report 038 section 3.4, the PDA profile:
+ * the deck, 800x480, 720x720, 1024x600, 1280x720 ... and the portrait 480x640, 480x800; 480x480 too). Smaller ones
+ * (480x320, the 320x480 SPI panel turned to 480x320, the 320x170 board) keep the P-b / P-c behaviour. */
+inline constexpr int kSwitcherMinSide = 480;
 bool switcher_fits(int w, int h);
 
 /* APPLAUNCH_MULTITASK, any case: 1/true/on/yes = On, 0/false/off/no = Off; unset, empty or anything else = Default. */
@@ -61,8 +63,9 @@ MultitaskFlag parse_multitask_flag(const char *value);
 
 /* THE rule for multitasking (on by default since task 015 "default on"; read once by multitask_ui::enabled()): the
  * flag forces it on or off; by default it is on where P-d was designed for, a logical canvas the switcher fits
- * (switcher_fits: 640x480 and more), and off below (480x320, the 320x480 SPI panel turned to 480x320, the 320x170
- * board: these keep the launcher as it was before multitasking). An unknown canvas (w or h <= 0) is off by default. */
+ * (switcher_fits: a short side of 480 and more), and off below (480x320, the 320x480 SPI panel turned to 480x320, the
+ * 320x170 board: these keep the launcher as it was before multitasking). An unknown canvas (w or h <= 0) is off by
+ * default. */
 bool multitask_on(MultitaskFlag flag, int w, int h);
 
 /* The first-run hint (D15): "Hold three fingers to switch apps" when the panel tracks three contacts (G1 works),

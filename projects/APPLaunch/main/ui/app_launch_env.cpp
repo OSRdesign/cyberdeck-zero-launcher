@@ -19,6 +19,18 @@ Vars variables(const Input &in)
     vars.emplace_back("APPLAUNCH_CANVAS", std::to_string(in.canvas_w) + "x" + std::to_string(in.canvas_h));
     vars.emplace_back("APPLAUNCH_CANVAS_SCALE", std::to_string(in.canvas_scale));
     if (!in.state_dir.empty()) vars.emplace_back("APPLAUNCH_STATE_DIR", in.state_dir);
+    if (in.turned && in.mode == Mode::Fullscreen) {
+        /* the app's own cp0_lvgl backend reads APPLAUNCH_ROTATE / APPLAUNCH_LOGICAL (board profile names); an app with
+         * its own glue (viz1090) reads APPLAUNCH_SCREEN_* first: both must describe the landscape canvas */
+        const std::string rot = std::to_string(in.turned_rotate);
+        const std::string w = std::to_string(in.canvas_w), h = std::to_string(in.canvas_h);
+        vars.emplace_back("APPLAUNCH_ROTATE", rot);
+        vars.emplace_back("APPLAUNCH_LOGICAL", w + "x" + h);
+        vars.emplace_back("APPLAUNCH_SCREEN_W", w);
+        vars.emplace_back("APPLAUNCH_SCREEN_H", h);
+        vars.emplace_back("APPLAUNCH_SCREEN_ROTATE", rot);
+        vars.emplace_back("APPLAUNCH_SCREEN_CLASS", in.turned_class);
+    }
     return vars;
 }
 
@@ -65,10 +77,38 @@ bool from_metrics(const cp0_ui_metrics_t *m, Mode mode, const char *runtime_dir,
     return true;
 }
 
-std::string export_for_current(Mode mode)
+int turned_rotation(int launcher_rot)
 {
+    switch (launcher_rot) {
+    case 0: return 270;
+    case 90: return 0;
+    case 180: return 90;
+    case 270: return 180;
+    default: return 0;
+    }
+}
+
+bool turned_from_metrics(const cp0_ui_metrics_t *m, const char *runtime_dir, Input *out)
+{
+    if (!m || !out || m->w <= 0 || m->h <= m->w) return false;
     Input in;
-    if (!from_metrics(cp0_ui_metrics_current(), mode, std::getenv("XDG_RUNTIME_DIR"), &in)) return std::string();
+    if (!from_metrics(m, Mode::Fullscreen, runtime_dir, &in)) return false;
+    in.win_w = in.canvas_w = m->h;
+    in.win_h = in.canvas_h = m->w;
+    in.turned = true;
+    in.turned_rotate = turned_rotation(m->rot);
+    in.turned_class = cp0_ui_class_name(cp0_ui_classify(m->h, m->w));
+    *out = in;
+    return true;
+}
+
+std::string export_for_current(Mode mode, bool turned)
+{
+    const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+    const char *runtime_dir = std::getenv("XDG_RUNTIME_DIR");
+    Input in;
+    if (turned && mode == Mode::Fullscreen && turned_from_metrics(m, runtime_dir, &in)) return export_command(in);
+    if (!from_metrics(m, mode, runtime_dir, &in)) return std::string();
     return export_command(in);
 }
 

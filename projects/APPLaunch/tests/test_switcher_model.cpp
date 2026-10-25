@@ -132,7 +132,14 @@ void test_fits_and_hint()
     expect("720x720", switcher_fits(720, 720) ? "yes" : "no", "yes");
     expect("1280x720", switcher_fits(1280, 720) ? "yes" : "no", "yes");
     expect("480x320", switcher_fits(480, 320) ? "yes" : "no", "no");
-    expect("480x480", switcher_fits(480, 480) ? "yes" : "no", "no");
+    /* report 038 section 3.4 (the PDA profile): the short side at least 480, so 480x480 is in since S2 (it was out
+     * under the earlier 640x480 rule), and so are the portrait panels */
+    expect("480x480", switcher_fits(480, 480) ? "yes" : "no", "yes");
+    expect("480x640 (portrait)", switcher_fits(480, 640) ? "yes" : "no", "yes");
+    expect("480x800 (portrait, Pi 3A+ DSI turned)", switcher_fits(480, 800) ? "yes" : "no", "yes");
+    expect("479x800", switcher_fits(479, 800) ? "yes" : "no", "no");
+    expect("800x479", switcher_fits(800, 479) ? "yes" : "no", "no");
+    expect("320x480", switcher_fits(320, 480) ? "yes" : "no", "no");
     expect("hint with 5 slots", first_run_hint(5), "Hold three fingers to switch apps");
     expect("hint with 3 slots", first_run_hint(3), "Hold three fingers to switch apps");
     expect("hint single touch", first_run_hint(1), "Alt+Tab switches apps");
@@ -164,6 +171,9 @@ void test_default_on()
     expect("default 1280x720", on(MultitaskFlag::Default, 1280, 720), "on");
     expect("default 480x320 (Pi 3A+ SPI)", on(MultitaskFlag::Default, 480, 320), "off");
     expect("default 320x480", on(MultitaskFlag::Default, 320, 480), "off");
+    expect("default 480x640 (PDA)", on(MultitaskFlag::Default, 480, 640), "on");
+    expect("default 480x800 (PDA, Pi 3A+ DSI turned)", on(MultitaskFlag::Default, 480, 800), "on");
+    expect("off 480x800", on(MultitaskFlag::Off, 480, 800), "off");
     expect("default 320x170", on(MultitaskFlag::Default, 320, 170), "off");
     expect("default unknown canvas", on(MultitaskFlag::Default, 0, 0), "off");
     expect("off 640x480", on(MultitaskFlag::Off, 640, 480), "off");

@@ -139,6 +139,6 @@ void Launch::show_home()
     native_ui::show_home();
 }
 
-void Launch::launch_Exec(const std::string &, bool, bool, const std::string &, multitask::Background) {}
+void Launch::launch_Exec(const std::string &, bool, bool, const std::string &, multitask::Background, bool) {}
 
 void Launch::launch_Exec_in_terminal(const std::string &, bool, TerminalHelpFactory) {}

@@ -52,16 +52,44 @@ exits).
 | `APPLAUNCH_STATE_DIR` | the state directory (absent without `XDG_RUNTIME_DIR`) | same |
 | `APPLAUNCH_LIFECYCLE=1`, `APPLAUNCH_CONTROL_FD=<n>` | never | only for an app with `X-Background` and only from a launcher with multitasking on: the lifecycle control socket (section 13) |
 
-All coordinates are **logical**: landscape, before the panel's rotation. Compat apps also get the launcher's
+All coordinates are **logical**: the canvas as the launcher shows it (landscape on every board but the portrait PDA
+profile, below), before the panel's rotation. Compat apps also get the launcher's
 virtual-framebuffer setup (`APPLAUNCH_VFB`, `LD_PRELOAD`, `LV_LINUX_FBDEV_DEVICE=/dev/fb0`, `APPLAUNCH_FB=/dev/fb0`,
 `APPLAUNCH_ROTATE=0`, the virtual keyboard in `LV_LINUX_KEYBOARD_DEVICE`): these are plumbing, not contract. A
 terminal app (`Terminal=true`) runs inside the launcher's terminal page and gets no per-launch variables.
+
+### Portrait launcher (the PDA profile)
+
+A board profile may show the launcher in portrait (the PDA profile, report 038; `pi3a-wsdsi43-portrait`: the Pi 3A+
+4.3" DSI panel turned to 480x800). Its logical canvas is then taller than wide and `APPLAUNCH_SCREEN_CLASS` is
+`portrait`. No app built before this gets a portrait canvas, so contract 1 holds (keys and variables are only added):
+
+| App | What it gets on a portrait launcher |
+|---|---|
+| fullscreen, **without** `X-Portrait` (every app today) | runs **turned**: full screen on the panel seen in landscape (480x800 -> `800x480`), the user turns the device. On its command line, after the variables above (window `0,0,800,480`, canvas `800x480`, scale `1`), the display variables of that canvas, which replace the inherited board profile's and the launcher's: `APPLAUNCH_ROTATE` and `APPLAUNCH_SCREEN_ROTATE` (a quarter turn back from the launcher's: `90` -> `0`, `270` -> `180`), `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_SCREEN_W=800`, `APPLAUNCH_SCREEN_H=480`, `APPLAUNCH_SCREEN_CLASS` of that canvas (`wide`). A `cp0_lvgl` app's display backend and touch (`buffer` mapping) follow by themselves; nothing to change in the app. `X-MinSize` is checked against that landscape canvas |
+| fullscreen **with** `X-Portrait=WxH` that fits the portrait canvas | the portrait canvas as it is (the variables above, e.g. canvas `480x800`), no turning |
+| fullscreen with an `X-Portrait` larger than the portrait canvas | turned, as without it |
+| compat (320x170), a terminal app (`Terminal=true`) | as on every board: a terminal app runs in the launcher's terminal page; `X-MinSize` against the portrait canvas |
+| compat (320x170), not a terminal | **not listed** (see below) |
+
+A portrait screen shows only responsive fullscreen apps (turned, or native with `X-Portrait`) and terminal apps. A
+compat app that is not a terminal is a fixed 320x170 page, too small at the top of a tall screen, so a portrait launcher
+hides its tile (`desktop_fit()`: `Hidden`, whatever its `X-MinSize`); a landscape or square launcher is not affected.
+The built-in fixed-pixel tiles (IP Panel, Snake, Tank, Store) are hidden by default through the board profile
+(`APPLAUNCH_HIDE_TILES`), and Settings > Launcher can turn them on.
+
+`screen.state` and the process-wide `APPLAUNCH_SCREEN_*` keep describing the panel as the launcher shows it (portrait,
+`rot=90`); only a turned app's own command line says otherwise, so a turned app takes the environment first (as
+`cp0_app_env_read()` does) and does not use `screen.state`'s `w`, `h` and `rot` for its canvas. A turned app hidden
+behind the launcher's switcher (section 13) shows its dimmed frame sideways. Reserved for the writing zone of the PDA
+profile, not written by this launcher yet (report 038, phases S3 and S4): `APPLAUNCH_ZONE`, `screen.state` `orient=`
+and `zone=`, `input.state` `vkb=zone`.
 
 ### Panel (process-wide; always the panel, never the app's canvas)
 
 | Variable | Meaning |
 |---|---|
-| `APPLAUNCH_SCREEN_W`, `APPLAUNCH_SCREEN_H` | logical (landscape) panel size, px |
+| `APPLAUNCH_SCREEN_W`, `APPLAUNCH_SCREEN_H` | logical panel size as the launcher shows it (landscape, or portrait on the PDA profile), px |
 | `APPLAUNCH_SCREEN_ROTATE` | clockwise pre-rotation of the logical picture into the framebuffer: `0`, `90`, `180`, `270` |
 | `APPLAUNCH_SCREEN_PPMM` | density, px per mm x100 (`1130` = 11.3 px/mm) |
 | `APPLAUNCH_SCREEN_CLASS` | `compact`, `standard`, `wide`, `square`, `large`, `portrait` (rules in `cp0_ui_metrics.h`) |
@@ -242,7 +270,8 @@ Read it with `cp0_app_board_read(NULL, &board)` (SDK, section 9): `0` for a good
 | `X-Fullscreen=true` | fullscreen mode: the launcher stops drawing, the app owns the whole panel until it exits (the hold-Esc watchdog still applies). Without it the app is a compat app: 320x170 in the scaled window, toolbar below. |
 | `X-Background=run\|freeze` | (section 13) the app may be hidden and resumed instead of owning the panel until it exits; `freeze` = stopped while hidden, `run` = keeps working while hidden. Absent or another value: today's behaviour. Only with `X-Fullscreen=true`, only under a launcher with multitasking on; an older launcher ignores it. Declare it only in a build that answers the protocol (section 13, "The helper"). |
 | `X-Permissions=...` | **reserved**, not read by any launcher yet (report 035, D3). A later launcher may let an app declare the launcher requests it uses (`beep`, `brightness`, ...) and refuse the rest with `err denied`. Today every request of section 14 is open to every process of the user, rate-limited and logged; do not rely on it being absent. |
-| `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (the SDL simulator) shows it. |
+| `X-MinSize=WxH` | the logical screen size the app needs (`x` or `X`, each 1..65535). On a smaller screen (either dimension) the tile is **hidden**, like `Hidden=true`: the app is not registered, so it does **not appear in Settings > Apps either**. Malformed = no restriction. A launcher without layout metrics (the SDL simulator) shows it. It is the **landscape** minimum: on a portrait launcher (section 3, "Portrait launcher") a fullscreen app is checked against the panel seen in landscape, the canvas it runs turned on. |
+| `X-Portrait=WxH` | (added with the PDA profile, report 038; same syntax as `X-MinSize`) the smallest canvas the app supports on a portrait launcher. A fullscreen app that declares it and fits gets the portrait canvas there; absent, malformed or larger than the portrait canvas: the app is landscape only and runs turned. Ignored on a landscape launcher and by an older launcher. Declare it only in a build whose layout passes on the portrait canvases (480x640, 480x800). |
 
 **An older launcher ignores `X-MinSize`** (and every contract variable), so an app must still start on a screen that
 is too small and say so ("needs a 640x480 screen") instead of drawing off the edge.
@@ -386,8 +415,9 @@ section L.
 **Status: contract 1, additive** (no `v=` change, section 8; final since multitasking phase P-e; **shipped in launcher
 v0.8.0**). The launcher side is
 task 015 (`docs/dev/tasks/015-multitasking-pb.md`, `-pc.md`, `-pd.md`). Multitasking is **on by default** on logical
-canvases of 640x480 and more (the size the switcher was designed for) and off below them (480x320, the 320x480 SPI
-panel turned to 480x320, the 320x170 board: the launcher behaves as before multitasking). `APPLAUNCH_MULTITASK=0`
+canvases whose short side is 480 or more (640x480, the size the switcher was designed for, and up; since the PDA
+profile also the portrait 480x640 and 480x800) and off below them (480x320, the 320x480 SPI panel turned to 480x320,
+the 320x170 board: the launcher behaves as before multitasking). `APPLAUNCH_MULTITASK=0`
 (or `false`, `off`, `no`) in the launcher's environment turns it off, `=1` (`true`, `on`, `yes`) forces it on, also
 on a smaller canvas; with it off nothing of this section happens. The app side is the toolkit's helper (below, phase
 P-e), which every native app of the apps repository gets through `apps/_common`. Design and owner decisions:
@@ -427,7 +457,7 @@ by both sides. `<n>` is a decimal number that the launcher increases with every 
 | launcher -> app | `close <n>` | save and quit. `SIGTERM` follows 3 s later, `SIGKILL` 3 s after that |
 | app -> launcher | `ack <n>` | `hide` or `show` done |
 | app -> launcher | `home` | leave to the launcher (an app's own "minimise" control). Esc at the app's root still **quits** (decision D5) |
-| app -> launcher | `switcher` | open the switcher: the app is hidden as for `home`, then the launcher shows its switcher screen (on screens under 640x480: the same as `home`) |
+| app -> launcher | `switcher` | open the switcher: the app is hidden as for `home`, then the launcher shows its switcher screen (on screens whose short side is under 480: the same as `home`) |
 
 ### Obligations
 
@@ -477,7 +507,7 @@ must not do while hidden). Esc at an app's root still quits (D5); nothing in the
   switcher (phase P-d): the app in front is hidden (`hide`), as Super does. An app without `X-Background` is frozen
   instead (`SIGSTOP` of its group) behind a "Close <app>?" sheet: Keep continues it as a `show` would (last frame put
   back, input queues emptied first; no message, it has no socket), Close ends it as Esc held 3 s does (after a
-  `SIGCONT`). On screens under 640x480 the gestures hide a lifecycle app and leave others alone. While an app
+  `SIGCONT`). On screens whose short side is under 480 the gestures hide a lifecycle app and leave others alone. While an app
   is in front the launcher reads the touch screen **passively** (a second file descriptor, never `EVIOCGRAB`): the app
   still gets every touch, including the three fingers. When G1 fires the fingers are still down: `hide` arrives in
   the middle of a press; cancel it (no click) as the `hide` obligation says, and ignore the touches until `show`.

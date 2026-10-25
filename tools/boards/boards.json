@@ -7,7 +7,7 @@
     "fb: the panel's framebuffer as the board reports it (width x height in buffer orientation, bpp, pixel format);",
     "rotate: degrees counter-clockwise that turn a raw framebuffer capture into what the user sees (PIL Image.rotate).",
     "test_env: the launcher environment of test-start (from cyberdeckzero.service, install.sh board profiles and the scratchpad test runs).",
-    "quirks: no_environ = an ssh command string containing the word 'environ' drops the connection (Pi 3A+): board.py refuses such a command.",
+    "quirks: no_environ = an ssh command string containing the word 'environ' drops the connection (Pi 3A+, Pi 4 B): board.py refuses such a command.",
     "pi3a and pi3a-dsi are the same Pi 3A+ (same host) with one panel or the other: pi3a = Luckfox 3.5in SPI (install.sh profile pi3a-luckfox35),",
     "      pi3a-dsi = Waveshare 4.3in DSI (profile pi3a-wsdsi43; the panel mounted since 2026-10-13). Use the entry of the panel that is mounted.",
     "pi4b = Raspberry Pi 4 Model B with the Freenove 5in DSI panel (install.sh profile pi4b-dsi).",
@@ -111,7 +111,7 @@
         "APPLAUNCH_TOUCH_INVERT_Y": "0",
         "APPLAUNCH_STD_KEYBOARD": "1"
       },
-      "quirks": []
+      "quirks": ["no_environ"]
     },
     "pi5": {
       "host": "192.168.68.175",

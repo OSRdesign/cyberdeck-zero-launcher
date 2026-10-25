@@ -20,7 +20,8 @@
 #                          with brightness levels (overlay hyperpixel4-pwm-backlight, a config.txt line, a reboot;
 #                          README.md, "Pi 5 + HyperPixel 4: brightness levels"). Never done without this option
 #   --board NAME           use this board profile instead of detecting it (zero2w, pi3a-luckfox35,
-#                          pi3a-wsdsi43, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5)
+#                          pi3a-wsdsi43, pi3a-wsdsi43-portrait (PDA: never detected), pi4b-dsi, pi5-hyperpixel4,
+#                          hackberry-cm5)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
 #   --dry-run              print the detected board, the session and what would be done, change nothing
 #   --force                continue on an unknown board (no profile is written); replace a hand-edited
@@ -65,7 +66,7 @@ while [ $# -gt 0 ]; do
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
         --pwm-backlight) PWM_BACKLIGHT=1; shift ;;
-        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
+        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --force) FORCE=1; shift ;;
@@ -207,13 +208,15 @@ print_facts() {
     echo "  backlight:${bl:- none}"
 }
 
-# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi4b-dsi | pi5-hyperpixel4 | hackberry-cm5 | pc-<model> | "" (unknown).
+# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi3a-wsdsi43-portrait | pi4b-dsi | pi5-hyperpixel4 | hackberry-cm5
+# | pc-<model> | "" (unknown). pi3a-wsdsi43-portrait (the PDA profile, report 038) is the DSI panel turned to portrait:
+# chosen only with --board, never detected (the same panel is pi3a-wsdsi43 when detected).
 # PANEL_FB: the panel's framebuffer of a board with a profile (not the deck).
 # BOARD_NOTE: why a known model was left unknown (two panels at once), printed with the facts.
 BOARD=""
 PANEL_FB=""
 BOARD_NOTE=""
-KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5"
+KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5"
 # The panel of each profiled board: fbdev name prefix, buffer size (virtual_size), DRM connector and its mode.
 # The RP1 DPI fbdev ("drm-rp1-dpidrmf") is the panel's native buffer: portrait 480x800 for the HyperPixel 4 (the
 # launcher pre-rotates its 800x480 canvas 90 degrees), square 720x720 for the HackBerry (report 021, addenda 3, 4, 7).
@@ -226,7 +229,7 @@ KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi4b-dsi, pi5-hyperpixel4, h
 panel_spec() {
     case "$1" in
         pi3a-luckfox35) echo "panel-mipi-dbi 320,480 SPI-* 320x480" ;;
-        pi3a-wsdsi43|pi4b-dsi) echo "vc4drmfb 800,480 DSI-* 800x480" ;;
+        pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi) echo "vc4drmfb 800,480 DSI-* 800x480" ;;
         pi5-hyperpixel4) echo "drm-rp1-dpi 480,800 DPI-* 480x800" ;;
         hackberry-cm5) echo "drm-rp1-dpi 720,720 DPI-* 720x720" ;;
     esac
@@ -244,7 +247,7 @@ detect_panel() {
 if [ -n "$BOARD_ARG" ]; then
     case "$BOARD_ARG" in
         zero2w) BOARD=zero2w ;;
-        pi3a-luckfox35|pi3a-wsdsi43|pi4b-dsi|pi5-hyperpixel4|hackberry-cm5)
+        pi3a-luckfox35|pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-hyperpixel4|hackberry-cm5)
             BOARD=$BOARD_ARG
             detect_panel "$BOARD" || true
             if [ -z "$PANEL_FB" ]; then
@@ -531,6 +534,34 @@ APPLAUNCH_TOUCH_ORIENT=buffer
 EOF
             if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
             cat <<EOF
+LV_LINUX_FBDEV_DEVICE=$PANEL_FB
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+        ;;
+        # The PDA profile (report 038, phase S2): the same DSI panel turned to portrait, 480x800. Only with --board.
+        # No APPLAUNCH_COMPAT_SCALE: 320x170 fits 1x only on a 480 px wide canvas. Landscape fullscreen apps run turned
+        # (a quarter turn back from APPLAUNCH_ROTATE, full screen 800x480): the launcher sets that per launch.
+        pi3a-wsdsi43-portrait)
+            bl=$(dsi_backlight)
+            cat <<EOF
+APPLAUNCH_BOARD=pi3a-wsdsi43-portrait
+APPLAUNCH_FB=$PANEL_FB
+APPLAUNCH_LOGICAL=480x800
+# 90: the panel's right edge (as it sits in landscape) at the top; 270: its left edge at the top (edit by hand)
+APPLAUNCH_ROTATE=90
+# landscape visible area in mm, as pi3a-wsdsi43 (the launcher turns it to the portrait canvas): the layout's density
+APPLAUNCH_PANEL_MM=94x56
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+EOF
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            cat <<EOF
+# the fixed-pixel built-in tiles (IP Panel, Snake, Tank: 320x170 pages; the Store) start hidden on the portrait panel;
+# Settings > Launcher shows them, and what is saved there wins
+APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 # the deck's legacy touch axes (set in its user service) must not apply here: neutral values
 APPLAUNCH_TOUCH_SWAP_XY=0
