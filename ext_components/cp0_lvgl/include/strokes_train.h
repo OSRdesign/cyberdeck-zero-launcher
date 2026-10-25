@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * strokes_train.h: the Strokes training session (PDA phase S6, report 042), the pure part of Settings > System >
- * Strokes training. Plain C99, no LVGL, no clock, no file access: the caller feeds it strokes, saves the overlay text it
+ * Strokes training. Plain C99, no LVGL, no clock, no file I/O: the caller feeds it strokes, saves the overlay text it
  * returns and reloads the recogniser's tables.
  *
  * The session walks an order of glyphs: first the failing letters the caller names (the owner's), then the rest of the
