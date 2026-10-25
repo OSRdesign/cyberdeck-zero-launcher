@@ -18,10 +18,11 @@
  *   | letters box     | digits box  |   the writing zone, write_h high (a third of the panel), the boxes inset by pad
  *   +-------------------------------+ h
  *
- * Sizes: pad = SPACE_S, key_h = 5 mm (the mockup's buttons, panel density, cp0_ui_mm_px), write_h = a third of the
- * panel's height, rounded (owner, after the first board test of 0.8.8-pda.4: 267 px on the 4.3" DSI's 480x800, 213 px
- * on 480x640; S3 first drew 20.6 mm, 176 px, which was too small to write in); the letters box takes 68 % of the boxes'
- * width. The app area is what the pages get (their own metrics, cp0_ui_metrics_compute of w x app_h); the strip does
+ * Sizes: pad = SPACE_S, key_h = 5 mm (the mockup's buttons, panel density, cp0_ui_mm_px), write_h = min(a third of the
+ * panel's height rounded, h - row_h - 400) (owner, after the first board test of 0.8.8-pda.4: 267 px on the 4.3" DSI's
+ * 480x800; S3 first drew 20.6 mm, 176 px, which was too small to write in; the cap keeps the app area at 400 px or more,
+ * the Square class, so 480x640 gets 187 px instead of a third's 213 and its pages keep their Square header and titles;
+ * a panel whose cap is under 6 pad gets no zone); the letters box takes 68 % of the boxes' width. The app area is what the pages get (their own metrics, cp0_ui_metrics_compute of w x app_h); the strip does
  * not resize it: it covers its bottom and the pages leave that room free like the on-screen keyboard's (cp0::ui::osk
  * inset).
  *
@@ -46,6 +47,7 @@ extern "C" {
 #endif
 
 #define CP0_ZONE_WRITE_DIV 3      /* the writing zone with its padding: h / 3, rounded (267 px at 480x800) */
+#define CP0_ZONE_APP_KEEP_PX 400  /* ...capped at h - row_h - this, so the app area stays Square (187 px at 480x640) */
 #define CP0_ZONE_KEY_MM_X10 50    /* a soft button, a strip key: 5 mm (the mockup's 41-43 px at 8.54 px/mm) */
 #define CP0_ZONE_KEY_FLOOR_PX 32
 #define CP0_ZONE_LETTERS_PCT 68   /* the letters box: 68 % of the two boxes' width */

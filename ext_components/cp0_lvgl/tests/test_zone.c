@@ -117,26 +117,29 @@ static void test_layout(void)
     CHECK_EQ(l.box_label_px, 14);
     CHECK_EQ(l.ink_px, 3);
 
-    /* 480x640, a 3.5" panel at 9.04 px/mm: 5 mm = 45, a third of 640 = 213, the app area 374 (321 with the strip) */
+    /* 480x640, a 3.5" panel at 9.04 px/mm: 5 mm = 45; a third of 640 (213) would leave the app 374 px (Compact), the
+     * cap 640 - 53 - 400 gives 187 and the app area 400 (347 with the strip) */
     {
         const cp0_ui_metrics_t m = metrics(480, 640, ppmm_35());
         cp0_zone_layout_t s;
         CHECK_EQ(m.ppmm_x100, 904);
         CHECK_EQ(cp0_zone_layout(&m, &s), 0);
         CHECK_EQ(s.key_h, 45);
-        CHECK_EQ(s.write_h, 213);
-        CHECK_EQ(s.app_h, 374);
-        CHECK_EQ(s.band_open, 319);
-        CHECK_EQ(s.strip_y, 321);
+        CHECK_EQ(s.row_h, 53);
+        CHECK_EQ(s.write_h, 187);
+        CHECK_EQ(s.app_h, CP0_ZONE_APP_KEEP_PX);
+        CHECK_EQ(s.band_open, 293);
+        CHECK_EQ(s.strip_y, 347);
+        CHECK_EQ(s.letters.h, 171);
     }
-    /* the deck's 11.3 px/mm on 480x640: everything larger, still room for the app */
+    /* the deck's 11.3 px/mm on 480x640: larger keys, the cap gives the writing zone 640 - 65 - 400 = 175 */
     {
         const cp0_ui_metrics_t m = metrics(480, 640, 1130);
         cp0_zone_layout_t s;
         CHECK_EQ(cp0_zone_layout(&m, &s), 0);
         CHECK_EQ(s.key_h, 57);
-        CHECK_EQ(s.write_h, 213);
-        CHECK_EQ(s.app_h, 362);
+        CHECK_EQ(s.write_h, 175);
+        CHECK_EQ(s.app_h, CP0_ZONE_APP_KEEP_PX);
     }
     /* no zone: landscape, square, too small a panel, no metrics */
     {

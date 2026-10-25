@@ -39,8 +39,12 @@ int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
     l.radius = imax(4, m->tok[CP0_TOK_RADIUS_S]);
     l.key_h = cp0_ui_mm_px(l.ppmm_x100, CP0_ZONE_KEY_MM_X10, CP0_ZONE_KEY_FLOOR_PX);
     l.row_h = l.pad + l.key_h;
-    /* a third of the panel, rounded to the nearest pixel (h / 3 is never half way) */
-    l.write_h = imax(6 * l.pad, (2 * l.h + CP0_ZONE_WRITE_DIV) / (2 * CP0_ZONE_WRITE_DIV));
+    /* a third of the panel, rounded to the nearest pixel (h / 3 is never half way), capped so the app area keeps
+     * CP0_ZONE_APP_KEEP_PX; a panel whose cap leaves less than the floor (6 pad) gets no zone */
+    const int third = (2 * l.h + CP0_ZONE_WRITE_DIV) / (2 * CP0_ZONE_WRITE_DIV);
+    const int cap = l.h - l.row_h - CP0_ZONE_APP_KEEP_PX;
+    if (cap < 6 * l.pad) return -1;
+    l.write_h = imax(6 * l.pad, imin(third, cap));
     l.band_closed = l.row_h + l.write_h;
     l.band_open = l.band_closed + l.row_h;
     l.app_h = l.h - l.band_closed;
