@@ -309,6 +309,71 @@ static void test_session(void)
     strokes_table_free(t);
 }
 
+/* The glyph picker: pick a glyph, four attempts, back to the picker; the marks; the re-test written into the block. */
+static void test_picker(void)
+{
+    strokes_table *t = table_with(NULL);
+    strokes_train *s = strokes_train_new(t, NULL, "b d", NULL);
+    strokes_train_set_time(s, "2026-10-26 09:00");
+    strokes_point pts[512];
+    CHECK_NEAR(strokes_train_mark(s, 0), STROKES_TRAIN_UNTRAINED, 0);
+    unsigned ev = strokes_train_open_picker(s);
+    CHECK((ev & STROKES_TRAIN_EV_PHASE) && strokes_train_phase(s) == STROKES_TRAIN_PICK);
+    CHECK_NEAR(strokes_train_current(s), -1, 0);
+    CHECK_NEAR(strokes_train_stroke(s, pts, 0), 0, 0);
+    /* d picked, written as the chart's d four times: trained, back to the picker */
+    ev = strokes_train_pick(s, 1);
+    CHECK(strokes_train_phase(s) == STROKES_TRAIN_TRAINING && strokes_train_current(s) == 1 && strokes_train_picked(s));
+    for (int k = 0; k < STROKES_TRAIN_REPS; ++k) {
+        const int n = clean_points(t, "d", STROKES_SET_LETTERS, pts, 512);
+        ev = strokes_train_stroke(s, pts, n);
+    }
+    CHECK((ev & STROKES_TRAIN_EV_OVERLAY) && (ev & STROKES_TRAIN_EV_PHASE) && strokes_train_phase(s) == STROKES_TRAIN_PICK);
+    CHECK_NEAR(strokes_train_mark(s, 1), STROKES_TRAIN_TRAINED, 0);
+    /* b picked, written as the chart's q (read as q): hard; Back in the middle of a picked glyph: the picker again */
+    strokes_train_pick(s, 0);
+    int n = clean_points(t, "q", STROKES_SET_LETTERS, pts, 512);
+    strokes_train_stroke(s, pts, n);
+    ev = strokes_train_back(s);
+    CHECK((ev & STROKES_TRAIN_EV_PHASE) && strokes_train_phase(s) == STROKES_TRAIN_PICK);
+    CHECK_NEAR(strokes_train_mark(s, 0), STROKES_TRAIN_UNTRAINED, 0);
+    strokes_train_pick(s, 0);
+    for (int k = 0; k < STROKES_TRAIN_REPS; ++k) {
+        n = clean_points(t, "q", STROKES_SET_LETTERS, pts, 512);
+        strokes_train_stroke(s, pts, n);
+    }
+    CHECK_NEAR(strokes_train_mark(s, 0), STROKES_TRAIN_HARD, 0);
+    /* the order again: the first glyph without a block (a, after b and d) */
+    ev = strokes_train_resume(s);
+    CHECK(strokes_train_phase(s) == STROKES_TRAIN_TRAINING && strokes_train_current(s) == 2 && !strokes_train_picked(s));
+    strokes_train_open_picker(s);
+    /* Finish from the picker: the re-test of b and d; each result goes into its block */
+    strokes_table *t2 = table_with(strokes_train_overlay(s));
+    strokes_train_set_table(s, t2);
+    ev = strokes_train_finish(s);
+    CHECK(strokes_train_phase(s) == STROKES_TRAIN_RETEST && strokes_train_retest_count(s) == 2);
+    n = clean_points(t, "b", STROKES_SET_LETTERS, pts, 512);
+    ev = strokes_train_stroke(s, pts, n);
+    CHECK(ev & STROKES_TRAIN_EV_OVERLAY);
+    CHECK(strstr(strokes_train_overlay(s), STROKES_TRAIN_RETEST_MARK "1/1 2026-10-26 09:00\n\n") != NULL);
+    CHECK_NEAR(strokes_train_mark(s, 0), STROKES_TRAIN_TRAINED, 0); /* the latest rate: the re-test's */
+    n = clean_points(t, "q", STROKES_SET_LETTERS, pts, 512);                     /* d written as q: not recognised */
+    strokes_train_stroke(s, pts, n);
+    CHECK(strokes_train_phase(s) == STROKES_TRAIN_DONE);
+    CHECK_NEAR(strokes_train_mark(s, 1), STROKES_TRAIN_HARD, 0);
+    /* a new session reads the marks back from the overlay; the blocks are still valid overlay text */
+    strokes_train *again = strokes_train_new(t, NULL, "b d", strokes_train_overlay(s));
+    CHECK(strokes_train_mark(again, 0) == STROKES_TRAIN_TRAINED && strokes_train_mark(again, 1) == STROKES_TRAIN_HARD);
+    CHECK_NEAR(count_lines(strokes_train_overlay(again), STROKES_TRAIN_RETEST_MARK), 2, 0);
+    strokes_table *t3 = table_with(strokes_train_overlay(again));
+    CHECK(t3 != NULL);
+    strokes_table_free(t3);
+    strokes_train_free(again);
+    strokes_train_free(s);
+    strokes_table_free(t2);
+    strokes_table_free(t);
+}
+
 /* ---- the simulation: a writer unlike the chart ---- */
 
 /* The writer's own table: the chart stroke of each letter of `which`, turned 32 degrees clockwise and 0.62 as wide. */
@@ -459,5 +524,6 @@ void suite_train(void)
     RUN(test_order);
     RUN(test_overlay_merge);
     RUN(test_session);
+    RUN(test_picker);
     RUN(test_simulation);
 }

@@ -366,6 +366,18 @@ private:
         lv_obj_add_flag(summary_, LV_OBJ_FLAG_HIDDEN);
         summary_font_ = body ? body : cp0_ui_font_px(l.value_px);
 
+        /* the glyph picker (report 042 section 12): the stage's and the result line's room, a grid that scrolls */
+        picker_ = plain(column);
+        lv_obj_set_size(picker_, width, side_ + l.gap + result_h);
+        lv_obj_add_flag(picker_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_scroll_dir(picker_, LV_DIR_VER);
+        lv_obj_set_flex_flow(picker_, LV_FLEX_FLOW_ROW_WRAP);
+        lv_obj_set_style_pad_row(picker_, l.gap / 2, 0);
+        lv_obj_set_style_pad_column(picker_, l.gap / 2, 0);
+        lv_obj_add_flag(picker_, LV_OBJ_FLAG_HIDDEN);
+        cell_ = std::max(36, (width - 7 * (l.gap / 2)) / 8);
+        cell_font_ = body ? body : cp0_ui_font_px(l.value_px);
+
         result_ = text(column, body ? body : cp0_ui_font_px(l.value_px), kText);
         lv_obj_set_size(result_, width, result_h);
         lv_obj_set_style_pad_left(result_, l.gap / 2, 0);
@@ -431,7 +443,9 @@ private:
 
     /* ---------------------------------------------------------------- what the page shows now */
 
-    enum Button { kBack = 0, kSkip, kRedo, kReset, kFinish, kButtons };
+    static constexpr int kButtons = 5;
+    /* what a button does: the five buttons change with the phase */
+    enum Action { kNone = 0, kBack, kSkip, kRedo, kPick, kFinish, kResume, kPage, kReset, kAgain };
 
     std::string label_of(int item) const
     {
@@ -468,13 +482,21 @@ private:
         }
     }
 
-    void set_button(Button b, const char *label, bool shown)
+    /* slot i shows label and does action (kNone: hidden) */
+    void set_button(int slot, const char *label, Action action)
     {
-        lv_obj_t *obj = buttons_[static_cast<std::size_t>(b)];
+        lv_obj_t *obj = buttons_[static_cast<std::size_t>(slot)];
         if (!obj) return;
-        lv_label_set_text(button_label_[static_cast<std::size_t>(b)], label);
-        if (shown) lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        action_[static_cast<std::size_t>(slot)] = action;
+        lv_label_set_text(button_label_[static_cast<std::size_t>(slot)], label);
+        if (action != kNone) lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    void set_buttons(std::array<std::pair<const char *, Action>, kButtons> spec)
+    {
+        for (std::size_t i = 0; i < spec.size(); ++i) set_button(static_cast<int>(i), spec[i].first, spec[i].second);
+        keep_focus_visible();
     }
 
     void refresh()
@@ -488,19 +510,25 @@ private:
         const int cur = strokes_train_current(session_);
         const strokes_train_item *it = strokes_train_item_at(session_, cur);
         char buf[200];
+        if (phase == STROKES_TRAIN_PICK) {
+            show_picker();
+            return;
+        }
         if (phase == STROKES_TRAIN_DONE || !it) {
             show_summary();
             return;
         }
         lv_obj_add_flag(summary_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(picker_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(stage_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(result_, LV_OBJ_FLAG_HIDDEN);
         if (phase == STROKES_TRAIN_TRAINING) {
             std::snprintf(buf, sizeof(buf), "Draw %s  (%d/%d)", it->label, strokes_train_progress(session_) + 1,
                           STROKES_TRAIN_REPS);
             lv_label_set_text(prompt_, buf);
             const bool digits = it->set == STROKES_SET_DIGITS;
-            std::string hint = std::string(group_text(it->group)) + " - write it in the " +
-                               (digits ? "digits" : "letters") + " box";
+            std::string hint = std::string(strokes_train_picked(session_) ? "Picked" : group_text(it->group)) +
+                               " - write it in the " + (digits ? "digits" : "letters") + " box";
             if (it->set == STROKES_SET_PUNCT) hint += ", without the tap before it";
             if (it->set == STROKES_SET_ANY) hint += " (a gesture)";
             std::snprintf(buf, sizeof(buf), "  -  glyph %d of %d", cur + 1, strokes_train_count(session_));
@@ -539,12 +567,91 @@ private:
             if (training) lv_obj_remove_flag(t.box, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_add_flag(t.box, LV_OBJ_FLAG_HIDDEN);
         }
-        set_button(kBack, "Back", training);
-        set_button(kSkip, "Skip", true);
-        set_button(kRedo, "Redo", training);
-        set_button(kReset, "Reset all", training);
-        set_button(kFinish, training ? "Finish" : "Summary", true);
-        keep_focus_visible();
+        if (!training)
+            set_buttons({{{"", kNone}, {"Skip", kSkip}, {"", kNone}, {"", kNone}, {"Summary", kFinish}}});
+        else if (strokes_train_picked(session_)) /* a picked glyph: Back is the picker */
+            set_buttons({{{"Picker", kBack}, {"", kNone}, {"Redo", kRedo}, {"", kNone}, {"Finish", kFinish}}});
+        else
+            set_buttons({{{"Back", kBack}, {"Skip", kSkip}, {"Redo", kRedo}, {"Pick", kPick}, {"Finish", kFinish}}});
+    }
+
+    /* The picker's labels: the gestures' words shortened to fit a cell */
+    std::string short_label(int i) const
+    {
+        const std::string l = label_of(i);
+        if (l == "space") return "spc";
+        if (l == "backspace") return "bksp";
+        if (l == "enter") return "ent";
+        if (l == "shift") return "shft";
+        return l;
+    }
+
+    static uint32_t mark_rgb(int mark)
+    {
+        return mark == STROKES_TRAIN_HARD ? CP0_UI_LIST_WARN_RGB : mark == STROKES_TRAIN_TRAINED ? CP0_UI_LIST_OK_RGB
+                                                                                              : kBoxBorder;
+    }
+
+    /* The glyph picker: a cell per glyph (the letters and digits, or the gestures and punctuation), its frame the mark:
+     * grey untrained, green trained, amber hard (recognised under 75 %, its latest rate). A tap trains that glyph. */
+    void show_picker()
+    {
+        lv_obj_add_flag(stage_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(summary_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(result_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(picker_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clean(picker_);
+        lv_label_set_text(prompt_, picker_page_ ? "Pick a glyph: gestures, punctuation" : "Pick a glyph");
+        lv_label_set_text(hint_, error_.empty() ? "Grey: not trained  -  green: trained  -  amber: hard (under 75 %)"
+                                                : error_.c_str());
+        lv_obj_set_style_text_color(hint_, lv_color_hex(error_.empty() ? kGrey : CP0_UI_LIST_BAD_RGB), 0);
+        for (int i = 0; i < strokes_train_count(session_); ++i) {
+            const strokes_train_item *it = strokes_train_item_at(session_, i);
+            if ((it->group == STROKES_TRAIN_OTHER) != (picker_page_ == 1)) continue;
+            const int mark = strokes_train_mark(session_, i);
+            lv_obj_t *b = lv_button_create(picker_);
+            lv_obj_remove_flag(b, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+            if (lv_obj_get_group(b)) lv_group_remove_obj(b);
+            lv_obj_set_size(b, cell_, cell_);
+            lv_obj_set_style_radius(b, page_.layout().esc_radius, 0);
+            lv_obj_set_style_bg_color(b, lv_color_hex(kBoxBg), 0);
+            lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(b, lv_color_hex(kButtonPressed), LV_STATE_PRESSED);
+            lv_obj_set_style_shadow_width(b, 0, 0);
+            lv_obj_set_style_pad_all(b, 0, 0);
+            lv_obj_set_style_border_color(b, lv_color_hex(mark_rgb(mark)), 0);
+            lv_obj_set_style_border_width(b, mark == STROKES_TRAIN_UNTRAINED ? 1 : 2, 0);
+            lv_obj_set_style_outline_color(b, lv_color_hex(kFocus), LV_STATE_FOCUS_KEY);
+            lv_obj_set_style_outline_width(b, 2, LV_STATE_FOCUS_KEY);
+            lv_obj_set_user_data(b, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
+            lv_obj_add_event_cb(b, cell_cb, LV_EVENT_CLICKED, this);
+            lv_obj_add_event_cb(b, cell_cb, LV_EVENT_KEY, this);
+            lv_obj_t *label = text(b, cell_font_, mark == STROKES_TRAIN_UNTRAINED ? kText : mark_rgb(mark));
+            lv_label_set_text(label, short_label(i).c_str());
+            lv_obj_center(label);
+            if (group_) lv_group_add_obj(group_, b);
+        }
+        set_buttons({{{"In order", kResume},
+                      {picker_page_ ? "Letters" : "Symbols", kPage},
+                      {"Reset all", kReset},
+                      {"", kNone},
+                      {"Finish", kFinish}}});
+    }
+
+    static void cell_cb(lv_event_t *event)
+    {
+        auto *self = static_cast<StrokesTrainingPanel *>(lv_event_get_user_data(event));
+        auto *obj = static_cast<lv_obj_t *>(lv_event_get_current_target(event));
+        if (!self || !obj) return;
+        const int item = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(obj)));
+        if (lv_event_get_code(event) == LV_EVENT_KEY) {
+            self->on_key(lv_event_get_key(event));
+            return;
+        }
+        self->post([self, item] {
+            self->apply(strokes_train_pick(self->session_, item));
+            self->flash(std::string(), STROKES_TRAIN_NONE);
+        });
     }
 
     void show_summary()
@@ -567,10 +674,29 @@ private:
         lv_obj_set_style_text_color(hint_, lv_color_hex(kText), 0);
         const cp0_ui_roller_page_t &l = page_.layout();
         const int width = l.roller_w - 2 * l.inset;
+        lv_obj_add_flag(picker_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(result_, LV_OBJ_FLAG_HIDDEN);
+        /* the glyphs trained in this session, the ones that improved least first (the re-test's rate minus the training
+         * attempts'; not re-tested: last) */
+        std::vector<std::pair<int, int>> order;
         for (int i = 0; i < strokes_train_count(session_); ++i) {
             strokes_train_stats st;
             strokes_train_item_stats(session_, i, &st);
             if (!st.trained) continue;
+            const int gain = st.retested && st.tried ? 100 * st.ok_after / st.retested - 100 * st.ok_before / st.tried
+                                                     : 1000;
+            order.emplace_back(gain, i);
+        }
+        std::stable_sort(order.begin(), order.end(),
+                         [](const std::pair<int, int> &a, const std::pair<int, int> &b) { return a.first < b.first; });
+        if (!order.empty()) {
+            lv_obj_t *head = text(summary_, summary_font_, kGrey);
+            lv_label_set_text(head, "Improved least first:");
+        }
+        for (const auto &entry : order) {
+            const int i = entry.second;
+            strokes_train_stats st;
+            strokes_train_item_stats(session_, i, &st);
             lv_obj_t *row = plain(summary_);
             lv_obj_set_size(row, width, LV_SIZE_CONTENT);
             lv_obj_t *glyph = text(row, summary_font_, kText);
@@ -596,12 +722,7 @@ private:
             lv_label_set_text(added, buf);
             lv_obj_align(added, LV_ALIGN_RIGHT_MID, 0, 0);
         }
-        set_button(kBack, "Back", false);
-        set_button(kSkip, "Skip", false);
-        set_button(kRedo, "Redo", false);
-        set_button(kReset, "Reset all", false);
-        set_button(kFinish, "Train again", true);
-        keep_focus_visible();
+        set_buttons({{{"", kNone}, {"", kNone}, {"", kNone}, {"", kNone}, {"Train again", kAgain}}});
     }
 
     void keep_focus_visible()
@@ -646,33 +767,39 @@ private:
         auto *self = static_cast<StrokesTrainingPanel *>(lv_event_get_user_data(event));
         auto *obj = static_cast<lv_obj_t *>(lv_event_get_current_target(event));
         if (!self || !obj) return;
-        const int which = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(obj)));
+        const int slot = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(obj)));
         if (lv_event_get_code(event) == LV_EVENT_KEY) {
-            const uint32_t key = lv_event_get_key(event);
-            if (key == LV_KEY_ESC && self->back_) self->back_();
-            else if ((key == LV_KEY_LEFT || key == LV_KEY_UP) && self->group_) lv_group_focus_prev(self->group_);
-            else if ((key == LV_KEY_RIGHT || key == LV_KEY_DOWN) && self->group_) lv_group_focus_next(self->group_);
+            self->on_key(lv_event_get_key(event));
             return;
         }
-        self->post([self, which] { self->press(which); });
+        const Action action = self->action_[static_cast<std::size_t>(slot)];
+        self->post([self, action] { self->press(action); });
     }
 
-    void press(int which)
+    void on_key(uint32_t key)
+    {
+        if (key == LV_KEY_ESC && back_) back_();
+        else if ((key == LV_KEY_LEFT || key == LV_KEY_UP) && group_) lv_group_focus_prev(group_);
+        else if ((key == LV_KEY_RIGHT || key == LV_KEY_DOWN) && group_) lv_group_focus_next(group_);
+    }
+
+    void press(Action action)
     {
         if (!session_) return;
         unsigned ev = 0;
-        switch (which) {
+        switch (action) {
         case kBack: ev = strokes_train_back(session_); break;
         case kSkip: ev = strokes_train_skip(session_); break;
         case kRedo: ev = strokes_train_redo(session_); break;
-        case kReset: open_reset(); return;
-        case kFinish:
-            if (strokes_train_phase(session_) == STROKES_TRAIN_DONE) {
-                restart();
-                return;
-            }
-            ev = strokes_train_finish(session_);
+        case kPick: ev = strokes_train_open_picker(session_); break;
+        case kResume: ev = strokes_train_resume(session_); break;
+        case kPage:
+            picker_page_ = 1 - picker_page_;
+            ev = STROKES_TRAIN_EV_MOVED;
             break;
+        case kReset: open_reset(); return;
+        case kFinish: ev = strokes_train_finish(session_); break;
+        case kAgain: restart(); return;
         default: return;
         }
         apply(ev);
@@ -712,14 +839,17 @@ private:
     void close_dialog()
     {
         dialog_.reset();
-        if (group_ && buttons_[kReset]) lv_group_focus_obj(buttons_[kReset]);
+        for (std::size_t i = 0; i < action_.size(); ++i)
+            if (group_ && action_[i] == kReset) lv_group_focus_obj(buttons_[i]);
         keep_focus_visible();
     }
 
     void confirm_reset()
     {
         close_dialog();
-        const unsigned ev = strokes_train_reset_all(session_);
+        const bool picking = strokes_train_phase(session_) == STROKES_TRAIN_PICK;
+        unsigned ev = strokes_train_reset_all(session_);
+        if (picking) ev |= strokes_train_open_picker(session_); /* the picker stays, every glyph grey */
         attempts_ = 0;
         apply(ev | STROKES_TRAIN_EV_MOVED);
         flash("Personal templates removed", STROKES_TRAIN_NONE);
@@ -755,6 +885,11 @@ private:
     lv_obj_t *prompt_ = nullptr, *hint_ = nullptr, *stage_ = nullptr, *guide_box_ = nullptr, *result_ = nullptr;
     lv_obj_t *summary_ = nullptr;
     const lv_font_t *summary_font_ = nullptr;
+    lv_obj_t *picker_ = nullptr;
+    const lv_font_t *cell_font_ = nullptr;
+    int cell_ = 40;
+    int picker_page_ = 0; /* 0: the letters and digits, 1: the gestures and punctuation */
+    std::array<Action, kButtons> action_{};
     lv_obj_t *flash_ = nullptr;
     Shape guide_;
     std::array<Thumb, STROKES_TRAIN_REPS> thumbs_{};

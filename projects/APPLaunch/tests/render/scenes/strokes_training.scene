@@ -1,11 +1,11 @@
 # Settings > System > Strokes training (report 042, PDA phase S6) on the profile pda: the page keeps the writing zone's
-# band shown and takes its strokes. The first glyph is b (the letters refused at the owner's first board test come
-# first): its shape as a guide (light ink, a green dot where it starts), "Draw b (1/4)". Attempts written in the letters
-# box: a lower-case b (recognised: green), a d (read as d: amber), a scribble (refused: red); the Reset all dialog,
-# cancelled (the focus stays on Reset all); a fourth b ends the glyph: its templates go to the user overlay
-# (out/<WxH>/runtime/config, strokesuser), the tables are loaded again, the page moves on to p; every attempt is in the
-# capture log. Finish starts the re-test
-# (b once more), then the summary: recognised before (the training attempts) and after (the re-test).
+# band shown (its writing boxes) and takes its strokes. The first glyph is b (the letters refused at the owner's first
+# board test come first): its shape as a guide (light ink, a green dot where it starts), "Draw b (1/4)". Attempts written
+# in the letters box: a lower-case b (recognised: green), a d (read as d: amber), a scribble (refused: red); a fourth b
+# ends the glyph: its templates go to the user overlay (out/<WxH>/runtime/config, strokesuser), the tables are loaded
+# again, the page moves on to p; every attempt is in the capture log. Pick opens the glyph picker (section 12: b amber,
+# hard: 2 of 4 recognised); e picked and written four times comes back green; the Reset all dialog, cancelled; Finish
+# starts the re-test (b and e once more), then the summary: the glyphs that improved least first.
 # Goldens at both sizes.
 title strokes training
 sizes 480x640 480x800
@@ -23,7 +23,7 @@ key UP
 key UP
 key UP
 key ENTER
-expect_zone shown
+expect_zone writing
 expect_text "Draw b  (1/4)"
 shot strokes_training
 stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
@@ -31,22 +31,34 @@ stroke letters 60,30 60,117 61,111 61,104 62,95 62,90 63,84 64,78 64,73 65,64 67
 stroke letters 40,40 120,45 43,100 130,110 50,44
 expect_text "Draw b  (4/4)"
 shot strokes_training_attempts
-key RIGHT
-key RIGHT
-key RIGHT
-key ENTER
-shot strokes_training_reset
-key ESC
 stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
 expect_text "Draw p  (1/4)"
 expect_file strokes-user.txt has "# strokes-training b letters: 4 written, 2 recognised"
 expect_file strokes-training.txt lines 4
 shot strokes_training_next
-key RIGHT
-key ENTER
-expect_text "Check b  (1/1)"
+tapbutton Pick
+expect_text "Pick a glyph"
+expect_zone writing
+shot strokes_training_picker
+tapbutton e
+expect_text "Draw e  (1/4)"
+stroke letters 109,39 105,34 101,30 96,27 90,25 84,25 77,26 70,27 65,28 59,32 55,36 53,41 52,47 52,53 53,59 57,63 62,66 68,68 74,69 80,70 86,72 88,72 82,73 77,74 70,75 62,76 58,79 54,83 52,89 51,95 50,100 50,105 52,112 56,118 62,122 66,124 72,125 78,125 84,125 90,124 96,121 102,117 106,113 111,109 114,105 120,99
+stroke letters 109,39 105,34 101,30 96,27 90,25 84,25 77,26 70,27 65,28 59,32 55,36 53,41 52,47 52,53 53,59 57,63 62,66 68,68 74,69 80,70 86,72 88,72 82,73 77,74 70,75 62,76 58,79 54,83 52,89 51,95 50,100 50,105 52,112 56,118 62,122 66,124 72,125 78,125 84,125 90,124 96,121 102,117 106,113 111,109 114,105 120,99
+stroke letters 109,39 105,34 101,30 96,27 90,25 84,25 77,26 70,27 65,28 59,32 55,36 53,41 52,47 52,53 53,59 57,63 62,66 68,68 74,69 80,70 86,72 88,72 82,73 77,74 70,75 62,76 58,79 54,83 52,89 51,95 50,100 50,105 52,112 56,118 62,122 66,124 72,125 78,125 84,125 90,124 96,121 102,117 106,113 111,109 114,105 120,99
+stroke letters 109,39 105,34 101,30 96,27 90,25 84,25 77,26 70,27 65,28 59,32 55,36 53,41 52,47 52,53 53,59 57,63 62,66 68,68 74,69 80,70 86,72 88,72 82,73 77,74 70,75 62,76 58,79 54,83 52,89 51,95 50,100 50,105 52,112 56,118 62,122 66,124 72,125 78,125 84,125 90,124 96,121 102,117 106,113 111,109 114,105 120,99
+expect_text "Pick a glyph"
+expect_file strokes-user.txt has "# strokes-training e letters: 4 written"
+shot strokes_training_picked
+tapbutton "Reset all"
+shot strokes_training_reset
+key ESC
+tapbutton Finish
+expect_text "Check b  (1/2)"
 shot strokes_training_retest
 stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
+expect_text "Check e  (2/2)"
+stroke letters 109,39 105,34 101,30 96,27 90,25 84,25 77,26 70,27 65,28 59,32 55,36 53,41 52,47 52,53 53,59 57,63 62,66 68,68 74,69 80,70 86,72 88,72 82,73 77,74 70,75 62,76 58,79 54,83 52,89 51,95 50,100 50,105 52,112 56,118 62,122 66,124 72,125 78,125 84,125 90,124 96,121 102,117 106,113 111,109 114,105 120,99
 expect_text "Summary"
-expect_file strokes-training.txt lines 5
+expect_file strokes-training.txt lines 10
+expect_file strokes-user.txt has "# re-test 1/1"
 shot strokes_training_summary

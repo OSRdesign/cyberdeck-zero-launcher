@@ -23,6 +23,7 @@
  *   # strokes-training <id> <set>: <n> written, <k> recognised, <a> added[ (personal only)] <time>
  *   [replace <id> <set>]
  *   <id> <set> <out> x,y x,y ...      (0 to STROKES_TRAIN_REPS lines)
+ *   [# re-test <ok>/<n> <time>]       (the glyph's latest re-test)
  *   <blank line>
  *
  * Lines outside such blocks (hand-written ones) are kept as they are, before the blocks. A glyph that has a block is
@@ -46,6 +47,9 @@ extern "C" {
 #define STROKES_TRAIN_MAX_ITEMS 128
 #define STROKES_TRAIN_MAX_PTS 1024      /* points kept per attempt (more: every second one is dropped) */
 #define STROKES_TRAIN_MARK "# strokes-training "
+#define STROKES_TRAIN_RETEST_MARK "# re-test "  /* a block's re-test line: "# re-test <ok>/<n> <time>" */
+#define STROKES_TRAIN_HARD_PCT 75          /* a glyph recognised under this (its latest rate) is hard */
+#define STROKES_TRAIN_MAX_TEMPLATES 4096   /* the table's limit: nothing more is kept beyond it */
 
 enum strokes_train_group {
     STROKES_TRAIN_FAILING = 0, /* the letters the caller names first */
@@ -64,8 +68,13 @@ enum strokes_train_verdict {
 enum strokes_train_phase {
     STROKES_TRAIN_TRAINING = 0,
     STROKES_TRAIN_RETEST,
-    STROKES_TRAIN_DONE
+    STROKES_TRAIN_DONE,
+    STROKES_TRAIN_PICK /* the glyph picker: the user chooses the glyph to train */
 };
+
+/* How a glyph stands (the picker's marks): no block; a block; a block whose latest rate (the re-test's, else its
+ * training attempts') is under STROKES_TRAIN_HARD_PCT. */
+enum strokes_train_mark { STROKES_TRAIN_UNTRAINED = 0, STROKES_TRAIN_TRAINED, STROKES_TRAIN_HARD };
 
 /* What a call did (bit mask). */
 enum strokes_train_event {
@@ -113,7 +122,7 @@ const strokes_train_item *strokes_train_item_at(const strokes_train *s, int i); 
 /* 1 when item i has a block in the overlay (trained, now or before). */
 int strokes_train_is_done(const strokes_train *s, int i);
 int strokes_train_phase(const strokes_train *s);
-/* The current item (TRAINING: the glyph being trained; RETEST: the glyph being checked), -1 in DONE. */
+/* The current item (TRAINING: the glyph being trained; RETEST: the glyph being checked), -1 in DONE and PICK. */
 int strokes_train_current(const strokes_train *s);
 /* TRAINING: attempts written for the current glyph (0..STROKES_TRAIN_REPS); RETEST: glyphs checked so far. */
 int strokes_train_progress(const strokes_train *s);
@@ -139,6 +148,16 @@ unsigned strokes_train_redo(strokes_train *s);
 unsigned strokes_train_reset_all(strokes_train *s);
 /* To the re-test of the glyphs trained in this session (none: DONE). */
 unsigned strokes_train_finish(strokes_train *s);
+/* The glyph picker (report 042 section 12): open it (from the training; the glyph's attempts dropped), train the glyph
+ * the user picked (four attempts as in the order; the last one brings the picker back; Back and Skip too), or go back
+ * to the order (the first glyph without a block). The glyphs trained either way are in the re-test of Finish. */
+unsigned strokes_train_open_picker(strokes_train *s);
+unsigned strokes_train_pick(strokes_train *s, int item);
+unsigned strokes_train_resume(strokes_train *s);
+/* 1 while a picked glyph is being trained. */
+int strokes_train_picked(const strokes_train *s);
+/* enum strokes_train_mark of item i. */
+int strokes_train_mark(const strokes_train *s, int i);
 /* Personal only for the glyphs trained from now on (0: added to the shipped variants, the default). */
 void strokes_train_set_personal_only(strokes_train *s, int on);
 

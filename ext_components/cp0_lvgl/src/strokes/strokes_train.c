@@ -17,6 +17,8 @@ typedef struct {
     int set;
     char *text;   /* the whole block: its header, the lines, the blank line after */
     int lines;    /* template lines in it */
+    int written, recognised; /* from its header (-1: not written there) */
+    int retested, retest_ok; /* from its "# re-test" line (0 / 0: none) */
 } block;
 
 typedef struct {
@@ -43,6 +45,7 @@ struct strokes_train {
     int n_retest, retest_pos;
     item_stats st[STROKES_TRAIN_MAX_ITEMS];
     int personal_only;
+    int picked; /* the glyph being trained was picked: the picker comes back after it */
     char when[40];
 };
 
@@ -106,6 +109,28 @@ static void drop_block(strokes_train *s, int bi)
     s->n_blocks--;
 }
 
+/* The numbers a block's text says: its header's "<n> written, <k> recognised" and its last "# re-test <a>/<b>". */
+static void block_stats(block *b)
+{
+    b->written = b->recognised = -1;
+    b->retested = b->retest_ok = 0;
+    const char *colon = strchr(b->text, ':');
+    const char *eol = strchr(b->text, '\n');
+    int n = 0, k = 0;
+    if (colon && (!eol || colon < eol) && sscanf(colon + 1, " %d written, %d recognised", &n, &k) == 2 && n > 0) {
+        b->written = n;
+        b->recognised = k;
+    }
+    const size_t ml = strlen(STROKES_TRAIN_RETEST_MARK);
+    for (const char *p = b->text; (p = strstr(p, STROKES_TRAIN_RETEST_MARK)) != NULL; p += ml) {
+        int a = 0, c = 0;
+        if (sscanf(p + ml, "%d/%d", &a, &c) == 2 && c > 0 && a >= 0 && a <= c) {
+            b->retest_ok = a;
+            b->retested = c;
+        }
+    }
+}
+
 /* Puts a block (replacing the glyph's earlier one in place, else at the end). 0, -1 out of memory. */
 static int put_block(strokes_train *s, const char *id, int set, const char *text, int lines)
 {
@@ -117,6 +142,7 @@ static int put_block(strokes_train *s, const char *id, int set, const char *text
         free(s->blocks[bi].text);
         s->blocks[bi].text = copy;
         s->blocks[bi].lines = lines;
+        block_stats(&s->blocks[bi]);
         return 0;
     }
     if (s->n_blocks == s->cap_blocks) {
@@ -135,6 +161,36 @@ static int put_block(strokes_train *s, const char *id, int set, const char *text
     b->set = set;
     b->text = copy;
     b->lines = lines;
+    block_stats(b);
+    return 0;
+}
+
+/* The block's re-test line becomes "# re-test <ok>/<n> <time>" (an earlier one dropped). 0, -1. */
+static int set_retest(strokes_train *s, int bi, int ok, int n)
+{
+    block *b = &s->blocks[bi];
+    sbuf out = {0};
+    sb_str(&out, "");
+    for (const char *p = b->text; *p;) {
+        const char *eol = strchr(p, '\n');
+        const size_t len = eol ? (size_t)(eol - p) + 1 : strlen(p);
+        const int blank = len <= 1 || (len == 2 && p[0] == '\r');
+        if (strncmp(p, STROKES_TRAIN_RETEST_MARK, strlen(STROKES_TRAIN_RETEST_MARK)) != 0 && !blank)
+            sb_add(&out, p, len);
+        p += len;
+    }
+    if (out.n > 0 && out.p[out.n - 1] != '\n')
+        sb_str(&out, "\n");
+    char line[96];
+    snprintf(line, sizeof line, "%s%d/%d%s%s\n\n", STROKES_TRAIN_RETEST_MARK, ok, n, s->when[0] ? " " : "", s->when);
+    sb_str(&out, line);
+    if (out.oom) {
+        free(out.p);
+        return -1;
+    }
+    free(b->text);
+    b->text = out.p;
+    block_stats(b);
     return 0;
 }
 
@@ -399,7 +455,31 @@ int strokes_train_phase(const strokes_train *s)
 
 int strokes_train_current(const strokes_train *s)
 {
-    return s && s->phase != STROKES_TRAIN_DONE ? s->cur : -1;
+    return s && s->phase != STROKES_TRAIN_DONE && s->phase != STROKES_TRAIN_PICK ? s->cur : -1;
+}
+
+int strokes_train_picked(const strokes_train *s)
+{
+    return s && s->phase == STROKES_TRAIN_TRAINING && s->picked;
+}
+
+int strokes_train_mark(const strokes_train *s, int i)
+{
+    if (!s || i < 0 || i >= s->n_items)
+        return STROKES_TRAIN_UNTRAINED;
+    const int bi = find_block(s, s->items[i].id, s->items[i].set);
+    if (bi < 0)
+        return STROKES_TRAIN_UNTRAINED;
+    const block *b = &s->blocks[bi];
+    /* the latest rate known: the re-test's, else the training attempts' */
+    int ok = b->recognised, n = b->written;
+    if (b->retested > 0) {
+        ok = b->retest_ok;
+        n = b->retested;
+    }
+    if (n > 0 && ok * 100 < STROKES_TRAIN_HARD_PCT * n)
+        return STROKES_TRAIN_HARD;
+    return STROKES_TRAIN_TRAINED;
 }
 
 int strokes_train_progress(const strokes_train *s)
@@ -563,6 +643,8 @@ static unsigned close_glyph(strokes_train *s)
             if (!usable[k])
                 continue;
             const int ok = a->verdict == STROKES_TRAIN_OK;
+            if (strokes_table_template_count(s->t) + added >= STROKES_TRAIN_MAX_TEMPLATES)
+                break; /* the table's limit: nothing more is kept */
             if (pass == 0) {
                 if (ok && a->score >= STROKES_TRAIN_DUP_SCORE)
                     continue; /* the shipped variants know this shape */
@@ -634,13 +716,20 @@ unsigned strokes_train_stroke(strokes_train *s, const strokes_point *pts, int n)
         s->st[s->cur].retested++;
         if (a.verdict == STROKES_TRAIN_OK)
             s->st[s->cur].ok_after++;
+        unsigned ev = STROKES_TRAIN_EV_ATTEMPT | STROKES_TRAIN_EV_MOVED;
+        /* the re-test goes into the glyph's block (the picker marks a glyph by its latest rate) */
+        const int bi = find_block(s, s->items[s->cur].id, s->items[s->cur].set);
+        if (bi >= 0 && set_retest(s, bi, s->st[s->cur].ok_after, s->st[s->cur].retested) == 0) {
+            compose(s);
+            ev |= STROKES_TRAIN_EV_OVERLAY;
+        }
         s->retest_pos++;
         if (s->retest_pos >= s->n_retest) {
             s->phase = STROKES_TRAIN_DONE;
-            return STROKES_TRAIN_EV_ATTEMPT | STROKES_TRAIN_EV_MOVED | STROKES_TRAIN_EV_PHASE;
+            return ev | STROKES_TRAIN_EV_PHASE;
         }
         s->cur = s->retest[s->retest_pos];
-        return STROKES_TRAIN_EV_ATTEMPT | STROKES_TRAIN_EV_MOVED;
+        return ev;
     }
     if (s->n_att >= STROKES_TRAIN_REPS)
         return 0;
@@ -660,9 +749,47 @@ unsigned strokes_train_stroke(strokes_train *s, const strokes_point *pts, int n)
     unsigned ev = STROKES_TRAIN_EV_ATTEMPT;
     if (s->n_att >= STROKES_TRAIN_REPS) {
         ev |= close_glyph(s);
-        ev |= go_to(s, next_open(s, s->cur));
+        if (s->picked) /* a picked glyph: back to the picker */
+            ev |= strokes_train_open_picker(s);
+        else
+            ev |= go_to(s, next_open(s, s->cur));
     }
     return ev;
+}
+
+unsigned strokes_train_open_picker(strokes_train *s)
+{
+    if (!s || (s->phase != STROKES_TRAIN_TRAINING && s->phase != STROKES_TRAIN_PICK) || s->n_items == 0)
+        return 0;
+    s->n_att = 0;
+    s->picked = 0;
+    const int was = s->phase;
+    s->phase = STROKES_TRAIN_PICK;
+    return STROKES_TRAIN_EV_MOVED | (was != STROKES_TRAIN_PICK ? STROKES_TRAIN_EV_PHASE : 0u);
+}
+
+unsigned strokes_train_pick(strokes_train *s, int i)
+{
+    if (!s || i < 0 || i >= s->n_items || (s->phase != STROKES_TRAIN_PICK && s->phase != STROKES_TRAIN_TRAINING))
+        return 0;
+    const int was = s->phase;
+    s->phase = STROKES_TRAIN_TRAINING;
+    s->cur = i;
+    s->n_att = 0;
+    s->picked = 1;
+    return STROKES_TRAIN_EV_MOVED | (was != STROKES_TRAIN_TRAINING ? STROKES_TRAIN_EV_PHASE : 0u);
+}
+
+unsigned strokes_train_resume(strokes_train *s)
+{
+    if (!s || s->phase != STROKES_TRAIN_PICK)
+        return 0;
+    s->phase = STROKES_TRAIN_TRAINING;
+    s->picked = 0;
+    s->n_att = 0;
+    const int open = next_open(s, -1);
+    s->cur = open >= 0 ? open : 0;
+    return STROKES_TRAIN_EV_MOVED | STROKES_TRAIN_EV_PHASE;
 }
 
 unsigned strokes_train_skip(strokes_train *s)
@@ -678,12 +805,20 @@ unsigned strokes_train_skip(strokes_train *s)
         s->cur = s->retest[s->retest_pos];
         return STROKES_TRAIN_EV_MOVED;
     }
+    if (s->phase == STROKES_TRAIN_PICK)
+        return 0;
+    if (s->picked)
+        return strokes_train_open_picker(s);
     return go_to(s, next_open(s, s->cur));
 }
 
 unsigned strokes_train_back(strokes_train *s)
 {
-    if (!s || s->phase != STROKES_TRAIN_TRAINING || s->cur <= 0)
+    if (!s || s->phase != STROKES_TRAIN_TRAINING)
+        return 0;
+    if (s->picked)
+        return strokes_train_open_picker(s);
+    if (s->cur <= 0)
         return 0;
     return go_to(s, s->cur - 1);
 }
@@ -722,6 +857,7 @@ unsigned strokes_train_reset_all(strokes_train *s)
     s->phase = s->n_items > 0 ? STROKES_TRAIN_TRAINING : STROKES_TRAIN_DONE;
     s->cur = 0;
     s->n_att = 0;
+    s->picked = 0;
     s->n_retest = s->retest_pos = 0;
     return ev;
 }
@@ -735,6 +871,7 @@ unsigned strokes_train_finish(strokes_train *s)
         return STROKES_TRAIN_EV_PHASE | STROKES_TRAIN_EV_MOVED;
     }
     s->n_att = 0;
+    s->picked = 0;
     s->n_retest = 0;
     for (int i = 0; i < s->n_items; ++i)
         if (s->st[i].trained)
