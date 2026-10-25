@@ -83,15 +83,17 @@ The built-in fixed-pixel tiles (IP Panel, Snake, Tank, Store) are hidden by defa
 `cp0_app_env_read()` does) and does not use `screen.state`'s `w`, `h` and `rot` for its canvas. A turned app hidden
 behind the launcher's switcher (section 13) shows its dimmed frame sideways.
 
-**The writing zone (report 041, phase S3).** The PDA profile (`APPLAUNCH_PDA=1` in its board profile) shows a band at the
-bottom of the portrait panel: an optional key strip, the soft buttons Home, Menu (sends Ctrl+O, the options key of
-section 10b), Apps (the switcher) and Keys, and the writing zone where the user writes with a pen (the Strokes
-recogniser). The launcher's own pages are laid out in the app area above it; the band is the launcher's and it is never
-drawn over a fullscreen app: an app run turned owns the whole panel in landscape and sees none of it. While the launcher
-is in front, `input.state` says `vkb=zone` (section 5): the zone is the text input and no on-screen keyboard is shown;
-while a fullscreen app is in front it says the usual rule. `screen.state` and the `APPLAUNCH_SCREEN_*` variables keep
-describing the whole panel. Reserved for portrait apps that draw the zone in their own process (phase S4, not written
-by this launcher yet): `APPLAUNCH_ZONE`, `screen.state` `orient=` and `zone=`.
+**The writing zone (report 041, phase S3; report 042).** The PDA profile (`APPLAUNCH_PDA=1` in its board profile) has a
+band at the bottom of the portrait panel: a key strip (Tab, Ctrl, Shift, Alt, the arrows, Enter) on top of the writing
+zone where the user writes with a pen (the Strokes recogniser). It behaves like the fallback on-screen keyboard: it
+shows while one of the launcher's own text fields (its terminal pages included) wants input, by the keyboard's own rule
+(section 5), and is hidden otherwise; the launcher's pages get the whole panel and leave the band's rows free while it
+shows, as for the keyboard. The band is the launcher's and it is never drawn over a fullscreen app: an app run turned
+owns the whole panel in landscape and sees none of it. While the launcher is in front and the band shows, `input.state`
+says `vkb=zone` (section 5): the zone is the text input and no on-screen keyboard is shown; otherwise it says the usual
+rule. `screen.state` and the `APPLAUNCH_SCREEN_*` variables keep describing the whole panel. Reserved for portrait apps
+that draw the zone in their own process (phase S4, not written by this launcher yet): `APPLAUNCH_ZONE`, `screen.state`
+`orient=` and `zone=`.
 
 ### Panel (process-wide; always the panel, never the app's canvas)
 
@@ -180,7 +182,7 @@ gen=4
 | `bt_keyboards` | of them, Bluetooth |
 | `last_seen` | unix seconds of the last time `keyboards > 0` (0 = never since boot) |
 | `kb_gone`, `bt_gone` | **monotonic** seconds (`CLOCK_MONOTONIC`, same in every process of the boot) when the keyboard / Bluetooth keyboard count last dropped to 0; `0` = never |
-| `vkb` | the on-screen keyboard rule in force: `auto`, `off` (Settings > System > On-screen keyboard Off, or a desktop session owns the screen), `force` (`APPLAUNCH_OSK=force`, development and the HackBerry), `zone` (the PDA profile's writing zone is the text input while the launcher is in front: no on-screen keyboard; report 041) |
+| `vkb` | the on-screen keyboard rule in force: `auto`, `off` (Settings > System > On-screen keyboard Off, or a desktop session owns the screen), `force` (`APPLAUNCH_OSK=force`, development and the HackBerry), `zone` (the PDA profile's writing zone is shown as the text input while the launcher is in front: no on-screen keyboard; report 041, 042) |
 | `pointer` | Settings > System > Pointer navigation: `on` or `off` (the default). See section 10b |
 | `gen` | increases on every write |
 

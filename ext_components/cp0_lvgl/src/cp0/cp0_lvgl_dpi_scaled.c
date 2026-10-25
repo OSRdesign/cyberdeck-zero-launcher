@@ -27,9 +27,10 @@
  *   APPLAUNCH_TOUCH_INVERT_X    1 to mirror touch X (after the optional swap)
  *   APPLAUNCH_TOUCH_INVERT_Y    1 to mirror touch Y (after the optional swap)
  *   APPLAUNCH_BACKLIGHT         see cp0_backlight_profile.h
- *   APPLAUNCH_PDA               1 = the PDA profile's writing zone under the app area of a portrait canvas (report 041,
- *                               cp0_zone.h): the native display is the app area, a third display draws the band
- *                               (key strip, soft buttons, the writing zone) and the recogniser gets the pen strokes
+ *   APPLAUNCH_PDA               1 = the PDA profile's writing zone at the bottom of a portrait canvas (report 041, 042,
+ *                               cp0_zone.h): a third display draws the band (the key strip, the writing zone) over the
+ *                               bottom of the native display while text input is wanted, and the recogniser gets the
+ *                               pen strokes
  * Depth, channel layout and line length come from the framebuffer ioctls (16 bpp RGB565 layouts
  * and 32 bpp XRGB8888). All drawing goes through cp0_fb_output.c. Where the compat window goes and how
  * big the toolbar under it is are decided by the layout service (cp0_ui_metrics.h), which also exports
@@ -93,16 +94,17 @@ typedef struct {
 static dpi_ctx_t g;
 static bool fill_window_black_pending;
 
-/* The PDA writing zone (report 041, cp0_zone.h): the band under the native display (the app area). The zone display
- * covers the panel's rows strip_y..h; its first row_h rows (the key strip) are drawn only while the strip is open, and
- * the native display's rows from strip_y down are then not (the strip covers them; the pages keep them free). */
+/* The PDA writing zone (report 041, cp0_zone.h; on demand, report 042): the band at the bottom of the panel. The zone
+ * display covers the panel's rows strip_y..h and is drawn only while the band shows; the native display (the whole
+ * panel) does not draw those rows then (the band covers them; the pages keep them free, the on-screen keyboard's
+ * inset). */
 static struct {
     bool on;
     cp0_zone_layout_t l;
     lv_display_t *disp;
     lv_indev_t *indev;
     cp0_zone_router_t router;
-    volatile bool strip_open;
+    volatile bool shown;
     volatile bool repaint; /* someone wrote over the band (an app's frame, a backdrop): redraw it */
 } zone;
 static struct { volatile bool active; int x, y, w, h; } overlay; /* compat coordinates */
@@ -198,8 +200,8 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
         lv_display_flush_ready(disp);
         return;
     }
-    /* the writing zone's key strip, while open, covers the native display's bottom rows (report 041) */
-    if (zone.on && zone.strip_open && area->y1 + h > zone.l.strip_y) h = zone.l.strip_y - area->y1;
+    /* the writing zone's band, while it shows, covers the native display's bottom rows */
+    if (zone.on && zone.shown && area->y1 + h > zone.l.strip_y) h = zone.l.strip_y - area->y1;
     if (h <= 0) {
         fb_end();
         lv_display_flush_ready(disp);
@@ -235,7 +237,7 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
     lv_display_flush_ready(disp);
 }
 
-/* The writing zone's display: its rows are the panel's from strip_y; the strip's rows only while it is open. */
+/* The writing zone's display: its rows are the panel's from strip_y, drawn only while the band shows. */
 static void flush_zone(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
     const int w = lv_area_get_width(area);
@@ -244,12 +246,9 @@ static void flush_zone(lv_display_t *disp, const lv_area_t *area, uint8_t *px_ma
         lv_display_flush_ready(disp);
         return;
     }
-    const int first = zone.strip_open ? 0 : zone.l.row_h; /* the first row of the zone display drawn */
-    const int skip = area->y1 < first ? first - area->y1 : 0;
-    if (skip < h) {
-        uint8_t *src = px_map + (size_t)skip * (size_t)(w * g.bpp);
-        cp0_fbo_to_buffer_format(&g.out, src, w, h - skip, w * g.bpp);
-        cp0_fbo_blit(&g.out, area->x1, zone.l.strip_y + area->y1 + skip, w, h - skip, src, w * g.bpp);
+    if (zone.shown) {
+        cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
+        cp0_fbo_blit(&g.out, area->x1, zone.l.strip_y + area->y1, w, h, px_map, w * g.bpp);
     }
     fb_end();
     lv_display_flush_ready(disp);
@@ -492,7 +491,7 @@ static void deliver_frame(void *ctx, const cp0_touch_frame_t *raw)
         cp0_touch_frame_t zf = f;
         if (!tc.rd.monotonic) zf.t_us = zone_clock_us();
         cp0_zone_pen_t pen;
-        (void)cp0_zone_route(&zone.router, &zone.l, zone.strip_open, swallow_mode != 0, &zf, &pen);
+        (void)cp0_zone_route(&zone.router, &zone.l, zone.shown ? 1 : 0, swallow_mode != 0, &zf, &pen);
         if (pen.kind != CP0_ZONE_PEN_NONE) cp0_zone_ui_pen(&pen);
     }
     if (frame_cb && frame_cb(&f, f.t_us)) swallow_gesture();
@@ -794,17 +793,17 @@ static void init_touch(void)
     }
 }
 
-/* The writing zone's key strip opened or closed (the Keys button, cp0_zone_ui.h): the line between the app area and the
- * band moves; the native display redraws the rows the strip gave back. */
-static void zone_strip_changed(int open)
+/* The writing zone's band was shown or hidden (a text field wants input, a page pins it: cp0_zone_ui.h): the native
+ * display redraws the rows the band gave back, the band draws itself. */
+static void zone_vis_changed(int shown)
 {
-    zone.strip_open = open != 0;
-    if (!open && g.native) {
-        const lv_area_t rows = {0, zone.l.strip_y, g.lw - 1, zone.l.app_h - 1};
+    zone.shown = shown != 0;
+    if (!zone.shown && g.native) {
+        const lv_area_t rows = {0, zone.l.strip_y, g.lw - 1, g.lh - 1};
         lv_obj_invalidate_area(lv_display_get_screen_active(g.native), &rows);
         lv_obj_invalidate_area(lv_display_get_layer_top(g.native), &rows);
     }
-    if (zone.disp) lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
+    if (zone.shown && zone.disp) lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
 }
 
 /* -------------------------------------------------------------- public API */
@@ -1287,21 +1286,12 @@ lv_display_t *cp0_dpi_scaled_create(void)
     cp0_ui_metrics_t metrics;
     if (cp0_ui_metrics_compute(g.lw, g.lh, g.rot, density.ppmm_x100, density.src, want > 0 ? want : 0, &metrics) != 0)
         return NULL;
-    /* The PDA profile (report 041): the writing zone takes the bottom of a portrait panel; the pages get the app area
-     * above it (their metrics: that canvas at the panel's density), the panel metrics keep describing the whole panel
-     * (screen.state, what apps get) with the compat window as actually drawn. */
-    cp0_ui_metrics_t panel_metrics = metrics;
+    /* The PDA profile (report 041, 042): the writing zone's band covers the bottom of a portrait panel while text input
+     * is wanted (the keyboard's inset); the pages get the whole panel, as without it. */
+    const cp0_ui_metrics_t panel_metrics = metrics;
     const char *pda = getenv("APPLAUNCH_PDA");
     if (pda && strcmp(pda, "1") == 0) {
-        if (cp0_zone_layout(&metrics, &zone.l) == 0) {
-            cp0_ui_metrics_t area;
-            if (cp0_ui_metrics_compute(g.lw, zone.l.app_h, g.rot, density.ppmm_x100, density.src, want > 0 ? want : 0,
-                                       &area) == 0) {
-                zone.on = true;
-                metrics = area;
-                panel_metrics.compat = area.compat;
-            }
-        }
+        zone.on = cp0_zone_layout(&metrics, &zone.l) == 0;
         if (!zone.on)
             fprintf(stderr, "[zone] APPLAUNCH_PDA=1 but %dx%d has no room for the writing zone (portrait only): none\n",
                     g.lw, g.lh);
@@ -1340,8 +1330,8 @@ lv_display_t *cp0_dpi_scaled_create(void)
         lv_display_set_flush_cb(g.compat, flush_compat);
     }
 
-    /* native: full landscape panel (the PDA profile: the app area above the writing zone) */
-    const int native_h = zone.on ? zone.l.app_h : g.lh;
+    /* native: full landscape panel */
+    const int native_h = g.lh;
     g.native = lv_display_create(g.lw, native_h);
     lv_display_set_color_format(g.native, cf);
     {
@@ -1355,11 +1345,12 @@ lv_display_t *cp0_dpi_scaled_create(void)
         lv_display_set_flush_cb(g.native, flush_native);
     }
 
-    /* the writing zone's band (report 041): its own display under the app area, drawn in one chunk */
+    /* the writing zone's band (report 041): its own display at the bottom of the panel, drawn in one chunk */
     if (zone.on) {
-        zone.disp = lv_display_create(g.lw, zone.l.band_open);
+        zone.shown = false;
+        zone.disp = lv_display_create(g.lw, zone.l.band_h);
         lv_display_set_color_format(zone.disp, cf);
-        const size_t sz = (size_t)g.lw * (size_t)zone.l.band_open * g.bpp;
+        const size_t sz = (size_t)g.lw * (size_t)zone.l.band_h * g.bpp;
         uint8_t *buf = malloc(sz);
         if (!zone.disp || !buf) return NULL;
         lv_display_set_buffers(zone.disp, buf, NULL, sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
@@ -1382,7 +1373,7 @@ lv_display_t *cp0_dpi_scaled_create(void)
         if (cp0_zone_ui_create(zone.disp, &zone.l, zone_clock_us) != 0) return NULL;
         cp0_zone_ui_heal(&heal_ms, &heal_px);
         cp0_zone_router_init(&zone.router, heal_ms, heal_px);
-        cp0_zone_ui_set_strip_cb(zone_strip_changed);
+        cp0_zone_ui_set_vis_cb(zone_vis_changed);
         fprintf(stderr, "[zone] writing zone: %s\n", cp0_zone_ui_describe());
     }
 
@@ -1409,10 +1400,7 @@ lv_display_t *cp0_dpi_scaled_create(void)
             panel_metrics.compat.toolbar_y, panel_metrics.shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck");
     /* Early in start-up, before the services' threads, like the other setenv calls of the display and
      * keyboard set-up (fbdev backend, keyboard init). */
-    if (zone.on)
-        fprintf(stderr, "[display-metrics] app area %dx%d above the writing zone: class=%s row=%d target=%d toolbar=%d@%d\n",
-                metrics.w, metrics.h, cp0_ui_class_name(metrics.cls), metrics.tok[CP0_TOK_ROW_H],
-                metrics.tok[CP0_TOK_TARGET], metrics.compat.toolbar_h, metrics.compat.toolbar_y);
+
     const cp0_ui_panel_t panel = {dev, g.bpp * 8, touch_path};
     if (cp0_ui_metrics_publish(&panel_metrics, &panel, getenv("XDG_RUNTIME_DIR")) != 0)
         fprintf(stderr, "[display-metrics] screen state not written: %s\n", strerror(errno));

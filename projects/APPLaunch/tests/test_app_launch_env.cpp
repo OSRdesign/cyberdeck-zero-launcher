@@ -250,7 +250,8 @@ static void test_turned()
     CHECK(app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, true) ==
           app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen));
 
-    /* report 041, the PDA writing zone: the pages draw in the app area (480x482, the current metrics) while a
+    /* pages drawn in an area smaller than the panel (report 041 had the PDA pages in a 480x482 app area above the
+     * writing zone; since 042 they get the whole panel, the mechanism stays): the pages use the current metrics while a
      * fullscreen app gets the panel (the panel metrics), turned or not; a compat app the window as drawn */
     const cp0_ui_metrics_t area = compute_rot(480, 482, 90, 854);
     cp0_ui_metrics_t panel = m;

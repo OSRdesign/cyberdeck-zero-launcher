@@ -11,8 +11,8 @@
  *   - the lock screen is not up and the launcher owns the screen (no desktop session),
  * with APPLAUNCH_OSK=force|auto|off in the environment overriding for development (force: shown even with a physical
  * keyboard, e.g. the HackBerry's built-in one, and in the render harness). It is never summoned by the user.
- * The PDA profile's writing zone (report 041, launcher_zone.hpp) wins over all of it: while it is the text input (the
- * launcher in front) the keyboard never shows and input.state says vkb=zone.
+ * The PDA profile's writing zone (report 041, 042, launcher_zone.hpp): while it is the text input (the launcher in
+ * front) its band shows instead of the keyboard, by these same rules, and input.state says vkb=zone while it shows.
  * Compat apps and compat pages keep today's behaviour (no keyboard): this covers native pages only.
  *
  * LVGL thread only.

@@ -160,21 +160,23 @@ The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule, the
 `cp0_ui_list.c`, unit-tested by `tests/test_ui_list.c`; the render harness scene `compact_list` shows both densities at
 640x480, 800x480, 720x720 and 480x320, `compact_list_affordance` every affordance at the five sizes.
 
-### The PDA writing zone (`include/cp0_zone.h`, `include/cp0_zone_ui.h`, `include/strokes.h`; report 041)
+### The PDA writing zone (`include/cp0_zone.h`, `include/cp0_zone_ui.h`, `include/strokes.h`; report 041, 042)
 
-With `APPLAUNCH_PDA=1` on a portrait canvas the display manager draws a band at the bottom of the panel (a third LVGL
-display): the optional key strip (Tab, Ctrl, Shift, Alt, the arrows, Enter), the soft buttons Home, Menu, Apps, Keys and
-the writing zone (letters and digits boxes, a third of the panel's height). The native display is then the app area
-above it: `cp0_ui_metrics_get()`
-/ `cp0_ui_metrics_current()` are the app area's metrics, `cp0_ui_metrics_panel()` the whole panel's. A touch whose first
-contact lands in the band never reaches the native or compat display; a pen stroke goes to the Strokes recogniser
-(`strokes.h`, plain C99, built from `src/strokes/`; its tables in `/usr/share/APPLaunch/strokes`) and what it
-recognises is typed with `cp0_keyboard_inject_key()` like the on-screen keyboard's keys (characters as their US key with
-their text, characters without a key as text alone). The key strip, while open, keeps the bottom row of the app area
-free through the on-screen keyboard's inset (`cp0::ui::osk::set_reserved_inset()`): `Page` bodies, the terminal and
-dialogs leave it free as they do for the keyboard. The host gets Home and Apps through
-`cp0_zone_ui_set_action_cb()`; `cp0_display_zone_active()` says whether the band exists. The geometry, the touch
-router, the strip's sticky modifiers and what a result types are pure C (`cp0_zone.c`, `tests/test_zone.c`); the
+With `APPLAUNCH_PDA=1` on a portrait canvas the display manager can draw a band at the bottom of the panel (a third LVGL
+display): the key strip (Tab, Ctrl, Shift, Alt, the arrows, Enter) on top of the writing zone (letters and digits
+boxes, a third of the panel's height, at most `h - strip - 400` px). The band behaves like the fallback on-screen
+keyboard: the host hands the keyboard service a zone hook (`cp0::ui::osk::set_zone()`), and where a field would get the
+keyboard (it asked, the policy allows it, its screen is the one shown) the band shows instead
+(`cp0_zone_ui_set_text_wanted()`); a page may keep it shown (`cp0_zone_ui_set_pinned()`). The native display is the
+whole panel; while the band shows it covers the bottom `band_h` rows, which `Page` bodies, the terminal and dialogs
+leave free through the keyboard's inset (`cp0::ui::osk::set_reserved_inset()`). A touch whose first contact lands in
+the shown band never reaches the native or compat display; a pen stroke goes to the Strokes recogniser (`strokes.h`,
+plain C99, built from `src/strokes/`; its tables in `/usr/share/APPLaunch/strokes`) and what it recognises is typed
+with `cp0_keyboard_inject_key()` like the on-screen keyboard's keys (characters as their US key with their text,
+characters without a key as text alone). A capture (`cp0_zone_ui_set_capture()`, the Strokes training page) takes the
+finished strokes instead of typing them; `cp0_zone_ui_reload()` loads the tables again after the user overlay changed.
+`cp0_display_zone_active()` says whether the band exists, `cp0_zone_ui_shown()` whether it shows. The geometry, the
+touch router, the strip's sticky modifiers and what a result types are pure C (`cp0_zone.c`, `tests/test_zone.c`); the
 render harness scenes `zone_*` draw it at 480x640 and 480x800.
 
 ## Public C ABI

@@ -294,11 +294,14 @@ struct Service {
     bool multiline = false;
     std::unique_ptr<OnScreenKeyboard> keyboard;
     int inset = 0;
-    int reserved = 0; /* the PDA writing zone's key strip while it is open (report 041): an inset without a keyboard */
+    int reserved = 0; /* the PDA writing zone while it shows (report 041, 042): an inset without a keyboard */
     std::vector<Listener> listeners;
     int next_id = 1;
     lv_timer_t *poll = nullptr;
     bool apply_armed = false;
+    std::function<bool()> zone_input; /* the PDA writing zone is the text input (report 042) ... */
+    std::function<void(bool)> zone_show; /* ... and shows instead of the keyboard */
+    bool zone_shown = false;
 };
 
 constexpr uint32_t kPolicyPollMs = 250;
@@ -321,6 +324,14 @@ void notify(int keyboard_h)
         if (l.fn) l.fn(inset);
 }
 
+void zone_set(bool show)
+{
+    Service &s = service();
+    if (show == s.zone_shown) return;
+    s.zone_shown = show;
+    if (s.zone_show) s.zone_show(show);
+}
+
 void hide_now(bool release)
 {
     Service &s = service();
@@ -328,6 +339,7 @@ void hide_now(bool release)
         if (release) s.keyboard->release_all(); /* latched Shift / Ctrl dropped, owed releases out */
         s.keyboard.reset();
     }
+    zone_set(false);
     notify(0);
 }
 
@@ -356,9 +368,19 @@ void apply()
     Service &s = service();
     if (s.owner && !lv_obj_is_valid(s.owner)) s.owner = nullptr;
     const bool want = s.owner && s.allowed && s.allowed();
-    if (!want) {
+    if (want && s.zone_input && s.zone_input()) {
+        /* the PDA writing zone instead of the keyboard (report 042), while the field's screen is the one shown */
+        if (s.keyboard) {
+            s.keyboard->release_all();
+            s.keyboard.reset();
+        }
+        lv_display_t *display = lv_obj_get_display(s.owner);
+        zone_set(display && lv_obj_get_screen(s.owner) == lv_display_get_screen_active(display));
+        notify(0);
+    } else if (!want) {
         hide_now(true);
     } else {
+        zone_set(false);
         lv_obj_t *layer = lv_display_get_layer_top(lv_obj_get_display(s.owner));
         if (s.keyboard && (s.keyboard->type() != s.type || s.keyboard->multiline() != s.multiline ||
                            !s.keyboard->root() || lv_obj_get_parent(s.keyboard->root()) != layer))
@@ -484,6 +506,20 @@ void set_reserved_inset(int px)
     Service &s = service();
     s.reserved = px > 0 ? px : 0;
     notify(s.keyboard ? s.keyboard->height() : 0);
+}
+
+void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> show)
+{
+    Service &s = service();
+    zone_set(false);
+    s.zone_input = std::move(zone_input);
+    s.zone_show = std::move(show);
+    schedule();
+}
+
+void reevaluate()
+{
+    schedule();
 }
 
 int add_inset_listener(std::function<void(int inset)> listener)

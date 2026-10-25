@@ -724,10 +724,18 @@ lv_obj_t *owner();   /* the field the keyboard is up (or wanted) for, or NULL */
 int bottom_inset();  /* the keyboard's height while shown, else 0 (at least the reserved inset below) */
 /* The field that asked (owner) is a multi-line one (a terminal): Tab types a tab character there. */
 bool multiline();
-/* Room the host keeps free at the bottom of the display without a keyboard (the PDA writing zone's key strip while it
- * is open, report 041): the inset is the larger of this and the keyboard's height, so pages, the terminal and dialogs
- * leave it free as they do for the keyboard. 0 = none (the default). */
+/* Room the host keeps free at the bottom of the display without a keyboard (the PDA writing zone while it shows, report
+ * 041, 042): the inset is the larger of this and the keyboard's height, so pages, the terminal and dialogs leave it free
+ * as they do for the keyboard. 0 = none (the default). */
 void set_reserved_inset(int px);
+
+/* The PDA writing zone (report 042): while zone_input() is true the zone is the text input instead of this keyboard.
+ * Where the keyboard would show (a field requested it, the policy allows it, and the field's screen is the one shown),
+ * show(true) is called instead and no keyboard is built; show(false) when that ends (released, dismissed, not allowed
+ * any more, another screen in front, zone_input() false). Without it (the default) the keyboard works as before. */
+void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> show);
+/* Asks the policy again on the next cycle (a screen came up over the field: the multitasking switcher). */
+void reevaluate();
 
 /* Called with the new inset whenever it changes. Returns an id for remove_inset_listener(). */
 int add_inset_listener(std::function<void(int inset)> listener);

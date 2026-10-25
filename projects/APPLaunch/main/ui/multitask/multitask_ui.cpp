@@ -350,7 +350,7 @@ void show_switcher(const multitask::SwitcherInfo &info)
         };
         s_switcher.reset(new SwitcherScreen(std::move(events)));
         s_switcher_prev = active_besides(s_switcher->screen());
-        launcher_zone::close_strip(); /* the PDA writing zone's key strip would cover the switcher's bar (report 041) */
+        launcher_zone::screen_changed(); /* the PDA writing zone hides while the switcher is in front (report 042) */
         lv_screen_load(s_switcher->screen()); /* while an app is still in front it is drawn when the launcher is */
         detach_keypad();
         std::fprintf(stderr, "[mt] switcher screen up: %zu card(s), from %s%s\n", info.cards.size(),
@@ -880,25 +880,6 @@ bool screen_up()
 bool sheet_up()
 {
     return s_sheet != nullptr;
-}
-
-bool toggle_switcher(const char *source)
-{
-    if (!s_sup) return false;
-    if (s_switcher) {
-        s_sup->switcher_cancel();
-        return true;
-    }
-    const std::string name = source ? source : "button";
-    s_sup->launcher_gesture(name, name + " soft button", true);
-    return true;
-}
-
-bool switcher_home()
-{
-    if (!s_sup || !s_switcher) return false;
-    s_sup->switcher_home();
-    return true;
 }
 
 void launch(const std::string &name, const std::string &key, const std::string &command, bool keep_root,

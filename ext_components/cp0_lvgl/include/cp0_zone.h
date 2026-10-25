@@ -6,30 +6,35 @@
  * cp0_zone_ui.h; the display manager (cp0_lvgl_dpi_scaled.c) draws the band as a third display under the app area and
  * routes the touch screen's frames with the router below.
  *
- * The band, from the top (owner decisions of 2026-10-25, mockup variant A), on a portrait panel only:
+ * The band, from the top (owner decisions of 2026-10-25: mockup variant A; after pda.6, report 042: no soft-button row,
+ * the band shown on demand like the on-screen keyboard), on a portrait panel only:
  *
  *   +-------------------------------+ 0
- *   | app area (the native display) |
- *   +-------------------------------+ strip_y      (only while the Keys strip is open: it covers the app area's
- *   | Tab Ctrl Shift Alt < ^ v > Ent|               bottom row_h pixels, which the pages leave free: the inset)
- *   +-------------------------------+ app_h = buttons_y
- *   | Home | Menu | Apps | Keys     |   the soft-button row: pad above a key_h high button
+ *   | app area (the native display: |
+ *   | the whole panel)              |
+ *   +-------------------------------+ strip_y      (while the band shows; hidden, the app area reaches the bottom)
+ *   | Tab Ctrl Shift Alt < ^ v > Ent|   the key strip: pad, a key_h high key
  *   +-------------------------------+ write_y
  *   | letters box     | digits box  |   the writing zone, write_h high (a third of the panel), the boxes inset by pad
  *   +-------------------------------+ h
  *
- * Sizes: pad = SPACE_S, key_h = 5 mm (the mockup's buttons, panel density, cp0_ui_mm_px), write_h = min(a third of the
- * panel's height rounded, h - row_h - 400) (owner, after the first board test of 0.8.8-pda.4: 267 px on the 4.3" DSI's
- * 480x800; S3 first drew 20.6 mm, 176 px, which was too small to write in; the cap keeps the app area at 400 px or more,
- * the Square class, so 480x640 gets 187 px instead of a third's 213 and its pages keep their Square header and titles;
- * a panel whose cap is under 6 pad gets no zone); the letters box takes 68 % of the boxes' width. The app area is what the pages get (their own metrics, cp0_ui_metrics_compute of w x app_h); the strip does
- * not resize it: it covers its bottom and the pages leave that room free like the on-screen keyboard's (cp0::ui::osk
- * inset).
+ * The band behaves like the fallback on-screen keyboard: it shows while a text field wants input and the keyboard's
+ * policy allows it (cp0::ui::osk::set_zone: the same triggers, the terminal pages included) or while a page pins it
+ * (Strokes training), and is hidden otherwise. While it shows it covers the bottom band_h rows of the app area, which the
+ * pages leave free as for the keyboard (the cp0::ui::osk inset). Home, the switcher and the like are the multitasking
+ * gestures' (three fingers, a hold on the clock).
  *
- * Input rule: where the zone is shown it is the text input (input.state vkb=zone, no fallback keyboard). A contact that
+ * Sizes: pad = SPACE_S, key_h = 5 mm (the mockup's keys, panel density, cp0_ui_mm_px), write_h = min(a third of the
+ * panel's height rounded, h - row_h - 400): the panel keeps 400 px above the band while it shows (owner, after the first
+ * board test of 0.8.8-pda.4: 267 px on the 4.3" DSI's 480x800; S3 first drew 20.6 mm, 176 px, which was too small to
+ * write in; the cap, from pda.6, gives 480x640 187 px instead of a third's 213; a panel whose cap is under 6 pad gets no
+ * zone); the letters box takes 68 % of the boxes' width.
+ *
+ * Input rule: where the band is shown it is the text input (input.state vkb=zone, no fallback keyboard). A contact that
  * starts in the writing zone is a pen stroke for the recogniser (strokes.h) and never reaches the app; one that starts
- * on a button row is the band's; one that starts in the app area is the app's, as before. Only the first contact of a
- * touch writes: a second finger cancels the stroke (a three-finger gesture is never a stroke).
+ * on the strip is the band's; one that starts in the app area (or anywhere while the band is hidden) is the app's, as
+ * before. Only the first contact of a touch writes: a second finger cancels the stroke (a three-finger gesture is never
+ * a stroke).
  */
 #ifndef CP0_ZONE_H
 #define CP0_ZONE_H
@@ -47,20 +52,20 @@ extern "C" {
 #endif
 
 #define CP0_ZONE_WRITE_DIV 3      /* the writing zone with its padding: h / 3, rounded (267 px at 480x800) */
-#define CP0_ZONE_APP_KEEP_PX 400  /* ...capped at h - row_h - this, so the app area stays Square (187 px at 480x640) */
-#define CP0_ZONE_KEY_MM_X10 50    /* a soft button, a strip key: 5 mm (the mockup's 41-43 px at 8.54 px/mm) */
+#define CP0_ZONE_APP_KEEP_PX 400  /* ...capped at h - row_h - this: 400 px above the band (187 px at 480x640) */
+#define CP0_ZONE_KEY_MM_X10 50    /* a strip key: 5 mm (the mockup's 41-43 px at 8.54 px/mm) */
 #define CP0_ZONE_KEY_FLOOR_PX 32
 #define CP0_ZONE_LETTERS_PCT 68   /* the letters box: 68 % of the two boxes' width */
-#define CP0_ZONE_MIN_APP_H 300    /* a panel that would leave less to the app gets no zone */
+#define CP0_ZONE_MIN_APP_H 300    /* a panel that would leave less above the band gets no zone */
 
 /* Look (mockup variant A, 2026-10-25) */
-#define CP0_ZONE_BAND_RGB 0x181C1C      /* behind the strip and the soft buttons */
+#define CP0_ZONE_BAND_RGB 0x181C1C      /* behind the strip */
 #define CP0_ZONE_WRITE_RGB 0x0A0C0C     /* behind the boxes */
 #define CP0_ZONE_BOX_RGB 0x141818       /* a box */
 #define CP0_ZONE_BOX_BORDER_RGB 0x465050
-#define CP0_ZONE_KEY_RGB 0x242A2A       /* a button, a strip key */
+#define CP0_ZONE_KEY_RGB 0x242A2A       /* a strip key */
 #define CP0_ZONE_KEY_PRESSED_RGB 0x3A4444
-#define CP0_ZONE_LIT_RGB 0x1E6496       /* Keys while the strip is open; an armed modifier */
+#define CP0_ZONE_LIT_RGB 0x1E6496       /* an armed modifier */
 #define CP0_ZONE_LOCKED_RGB 0xE8E8E8    /* a locked modifier (double tap): highlighted, dark label */
 #define CP0_ZONE_LABEL_RGB 0xEBEBEB
 #define CP0_ZONE_BOX_LABEL_RGB 0x8C9696 /* "abc", "123" */
@@ -68,14 +73,6 @@ extern "C" {
 #define CP0_ZONE_REJECT_RGB 0xFF5A5A    /* a stroke the recogniser refused: the ink flashes red */
 
 /* ------------------------------------------------------------------ layout */
-
-typedef enum {
-    CP0_ZONE_BTN_HOME = 0,
-    CP0_ZONE_BTN_MENU, /* Ctrl+O, the apps' options key (APP-CONTRACT.md section 10b) */
-    CP0_ZONE_BTN_APPS, /* the multitasking switcher */
-    CP0_ZONE_BTN_KEYS, /* opens / closes the strip; lit while it is open */
-    CP0_ZONE_BTN__COUNT
-} cp0_zone_button_t;
 
 typedef enum {
     CP0_ZONE_KEY_TAB = 0,
@@ -99,41 +96,47 @@ typedef struct {
     int ppmm_x100;
     int pad;           /* SPACE_S: margins, gaps, the boxes' inset */
     int gap;           /* between two strip keys */
-    int key_h;         /* a soft button, a strip key */
-    int radius;        /* their corners (RADIUS_S) */
-    int row_h;         /* one key row: pad + key_h */
+    int key_h;         /* a strip key */
+    int radius;        /* its corners (RADIUS_S) */
+    int row_h;         /* the strip's row: pad + key_h */
     int write_h;       /* the writing zone with its padding */
-    int band_closed;   /* the band under the app area: buttons + writing zone */
-    int band_open;     /* ... + the strip row */
-    int app_h;         /* the app area: h - band_closed (the native display's height) */
-    int strip_y;       /* panel y of the strip row (open): app_h - row_h */
-    int buttons_y;     /* panel y of the buttons row (= app_h) */
-    int write_y;       /* panel y of the writing zone */
+    int band_h;        /* the band: the strip row + the writing zone (the band display's height) */
+    int strip_y;       /* panel y of the strip row, and of the band display's row 0: h - band_h */
+    int write_y;       /* panel y of the writing zone: h - write_h */
     int divider_x;     /* a pen press left of this is in the letters box, else in the digits box */
     cp0_zone_rect_t letters, digits;                 /* the boxes, panel coordinates */
-    cp0_zone_rect_t button[CP0_ZONE_BTN__COUNT];     /* panel coordinates */
-    cp0_zone_rect_t strip_key[CP0_ZONE_KEY__COUNT];  /* panel coordinates (shown only while the strip is open) */
-    int button_px;     /* text sizes (builtin Montserrat, even) */
-    int key_px;
+    cp0_zone_rect_t strip_key[CP0_ZONE_KEY__COUNT];  /* panel coordinates */
+    int key_px;        /* text sizes (builtin Montserrat, even) */
     int box_label_px;
     int ink_px;        /* the ink's line width */
 } cp0_zone_layout_t;
 
 /* The band for the panel metrics m (the whole panel: its size and density). Returns 0, or -1 (out untouched) when m is
- * NULL, the panel is not portrait (h <= w) or the app area would be under CP0_ZONE_MIN_APP_H. */
+ * NULL, the panel is not portrait (h <= w) or the room above the band would be under CP0_ZONE_MIN_APP_H. */
 int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out);
 
-/* Panel y where the band starts: strip_y while the strip is open, else app_h. */
-int cp0_zone_band_top(const cp0_zone_layout_t *l, int strip_open);
+/* Why the band shows (report 042): a text field wants input (the on-screen keyboard's policy, cp0::ui::osk), a page
+ * pins it (Strokes training). Either one: shown. */
+typedef struct {
+    int text;
+    int pinned;
+} cp0_zone_show_t;
+
+/* 1 when the band shows for s. */
+int cp0_zone_shown(const cp0_zone_show_t *s);
+
+/* The rows of the app area the band covers (shown: band_h, else 0): what the pages leave free, the on-screen
+ * keyboard's inset. */
+int cp0_zone_inset(const cp0_zone_layout_t *l, int shown);
 
 typedef enum {
-    CP0_ZONE_HIT_APP = 0, /* above the band */
-    CP0_ZONE_HIT_BAND,    /* the strip row (open) or the buttons row: the band's own pointer */
+    CP0_ZONE_HIT_APP = 0, /* above the band, or the band hidden */
+    CP0_ZONE_HIT_BAND,    /* the strip row: the band's own pointer */
     CP0_ZONE_HIT_LETTERS, /* the writing zone, left of divider_x */
     CP0_ZONE_HIT_DIGITS,  /* the writing zone, right of it */
 } cp0_zone_hit_t;
 
-cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int strip_open, int x, int y);
+cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int shown, int x, int y);
 
 /* ------------------------------------------------------------------ touch routing */
 
@@ -141,7 +144,7 @@ typedef enum {
     CP0_ZONE_OWNER_NONE = 0, /* no contact down */
     CP0_ZONE_OWNER_APP,      /* the touch started in the app area: the app's pointers, as before */
     CP0_ZONE_OWNER_PEN,      /* it started in the writing zone: the recogniser's (never the app's) */
-    CP0_ZONE_OWNER_BAND,     /* it started on the strip or the buttons: the band's pointer */
+    CP0_ZONE_OWNER_BAND,     /* it started on the strip: the band's pointer */
     CP0_ZONE_OWNER_IGNORED,  /* nobody's until every contact is up (swallowed, cancelled, several fingers at once) */
 } cp0_zone_owner_t;
 
@@ -176,10 +179,10 @@ typedef struct {
  * itself, the router only keeps such a press away from the app). */
 void cp0_zone_router_init(cp0_zone_router_t *r, int heal_ms, int heal_px);
 
-/* One frame of the touch screen (contacts in panel logical px). swallow: a new touch belongs to nobody (the screensaver,
- * the touch that woke it or closed an app): it is IGNORED. Fills *pen (kind NONE when the recogniser gets nothing) and
- * returns the owner after this frame. */
-cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int strip_open, int swallow,
+/* One frame of the touch screen (contacts in panel logical px), shown: the band is shown. swallow: a new touch belongs
+ * to nobody (the screensaver, the touch that woke it or closed an app): it is IGNORED. Fills *pen (kind NONE when the
+ * recogniser gets nothing) and returns the owner after this frame. */
+cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int shown, int swallow,
                                 const cp0_touch_frame_t *f, cp0_zone_pen_t *pen);
 
 /* A gesture took the contacts (multitasking G1 / G2): a stroke in progress is cancelled (*pen CANCEL, else NONE) and the
@@ -221,7 +224,7 @@ int cp0_zone_strip_repeat(cp0_zone_strip_t *s, cp0_zone_key_t key, cp0_ui_osk_ev
 int cp0_zone_strip_up(cp0_zone_strip_t *s, cp0_zone_key_t key, int multiline, uint64_t now_ms, cp0_ui_osk_event_t *out,
                       int max);
 int cp0_zone_strip_cancel(cp0_zone_strip_t *s, cp0_ui_osk_event_t *out, int max);
-/* The strip closes, the zone goes away: the owed releases (an arrow, Alt), every modifier off. */
+/* The band hides: the owed releases (an arrow, Alt), every modifier off. */
 int cp0_zone_strip_release_all(cp0_zone_strip_t *s, cp0_ui_osk_event_t *out, int max);
 
 /* What a Strokes result types, with the strip's modifiers (which it then uses): a character as its US key with its

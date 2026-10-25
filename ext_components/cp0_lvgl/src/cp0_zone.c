@@ -39,19 +39,18 @@ int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
     l.radius = imax(4, m->tok[CP0_TOK_RADIUS_S]);
     l.key_h = cp0_ui_mm_px(l.ppmm_x100, CP0_ZONE_KEY_MM_X10, CP0_ZONE_KEY_FLOOR_PX);
     l.row_h = l.pad + l.key_h;
-    /* a third of the panel, rounded to the nearest pixel (h / 3 is never half way), capped so the app area keeps
-     * CP0_ZONE_APP_KEEP_PX; a panel whose cap leaves less than the floor (6 pad) gets no zone */
+    /* a third of the panel, rounded to the nearest pixel (h / 3 is never half way), capped so the panel keeps
+     * CP0_ZONE_APP_KEEP_PX above the band (the strip row and the writing zone); a panel whose cap leaves less than the
+     * floor (6 pad) gets no zone */
     const int third = (2 * l.h + CP0_ZONE_WRITE_DIV) / (2 * CP0_ZONE_WRITE_DIV);
     const int cap = l.h - l.row_h - CP0_ZONE_APP_KEEP_PX;
     if (cap < 6 * l.pad) return -1;
     l.write_h = imax(6 * l.pad, imin(third, cap));
-    l.band_closed = l.row_h + l.write_h;
-    l.band_open = l.band_closed + l.row_h;
-    l.app_h = l.h - l.band_closed;
-    if (l.app_h < CP0_ZONE_MIN_APP_H) return -1;
-    l.strip_y = l.app_h - l.row_h;
-    l.buttons_y = l.app_h;
+    /* from the bottom: the writing zone, the strip above it (report 042: no soft-button row) */
+    l.band_h = l.row_h + l.write_h;
     l.write_y = l.h - l.write_h;
+    l.strip_y = l.h - l.band_h;
+    if (l.strip_y < CP0_ZONE_MIN_APP_H) return -1;
 
     /* the boxes: inset by pad, a gap of pad between them, the letters box 68 % */
     const int inner_w = l.w - 2 * l.pad;
@@ -60,14 +59,6 @@ int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
     l.digits = (cp0_zone_rect_t){l.pad + letters_w + l.pad, l.write_y + l.pad, inner_w - letters_w - l.pad,
                                  l.write_h - 2 * l.pad};
     l.divider_x = l.letters.x + l.letters.w + l.pad / 2;
-
-    /* four equal buttons, pad apart; the remainder pixels go to the last */
-    const int bw = (inner_w - 3 * l.pad) / 4;
-    for (int i = 0; i < CP0_ZONE_BTN__COUNT; i++) {
-        const int x = l.pad + i * (bw + l.pad);
-        const int w = i == CP0_ZONE_BTN__COUNT - 1 ? l.pad + inner_w - x : bw;
-        l.button[i] = (cp0_zone_rect_t){x, l.buttons_y + l.pad, w, l.key_h};
-    }
 
     /* the strip keys by weight, gap apart; the edges follow the cumulated weights so the row ends at the margin */
     int total = 0;
@@ -81,7 +72,6 @@ int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
         l.strip_key[i] = (cp0_zone_rect_t){x0, l.strip_y + l.pad, x1 - x0, l.key_h};
     }
 
-    l.button_px = cp0_ui_font_snap(imax(12, l.key_h * 42 / 100));
     l.key_px = cp0_ui_font_snap(imax(12, l.key_h * 38 / 100));
     l.box_label_px = cp0_ui_font_snap(imax(12, l.key_h / 3));
     l.ink_px = imax(2, imin(6, cp0_ui_mm_px(l.ppmm_x100, 4, 2))); /* 0.4 mm */
@@ -89,16 +79,20 @@ int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
     return 0;
 }
 
-int cp0_zone_band_top(const cp0_zone_layout_t *l, int strip_open)
+int cp0_zone_shown(const cp0_zone_show_t *s)
 {
-    if (!l) return 0;
-    return strip_open ? l->strip_y : l->app_h;
+    return s && (s->text || s->pinned) ? 1 : 0;
 }
 
-cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int strip_open, int x, int y)
+int cp0_zone_inset(const cp0_zone_layout_t *l, int shown)
 {
-    if (!l || y < cp0_zone_band_top(l, strip_open)) return CP0_ZONE_HIT_APP;
-    if (y < l->write_y) return CP0_ZONE_HIT_BAND;
+    return l && shown ? l->band_h : 0;
+}
+
+cp0_zone_hit_t cp0_zone_hit(const cp0_zone_layout_t *l, int shown, int x, int y)
+{
+    if (!l || !shown || y < l->strip_y) return CP0_ZONE_HIT_APP;
+    if (y < l->write_y) return CP0_ZONE_HIT_BAND; /* the strip */
     return x < l->divider_x ? CP0_ZONE_HIT_LETTERS : CP0_ZONE_HIT_DIGITS;
 }
 
@@ -136,7 +130,7 @@ static int within_heal(const cp0_zone_router_t *r, const cp0_touch_contact_t *c,
     return dx * dx + dy * dy <= (long long)r->heal_px * r->heal_px;
 }
 
-cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int strip_open, int swallow,
+cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l, int shown, int swallow,
                                 const cp0_touch_frame_t *f, cp0_zone_pen_t *pen)
 {
     pen_set(pen, CP0_ZONE_PEN_NONE, 0, 0, 0, f ? f->t_us : 0);
@@ -174,7 +168,7 @@ cp0_zone_owner_t cp0_zone_route(cp0_zone_router_t *r, const cp0_zone_layout_t *l
             return r->owner;
         }
         r->has_up = 0;
-        const cp0_zone_hit_t hit = cp0_zone_hit(l, strip_open, c->x, c->y);
+        const cp0_zone_hit_t hit = cp0_zone_hit(l, shown, c->x, c->y);
         if (hit == CP0_ZONE_HIT_APP) {
             r->owner = CP0_ZONE_OWNER_APP;
         } else if (hit == CP0_ZONE_HIT_BAND) {

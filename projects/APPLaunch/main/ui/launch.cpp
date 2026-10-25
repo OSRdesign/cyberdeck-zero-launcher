@@ -67,11 +67,6 @@ void Launch::bind_ui()
         hooks.show_home = [this] { show_home(); };
         multitask_ui::start(std::move(hooks));
     }
-    // The PDA writing zone's Home soft button (report 041): a page closes as with Esc held, else the home grid
-    launcher_zone::bind([this] {
-        if (app_Page) go_back_home();
-        else show_home();
-    });
 }
 
 void Launch::launch_index(std::size_t index)

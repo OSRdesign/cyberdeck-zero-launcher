@@ -256,15 +256,18 @@ What works in this phase:
   `APPLAUNCH_ROTATE=270`), and you turn the device while they run. They need no change: the launcher gives each one the
   landscape canvas on its command line (docs/APP-CONTRACT.md, section 3, "Portrait launcher"). An app that declares
   `X-Portrait` (none does yet) gets the portrait canvas instead;
-- text: the **writing zone** at the bottom of the screen (report 041, phase S3; `APPLAUNCH_PDA=1` in the profile):
-  write with a pen or a finger in the letters box (left) or the digits box (right), one stroke per character (the
-  Strokes alphabet, `tools/strokes/README.md`); the soft buttons above it are Home (the home grid), Menu (Ctrl+O, an
-  app's options), Apps (the switcher) and Keys (a strip with Tab, Ctrl, Shift, Alt, the arrows and Enter; Ctrl, Shift
-  and Alt act on the next key or character, a double tap locks them). A Bluetooth or USB keyboard works as everywhere;
-  the fallback on-screen keyboard does not show while the zone is there. A landscape app run turned has no zone: its
-  own rule applies (a keyboard, else its own on-screen keyboard). `APPLAUNCH_PDA=0` in `/etc/applaunch/board.conf` shows
-  the portrait launcher without the zone (the fallback keyboard then). `APPLAUNCH_STROKES_LOG=/home/<user>/strokes.txt`
-  added to `/etc/applaunch/board.conf` records every stroke written (for tuning the recogniser, report 041).
+- text: the **writing zone** at the bottom of the screen (report 041, 042; `APPLAUNCH_PDA=1` in the profile). It comes
+  up where the fallback on-screen keyboard would (a text field or a terminal page wants input, no physical keyboard,
+  Settings > System > On-screen keyboard Auto) and goes away after: a strip with Tab, Ctrl, Shift, Alt, the arrows and
+  Enter (Ctrl, Shift and Alt act on the next key or character, a double tap locks them) on top of the letters box (left)
+  and the digits box (right), where you write with a pen or a finger, one stroke per character (the Strokes alphabet,
+  `tools/strokes/README.md`). Home and the switcher are the multitasking gestures (three fingers, a hold on the clock).
+  A Bluetooth or USB keyboard works as everywhere; the fallback on-screen keyboard never shows while the zone is there.
+  A landscape app run turned has no zone: its own rule applies (a keyboard, else its own on-screen keyboard).
+  `APPLAUNCH_PDA=0` in `/etc/applaunch/board.conf` shows the portrait launcher without the zone (the fallback keyboard
+  then). Settings > System > Strokes training (report 042) learns the owner's own strokes;
+  `APPLAUNCH_STROKES_LOG=/home/<user>/strokes.txt` added to `/etc/applaunch/board.conf` records every stroke written
+  (for tuning the recogniser, report 041).
 - the portrait profile hides the fixed-pixel tiles by default (`APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store`:
   IP Panel, Snake, Tank and the Store are 320x170 pages that would sit small at the top of a 480x800 screen); Settings >
   Launcher turns each one on, and what is saved there wins over the profile. Desktop apps that are neither fullscreen

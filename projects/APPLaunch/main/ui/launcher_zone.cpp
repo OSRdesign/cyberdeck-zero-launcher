@@ -11,32 +11,17 @@
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
 #include "cp0_display.h"
+#include "cp0_ui_widgets.hpp"
 #include "cp0_zone_ui.h"
-#include "multitask/multitask_ui.hpp"
-#include "sample_log.h"
-#include "ui_screensaver.h"
-
-#include <utility>
 
 namespace launcher_zone {
 namespace {
 
-std::function<void()> s_home;
 bool s_app_front = false;
 
-void on_action(cp0_zone_action_t action)
+void on_shown(int)
 {
-    if (ui_screensaver_is_active()) return; /* the screensaver is up: its touch only wakes it */
-    switch (action) {
-    case CP0_ZONE_ACTION_HOME:
-        SLOGI("[zone] Home");
-        if (multitask_ui::switcher_home()) return; /* the switcher's own Home */
-        if (s_home) s_home();
-        break;
-    case CP0_ZONE_ACTION_APPS:
-        if (!multitask_ui::toggle_switcher("Apps")) SLOGI("[zone] Apps: multitasking is off");
-        break;
-    }
+    launcher_osk::refresh(); /* vkb=zone only while the band shows */
 }
 
 } // namespace
@@ -46,22 +31,37 @@ bool active()
     return cp0_display_available() && cp0_display_zone_active();
 }
 
-void bind(std::function<void()> home)
+bool shown()
 {
-    s_home = std::move(home);
-    if (active()) cp0_zone_ui_set_action_cb(on_action);
+    return active() && cp0_zone_ui_shown() != 0;
+}
+
+void bind()
+{
+    if (!active()) return;
+    cp0_zone_ui_set_vis_listener(on_shown);
+    /* the band is the text input while the launcher is in front: it shows where the keyboard would */
+    cp0::ui::osk::set_zone([] { return active() && !s_app_front; },
+                           [](bool show) { cp0_zone_ui_set_text_wanted(show ? 1 : 0); });
 }
 
 void set_app_front(bool front)
 {
     if (front == s_app_front) return;
     s_app_front = front;
-    if (active()) launcher_osk::refresh();
+    if (!active()) return;
+    cp0::ui::osk::reevaluate();
+    launcher_osk::refresh();
 }
 
 bool app_front()
 {
     return s_app_front;
+}
+
+void set_pinned(bool on)
+{
+    if (active()) cp0_zone_ui_set_pinned(on ? 1 : 0);
 }
 
 void set_blank(bool on)
@@ -76,9 +76,9 @@ void repaint()
     cp0_zone_ui_reset_input(); /* a stroke or a held strip key from before the app is not finished now */
 }
 
-void close_strip()
+void screen_changed()
 {
-    if (active()) cp0_zone_ui_set_strip_open(0);
+    if (active()) cp0::ui::osk::reevaluate();
 }
 
 } // namespace launcher_zone
@@ -88,12 +88,14 @@ void close_strip()
 namespace launcher_zone {
 
 bool active() { return false; }
-void bind(std::function<void()>) {}
+bool shown() { return false; }
+void bind() {}
 void set_app_front(bool) {}
 bool app_front() { return false; }
+void set_pinned(bool) {}
 void set_blank(bool) {}
 void repaint() {}
-void close_strip() {}
+void screen_changed() {}
 
 } // namespace launcher_zone
 

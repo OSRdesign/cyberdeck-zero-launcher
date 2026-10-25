@@ -1095,17 +1095,14 @@ void read_touch_now()
         }
 }
 
-/* The writing zone's rectangle NAME (report 041): a soft button (Home Menu Apps Keys), a strip key (Tab Ctrl Shift Alt
- * Left Up Down Right Enter) or a box (letters digits), panel coordinates. false when there is no such thing. */
+/* The writing zone's rectangle NAME (report 041, 042): a strip key (Tab Ctrl Shift Alt Left Up Down Right Enter) or a
+ * box (letters digits), panel coordinates. false when there is no such thing. */
 bool zone_rect(const std::string &name, cp0_zone_rect_t *out)
 {
     const cp0_zone_layout_t *l = cp0_zone_ui_layout();
     if (!l) return false;
-    static const char *const buttons[CP0_ZONE_BTN__COUNT] = {"Home", "Menu", "Apps", "Keys"};
     static const char *const keys[CP0_ZONE_KEY__COUNT] = {"Tab", "Ctrl", "Shift", "Alt", "Left",
                                                          "Up",  "Down", "Right", "Enter"};
-    for (int i = 0; i < CP0_ZONE_BTN__COUNT; ++i)
-        if (name == buttons[i]) return *out = l->button[i], true;
     for (int i = 0; i < CP0_ZONE_KEY__COUNT; ++i)
         if (name == keys[i]) return *out = l->strip_key[i], true;
     if (name == "letters") return *out = l->letters, true;
@@ -2198,7 +2195,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     } else if (cmd == "metrics") {
         /* what the layout service computed for this size, plus what the launcher exported to its children */
         if (w.size() != 2) return fail(scene, line, "usage: metrics NAME");
-        /* the panel (report 041: on the PDA profile the pages' own metrics are the app area above the writing zone) */
+        /* the panel (report 041 gave the pages an app area above the writing zone; since 042 it is the whole panel) */
         const cp0_ui_metrics_t *m = cp0_ui_metrics_panel();
         char text[2048];
         if (!m || cp0_ui_metrics_describe(m, text, sizeof(text)) < 0)
@@ -2359,24 +2356,24 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             settle(400);
         }
     } else if (cmd == "zonekey") {
-        /* zonekey NAME [hold MS]: a tap (or a press held MS ms) through the touch path on the centre of a soft button
-         * (Home Menu Apps Keys) or a key of the strip (Tab Ctrl Shift Alt Left Up Down Right Enter; open it first) */
+        /* zonekey NAME [hold MS]: a tap (or a press held MS ms) through the touch path on the centre of a key of the
+         * strip (Tab Ctrl Shift Alt Left Up Down Right Enter; the band shown) */
         cp0_zone_rect_t r{};
         if ((w.size() != 2 && w.size() != 4) || !zone_rect(w[1], &r) || w[1] == "letters" || w[1] == "digits")
-            return fail(scene, line, "usage: zonekey Home|Menu|Apps|Keys|Tab|Ctrl|Shift|Alt|Left|Up|Down|Right|Enter [hold MS]");
+            return fail(scene, line, "usage: zonekey Tab|Ctrl|Shift|Alt|Left|Up|Down|Right|Enter [hold MS]");
         const int held = w.size() == 4 && w[2] == "hold" ? std::max(0, to_int(w[3])) : 80;
         touch_at(run, 1, r.x + r.w / 2, r.y + r.h / 2);
         settle(static_cast<uint32_t>(held));
         touch_at(run, 0, r.x + r.w / 2, r.y + r.h / 2);
         settle(400);
     } else if (cmd == "expect_zone") {
-        /* expect_zone strip open|closed: the key strip's state */
-        if (w.size() != 3 || w[1] != "strip" || (w[2] != "open" && w[2] != "closed"))
-            return fail(scene, line, "usage: expect_zone strip open|closed");
+        /* expect_zone shown|hidden: the writing zone's band (the strip and the boxes, report 042) */
+        if (w.size() != 2 || (w[1] != "shown" && w[1] != "hidden")) return fail(scene, line, "usage: expect_zone shown|hidden");
         if (!cp0_zone_ui_active()) return fail(scene, line, "expect_zone: no writing zone");
-        const bool open = cp0_zone_ui_strip_open() != 0;
-        if (open != (w[2] == "open")) return fail(scene, line, std::string("expect_zone: the strip is ") + (open ? "open" : "closed"));
-        std::printf("expect_zone ok: strip %s\n", w[2].c_str());
+        const bool shown = cp0_zone_ui_shown() != 0;
+        if (shown != (w[1] == "shown"))
+            return fail(scene, line, std::string("expect_zone: the band is ") + (shown ? "shown" : "hidden"));
+        std::printf("expect_zone ok: %s\n", w[1].c_str());
     } else if (cmd == "expect_vkb") {
         /* expect_vkb auto|off|force|zone: the on-screen keyboard rule launcher_osk publishes (input.state vkb=) */
         if (w.size() != 2) return fail(scene, line, "usage: expect_vkb auto|off|force|zone");

@@ -1,6 +1,6 @@
 /*
- * Unit test of the PDA writing zone's pure core (src/cp0_zone.c, report 041): the band's geometry on the two portrait
- * panels and at the deck's density, the hit test with the strip open and closed, the touch router (a tap in the app,
+ * Unit test of the PDA writing zone's pure core (src/cp0_zone.c, report 041, 042): the band's geometry on the two portrait
+ * panels and at the deck's density, the hit test with the band shown and hidden, why it shows, the touch router (a tap in the app,
  * a stroke, a stroke that leaves the box, a second finger, a three-finger touch, a swallowed touch, a drop-out healed
  * wherever it lands, the band's rows, a gesture's cancel, a reset), the strip's sticky modifiers (arm, lock, off, used
  * by the next key, the held arrows and their repeat, Alt as a real key, release_all), what a recogniser result types
@@ -83,23 +83,17 @@ static void test_layout(void)
     CHECK_EQ(l.key_h, 43);
     CHECK_EQ(l.row_h, 51);
     CHECK_EQ(l.write_h, 267);
-    CHECK_EQ(l.band_closed, 318);
-    CHECK_EQ(l.band_open, 369);
-    CHECK_EQ(l.app_h, 482);
-    CHECK_EQ(l.strip_y, 431);
-    CHECK_EQ(l.buttons_y, 482);
+    /* report 042: the band is the strip on top of the writing zone at the bottom of the panel (no soft-button row); the
+     * app area is the whole panel, the band covers its bottom 318 rows while it shows */
+    CHECK_EQ(l.band_h, 318);
+    CHECK_EQ(l.strip_y, 482);
     CHECK_EQ(l.write_y, 533);
+    CHECK_EQ(l.strip_y, l.h - l.band_h);
+    CHECK(l.strip_y >= CP0_ZONE_APP_KEEP_PX);
     /* the boxes: 68 % / 32 % of 456 px (the mockup's 315 / 143), 251 px high (29 mm) */
     CHECK(l.letters.x == 8 && l.letters.y == 541 && l.letters.w == 310 && l.letters.h == 251);
     CHECK(l.digits.x == 326 && l.digits.y == 541 && l.digits.w == 146 && l.digits.h == 251);
     CHECK_EQ(l.divider_x, 322);
-    /* four buttons of 110 px, 8 apart, the row's keys 43 px under an 8 px gap */
-    for (int i = 0; i < CP0_ZONE_BTN__COUNT; i++) {
-        CHECK_EQ(l.button[i].x, 8 + i * 118);
-        CHECK_EQ(l.button[i].w, 110);
-        CHECK_EQ(l.button[i].y, 490);
-        CHECK_EQ(l.button[i].h, 43);
-    }
     /* the strip: nine keys from the left margin to the right one, 4 px apart, weights 13 15 15 12 10 10 10 10 18 */
     CHECK_EQ(l.strip_key[0].x, 8);
     CHECK_EQ(l.strip_key[CP0_ZONE_KEY_ENTER].x + l.strip_key[CP0_ZONE_KEY_ENTER].w, 472);
@@ -108,17 +102,17 @@ static void test_layout(void)
     CHECK(l.strip_key[CP0_ZONE_KEY_ENTER].w > l.strip_key[CP0_ZONE_KEY_CTRL].w);
     CHECK(l.strip_key[CP0_ZONE_KEY_CTRL].w > l.strip_key[CP0_ZONE_KEY_LEFT].w);
     CHECK(abs(l.strip_key[CP0_ZONE_KEY_LEFT].w - 38) <= 1);
-    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y, 439);
+    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y, 490);
+    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y + l.strip_key[CP0_ZONE_KEY_UP].h, l.write_y);
     /* every target at least 5 mm high, the arrows at least 4 mm wide */
     CHECK(l.key_h * 100 >= 5 * l.ppmm_x100 - 50);
     CHECK(l.strip_key[CP0_ZONE_KEY_LEFT].w * 100 >= 4 * l.ppmm_x100);
-    CHECK_EQ(l.button_px, 18);
     CHECK_EQ(l.key_px, 16);
     CHECK_EQ(l.box_label_px, 14);
     CHECK_EQ(l.ink_px, 3);
 
-    /* 480x640, a 3.5" panel at 9.04 px/mm: 5 mm = 45; a third of 640 (213) would leave the app 374 px (Compact), the
-     * cap 640 - 53 - 400 gives 187 and the app area 400 (347 with the strip) */
+    /* 480x640, a 3.5" panel at 9.04 px/mm: 5 mm = 45; the cap 640 - 53 - 400 gives the writing zone 187 (a third: 213),
+     * so 400 px stay above the band */
     {
         const cp0_ui_metrics_t m = metrics(480, 640, ppmm_35());
         cp0_zone_layout_t s;
@@ -127,9 +121,9 @@ static void test_layout(void)
         CHECK_EQ(s.key_h, 45);
         CHECK_EQ(s.row_h, 53);
         CHECK_EQ(s.write_h, 187);
-        CHECK_EQ(s.app_h, CP0_ZONE_APP_KEEP_PX);
-        CHECK_EQ(s.band_open, 293);
-        CHECK_EQ(s.strip_y, 347);
+        CHECK_EQ(s.band_h, 240);
+        CHECK_EQ(s.strip_y, CP0_ZONE_APP_KEEP_PX);
+        CHECK_EQ(s.write_y, 453);
         CHECK_EQ(s.letters.h, 171);
     }
     /* the deck's 11.3 px/mm on 480x640: larger keys, the cap gives the writing zone 640 - 65 - 400 = 175 */
@@ -139,7 +133,7 @@ static void test_layout(void)
         CHECK_EQ(cp0_zone_layout(&m, &s), 0);
         CHECK_EQ(s.key_h, 57);
         CHECK_EQ(s.write_h, 175);
-        CHECK_EQ(s.app_h, CP0_ZONE_APP_KEEP_PX);
+        CHECK_EQ(s.strip_y, CP0_ZONE_APP_KEEP_PX);
     }
     /* no zone: landscape, square, too small a panel, no metrics */
     {
@@ -159,20 +153,35 @@ static void test_layout(void)
 static void test_hit(void)
 {
     const cp0_zone_layout_t l = layout_dsi();
-    CHECK_EQ(cp0_zone_band_top(&l, 0), 482);
-    CHECK_EQ(cp0_zone_band_top(&l, 1), 431);
+    CHECK_EQ(cp0_zone_inset(&l, 0), 0);
+    CHECK_EQ(cp0_zone_inset(&l, 1), 318);
+    CHECK_EQ(cp0_zone_inset(NULL, 1), 0);
+    /* hidden (report 042): the whole panel is the app's, nothing writes */
     CHECK_EQ(cp0_zone_hit(&l, 0, 100, 10), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 481), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 482), CP0_ZONE_HIT_BAND);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 460), CP0_ZONE_HIT_APP);  /* the strip's rows belong to the app while closed */
-    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 460), CP0_ZONE_HIT_BAND); /* ... and to the band while open */
-    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 430), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 532), CP0_ZONE_HIT_BAND);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 533), CP0_ZONE_HIT_LETTERS);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 2, 799), CP0_ZONE_HIT_LETTERS); /* the margins count as the nearest box */
-    CHECK_EQ(cp0_zone_hit(&l, 0, 321, 700), CP0_ZONE_HIT_LETTERS);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 322, 700), CP0_ZONE_HIT_DIGITS);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 500), CP0_ZONE_HIT_APP);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 700), CP0_ZONE_HIT_APP);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 479, 799), CP0_ZONE_HIT_APP);
+    /* shown: the strip is the band's, the writing zone the pen's */
+    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 481), CP0_ZONE_HIT_APP);
+    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 482), CP0_ZONE_HIT_BAND);
+    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 532), CP0_ZONE_HIT_BAND);
+    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 533), CP0_ZONE_HIT_LETTERS);
+    CHECK_EQ(cp0_zone_hit(&l, 1, 2, 799), CP0_ZONE_HIT_LETTERS); /* the margins count as the nearest box */
+    CHECK_EQ(cp0_zone_hit(&l, 1, 321, 700), CP0_ZONE_HIT_LETTERS);
+    CHECK_EQ(cp0_zone_hit(&l, 1, 322, 700), CP0_ZONE_HIT_DIGITS);
     CHECK_EQ(cp0_zone_hit(&l, 1, 479, 799), CP0_ZONE_HIT_DIGITS);
+
+    /* why it shows: a text field wanting input, a page pinning it (Strokes training) */
+    cp0_zone_show_t s = {0, 0};
+    CHECK_EQ(cp0_zone_shown(&s), 0);
+    s.text = 1;
+    CHECK_EQ(cp0_zone_shown(&s), 1);
+    s.text = 0;
+    s.pinned = 1;
+    CHECK_EQ(cp0_zone_shown(&s), 1);
+    s.text = 1;
+    CHECK_EQ(cp0_zone_shown(&s), 1);
+    CHECK_EQ(cp0_zone_shown(NULL), 0);
 }
 
 /* ------------------------------------------------------------------ the router */
@@ -210,152 +219,160 @@ static void test_router(void)
     cp0_zone_router_t r;
     cp0_zone_pen_t pen;
     cp0_touch_frame_t f;
+    const int W = 1; /* the band shown */
 
     cp0_zone_router_init(&r, 50, 128);
     /* a tap in the app area: the app's, nothing for the pen */
     f = one(0, 200, 300, 1);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_APP);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
     f = none(40);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
 
     /* a stroke in the digits box: down, moves, up at the last position */
     f = one(1000, 400, 650, 2);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
     CHECK(pen.kind == CP0_ZONE_PEN_DOWN && pen.box == STROKES_BOX_DIGITS && pen.x == 400 && pen.y == 650 &&
           pen.t_us == 1000000);
     f = one(1010, 400, 700, 2);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
     CHECK(pen.kind == CP0_ZONE_PEN_MOVE && pen.y == 700);
     f = none(1020);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
     CHECK(pen.kind == CP0_ZONE_PEN_UP && pen.box == STROKES_BOX_DIGITS && pen.x == 400 && pen.y == 700 &&
           pen.t_us == 1020000);
 
     /* a stroke that leaves its box upwards, into the app area, stays the pen's */
     cp0_zone_router_init(&r, 50, 128);
     f = one(2000, 100, 700, 3);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     CHECK(pen.kind == CP0_ZONE_PEN_DOWN && pen.box == STROKES_BOX_LETTERS);
     f = one(2010, 100, 400, 3);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
     CHECK(pen.kind == CP0_ZONE_PEN_MOVE && pen.y == 400);
 
     /* a second finger: the stroke is cancelled, both are nobody's until every contact is up */
     {
         const int two[6] = {100, 410, 3, 300, 300, 4};
         f = frame(2020, 2, two);
-        CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+        CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
         CHECK_EQ(pen.kind, CP0_ZONE_PEN_CANCEL);
         f = one(2030, 300, 300, 4);
-        CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+        CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
         CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
         f = none(2040);
-        CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
+        CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
         CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE); /* no lift for a cancelled stroke */
         /* nor a heal window: a press right after lands where it lands (the app) */
         f = one(2050, 100, 410, 5);
-        CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
+        CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_APP);
         f = none(2060);
-        cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+        cp0_zone_route(&r, &l, W, 0, &f, &pen);
     }
 
     /* three fingers landing in the writing zone at once (the multitasking G1 hold): never a stroke */
     {
         const int three[9] = {60, 700, 6, 160, 700, 7, 260, 700, 8};
         f = frame(3000, 3, three);
-        CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+        CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
         CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
         f = none(3500);
-        CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
+        CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
     }
 
     /* a swallowed touch (screensaver up, the touch that closed an app) writes nothing */
     f = one(4000, 100, 700, 9);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 1, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 1, &f, &pen), CP0_ZONE_OWNER_IGNORED);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
     f = one(4010, 100, 720, 9);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED); /* swallow ended: still the same touch */
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED); /* swallow ended: still the same touch */
     f = none(4020);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
 
     /* a drop-out: the pen lifts at the top of the band and comes back 30 ms later just above it, in the app area: the
      * stroke goes on (DOWN in the same box); 80 ms later it would have been the app's */
     cp0_zone_router_init(&r, 50, 128);
     f = one(5000, 100, 700, 10);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     f = one(5010, 100, 540, 10);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     f = none(5020);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_UP);
     f = one(5050, 100, 470, 11);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
     CHECK(pen.kind == CP0_ZONE_PEN_DOWN && pen.box == STROKES_BOX_LETTERS && pen.y == 470);
     f = none(5060);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_UP);
     f = one(5140, 100, 470, 12); /* 80 ms after the lift */
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_APP);
     f = none(5150);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     /* ... and a press within the time but far away is a new touch */
     f = one(5200, 100, 700, 13);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     f = none(5210);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     f = one(5220, 100, 100, 14);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_APP);
     f = none(5230);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
 
-    /* the band's rows: the buttons always, the strip row only while it is open */
+    /* the strip's row is the band's while it shows */
     f = one(6000, 200, 500, 15);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_BAND);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_BAND);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
     f = none(6010);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
-    f = one(6020, 200, 460, 16);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
+    /* the band hidden (report 042): its rows are the app's, nothing writes */
+    f = one(6012, 200, 700, 30);
     CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
-    f = none(6030);
+    CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
+    f = none(6014);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
-    f = one(6040, 200, 460, 17);
-    CHECK_EQ(cp0_zone_route(&r, &l, 1, 0, &f, &pen), CP0_ZONE_OWNER_BAND);
-    f = none(6050);
-    cp0_zone_route(&r, &l, 1, 0, &f, &pen);
+    CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
+    f = one(6016, 200, 500, 31);
+    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
+    f = none(6018);
+    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    f = one(6020, 200, 470, 16); /* above the strip */
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_APP);
+    f = none(6030);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
 
     /* the pen lifts and another contact lands in the same frame: the stroke ends, the other one is nobody's */
     f = one(7000, 100, 700, 18);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     f = one(7010, 300, 300, 19);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
     CHECK(pen.kind == CP0_ZONE_PEN_UP && pen.y == 700);
     f = none(7020);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
 
     /* a gesture took the contacts: cancel once, then nobody's */
     f = one(8000, 100, 700, 20);
-    cp0_zone_route(&r, &l, 0, 0, &f, &pen);
+    cp0_zone_route(&r, &l, W, 0, &f, &pen);
     cp0_zone_router_cancel(&r, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_CANCEL);
     CHECK_EQ(r.owner, CP0_ZONE_OWNER_IGNORED);
     cp0_zone_router_cancel(&r, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
     f = one(8010, 100, 710, 20);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
     f = none(8020);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
     cp0_zone_router_cancel(&r, &pen); /* nothing down: stays NONE */
     CHECK_EQ(r.owner, CP0_ZONE_OWNER_NONE);
 
     /* the panel comes back from an app with a finger down: nobody's until it lifts */
     cp0_zone_router_reset(&r, 1);
     f = one(9000, 100, 700, 21);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_IGNORED);
     f = none(9010);
-    CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
+    CHECK_EQ(cp0_zone_route(&r, &l, W, 0, &f, &pen), CP0_ZONE_OWNER_NONE);
     cp0_zone_router_reset(&r, 0);
     CHECK_EQ(r.owner, CP0_ZONE_OWNER_NONE);
 }
@@ -656,7 +673,7 @@ typedef struct {
 static void feed(pipeline_t *p, const cp0_zone_layout_t *l, const cp0_touch_frame_t *f)
 {
     cp0_zone_pen_t pen;
-    cp0_zone_route(&p->router, l, 0, 0, f, &pen);
+    cp0_zone_route(&p->router, l, 1, 0, f, &pen);
     switch (pen.kind) {
     case CP0_ZONE_PEN_DOWN: strokes_down(p->engine, pen.box, (float)pen.x, (float)pen.y, (uint64_t)pen.t_us); break;
     case CP0_ZONE_PEN_MOVE: strokes_move(p->engine, (float)pen.x, (float)pen.y, (uint64_t)pen.t_us); break;

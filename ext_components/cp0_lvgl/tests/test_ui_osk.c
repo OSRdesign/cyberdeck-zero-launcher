@@ -560,12 +560,6 @@ static void test_policy(void)
     p = base_policy();
     p.desktop_session = 1;
     CHECK(!cp0_ui_osk_policy_allows(&p));
-    /* the PDA writing zone is the text input (report 041): never, even forced */
-    p = base_policy();
-    p.zone = 1;
-    CHECK(!cp0_ui_osk_policy_allows(&p));
-    p.env = CP0_UI_OSK_ENV_FORCE;
-    CHECK(!cp0_ui_osk_policy_allows(&p));
     /* APPLAUNCH_OSK: force shows even with a keyboard and the setting Off (never under the lock), off never shows,
      * auto is the normal rule */
     p = base_policy();

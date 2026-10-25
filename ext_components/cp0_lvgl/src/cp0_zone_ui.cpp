@@ -8,7 +8,6 @@
 
 #include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_widgets.hpp"
-#include "input_keys.h"
 #include "keyboard_input.h"
 #include "strokes.h"
 
@@ -17,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -38,8 +38,6 @@ struct Ui {
     lv_obj_t *box[2] = {nullptr, nullptr};
     lv_obj_t *box_label[2] = {nullptr, nullptr};
     lv_obj_t *hint[2] = {nullptr, nullptr};
-    lv_obj_t *button[CP0_ZONE_BTN__COUNT] = {};
-    lv_obj_t *button_label[CP0_ZONE_BTN__COUNT] = {};
     lv_obj_t *key[CP0_ZONE_KEY__COUNT] = {};
     lv_obj_t *key_label[CP0_ZONE_KEY__COUNT] = {};
     lv_obj_t *ink = nullptr;
@@ -53,17 +51,22 @@ struct Ui {
     strokes_engine *engine = nullptr;
     strokes_config cfg{};
     cp0_zone_strip_t strip{};
-    bool strip_open = false;
+    cp0_zone_show_t show{}; /* why the band shows: a text field, a page pinning it (report 042) */
+    int shown = 0;
     int hint_box = STROKES_BOX_LETTERS;
     int accent = STROKES_ACCENT_NONE;
-    cp0_zone_action_cb_t action_cb = nullptr;
-    cp0_zone_strip_cb_t strip_cb = nullptr;
+    cp0_zone_vis_cb_t vis_cb = nullptr;
+    cp0_zone_vis_cb_t vis_listener = nullptr;
     char describe[320] = "";
-    /* APPLAUNCH_STROKES_LOG: the stroke being written, in the corpus format */
+    std::string overlay;     /* the user overlay's path ("" none) */
+    /* the stroke being written, in the corpus format (APPLAUNCH_STROKES_LOG, a capture) and as points (a capture) */
     FILE *log = nullptr;
     std::string log_points;
     int64_t log_t0 = 0;
     int log_box = STROKES_BOX_LETTERS;
+    std::vector<strokes_point> cap_pts;
+    cp0_zone_capture_cb_t capture_cb = nullptr;
+    void *capture_user = nullptr;
 };
 
 /* never destroyed: no LVGL call may run from a static destructor after LVGL is gone */
@@ -73,7 +76,6 @@ Ui &ui()
     return *u;
 }
 
-const char *const kButtonText[CP0_ZONE_BTN__COUNT] = {"Home", "Menu", "Apps", "Keys"};
 const char *const kKeyText[CP0_ZONE_KEY__COUNT] = {"Tab",         "Ctrl",          "Shift",          "Alt", LV_SYMBOL_LEFT,
                                                    LV_SYMBOL_UP, LV_SYMBOL_DOWN, LV_SYMBOL_RIGHT, "Enter"};
 
@@ -143,9 +145,6 @@ void refresh_strip()
         lv_obj_set_style_bg_color(u.key[k], lv_color_hex(bg), 0);
         lv_obj_set_style_text_color(u.key_label[k], lv_color_hex(fg), 0);
     }
-    if (u.button[CP0_ZONE_BTN_KEYS])
-        lv_obj_set_style_bg_color(u.button[CP0_ZONE_BTN_KEYS],
-                                  lv_color_hex(u.strip_open ? CP0_ZONE_LIT_RGB : CP0_ZONE_KEY_RGB), 0);
 }
 
 void refresh_mode()
@@ -236,12 +235,21 @@ bool ink_step()
     return true;
 }
 
-/* ------------------------------------------------------------------ the corpus log (development) */
+/* ------------------------------------------------------------------ the corpus log (development), the capture */
+
+bool recording()
+{
+    const Ui &u = ui();
+    return u.log || u.capture_cb;
+}
 
 void log_point(char kind, int64_t t, int x, int y)
 {
     Ui &u = ui();
-    if (!u.log) return;
+    if (!recording()) return;
+    if (kind != '^' && u.capture_cb && u.cap_pts.size() < 4096)
+        u.cap_pts.push_back(strokes_point{static_cast<float>(x), static_cast<float>(y),
+                                          static_cast<uint64_t>(t < 0 ? 0 : t)});
     char buf[64];
     const double ms = static_cast<double>(t - u.log_t0) / 1000.0;
     if (kind == '^') std::snprintf(buf, sizeof(buf), " ^%.3f", ms);
@@ -259,7 +267,13 @@ void log_result(const strokes_result &r)
     std::fprintf(u.log, "?\t%s\t%.3f\t%s\n", u.log_box == STROKES_BOX_DIGITS ? "digits" : "letters", u.cfg.ppmm,
                  u.log_points.c_str());
     std::fflush(u.log);
+}
+
+void log_clear()
+{
+    Ui &u = ui();
     u.log_points.clear();
+    u.cap_pts.clear();
 }
 
 /* ------------------------------------------------------------------ the recogniser */
@@ -268,6 +282,30 @@ void handle(const strokes_result &r)
 {
     Ui &u = ui();
     log_result(r);
+    if (u.capture_cb) {
+        /* a capture (Strokes training): the page gets the stroke; nothing is typed and no mode stays on */
+        std::vector<strokes_point> pts;
+        std::string corpus;
+        pts.swap(u.cap_pts);
+        corpus.swap(u.log_points);
+        cp0_zone_capture_t c{};
+        c.result = &r;
+        c.box = u.log_box;
+        c.pts = pts.empty() ? nullptr : pts.data();
+        c.n = static_cast<int>(pts.size());
+        c.corpus = corpus.c_str();
+        c.ppmm = u.cfg.ppmm;
+        const cp0_zone_capture_cb_t cb = u.capture_cb;
+        void *user = u.capture_user;
+        if (u.engine) strokes_set_mode(u.engine, 0);
+        u.accent = STROKES_ACCENT_NONE;
+        u.hint_box = r.box == STROKES_BOX_DIGITS ? STROKES_BOX_DIGITS : STROKES_BOX_LETTERS;
+        ink_fade(r.kind == STROKES_REJECT);
+        refresh_mode();
+        if (c.n > 0) cb(&c, user); /* may change the tables (a reload): nothing of u's state is used after it */
+        return;
+    }
+    log_clear();
     if (r.kind == STROKES_CHAR || r.kind == STROKES_KEY) {
         cp0_ui_osk_event_t e[CP0_ZONE_MAX_EVENTS];
         const int n = cp0_zone_result_events(&u.strip, &r, cp0::ui::osk::multiline() ? 1 : 0, e, CP0_ZONE_MAX_EVENTS);
@@ -296,52 +334,31 @@ void timer_cb(lv_timer_t *timer)
     if (!fading && !(u.engine && strokes_busy(u.engine))) lv_timer_pause(timer);
 }
 
-/* ------------------------------------------------------------------ the buttons and the strip */
+/* ------------------------------------------------------------------ the band, the strip */
 
-void set_strip(bool open)
+/* The band follows why it shows (report 042): shown, the pages leave its rows free (the on-screen keyboard's inset),
+ * the display manager draws it; hidden, the strip's owed releases go out, a stroke in progress is dropped, the app area
+ * reaches the bottom again. The host publishes its input rule (vkb=zone only while it shows). */
+void apply_shown()
 {
     Ui &u = ui();
-    if (open == u.strip_open || !u.active) return;
-    u.strip_open = open;
-    if (!open) {
+    if (!u.active) return;
+    const int shown = cp0_zone_shown(&u.show);
+    if (shown == u.shown) return;
+    u.shown = shown;
+    if (!shown) {
         cp0_ui_osk_event_t e[CP0_ZONE_MAX_EVENTS];
         inject(e, cp0_zone_strip_release_all(&u.strip, e, CP0_ZONE_MAX_EVENTS));
-    }
-    for (int k = 0; k < CP0_ZONE_KEY__COUNT; k++) {
-        if (open) lv_obj_remove_flag(u.key[k], LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(u.key[k], LV_OBJ_FLAG_HIDDEN);
+        if (u.engine) strokes_cancel(u.engine);
+        log_clear();
+        ink_hide();
     }
     refresh_strip();
     lv_obj_invalidate(u.screen);
-    /* pages, the terminal and dialogs leave the strip's row free, as for the on-screen keyboard */
-    cp0::ui::osk::set_reserved_inset(open ? u.l.row_h : 0);
-    if (u.strip_cb) u.strip_cb(open ? 1 : 0);
-    std::fprintf(stderr, "[zone] key strip %s\n", open ? "open" : "closed");
-}
-
-void button_cb(lv_event_t *event)
-{
-    Ui &u = ui();
-    const auto which = static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(event)));
-    switch (which) {
-    case CP0_ZONE_BTN_HOME:
-        if (u.action_cb) u.action_cb(CP0_ZONE_ACTION_HOME);
-        break;
-    case CP0_ZONE_BTN_APPS:
-        if (u.action_cb) u.action_cb(CP0_ZONE_ACTION_APPS);
-        break;
-    case CP0_ZONE_BTN_MENU: {
-        /* Ctrl+O: the options key of the apps (APP-CONTRACT.md section 10b), as the pointer's held click sends it */
-        (void)cp0_keyboard_inject_key(KEY_O, KBD_KEY_PRESSED, KBD_MOD_CTRL, nullptr);
-        (void)cp0_keyboard_inject_key(KEY_O, KBD_KEY_RELEASED, KBD_MOD_CTRL, nullptr);
-        break;
-    }
-    case CP0_ZONE_BTN_KEYS:
-        set_strip(!u.strip_open);
-        break;
-    default:
-        break;
-    }
+    cp0::ui::osk::set_reserved_inset(cp0_zone_inset(&u.l, shown));
+    if (u.vis_cb) u.vis_cb(shown);
+    if (u.vis_listener) u.vis_listener(shown);
+    std::fprintf(stderr, "[zone] band %s\n", shown ? "shown" : "hidden");
 }
 
 void key_cb(lv_event_t *event)
@@ -400,23 +417,37 @@ std::string user_overlay()
     return home && home[0] ? std::string(home) + "/.config/applaunch/strokes-user.txt" : std::string();
 }
 
-void load_tables(Ui &u)
+/* A new table from the shipped files and the user overlay; *overlay_err: the overlay was there and refused. NULL when
+ * nothing could be allocated. */
+strokes_table *load_table(Ui &u, bool *base_ok, bool *user_ok, strokes_error *overlay_err)
 {
-    u.table = strokes_table_new();
-    if (!u.table) return;
+    strokes_table *t = strokes_table_new();
+    if (!t) return nullptr;
     const std::string dir = env_or("APPLAUNCH_STROKES_DIR", "/usr/share/APPLaunch/strokes");
-    const bool base = add_table(u.table, dir + "/glyphs.txt", "the glyph table");
+    const bool base = add_table(t, dir + "/glyphs.txt", "the glyph table");
     const char *extra_env = std::getenv("APPLAUNCH_STROKES_EXTRA");
     const bool want_extra = !(extra_env && std::strcmp(extra_env, "0") == 0);
-    const bool extra = want_extra && add_table(u.table, dir + "/glyphs-extra.txt", "the optional glyph section");
-    const std::string overlay = user_overlay();
-    const bool user = readable(overlay) && add_table(u.table, overlay, "the user overlay");
+    const bool extra = want_extra && add_table(t, dir + "/glyphs-extra.txt", "the optional glyph section");
+    bool user = false;
+    if (readable(u.overlay)) {
+        strokes_error err;
+        std::memset(&err, 0, sizeof(err));
+        user = strokes_table_add_file(t, u.overlay.c_str(), &err) == 0;
+        if (!user) {
+            std::fprintf(stderr, "[zone] the user overlay ignored: %s:%d: %s\n", err.source, err.line, err.msg);
+            if (overlay_err) *overlay_err = err;
+        }
+    }
+    if (base_ok) *base_ok = base;
+    if (user_ok) *user_ok = user;
     std::snprintf(u.describe, sizeof(u.describe),
-                  "band %dx%d at y %d (strip row %d, buttons %d, writing %d px), app area %dx%d, boxes %d+%d px, "
-                  "recogniser %s: %d glyphs (%s%s%s)",
-                  u.l.w, u.l.band_closed, u.l.app_h, u.l.row_h, u.l.row_h, u.l.write_h, u.l.w, u.l.app_h, u.l.letters.w,
-                  u.l.digits.w, STROKES_VERSION, strokes_table_glyph_count(u.table),
-                  base ? "glyphs.txt" : "NO glyphs.txt", extra ? ", extra" : "", user ? ", user overlay" : "");
+                  "band %dx%d at y %d when shown (strip row %d, writing %d px), boxes %d+%d px, "
+                  "recogniser %s: %d glyphs, %d templates (%s%s%s)",
+                  u.l.w, u.l.band_h, u.l.strip_y, u.l.row_h, u.l.write_h, u.l.letters.w, u.l.digits.w, STROKES_VERSION,
+                  strokes_table_glyph_count(t),
+                  strokes_table_template_count(t), base ? "glyphs.txt" : "NO glyphs.txt", extra ? ", extra" : "",
+                  user ? ", user overlay" : "");
+    return t;
 }
 
 void build(Ui &u)
@@ -445,27 +476,22 @@ void build(Ui &u)
         lv_obj_align(u.hint[b], LV_ALIGN_TOP_RIGHT, -l.pad, l.pad / 2);
         lv_obj_add_flag(u.hint[b], LV_OBJ_FLAG_HIDDEN);
     }
-    for (int i = 0; i < CP0_ZONE_BTN__COUNT; i++) {
-        u.button[i] = key_obj(u.screen, l.button[i], y0, kButtonText[i], l.button_px, &u.button_label[i]);
-        lv_obj_add_event_cb(u.button[i], button_cb, LV_EVENT_CLICKED, reinterpret_cast<void *>(static_cast<intptr_t>(i)));
-    }
     for (int k = 0; k < CP0_ZONE_KEY__COUNT; k++) {
         u.key[k] = key_obj(u.screen, l.strip_key[k], y0, kKeyText[k], l.key_px, &u.key_label[k]);
         lv_obj_add_event_cb(u.key[k], key_cb, LV_EVENT_ALL, reinterpret_cast<void *>(static_cast<intptr_t>(k)));
-        lv_obj_add_flag(u.key[k], LV_OBJ_FLAG_HIDDEN);
     }
 
     u.ink = lv_line_create(u.screen);
     lv_obj_remove_style_all(u.ink);
     lv_obj_set_pos(u.ink, 0, 0);
-    lv_obj_set_size(u.ink, l.w, l.band_open);
+    lv_obj_set_size(u.ink, l.w, l.band_h);
     lv_obj_set_style_line_width(u.ink, l.ink_px, 0);
     lv_obj_set_style_line_rounded(u.ink, true, 0);
     lv_obj_set_style_line_color(u.ink, lv_color_hex(CP0_ZONE_INK_RGB), 0);
     lv_obj_remove_flag(u.ink, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(u.ink, LV_OBJ_FLAG_HIDDEN);
 
-    u.blank = plain(u.screen, cp0_zone_rect_t{0, y0, l.w, l.band_open}, y0, 0x000000);
+    u.blank = plain(u.screen, cp0_zone_rect_t{0, y0, l.w, l.band_h}, y0, 0x000000);
     lv_obj_add_flag(u.blank, LV_OBJ_FLAG_HIDDEN);
     refresh_strip();
 }
@@ -483,7 +509,8 @@ int cp0_zone_ui_create(lv_display_t *display, const cp0_zone_layout_t *layout, i
     u.clock = clock_us;
     cp0_zone_strip_init(&u.strip);
     build(u);
-    load_tables(u);
+    u.overlay = user_overlay();
+    u.table = load_table(u, nullptr, nullptr, nullptr);
     strokes_config_default(&u.cfg);
     u.cfg.ppmm = static_cast<float>(u.l.ppmm_x100) / 100.0f;
     u.engine = u.table ? strokes_engine_new(u.table, &u.cfg) : nullptr;
@@ -545,7 +572,7 @@ void cp0_zone_ui_pen(const cp0_zone_pen_t *pen)
         if (!continues) {
             u.n_pts = 0;
             ink_show(CP0_ZONE_INK_RGB);
-            u.log_points.clear();
+            log_clear();
             u.log_t0 = pen->t_us;
             u.log_box = pen->box;
         }
@@ -568,7 +595,7 @@ void cp0_zone_ui_pen(const cp0_zone_pen_t *pen)
         break;
     case CP0_ZONE_PEN_CANCEL:
         strokes_cancel(u.engine);
-        u.log_points.clear();
+        log_clear();
         ink_fade(false);
         break;
     default:
@@ -577,24 +604,90 @@ void cp0_zone_ui_pen(const cp0_zone_pen_t *pen)
     wake_timer();
 }
 
-int cp0_zone_ui_strip_open(void)
+int cp0_zone_ui_shown(void)
 {
-    return ui().strip_open ? 1 : 0;
+    return ui().active ? ui().shown : 0;
 }
 
-void cp0_zone_ui_set_strip_open(int open)
+void cp0_zone_ui_set_text_wanted(int on)
 {
-    set_strip(open != 0);
+    Ui &u = ui();
+    u.show.text = on ? 1 : 0;
+    apply_shown();
 }
 
-void cp0_zone_ui_set_strip_cb(cp0_zone_strip_cb_t cb)
+void cp0_zone_ui_set_pinned(int on)
 {
-    ui().strip_cb = cb;
+    Ui &u = ui();
+    u.show.pinned = on ? 1 : 0;
+    apply_shown();
 }
 
-void cp0_zone_ui_set_action_cb(cp0_zone_action_cb_t cb)
+void cp0_zone_ui_set_vis_cb(cp0_zone_vis_cb_t cb)
 {
-    ui().action_cb = cb;
+    ui().vis_cb = cb;
+}
+
+void cp0_zone_ui_set_vis_listener(cp0_zone_vis_cb_t cb)
+{
+    ui().vis_listener = cb;
+}
+
+void cp0_zone_ui_set_capture(cp0_zone_capture_cb_t cb, void *user)
+{
+    Ui &u = ui();
+    u.capture_cb = cb;
+    u.capture_user = cb ? user : nullptr;
+    if (u.engine) strokes_set_mode(u.engine, 0); /* a capture starts and ends with no mode on */
+    u.accent = STROKES_ACCENT_NONE;
+    if (u.active) refresh_mode();
+}
+
+const strokes_table *cp0_zone_ui_table(void)
+{
+    return ui().active ? ui().table : nullptr;
+}
+
+const strokes_config *cp0_zone_ui_config(void)
+{
+    return ui().active ? &ui().cfg : nullptr;
+}
+
+const char *cp0_zone_ui_overlay_path(void)
+{
+    return ui().overlay.c_str();
+}
+
+int cp0_zone_ui_reload(strokes_error *err)
+{
+    Ui &u = ui();
+    if (err) std::memset(err, 0, sizeof(*err));
+    if (!u.active) return -1;
+    bool base = false, user = false;
+    strokes_error overlay_err;
+    std::memset(&overlay_err, 0, sizeof(overlay_err));
+    strokes_table *t = load_table(u, &base, &user, &overlay_err);
+    strokes_engine *e = t && base ? strokes_engine_new(t, &u.cfg) : nullptr;
+    if (!e) { /* nothing usable: the tables in use stay */
+        strokes_table_free(t);
+        if (err) std::snprintf(err->msg, sizeof(err->msg), "the shipped glyph table could not be loaded");
+        return -1;
+    }
+    if (u.engine) strokes_engine_free(u.engine);
+    strokes_table_free(u.table);
+    u.table = t;
+    u.engine = e;
+    strokes_set_mode(u.engine, 0);
+    log_clear();
+    ink_hide();
+    u.accent = STROKES_ACCENT_NONE;
+    refresh_mode();
+    std::fprintf(stderr, "[zone] tables reloaded: %s\n", u.describe);
+    if (overlay_err.msg[0]) {
+        if (err) *err = overlay_err;
+        return -1;
+    }
+    return 0;
 }
 
 void cp0_zone_ui_set_blank(int on)
@@ -621,7 +714,7 @@ void cp0_zone_ui_reset_input(void)
         strokes_set_mode(u.engine, 0);
     }
     u.accent = STROKES_ACCENT_NONE;
-    u.log_points.clear();
+    log_clear();
     cp0_ui_osk_event_t e[CP0_ZONE_MAX_EVENTS];
     inject(e, cp0_zone_strip_release_all(&u.strip, e, CP0_ZONE_MAX_EVENTS));
     ink_hide();

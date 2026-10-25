@@ -11,7 +11,6 @@
 #include "cp0_timedate_client.hpp"
 #include "cp0_timezone.hpp"
 #include "input_presence.hpp"
-#include "multitask/multitask_ui.hpp"
 #include "settings/settings_hw_profile.hpp"
 
 #include <cstdio>
@@ -147,19 +146,6 @@ void input_presence::set_vkb(cp0_app_vkb_t vkb)
     harness::fixtures().vkb = cp0_app_vkb_name(vkb);
 }
 void input_presence::set_pointer_nav(bool) {}
-
-/* multitask_ui.cpp (the supervisor) is not linked: the PDA writing zone's Apps and Home soft buttons find no switcher
- * (launcher_zone.cpp) */
-bool multitask_ui::toggle_switcher(const char *source)
-{
-    std::fprintf(stderr, "[harness] %s soft button: no multitasking in the harness\n", source ? source : "?");
-    return false;
-}
-
-bool multitask_ui::switcher_home()
-{
-    return false;
-}
 
 /* ui_screensaver.cpp (the lock screen) is not linked: never locked */
 extern "C" int ui_screensaver_is_active(void)

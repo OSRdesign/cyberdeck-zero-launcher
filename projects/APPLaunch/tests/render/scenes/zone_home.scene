@@ -1,8 +1,7 @@
-# The PDA profile's writing zone (report 041, phase S3) on the profile pda (480x800 = the Pi 3A+ 4.3" DSI turned,
-# 480x640 = a 3.5" panel turned): the home grid in the app area above the band, the band idle (the soft buttons Home,
-# Menu, Apps, Keys; the letters box "abc" and the digits box "123"); then the Keys button opens the key strip (Keys lit,
-# the strip between the app area and the soft buttons) and closes it again (the app area's rows come back).
-# Goldens at both sizes.
+# The PDA profile's writing zone (report 041, phase S3; report 042: on demand, no soft buttons) on the profile pda
+# (480x800 = the Pi 3A+ 4.3" DSI turned, 480x640 = a 3.5" panel turned): the home grid has no text field, so the band
+# (the key strip and the writing boxes) is hidden and the home grid gets the whole panel; the input rule is the usual
+# one (vkb=auto). Goldens at both sizes.
 title zone home
 sizes 480x640 480x800
 profile pda
@@ -11,11 +10,6 @@ clock 20:30
 wifi 70
 bt on
 home
-expect_vkb zone
+expect_zone hidden
+expect_vkb auto
 shot zone_home
-zonekey Keys
-expect_zone strip open
-shot zone_home_strip
-zonekey Keys
-expect_zone strip closed
-expect_same zone_home
