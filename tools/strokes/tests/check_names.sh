@@ -11,7 +11,7 @@ here=$(cd -- "$(dirname -- "$0")/.." && pwd)
 repo=$(cd -- "$here/../.." && pwd)
 pattern='g[r]affiti'
 set -- "$here" "$repo/ext_components/cp0_lvgl/src/strokes" "$repo/ext_components/cp0_lvgl/include/strokes.h" \
-    "$repo/projects/APPLaunch/APPLaunch/strokes"
+    "$repo/ext_components/cp0_lvgl/include/strokes_train.h" "$repo/projects/APPLaunch/APPLaunch/strokes"
 hits=$(grep -rniI --exclude-dir=build -e "$pattern" "$@" || true)
 names=$(for d in "$@"; do find "$d" -path "$here/build" -prune -o -print; done | grep -i -e "$pattern" || true)
 if [ -n "$hits$names" ]; then

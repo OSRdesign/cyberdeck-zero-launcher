@@ -37,18 +37,19 @@ LIB_FLAGS := $(BASE) -Wpedantic
 TOOL_FLAGS := $(BASE) -D_DEFAULT_SOURCE
 LDLIBS := -lm
 
-LIB_SRC := $(addprefix $(LIB_DIR)/,strokes_geom.c strokes_table.c strokes_match.c strokes_capture.c strokes_engine.c)
+LIB_SRC := $(addprefix $(LIB_DIR)/,strokes_geom.c strokes_table.c strokes_match.c strokes_capture.c strokes_engine.c \
+           strokes_train.c)
 TOOL_SRC := src/sample.c src/synth.c src/report.c src/tools_common.c src/evparse.c
 TEST_SRC := $(wildcard tests/test_*.c)
 
 LIB_OBJ := $(patsubst $(LIB_DIR)/%.c,$(O)/lib/%.o,$(LIB_SRC))
 TOOL_OBJ := $(patsubst src/%.c,$(O)/%.o,$(TOOL_SRC))
 TEST_OBJ := $(patsubst tests/%.c,$(O)/tests/%.o,$(TEST_SRC))
-HDR := $(CP0)/include/strokes.h $(LIB_DIR)/strokes_internal.h src/sample.h src/tools_common.h src/evparse.h tests/test.h
+HDR := $(CP0)/include/strokes.h $(CP0)/include/strokes_train.h $(LIB_DIR)/strokes_internal.h src/sample.h src/tools_common.h src/evparse.h tests/test.h
 
-PROGS := $(O)/strokes-eval $(O)/strokes-replay $(O)/strokes-capture $(O)/strokes-bench $(O)/test_strokes
+PROGS := $(O)/strokes-eval $(O)/strokes-replay $(O)/strokes-capture $(O)/strokes-bench $(O)/strokes-log $(O)/test_strokes
 
-.PHONY: all test asan eval bench check aarch64 clean names e2e
+.PHONY: all test asan eval bench check aarch64 clean names e2e logtest
 
 all: $(PROGS) $(O)/libstrokes.a
 
@@ -58,7 +59,7 @@ $(O) $(O)/tests $(O)/lib:
 $(LIB_OBJ): $(O)/lib/%.o: $(LIB_DIR)/%.c $(HDR) | $(O)/lib
 	$(CC) $(LIB_FLAGS) -c $< -o $@
 
-$(TOOL_OBJ) $(O)/eval_main.o $(O)/replay_main.o $(O)/capture_main.o $(O)/bench_main.o: $(O)/%.o: src/%.c $(HDR) | $(O)
+$(TOOL_OBJ) $(O)/eval_main.o $(O)/replay_main.o $(O)/capture_main.o $(O)/bench_main.o $(O)/log_main.o: $(O)/%.o: src/%.c $(HDR) | $(O)
 	$(CC) $(TOOL_FLAGS) -c $< -o $@
 
 $(TEST_OBJ): $(O)/tests/%.o: tests/%.c $(HDR) | $(O)/tests
@@ -78,6 +79,9 @@ $(O)/strokes-capture: $(O)/capture_main.o $(TOOL_OBJ) $(O)/libstrokes.a
 	$(CC) $(SAN) $(LDSTATIC) -o $@ $^ $(LDLIBS)
 
 $(O)/strokes-bench: $(O)/bench_main.o $(TOOL_OBJ) $(O)/libstrokes.a
+	$(CC) $(SAN) $(LDSTATIC) -o $@ $^ $(LDLIBS)
+
+$(O)/strokes-log: $(O)/log_main.o $(TOOL_OBJ) $(O)/libstrokes.a
 	$(CC) $(SAN) $(LDSTATIC) -o $@ $^ $(LDLIBS)
 
 $(O)/test_strokes: $(TEST_OBJ) $(TOOL_OBJ) $(O)/libstrokes.a
@@ -102,6 +106,9 @@ names:
 e2e: $(O)/strokes-eval $(O)/strokes-capture $(O)/strokes-replay
 	sh tests/e2e.sh $(O)
 
+logtest: $(O)/strokes-log $(O)/strokes-replay
+	sh tests/log.sh $(O)
+
 check:
 	$(MAKE) WERROR=-Werror all
 	$(O)/test_strokes
@@ -109,12 +116,15 @@ check:
 	$(MAKE) WERROR=-Werror eval
 	$(MAKE) e2e
 	sh tests/e2e.sh build/asan
+	$(MAKE) logtest
+	sh tests/log.sh build/asan
 	$(MAKE) names
 	@echo "check: all passed"
 
 aarch64:
 	$(MAKE) O=build/aarch64 CC=aarch64-linux-gnu-gcc LDSTATIC=-static WERROR="$(WERROR)" \
-		build/aarch64/strokes-eval build/aarch64/strokes-replay build/aarch64/strokes-capture build/aarch64/strokes-bench
+		build/aarch64/strokes-eval build/aarch64/strokes-replay build/aarch64/strokes-capture build/aarch64/strokes-bench \
+		build/aarch64/strokes-log
 
 clean:
 	rm -rf build

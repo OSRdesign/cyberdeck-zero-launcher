@@ -66,5 +66,6 @@ void suite_engine(void);
 void suite_tools(void);
 void suite_fuzz(void);
 void suite_accuracy(void);
+void suite_train(void);
 
 #endif

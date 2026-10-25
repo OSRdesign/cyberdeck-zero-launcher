@@ -132,7 +132,7 @@ int main(int argc, char **argv)
         void (*fn)(void);
     } suites[] = {{"geometry", suite_geom}, {"table", suite_table},   {"match", suite_match},
                   {"engine", suite_engine}, {"tools", suite_tools},   {"fuzz", suite_fuzz},
-                  {"accuracy", suite_accuracy}};
+                  {"accuracy", suite_accuracy}, {"train", suite_train}};
     for (size_t i = 0; i < sizeof suites / sizeof suites[0]; ++i) {
         int c0 = t_checks, f0 = t_fails, n0 = t_tests;
         suites[i].fn();
