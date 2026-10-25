@@ -76,27 +76,28 @@ static void test_layout(void)
 {
     CHECK_EQ(ppmm_dsi(), 854);
     const cp0_zone_layout_t l = layout_dsi();
-    /* 480x800 at 8.54 px/mm: pad 8, keys 5 mm = 43 px, the writing zone 20.6 mm = 176 px (the owner's "about 176") */
+    /* 480x800 at 8.54 px/mm: pad 8, keys 5 mm = 43 px, the writing zone a third of the panel: 267 px (owner, after the
+     * first board test of 0.8.8-pda.4; S3 first drew 20.6 mm = 176 px) */
     CHECK_EQ(l.pad, 8);
     CHECK_EQ(l.gap, 4);
     CHECK_EQ(l.key_h, 43);
     CHECK_EQ(l.row_h, 51);
-    CHECK_EQ(l.write_h, 176);
-    CHECK_EQ(l.band_closed, 227);
-    CHECK_EQ(l.band_open, 278);
-    CHECK_EQ(l.app_h, 573);
-    CHECK_EQ(l.strip_y, 522);
-    CHECK_EQ(l.buttons_y, 573);
-    CHECK_EQ(l.write_y, 624);
-    /* the boxes: 68 % / 32 % of 456 px, 160 px high (the mockup's 315 / 143 x 160) */
-    CHECK(l.letters.x == 8 && l.letters.y == 632 && l.letters.w == 310 && l.letters.h == 160);
-    CHECK(l.digits.x == 326 && l.digits.y == 632 && l.digits.w == 146 && l.digits.h == 160);
+    CHECK_EQ(l.write_h, 267);
+    CHECK_EQ(l.band_closed, 318);
+    CHECK_EQ(l.band_open, 369);
+    CHECK_EQ(l.app_h, 482);
+    CHECK_EQ(l.strip_y, 431);
+    CHECK_EQ(l.buttons_y, 482);
+    CHECK_EQ(l.write_y, 533);
+    /* the boxes: 68 % / 32 % of 456 px (the mockup's 315 / 143), 251 px high (29 mm) */
+    CHECK(l.letters.x == 8 && l.letters.y == 541 && l.letters.w == 310 && l.letters.h == 251);
+    CHECK(l.digits.x == 326 && l.digits.y == 541 && l.digits.w == 146 && l.digits.h == 251);
     CHECK_EQ(l.divider_x, 322);
     /* four buttons of 110 px, 8 apart, the row's keys 43 px under an 8 px gap */
     for (int i = 0; i < CP0_ZONE_BTN__COUNT; i++) {
         CHECK_EQ(l.button[i].x, 8 + i * 118);
         CHECK_EQ(l.button[i].w, 110);
-        CHECK_EQ(l.button[i].y, 581);
+        CHECK_EQ(l.button[i].y, 490);
         CHECK_EQ(l.button[i].h, 43);
     }
     /* the strip: nine keys from the left margin to the right one, 4 px apart, weights 13 15 15 12 10 10 10 10 18 */
@@ -107,7 +108,7 @@ static void test_layout(void)
     CHECK(l.strip_key[CP0_ZONE_KEY_ENTER].w > l.strip_key[CP0_ZONE_KEY_CTRL].w);
     CHECK(l.strip_key[CP0_ZONE_KEY_CTRL].w > l.strip_key[CP0_ZONE_KEY_LEFT].w);
     CHECK(abs(l.strip_key[CP0_ZONE_KEY_LEFT].w - 38) <= 1);
-    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y, 530);
+    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y, 439);
     /* every target at least 5 mm high, the arrows at least 4 mm wide */
     CHECK(l.key_h * 100 >= 5 * l.ppmm_x100 - 50);
     CHECK(l.strip_key[CP0_ZONE_KEY_LEFT].w * 100 >= 4 * l.ppmm_x100);
@@ -116,16 +117,17 @@ static void test_layout(void)
     CHECK_EQ(l.box_label_px, 14);
     CHECK_EQ(l.ink_px, 3);
 
-    /* 480x640, a 3.5" panel at 9.04 px/mm: 5 mm = 45, 20.6 mm = 186, the app area 401 */
+    /* 480x640, a 3.5" panel at 9.04 px/mm: 5 mm = 45, a third of 640 = 213, the app area 374 (321 with the strip) */
     {
         const cp0_ui_metrics_t m = metrics(480, 640, ppmm_35());
         cp0_zone_layout_t s;
         CHECK_EQ(m.ppmm_x100, 904);
         CHECK_EQ(cp0_zone_layout(&m, &s), 0);
         CHECK_EQ(s.key_h, 45);
-        CHECK_EQ(s.write_h, 186);
-        CHECK_EQ(s.app_h, 401);
-        CHECK_EQ(s.band_open, 292);
+        CHECK_EQ(s.write_h, 213);
+        CHECK_EQ(s.app_h, 374);
+        CHECK_EQ(s.band_open, 319);
+        CHECK_EQ(s.strip_y, 321);
     }
     /* the deck's 11.3 px/mm on 480x640: everything larger, still room for the app */
     {
@@ -133,8 +135,8 @@ static void test_layout(void)
         cp0_zone_layout_t s;
         CHECK_EQ(cp0_zone_layout(&m, &s), 0);
         CHECK_EQ(s.key_h, 57);
-        CHECK_EQ(s.write_h, 233);
-        CHECK_EQ(s.app_h, 342);
+        CHECK_EQ(s.write_h, 213);
+        CHECK_EQ(s.app_h, 362);
     }
     /* no zone: landscape, square, too small a panel, no metrics */
     {
@@ -154,16 +156,16 @@ static void test_layout(void)
 static void test_hit(void)
 {
     const cp0_zone_layout_t l = layout_dsi();
-    CHECK_EQ(cp0_zone_band_top(&l, 0), 573);
-    CHECK_EQ(cp0_zone_band_top(&l, 1), 522);
+    CHECK_EQ(cp0_zone_band_top(&l, 0), 482);
+    CHECK_EQ(cp0_zone_band_top(&l, 1), 431);
     CHECK_EQ(cp0_zone_hit(&l, 0, 100, 10), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 572), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 573), CP0_ZONE_HIT_BAND);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 540), CP0_ZONE_HIT_APP);  /* the strip's rows belong to the app while closed */
-    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 540), CP0_ZONE_HIT_BAND); /* ... and to the band while open */
-    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 521), CP0_ZONE_HIT_APP);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 623), CP0_ZONE_HIT_BAND);
-    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 624), CP0_ZONE_HIT_LETTERS);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 481), CP0_ZONE_HIT_APP);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 482), CP0_ZONE_HIT_BAND);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 460), CP0_ZONE_HIT_APP);  /* the strip's rows belong to the app while closed */
+    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 460), CP0_ZONE_HIT_BAND); /* ... and to the band while open */
+    CHECK_EQ(cp0_zone_hit(&l, 1, 100, 430), CP0_ZONE_HIT_APP);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 532), CP0_ZONE_HIT_BAND);
+    CHECK_EQ(cp0_zone_hit(&l, 0, 100, 533), CP0_ZONE_HIT_LETTERS);
     CHECK_EQ(cp0_zone_hit(&l, 0, 2, 799), CP0_ZONE_HIT_LETTERS); /* the margins count as the nearest box */
     CHECK_EQ(cp0_zone_hit(&l, 0, 321, 700), CP0_ZONE_HIT_LETTERS);
     CHECK_EQ(cp0_zone_hit(&l, 0, 322, 700), CP0_ZONE_HIT_DIGITS);
@@ -280,18 +282,18 @@ static void test_router(void)
     cp0_zone_router_init(&r, 50, 128);
     f = one(5000, 100, 700, 10);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
-    f = one(5010, 100, 600, 10);
+    f = one(5010, 100, 540, 10);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
     f = none(5020);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_UP);
-    f = one(5050, 100, 560, 11);
+    f = one(5050, 100, 470, 11);
     CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_PEN);
-    CHECK(pen.kind == CP0_ZONE_PEN_DOWN && pen.box == STROKES_BOX_LETTERS && pen.y == 560);
+    CHECK(pen.kind == CP0_ZONE_PEN_DOWN && pen.box == STROKES_BOX_LETTERS && pen.y == 470);
     f = none(5060);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_UP);
-    f = one(5140, 100, 560, 12); /* 80 ms after the lift */
+    f = one(5140, 100, 470, 12); /* 80 ms after the lift */
     CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
     f = none(5150);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
@@ -306,16 +308,16 @@ static void test_router(void)
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
 
     /* the band's rows: the buttons always, the strip row only while it is open */
-    f = one(6000, 200, 600, 15);
+    f = one(6000, 200, 500, 15);
     CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_BAND);
     CHECK_EQ(pen.kind, CP0_ZONE_PEN_NONE);
     f = none(6010);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
-    f = one(6020, 200, 540, 16);
+    f = one(6020, 200, 460, 16);
     CHECK_EQ(cp0_zone_route(&r, &l, 0, 0, &f, &pen), CP0_ZONE_OWNER_APP);
     f = none(6030);
     cp0_zone_route(&r, &l, 0, 0, &f, &pen);
-    f = one(6040, 200, 540, 17);
+    f = one(6040, 200, 460, 17);
     CHECK_EQ(cp0_zone_route(&r, &l, 1, 0, &f, &pen), CP0_ZONE_OWNER_BAND);
     f = none(6050);
     cp0_zone_route(&r, &l, 1, 0, &f, &pen);
@@ -761,6 +763,22 @@ static void test_end_to_end(void)
     CHECK(p.keys[2] == KEY_SPACE);
     CHECK(p.keys[3] == KEY_1);
     CHECK(p.keys[4] == 0 && p.mods[4] == 0);
+
+    /* what the first board test refused (report 041 section 12): a lower-case b, then the shift gesture and a plain V
+     * (no flick), written 18 mm high as the taller writing zone invites; the extended mode left first */
+    {
+        static const float b_lower[] = {0, 0, 0, 100, 0, 70, 6, 50, 27, 42, 51, 50, 61, 72, 53, 93, 28, 100, 4, 97};
+        static const float vee[] = {0, 0, 25, 100, 50, 0};
+        strokes_set_mode(p.engine, 0);
+        write_stroke(&p, &l, b_lower, 10, lx, ly, 18.0f);
+        write_stroke(&p, &l, up, 2, lx, ly, 12.0f);
+        write_stroke(&p, &l, vee, 3, lx, ly, 18.0f);
+        CHECK_STR(p.typed, "iI 1\xc2\xa3"
+                           "bV");
+        CHECK_EQ(p.n_keys, 7);
+        CHECK(p.keys[5] == KEY_B && p.mods[5] == 0);
+        CHECK(p.keys[6] == KEY_V && p.mods[6] == KBD_MOD_SHIFT);
+    }
 
     /* a stroke cut by a second finger types nothing */
     {

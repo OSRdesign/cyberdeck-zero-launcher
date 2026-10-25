@@ -164,7 +164,8 @@ The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule, the
 
 With `APPLAUNCH_PDA=1` on a portrait canvas the display manager draws a band at the bottom of the panel (a third LVGL
 display): the optional key strip (Tab, Ctrl, Shift, Alt, the arrows, Enter), the soft buttons Home, Menu, Apps, Keys and
-the writing zone (letters and digits boxes). The native display is then the app area above it: `cp0_ui_metrics_get()`
+the writing zone (letters and digits boxes, a third of the panel's height). The native display is then the app area
+above it: `cp0_ui_metrics_get()`
 / `cp0_ui_metrics_current()` are the app area's metrics, `cp0_ui_metrics_panel()` the whole panel's. A touch whose first
 contact lands in the band never reaches the native or compat display; a pen stroke goes to the Strokes recogniser
 (`strokes.h`, plain C99, built from `src/strokes/`; its tables in `/usr/share/APPLaunch/strokes`) and what it

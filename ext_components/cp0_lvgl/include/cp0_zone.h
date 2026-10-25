@@ -15,13 +15,15 @@
  *   +-------------------------------+ app_h = buttons_y
  *   | Home | Menu | Apps | Keys     |   the soft-button row: pad above a key_h high button
  *   +-------------------------------+ write_y
- *   | letters box     | digits box  |   the writing zone, write_h high (20.6 mm), the boxes inset by pad
+ *   | letters box     | digits box  |   the writing zone, write_h high (a third of the panel), the boxes inset by pad
  *   +-------------------------------+ h
  *
- * Sizes (panel density, cp0_ui_mm_px): pad = SPACE_S, key_h = 5 mm (the mockup's buttons), write_h = 20.6 mm (176 px on
- * the 4.3" DSI at 8.54 px/mm, "about 20 mm"); the letters box takes 68 % of the boxes' width. The app area is what the
- * pages get (their own metrics, cp0_ui_metrics_compute of w x app_h); the strip does not resize it: it covers its
- * bottom and the pages leave that room free like the on-screen keyboard's (cp0::ui::osk inset).
+ * Sizes: pad = SPACE_S, key_h = 5 mm (the mockup's buttons, panel density, cp0_ui_mm_px), write_h = a third of the
+ * panel's height, rounded (owner, after the first board test of 0.8.8-pda.4: 267 px on the 4.3" DSI's 480x800, 213 px
+ * on 480x640; S3 first drew 20.6 mm, 176 px, which was too small to write in); the letters box takes 68 % of the boxes'
+ * width. The app area is what the pages get (their own metrics, cp0_ui_metrics_compute of w x app_h); the strip does
+ * not resize it: it covers its bottom and the pages leave that room free like the on-screen keyboard's (cp0::ui::osk
+ * inset).
  *
  * Input rule: where the zone is shown it is the text input (input.state vkb=zone, no fallback keyboard). A contact that
  * starts in the writing zone is a pen stroke for the recogniser (strokes.h) and never reaches the app; one that starts
@@ -43,7 +45,7 @@
 extern "C" {
 #endif
 
-#define CP0_ZONE_WRITE_MM_X10 206 /* the writing zone: 20.6 mm with its padding (176 px at 8.54 px/mm) */
+#define CP0_ZONE_WRITE_DIV 3      /* the writing zone with its padding: h / 3, rounded (267 px at 480x800) */
 #define CP0_ZONE_KEY_MM_X10 50    /* a soft button, a strip key: 5 mm (the mockup's 41-43 px at 8.54 px/mm) */
 #define CP0_ZONE_KEY_FLOOR_PX 32
 #define CP0_ZONE_LETTERS_PCT 68   /* the letters box: 68 % of the two boxes' width */

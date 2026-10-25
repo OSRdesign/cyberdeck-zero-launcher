@@ -250,15 +250,15 @@ static void test_turned()
     CHECK(app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, true) ==
           app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen));
 
-    /* report 041, the PDA writing zone: the pages draw in the app area (480x573, the current metrics) while a
+    /* report 041, the PDA writing zone: the pages draw in the app area (480x482, the current metrics) while a
      * fullscreen app gets the panel (the panel metrics), turned or not; a compat app the window as drawn */
-    const cp0_ui_metrics_t area = compute_rot(480, 573, 90, 854);
+    const cp0_ui_metrics_t area = compute_rot(480, 482, 90, 854);
     cp0_ui_metrics_t panel = m;
     panel.compat = area.compat;
     cp0_ui_metrics_set_current(&area);
     CHECK(cp0_ui_metrics_panel() == cp0_ui_metrics_current()); /* no panel set: the current ones */
     cp0_ui_metrics_set_panel(&panel);
-    CHECK(cp0_ui_metrics_panel()->h == 800 && cp0_ui_metrics_current()->h == 573);
+    CHECK(cp0_ui_metrics_panel()->h == 800 && cp0_ui_metrics_current()->h == 482);
     CHECK(app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, true).find("APPLAUNCH_CANVAS='800x480'") !=
           std::string::npos);
     CHECK(app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen).find("APPLAUNCH_CANVAS='480x800'") !=
