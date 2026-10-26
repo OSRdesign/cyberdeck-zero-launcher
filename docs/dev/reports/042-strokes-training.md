@@ -3,7 +3,9 @@
 Status: built 2026-10-25 on branch `pda-s3-zone` (worktree `launcher-s3`, after report 041 / `0.8.8-pda.6`), from the
 owner's brief after the board test of `0.8.8-pda.5` on the Pi 3A+ (11 of 26 letters refused: b, p, s, e, m, o, q, r,
 y, z) and three owner decisions that came in while it was built (sections 2 and 7). Committed on the branch, not
-pushed; no board touched. Bundle `0.8.8-pda.7` (section 10).
+pushed; no board touched. Bundle `0.8.8-pda.7` (section 10). Then, 2026-10-26: the glyph picker (section 12) and the
+On-screen keyboard values Auto / On / Handwriting + keyboard with the strip's Keyb and the keyboard's cross (section
+13); bundle `0.8.8-pda.8` (section 14).
 
 ## 1. Summary
 
@@ -24,6 +26,10 @@ pushed; no board touched. Bundle `0.8.8-pda.7` (section 10).
   rows free through the keyboard's inset; `vkb=zone` only while it shows. Home / Menu / Apps / Keys are gone (the
   multitasking gestures do Home and the switcher).
 - **Home grid**: with the whole panel back, both PDA portrait panels get three columns (section 7).
+- **pda.8** (2026-10-26): the **glyph picker** on the training page (section 12); Settings > System > On-screen
+  keyboard is **Auto / On / Handwriting + keyboard** (the last on the PDA profile only, its default; Off is gone, a
+  stored Off reads as Auto); the strip loses Shift and gets **Keyb**, which puts the standard keyboard in the band's
+  place until that keyboard's close **cross** (section 13).
 - **Simulation** (the synthetic generator, `tests/test_train.c`): a writer whose ten letters are slanted and narrow is
   recognised 25.7 % by the shipped tables, 93.2 % after one training session of four strokes per letter; the chart's
   letters stay at 98.7 %.
@@ -251,3 +257,113 @@ render/golden/480x640/*, render/golden/480x800/*}`, `pizero2w/README.md`.
 `tools/strokes`: `Makefile, README.md, share/overlay-example.txt, src/log_main.c (new), tests/{test_train.c (new),
 log.sh (new), test.h, test_main.c, check_names.sh}`. `docs`: `APP-CONTRACT.md`, `cp0_lvgl.en.md`, report 041 (section
 13), this report.
+
+## 12. The glyph picker (owner request of 2026-10-26, A)
+
+The training walks the glyphs in an order; the picker lets the owner choose one. On the training page **Pick** opens
+it (the glyph in progress keeps its block; its unfinished attempts are dropped):
+
+- **Pick a glyph**: a grid of the letters and the digits, one cell per glyph (at least 36 px), and **Symbols** for a
+  second page with the gestures and the punctuation (**Letters** goes back). Each cell is marked: grey = not trained
+  (no block), green = trained, amber = hard (its latest rate under 75 %: the re-test's when there is one, else the
+  training attempts'). The line under the title says so.
+- A tapped glyph is trained as in the order (four attempts, the same rules for what is kept, its block replaced), then
+  the picker comes back. **Picker** (in Back's place) returns without finishing it, **Redo** starts it again.
+- **In order** resumes the order at the first glyph without a block; **Reset all** (confirmed) and **Finish** as on
+  the training page. A picked glyph is in Finish's re-test like the others.
+- The **summary** lists the glyphs that improved least first ("Improved least first:").
+- The overlay keeps **one block per glyph**; its header carries the training numbers and the re-test writes a
+  `# re-test a/b time` line into it, so the marks survive a restart. No template is kept beyond the table's limit
+  (`STROKES_TRAIN_MAX_TEMPLATES`, 4096).
+
+Library: `strokes_train_open_picker()`, `strokes_train_pick()`, `strokes_train_resume()`, `strokes_train_picked()`,
+`strokes_train_mark()` (`STROKES_TRAIN_UNTRAINED / TRAINED / HARD`), phase `STROKES_TRAIN_PICK`; tests in
+`tools/strokes/tests/test_train.c` (the marks from a block's header and re-test line, a pick, the picker back after
+the fourth attempt, the re-test of a picked glyph, one block per glyph, the cap). Render: `strokes_training` gained the
+shots `strokes_training_picker` (b amber: 2 of 4 recognised) and `strokes_training_picked` (e picked, written four
+times, green). Commit `0fb5a087`.
+
+## 13. On-screen keyboard: Auto, On, Handwriting + keyboard; Keyb and the cross (owner revisions of 2026-10-26, B)
+
+Four owner messages, the last ones winning: a keyboard key in the band (built, then reverted: `7c20344c`), then a
+setting value On plus Keyb and a cross, then On as the standard keyboard only with a new value for the band, then Off
+removed. What is built:
+
+| Settings > System > On-screen keyboard | no physical keyboard | a physical keyboard | `vkb=` | offered |
+|---|---|---|---|---|
+| **Auto** (0) | the standard keyboard for a text field | nothing (the keyboard types) | `auto` | every profile; the default elsewhere |
+| **On** (2) | the standard keyboard | the standard keyboard too | `force` | every profile |
+| **Handwriting + keyboard** (3) | the band (strip + writing boxes); Keyb: the standard keyboard with a close cross | nothing | `zone` while the band shows, else `auto` | the PDA profile only (`APPLAUNCH_PDA=1`: the writing zone exists); its default |
+
+- **Off is gone** (owner: Auto covers the physical-keyboard case; the risk of locking oneself out without a keyboard is
+  accepted). A stored 1 (Off of earlier versions) reads as **Auto** on every profile, the PDA one included (not as its
+  default); it is not rewritten until the user picks a value. A stored 3 on a profile without the zone reads as Auto;
+  any other value as the profile's default. `cp0_ui_osk_setting_read()` / `cp0_ui_osk_setting_default()` are
+  unit-tested (`test_ui_osk`); the scenes `zone_old_off` and `osk_policy` (review only) start from a stored 1 and check
+  it (`expect_mode 0`, the keyboard shown). `APPLAUNCH_OSK=off` (development) still turns every keyboard off.
+- **Auto on the PDA profile** keeps the existing fallback keyboard: the standard keyboard, no band (`zone_osk_auto`).
+  The user can type there: the keyboard has every key, the number pad for Number fields, the terminal's Alt and arrows.
+- **On**: the standard keyboard only (no band, no Keyb, no cross), shown for every focused text field even with a
+  physical keyboard; never under the lock screen nor in a desktop session (`zone_osk_on`).
+- **The strip**: Shift removed, **Keyb** added before Tab: `Keyb Tab Ctrl Alt < ^ v > Enter`, widths 1.1 / 1 / ... /
+  1.2 arrow keys (at 480 px: Keyb 51 px, Tab to the arrows 46-47, Enter 56; 46 px = 5.4 mm at 8.54 px/mm, 5.1 mm at 9.04 px/mm;
+  every key at least 5 mm, `test_zone`). Upper case is the recogniser's own (the shift gesture, caps lock), or the
+  keyboard's. Ctrl and Alt as before (sticky, a double tap locks).
+- **Keyb** puts the standard keyboard in the band's place for this field **and the next ones** (Tab to the next field,
+  other pages, the terminal) until its **cross**: one key wide at the right end of its top row (`LV_SYMBOL_CLOSE`), the
+  arrows left of it; on the terminal's keyboard (Esc Tab Ctrl Alt) the utility keys narrow from 62 to 50 px at 480 px
+  to keep the arrows. The cross brings the band back. Keyb does nothing on the Strokes training page (the page needs
+  the band). Changing the setting forgets a Keyb choice.
+- **In the terminal** the keyboard's keys reach the PTY exactly as a physical keyboard's (the scene's PTY log: `s`,
+  `u`, `\x0d`): a sudo password is typed exactly with Keyb.
+- **A physical keyboard** hides the band and the keyboard for text fields (the fallback rule), except with On.
+- **Default on the PDA profile**: the launcher reads Handwriting + keyboard when nothing is stored and the writing zone
+  exists, i.e. from the profile's `APPLAUNCH_PDA=1` that install.sh writes; install.sh does not write `osk_mode` into
+  the user's settings, so a reinstall keeps the user's choice. Consequence: a pda.7 board where the owner had picked
+  Auto explicitly (stored 0) shows the standard keyboard after the update, until Handwriting + keyboard is picked once.
+
+Code: `cp0_ui_osk_setting_t` (Auto 0, On 2, Hand 3), the policy's `setting_on` (in `setting_off`'s place),
+`cp0_ui_osk_layout_add_close()` and the key kind `CP0_UI_OSK_K_CLOSE` (sends nothing), `cp0::ui::osk::set_close()`,
+`cp0_zone_ui_set_keyb_cb()`; `launcher_osk` (`mode()`, `choices()`, `set_mode()`), `launcher_zone` (the band is the
+input only with Handwriting + keyboard, the launcher in front and no Keyb choice; `mode_changed()`), the Settings list
+built from `launcher_osk::choices()`. Commits `9e75d51c` (code), `ae95958b` (render), `110b3aab` (docs).
+
+Render (goldens at 480x640 and 480x800, all viewed): `zone_strip` adds `zone_strip_keyb` (the terminal's keyboard with
+the cross) and `zone_strip_back` (the band again); new `zone_keyboard`: `zone_keyb_text` (Keyb on the Keyboard test),
+`zone_keyb_numpad` (Tab: the Number field's pad, the cross still there), `zone_keyb_back`, `zone_osk_choice` (the three
+values), `zone_osk_on`, `zone_osk_auto`; `pda_title_osk_choice` (the portrait launcher without the zone) shows the two
+values Auto and On. Harness: `zonekey Keyb`, `tapkey CLOSE`, `tapbutton`, `expect_osk`, `expect_mode`.
+
+What the owner checks on the board (about 10 min):
+
+1. Settings > System > On-screen keyboard: Auto, On, Handwriting + keyboard (checked).
+2. The CLI: the band comes up; **Keyb**: the keyboard with a cross at the top right; `sudo -v`, the password on the
+   keyboard, Enter; the cross: the band again.
+3. Keyboard test: Keyb on Text, Tab to Number: still the keyboard; the cross.
+4. On: the keyboard even with the Bluetooth keyboard connected. Auto: no band, the keyboard only without the Bluetooth
+   keyboard. Back to Handwriting + keyboard.
+
+Risks and open points:
+
+1. **Keyb on the training page** is drawn like the other keys but does nothing; dimming or hiding it there is a visual
+   decision left to the owner.
+2. **No Shift on the strip**: upper case only by the shift gesture (or Keyb); Ctrl+Shift combinations need Keyb.
+3. **480x640 terminal**: the terminal's keyboard takes 285 of the 640 rows (the band takes 240).
+4. **A stored Auto from pda.7** (the default paragraph above): picked once, then it stays.
+5. **No way back to the band with On**: by design (On = the standard keyboard only).
+
+## 14. Checks and bundle 0.8.8-pda.8
+
+- `check-all.sh` on the code of `9e75d51c`-`110b3aab`: cp0-unit, app-unit, strokes, render (74 scenes), compare (178
+  goldens identical), twice (1956 PNGs byte-identical), header (338), contract (509 checks), branding: all pass. (The
+  Windows side of that run was stopped for low memory while it waited; the WSL side finished every step and its logs
+  were read.)
+- Install tests (`tests/test-install-board.sh` in a Linux clone of the branch at `110b3aab`): 375 passed, 0 failed.
+- Goldens: 36 changed only in the strip row (Keyb, no Shift: y 408-452 at 480x640, 490-532 at 480x800) or, for
+  `pda_title_osk_choice`, the list's second row (On instead of Off); 16 new; the other 110 byte-identical (every
+  640x480 and 480x320 golden among them).
+
+**Bundle `0.8.8-pda.8`: not built yet.** The machine was short of memory when the checks ended (2.5 of 16 GB free), so
+the arm64 build was left for the coordinator to start: `APPLAUNCH_VERSION=0.8.8-pda.8 tools/dev/wsl-build.sh --arch
+arm64 --with-store` inside WSL, then the version string checked in `payload/bin/cyberdeckzero` and the archive copied
+next to pda.7 with its `.sha256`.
