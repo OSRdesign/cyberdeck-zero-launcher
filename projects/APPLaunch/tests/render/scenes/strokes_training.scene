@@ -23,7 +23,7 @@ key UP
 key UP
 key UP
 key ENTER
-expect_zone writing
+expect_zone shown
 expect_text "Draw b  (1/4)"
 shot strokes_training
 stroke letters 60,20 60,45 60,70 60,95 60,120 60,105 60,90 61,78 66,70 75,64 87,62 100,64 111,70 118,80 121,92 119,104 113,113 102,119 88,120 74,119 64,117
@@ -38,7 +38,7 @@ expect_file strokes-training.txt lines 4
 shot strokes_training_next
 tapbutton Pick
 expect_text "Pick a glyph"
-expect_zone writing
+expect_zone shown
 shot strokes_training_picker
 tapbutton e
 expect_text "Draw e  (1/4)"

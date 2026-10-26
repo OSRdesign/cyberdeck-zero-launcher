@@ -2,7 +2,10 @@
 # for the on-screen keyboard, so the band shows (the strip on top of the writing boxes; the terminal leaves its rows free
 # as for the keyboard). Ctrl tapped is armed (lit) for the next key; a "c" written in the letters box then sends Ctrl+C
 # (the fake shell echoes ^C and a new prompt) and Ctrl goes off; a pound sign (the extended prefix, then an l) reaches
-# the terminal as UTF-8 text (its own font draws it). Goldens at both sizes.
+# the terminal as UTF-8 text (its own font draws it). Keyb (report 042, Handwriting + keyboard: the profile's default)
+# puts the standard keyboard in the band's place (a terminal's: Alt, the arrows, the close cross at the right of its top
+# row; vkb= the usual rule): s, u and Enter tapped on it reach the PTY as keys (a sudo password typed exactly); the
+# cross brings the band back (vkb=zone). Goldens at both sizes.
 title zone strip
 sizes 480x640 480x800
 profile pda
@@ -25,3 +28,17 @@ stroke letters 60,30 145,115
 stroke letters 60,30 60,130 121,130
 ptylog zone_strip_pty
 shot zone_strip_pound
+zonekey Keyb
+expect_zone hidden
+expect_osk shown
+expect_vkb auto
+shot zone_strip_keyb
+tapkey s
+tapkey u
+tapkey ENTER
+ptylog zone_strip_keyb_pty
+tapkey CLOSE
+expect_osk hidden
+expect_zone shown
+expect_vkb zone
+shot zone_strip_back
