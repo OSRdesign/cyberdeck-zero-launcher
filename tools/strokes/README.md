@@ -5,15 +5,17 @@ Phase **S1** of the PDA profile ([report 038](../../docs/dev/reports/038-pda-pro
 touch frames of one contact into characters, keys and mode changes, plus the PC tools that test it: a synthetic stroke
 generator and evaluation command, a capture tool for real stylus strokes, a corpus replay harness and a benchmark.
 
-Nothing here is linked into the launcher yet: S3 moves the library into `ext_components/cp0_lvgl` and draws the
-writing zone (section "How S3 uses it"). Real stylus accuracy is **not measured** yet; every number below comes from
-synthetic strokes.
+Since S3 ([report 041](../../docs/dev/reports/041-pda-s3.md)) the library itself lives in the launcher's `cp0_lvgl`
+component and draws the PDA writing zone there (section "How the launcher uses it"); this directory keeps the PC tools
+and tests, which build the very same files (no copy). Real stylus accuracy is **not measured** yet; every number below
+comes from synthetic strokes.
 
 | | |
 |---|---|
-| Library | `include/strokes.h`, `src/strokes_{geom,table,match,capture,engine}.c`, `src/strokes_internal.h` (about 30 KB of aarch64 code, no allocation after start-up, no globals) |
-| Glyph table | `share/glyphs.txt` (shipped, read-only), `share/glyphs-extra.txt` (optional section: rarer extended characters, accents), `share/overlay-example.txt` (user overlay format); `share/` mirrors `/usr/share/APPLaunch/strokes/` (and the repo's `.gitignore` ignores every `data/` directory) |
-| Tools | `strokes-eval` (synthetic accuracy), `strokes-replay` (corpus replay), `strokes-capture` (stylus capture), `strokes-bench` (time per stroke) |
+| Library | `ext_components/cp0_lvgl/include/strokes.h`, `ext_components/cp0_lvgl/src/strokes/strokes_{geom,table,match,capture,engine}.c`, `.../src/strokes/strokes_internal.h` (about 30 KB of aarch64 code, no allocation after start-up, no globals) |
+| Glyph table | `projects/APPLaunch/APPLaunch/strokes/glyphs.txt` (shipped, read-only, installed as `/usr/share/APPLaunch/strokes/glyphs.txt`), `.../strokes/glyphs-extra.txt` (optional section: rarer extended characters, accents); `share/overlay-example.txt` here (user overlay format) |
+| Training | `ext_components/cp0_lvgl/include/strokes_train.h`, `src/strokes/strokes_train.c`: the session of Settings > System > Strokes training (report 042, section "Training") |
+| Tools | `strokes-eval` (synthetic accuracy), `strokes-replay` (corpus replay), `strokes-capture` (stylus capture), `strokes-bench` (time per stroke), `strokes-log` (the training page's capture log) |
 | Tests | `tests/` (unit tests, ASan + UBSan run, end-to-end capture test, name check) |
 
 ## Rules that apply to this directory
@@ -21,7 +23,7 @@ synthetic strokes.
 - **Licence.** MIT, our own code. Ideas read, never copied: the resample-and-compare scheme published with the
   $1 recogniser (New BSD) and the closed-form rotation of Protractor (paper; its patents are listed as expired). No
   GPL code (xstroke) and no LGPL code (Tomoe) is read or linked; EdgeWrite's corner-sequence method (patented) is not
-  used. No Palm or ACCESS code, file, image or data: the strokes in `share/glyphs.txt` and `share/glyphs-extra.txt`
+  used. No Palm or ACCESS code, file, image or data: the strokes in `glyphs.txt` and `glyphs-extra.txt`
   are those of the classic Palm one-stroke alphabet, traced by hand from its public reference chart (report 039 cites
   it; the chart itself is not in the repository). The templates are our own drawings of those strokes, in our own
   format.
@@ -44,7 +46,8 @@ make aarch64    # static aarch64 tools for the boards (build/aarch64; aarch64-li
 
 Plain C99 for the library (`-std=c99 -Wpedantic`); the tools add POSIX and Linux headers. Warnings: `-Wall -Wextra
 -Wshadow -Wpointer-arith -Wstrict-prototypes -Wmissing-prototypes -Wcast-qual -Wvla`, zero of them (`make check`
-builds with `-Werror`). The tests and tools run from `tools/strokes` (they read `share/glyphs.txt`; `STROKES_TABLE`
+builds with `-Werror`). The tests and tools run from `tools/strokes` (they read the shipped `glyphs.txt` from
+`../../projects/APPLaunch/APPLaunch/strokes`; `STROKES_TABLE`
 overrides).
 
 ## Design
@@ -125,6 +128,13 @@ and digits sets only (after a prefix only backspace, which leaves the prefix wit
 prefix keeps it; upper-casing covers the Latin-1 letters; the punctuation and extended modes stay on until
 backspace or a box change (owner decision 2026-10-25, see Modes). Every 0.1.0 call keeps its signature.
 
+0.3.0 (report 042): `strokes_table_template_points()` (a variant's vertices: the training page's guide) and the
+training session (`strokes_train.h`, section "Training"); every earlier call unchanged.
+
+0.2.1 (report 041 section 12): the gate `sharp=` in the table format (an older library refuses a table that uses
+it: the tables and the library ship together) and the b, u and v variants of the shipped table. The API is
+unchanged.
+
 ## Glyph table
 
 Plain text, one line per variant, fields separated by spaces or tabs, `#` at the start of a line for comments:
@@ -157,19 +167,24 @@ far away is open. The parser refuses a template that fails its own gates.
 | `closed=` | `yes` (end within 0.32 of the start), `no` (at least 0.15 away), `any` |
 | `turn=` | `cw` or `ccw`, optionally `:DEG` (default 90): net turning of at least DEG degrees in that sense |
 | `corners=` | `N` or `N-M`: sharp turns (more than 65 degrees over three of the 32 points) |
+| `sharp=` | `DEG` (at least) or `DEG-DEG` (a range), degrees: the sharpest turn of the stroke, the largest turning over three consecutive of the 32 points (a V's point turns 130-180, a u's round bottom 50-110) |
 | `dirs=` | numpad digits (`6` right, `3` down-right, `2` down, `1` down-left, `4` left, `7` up-left, `8` up, `9` up-right): each must appear in this order in the stroke's chain code, within 45 degrees |
 
-### The shipped set (93 glyphs; optional section 14 more)
+### The shipped set (93 glyphs, 103 templates; optional section 14 more)
 
 The strokes of the classic one-stroke alphabet as its reference chart draws them (report 039 section 13 cites the
 chart and shows the traced templates): start point, direction, loops, corners and retraces included, one template per
 glyph because the chart shows one way to write each. Letters type lower case; a shift gesture first makes the next
-letter upper case. Contact sheets of the templates: report 039 section 13.
+letter upper case. Contact sheets of the templates: report 039 section 13. Since the first board test (report 041
+section 12) b, u and v also have natural variants after the chart's line: b 6 (the lower-case b, also with a wide
+bowl or drawn on from the foot of the stem; the chart's B with a full stem, with a bigger lower bump, or written up
+the stem from the bottom), v 3 (a plain V, a short flick, a wide V: only with a sharp point, gate `sharp=`), u 1 (a
+narrow u: only with a round bottom and from the top left).
 
 | Glyph | Stroke |
 |---|---|
 | a | up from bottom-left to a rounded top, down to bottom-right (no bar) |
-| b | stem down, back up the stem, two bumps to the right, ending bottom-left going left |
+| b | stem down, back up the stem, two bumps to the right, ending bottom-left going left (variants: a lower-case b, stem down then a bowl to the right; a B up the stem from the bottom) |
 | c | from top-right, counter-clockwise over the top and round to bottom-right |
 | d | stem down, back up the stem, one bump to the right, ending bottom-left going left |
 | e | from top-right, a counter-clockwise bowl to a point in the middle, a second bowl ending bottom-right |
@@ -189,7 +204,7 @@ letter upper case. Contact sheets of the templates: report 039 section 13.
 | s | from top-right over the top, across, round the bottom, ending bottom-left |
 | t | right along the top, then down the right side |
 | u | down, round the bottom, up to top-right |
-| v | down to a point, up, a short flick to the right at the top |
+| v | down to a point, up, a short flick to the right at the top (variants: a plain V with a sharp point, no flick) |
 | w | down, round, up to a point a third down, down, round, up to top-right |
 | x | **two strokes**: the extended prefix (a line down-right), then a line down-left (glyph `x` of the ext set) |
 | y | down, round to the right, up to top-right, back down the same line below the base, a clockwise loop, out up-right |
@@ -226,13 +241,17 @@ accents wait for the next letter (a e i o u y n; other characters and keys drop 
 
 ### User overlay
 
-The same format, read after the shipped table (S3: `~/.config/applaunch/strokes-user.txt`; example:
+The same format, read after the shipped table (the launcher: `~/.config/applaunch/strokes-user.txt`; example:
 `share/overlay-example.txt`). A glyph line adds a variant (its output must equal the existing one). Two directives:
 
 - `replace <id> <set>`: drops the variants of that glyph that came from earlier files; the lines that follow in this
-  file define it again (with any output). This is what the S6 training screen writes, with lines from
-  `strokes_template_line()`.
+  file define it again (with any output): personal templates only for that glyph (the training session's
+  personal-only option, not its default: section "Training").
 - `remove <id> <set>`: drops the glyph; a stroke like it is then rejected.
+
+The training page writes one block per glyph (a `# strokes-training <id> <set>: ...` comment, the glyph lines from
+`strokes_template_line()`, a blank line): its templates are ADDED to the shipped variants of the glyph (the glyph's
+score is its best variant's). Lines outside the blocks are kept as they are.
 
 A file is applied as a whole or not at all: one bad line refuses it, and the error names the file and line.
 `strokes-eval --overlay FILE` and `strokes-replay --overlay FILE` show what an overlay does to its neighbours (a
@@ -321,7 +340,7 @@ On the reference board (Pi 3A+, Waveshare 4.3" DSI, written in portrait):
 
 ```sh
 make aarch64                                           # on the PC: static build/aarch64/strokes-capture
-scp build/aarch64/strokes-capture share/glyphs.txt share/glyphs-extra.txt <board>:
+scp build/aarch64/strokes-capture ../../projects/APPLaunch/APPLaunch/strokes/glyphs*.txt <board>:
 # on the board, with the launcher stopped so that it does not react to the strokes
 systemctl --user stop cyberdeckzero
 ./strokes-capture --list                               # find the touch screen: /dev/input/eventN ... touch
@@ -345,6 +364,60 @@ systemctl --user start cyberdeckzero
 - WSL has no evdev: `--evdev` and `--list` are compile-tested only; the evtest path is tested end to end
   (`make e2e`).
 
+## Training (report 042)
+
+Settings > System > Strokes training (the PDA profile only) learns the owner's own strokes. The page keeps the writing
+zone shown and takes its strokes (nothing is typed), walks the glyphs in an order (the letters refused at the owner's
+first board test first: b p s e m o q r y z; then the other letters, the digits, then the gestures and the punctuation,
+optional) and asks for each one four times, with the glyph's chart stroke as a guide. Each attempt is judged by the
+recogniser in the glyph's own set (`strokes_classify`: a punctuation glyph without its tap) and shown: recognised,
+refused, or read as another glyph. After the fourth attempt (`strokes_train.c`):
+
+- a miss (refused or another glyph) becomes a template of the glyph when the user wrote it at least twice the same way
+  (another attempt reads it as the glyph): a shape written once is a slip or a scribble and is not kept;
+- a recognised attempt becomes one only when it adds a shape: its score to the shipped variants under 0.92;
+- none near an attempt already taken (0.92), so the overlay stays small (a few lines per glyph, about 350 bytes each);
+- the block replaces the glyph's earlier block; the overlay is written whole (`~/.config/applaunch/strokes-user.txt`)
+  and the launcher loads its tables again.
+
+A glyph with a block is done: the page resumes at the first glyph without one. Back (the previous glyph, written again),
+Skip, Redo (the glyph's block dropped), Reset all (every block dropped, hand-written lines kept), Finish (a re-test of
+the glyphs trained in the session, once each, then the summary: recognised before = the training attempts, after = the
+re-test; the glyphs that improved least first). Pick a glyph (report 042 section 12, `strokes_train_open_picker` /
+`strokes_train_pick`): a grid of the letters and digits (a second page: the gestures and the punctuation) marked
+untrained (no block), trained, or hard (its latest rate, the re-test's else the training attempts', under 75 %); a
+glyph tapped is trained as in the order (four attempts, the same rules, its block replaced), then the picker comes
+back; a picked glyph is in Finish's re-test too. One block per glyph, its re-test line kept in it (`# re-test a/b
+time`); no template is kept beyond the table's limit (4096). Personal only (`strokes_train_set_personal_only`: a `replace` line in the block) is in the session but not on
+the page: in the simulation below it brings nothing for the user and the chart's strokes of those glyphs are lost.
+
+The simulation (`tests/test_train.c`): a writer whose ten letters b p s e m o q r y z are the chart's turned 32 degrees
+and 0.62 as wide (through the synthetic generator), 60 strokes per letter: 25.7 % recognised by the shipped tables;
+after a session of four strokes per letter (24 templates, 8.4 KB) 93.2 % (personal only 93.3 %); the chart's letters
+(40 per letter) 98.7 % before and after (personal only 79.6 %).
+
+Every attempt also goes to the capture log `~/.config/applaunch/strokes-training.txt` (the corpus format, the label =
+the glyph asked for, after a comment line):
+
+```
+# training phase=train target=b set=letters attempt=2/4 verdict=wrong got=d score=0.975 margin=0.199 reject=none size_mm=7.5x11.7 at=2026-10-25T21:04:00
+b<TAB>letters<TAB>8.540<TAB>0.000,68,571 10.000,68,579 ... ^160.000
+```
+
+`strokes-log` reads it on a PC (`scp <board>:.config/applaunch/strokes-training.txt .`):
+
+```sh
+build/host/strokes-log strokes-training.txt                      # what the board recorded, then the replay
+build/host/strokes-log strokes-training.txt --overlay strokes-user.txt --phase train
+build/host/strokes-log --merge all.txt day1.txt day2.txt         # one corpus (comment lines kept)
+build/host/strokes-replay strokes-training.txt --errors          # the usual per-glyph table and the misses
+```
+
+It prints per glyph the recorded training attempts (recognised / refused / wrong of n) and the re-test, the sizes in
+mm, the session's accuracy before and after, the recorded confusions (asked -> read, `~` = refused), then the same
+strokes replayed with the tables now (the shipped ones, plus `--overlay`): the per-glyph table and confusions of
+`strokes-replay`.
+
 ## Replaying a corpus (`strokes-replay`)
 
 ```sh
@@ -366,23 +439,36 @@ for the Cortex-A53 boards (Pi Zero 2 W at 1.0 GHz, Pi 3A+ at 1.4 GHz): 10-20 tim
 (about 18 000 multiply-adds for the matcher and about 400 `hypotf`/`atan2f` calls). `build/aarch64/strokes-bench` on
 a board prints the real number.
 
-## How S3 uses it
+## How the launcher uses it (S3, report 041; report 042)
 
-- The library moves to `ext_components/cp0_lvgl` (after report 029's decoupling lands); the shipped table goes to
-  `/usr/share/APPLaunch/strokes/glyphs.txt` (and `glyphs-extra.txt`, loaded when a setting asks for the rarer
-  extended characters and the accents), the user overlay to `~/.config/applaunch/strokes-user.txt`.
-- The zone subscribes to the raw touch frames (`cp0_touch_reader`, contact 0, `CLOCK_MONOTONIC`), not to the 30 Hz LVGL
-  pointer, and calls `strokes_down/move/up` with the box of the press (letters box: `STROKES_BOX_LETTERS`, digits box:
-  `STROKES_BOX_DIGITS`) and `cfg.ppmm` from the layout service. It calls `strokes_poll` from its timer.
-- A `STROKES_CHAR` goes through the on-screen keyboard's US table (`cp0_ui_osk.c`) to `{KEY_*, Shift}` and
-  `cp0_keyboard_inject_key()`; a `STROKES_KEY` uses `strokes_key_linux_code()`. The extended set and the accents type
-  characters the US table has no key for (`©`, `é`, ...): S3 needs a text path for them (open question). `r.mode`
-  and `r.accent` drive the mode line (Shift, Caps, Punct, Ext, the pending accent); Punct and Ext stay lit until
-  backspace or a box change, so the line must show them for as long as `strokes_get_mode()` has them. A `STROKES_REJECT` flashes the ink red. `strokes_set_mode(e, 0)` when the zone opens,
-  `strokes_cancel` when it closes.
-- The ink is drawn from the frames as they arrive; recognition happens heal_ms (50 ms) after the lift.
-- S3 adds the trademark word to `tools/dev/check-branding.sh` (report 038) and keeps `make check` of this directory in
-  its own checks.
+- The library is a part of `ext_components/cp0_lvgl` (`include/strokes.h`, `src/strokes/`); the tools here build those
+  same files. The shipped tables are `/usr/share/APPLaunch/strokes/glyphs.txt` and `glyphs-extra.txt` (both loaded;
+  `APPLAUNCH_STROKES_EXTRA=0` leaves the optional section out), then the user overlay
+  `~/.config/applaunch/strokes-user.txt` (`$XDG_CONFIG_HOME` first; `APPLAUNCH_STROKES_USER` names another file, `""`
+  none); `APPLAUNCH_STROKES_DIR` moves the tables (the render harness uses the repository's). A table that is refused is
+  logged (`[zone] ... ignored`) and skipped.
+- The writing zone's band (the key strip on top of the letters and digits boxes) shows like the fallback on-screen
+  keyboard: where a text field asks for input and the keyboard's policy allows it (report 042), with Settings > System >
+  On-screen keyboard on Handwriting + keyboard (the PDA profile's default), and on the training page; hidden otherwise.
+  The strip's Keyb key puts the standard on-screen keyboard in its place until that keyboard's close cross.
+- The writing zone (`cp0_zone_ui.cpp`) gets the raw touch frames from the display manager (`cp0_touch_reader`,
+  `CLOCK_MONOTONIC` event times), routed by `cp0_zone_route()`: a touch whose first contact lands in the writing zone is
+  the pen's (`strokes_down` with the box of the press, `strokes_move`, `strokes_up`); a second contact cancels the
+  stroke (`strokes_cancel`); a press within the heal window near a lift continues the stroke wherever it lands.
+  `cfg.ppmm` is the panel's density; `strokes_poll` runs from the zone's timer (paused while idle).
+- A `STROKES_CHAR` is typed as its US key (`cp0_ui_osk_char_key()`, the on-screen keyboard's table) with its text, or as
+  text alone (key code 0) when no US key types it (`£`, `©`, `é`, ...): `cp0_keyboard_inject_key()` press + release.
+  A `STROKES_KEY` uses `strokes_key_linux_code()` with the keyboard's control text. The key strip's sticky Ctrl and Alt
+  apply to them (Ctrl+C); upper case is the recogniser's own (the shift gesture, caps lock: the strip has no Shift). The mode line shows `strokes_get_mode()` (abc / Abc / ABC, Shift, Caps, Punct, Ext,
+  the pending accent) in the box of the last stroke; a `STROKES_REJECT` flashes the ink red. The modes are cleared
+  (`strokes_set_mode(e, 0)`) and a stroke in progress dropped when the panel goes to an app and comes back.
+- `APPLAUNCH_STROKES_LOG=FILE` (development) appends every stroke the zone sees to FILE in the corpus format (label `?`,
+  the recogniser's answer in a comment line before it): `strokes-replay FILE` replays the owner's real strokes.
+- Strokes training (report 042, section "Training"): a capture (`cp0_zone_ui_set_capture`) takes the strokes instead
+  of typing them; `cp0_zone_ui_reload()` loads the tables again after the overlay changed; the capture log is
+  `strokes-training.txt` next to the overlay.
+- The trademark word is in `tools/dev/check-branding.sh` (the whole repository but `docs/dev`); `make check` of this
+  directory is the `strokes` step of `tools/dev/check-all.sh`.
 
 ## Limits
 
@@ -390,8 +476,10 @@ a board prints the real number.
   3 mm, tap 1.5 mm / 250 ms, min_score 0.80, margin 0.04) are first guesses from synthetic strokes.
 - Weakest in the synthetic test (report 039 section 13.4): q against o (the tail is a third of the width; about
   91 %), then enter, r, g and e (98 %). Under the harsh generator the straight lines (i, 1, `'`, `-`, `\`, `/`, `!`)
-  and the retraced or looped shapes (b, r, y, `®`, `%`) lose most. The shipped table has no explicit gates: every
-  gate comes from its template.
+  and the retraced or looped shapes (b, r, y, `®`, `%`) lose most. The shipped table's only explicit gates are on the
+  u and v variants (`sharp=`, `start=`); every other gate comes from its template.
+- The b variants share the stem and its retrace with d: under the harsh generator d loses about 6 points (rejected,
+  not wrong); a narrow u and a V with a rounded point remain the closest pair (report 041 section 12).
 - One contact only; no multi-stroke glyph other than the two prefixes (X = the extended prefix + x, caps lock = two
   shifts).
 - At report rates below 60 Hz a two-frame drop-out exceeds 50 ms and splits the stroke: raise `heal_ms` for such panels.

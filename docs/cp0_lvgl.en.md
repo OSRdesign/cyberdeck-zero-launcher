@@ -160,6 +160,29 @@ The maths (row tops, scroll-to-visible, key and tap rules, the refresh rule, the
 `cp0_ui_list.c`, unit-tested by `tests/test_ui_list.c`; the render harness scene `compact_list` shows both densities at
 640x480, 800x480, 720x720 and 480x320, `compact_list_affordance` every affordance at the five sizes.
 
+### The PDA writing zone (`include/cp0_zone.h`, `include/cp0_zone_ui.h`, `include/strokes.h`; report 041, 042)
+
+With `APPLAUNCH_PDA=1` on a portrait canvas the display manager can draw a band at the bottom of the panel (a third LVGL
+display): the key strip (Keyb, Tab, Ctrl, Alt, the arrows, Enter) on top of the writing zone (letters and digits
+boxes, a third of the panel's height, at most `h - strip - 400` px). The band behaves like the fallback on-screen
+keyboard: the host hands the keyboard service a zone hook (`cp0::ui::osk::set_zone()`), and where a field would get the
+keyboard (it asked, the policy allows it, its screen is the one shown) and the hook says the zone is the text input,
+the band shows instead (`cp0_zone_ui_set_text_wanted()`); a page may keep it shown (`cp0_zone_ui_set_pinned()`). The
+strip's Keyb key calls the host (`cp0_zone_ui_set_keyb_cb()`), which puts the standard keyboard in the band's place;
+that keyboard then has a close cross at the right of its top row (`cp0::ui::osk::set_close()`, the layout's
+`cp0_ui_osk_layout_add_close()`), whose callback brings the band back. The launcher does this only with Settings >
+System > On-screen keyboard on Handwriting + keyboard (`cp0_ui_osk_setting_t`, report 042). The native display is the
+whole panel; while the band shows it covers the bottom `band_h` rows, which `Page` bodies, the terminal and dialogs
+leave free through the keyboard's inset (`cp0::ui::osk::set_reserved_inset()`). A touch whose first contact lands in
+the shown band never reaches the native or compat display; a pen stroke goes to the Strokes recogniser (`strokes.h`,
+plain C99, built from `src/strokes/`; its tables in `/usr/share/APPLaunch/strokes`) and what it recognises is typed
+with `cp0_keyboard_inject_key()` like the on-screen keyboard's keys (characters as their US key with their text,
+characters without a key as text alone). A capture (`cp0_zone_ui_set_capture()`, the Strokes training page) takes the
+finished strokes instead of typing them; `cp0_zone_ui_reload()` loads the tables again after the user overlay changed.
+`cp0_display_zone_active()` says whether the band exists, `cp0_zone_ui_shown()` whether it shows. The geometry, the
+touch router, the strip's sticky modifiers and what a result types are pure C (`cp0_zone.c`, `tests/test_zone.c`); the
+render harness scenes `zone_*` draw it at 480x640 and 480x800.
+
 ## Public C ABI
 
 Declarations are in `include/cp0_lvgl_app.h` and `include/hal_lvgl_bsp.h`. Unless noted otherwise, 0 means success and a negative value means failure.

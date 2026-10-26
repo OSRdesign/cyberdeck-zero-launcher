@@ -71,6 +71,8 @@ int stk_gates_pass(const stk_gates *g, const stk_feat *tf, const stk_feat *f)
         return 0;
     if (g->cmin >= 0 && (f->corners < g->cmin || f->corners > g->cmax))
         return 0;
+    if (g->sharp_max > 0.0f && (f->sharp < g->sharp_min || f->sharp > g->sharp_max))
+        return 0;
     if (g->dirs[0] && !dirs_pass(g->dirs, f->dirs))
         return 0;
     return 1;

@@ -1,0 +1,53 @@
+# The PDA writing zone (report 041, 042) as the text input of a native page: Settings has no text field (the band
+# hidden); Settings > System > Keyboard test (development channel) focuses its Text field, so the band shows where the
+# on-screen keyboard would (vkb=zone), and the field is written with pen strokes through the touch path, the router and
+# the recogniser with the shipped tables. The strokes are the shipped templates drawn about 12 mm high in the
+# boxes (points in px from the box's corner). Shots: the mode line after the shift gesture ("Abc", Shift), after the
+# extended prefix (Ext), the field with "Lit £1" (a pound sign through the extended set: no US key, typed as text alone;
+# the field shows it), a stroke in progress (its ink), and a dead accent (the acute stroke: the mode line says so) put
+# on the next letter (i: an i with an acute accent, U+00ED, typed as text alone); then Esc ends the editing and the band
+# hides (the page gets the whole panel, vkb=auto).
+# Goldens at both sizes.
+title zone text
+sizes 480x640 480x800
+profile pda
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+expect_zone hidden
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+expect_vkb zone
+stroke letters 60,130 60,30
+shot zone_text_shift
+stroke letters 60,30 60,130 121,130
+stroke letters 60,30 60,130
+stroke letters 60,30 118,30 121,130
+stroke letters 40,80 140,80
+stroke letters 60,30 145,115
+shot zone_text_ext
+stroke letters 60,30 60,130 121,130
+stroke digits 50,30 50,130
+expect_text "Lit £1"
+shot zone_text
+stroke letters 120,30 120,90 hold
+shot zone_ink
+release
+expect_text "Lit £1i"
+stroke letters 34,130 101,30 20,127
+shot zone_text_accent
+stroke letters 60,30 60,130
+expect_text "Lit £1ií"
+key ESC
+expect_zone hidden
+expect_vkb auto
+shot zone_text_done

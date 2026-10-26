@@ -203,6 +203,15 @@ int cp0_ui_narrow_header(const cp0_ui_metrics_t *m);
 void cp0_ui_metrics_set_current(const cp0_ui_metrics_t *m);
 const cp0_ui_metrics_t *cp0_ui_metrics_current(void);
 
+/* The panel's metrics (report 041): the whole panel as the launcher shows it, for what describes the screen rather than
+ * what a page draws in: screen.state and the APPLAUNCH_SCREEN_* variables, which apps fit (X-MinSize, X-Portrait, a
+ * turned app's canvas), the multitasking size rule and its gestures. They differ from cp0_ui_metrics_current() only on
+ * the PDA profile, whose native display is the app area above the writing zone (cp0_zone.h); there the panel metrics'
+ * compat window is the app area's, the one actually drawn. Set by the display manager; without it (NULL, the default)
+ * cp0_ui_metrics_panel() returns cp0_ui_metrics_current(). */
+void cp0_ui_metrics_set_panel(const cp0_ui_metrics_t *m);
+const cp0_ui_metrics_t *cp0_ui_metrics_panel(void);
+
 /* Screen state file published for apps (the app contract, cp0_app_contract.h): $XDG_RUNTIME_DIR/applaunch/screen.state
  * (/tmp/applaunch-screen.state when XDG_RUNTIME_DIR is unset), one key per line, readers ignore unknown keys:
  *   v=1  w=  h=  rot=  ppmm= (x100)  density=default|panel_mm|fbdev  class=  compat=x,y,w,h  scale=  toolbar= (px)

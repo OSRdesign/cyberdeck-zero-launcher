@@ -1,0 +1,27 @@
+# Settings > On-screen keyboard Off is gone (report 042): a stored Off (osk_mode 1, from an earlier version) reads as
+# Auto on the PDA profile too (not as the profile's default Handwriting + keyboard): the Keyboard test's Text field gets
+# the standard keyboard (no band), and nothing breaks. Review only, no golden.
+title zone old off
+review
+sizes 480x800
+profile pda
+env APPLAUNCH_DEV 1
+config osk_mode 1
+keyboards 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+expect_mode 0
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone hidden
+expect_osk shown
+expect_vkb auto
+shot zone_old_off

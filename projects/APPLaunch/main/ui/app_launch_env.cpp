@@ -104,7 +104,9 @@ bool turned_from_metrics(const cp0_ui_metrics_t *m, const char *runtime_dir, Inp
 
 std::string export_for_current(Mode mode, bool turned)
 {
-    const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+    /* a fullscreen app gets the panel (report 041: on the PDA profile not the app area the launcher's pages draw in;
+     * the writing zone is the launcher's); a compat app the window the launcher draws it in (the same in both) */
+    const cp0_ui_metrics_t *m = mode == Mode::Fullscreen ? cp0_ui_metrics_panel() : cp0_ui_metrics_current();
     const char *runtime_dir = std::getenv("XDG_RUNTIME_DIR");
     Input in;
     if (turned && mode == Mode::Fullscreen && turned_from_metrics(m, runtime_dir, &in)) return export_command(in);

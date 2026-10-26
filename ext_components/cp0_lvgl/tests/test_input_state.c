@@ -76,6 +76,9 @@ static void test_format_parse(void)
     full.pointer_nav = 0;
     full.vkb = CP0_APP_VKB_FORCE;
     CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\nvkb=force\n") != NULL);
+    full.vkb = CP0_APP_VKB_ZONE; /* report 041: the PDA writing zone is the text input */
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\nvkb=zone\n") != NULL);
+    CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0 && parsed.vkb == CP0_APP_VKB_ZONE);
     /* the longest values still fit the writer's buffer */
     cp0_input_state_t big = {.keyboards = 4294967295u, .last_seen = INT64_MIN, .gen = 4294967295u};
     big.bt_keyboards = 4294967295u;

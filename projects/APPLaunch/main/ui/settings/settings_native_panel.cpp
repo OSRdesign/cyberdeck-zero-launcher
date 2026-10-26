@@ -13,6 +13,7 @@
 #include "settings_native_timezone_page.hpp"
 #include "settings_native_wifi_page.hpp"
 #include "settings_page.hpp"
+#include "settings_strokes_page.hpp"
 
 std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter &node,
                                                                   const SettingsNativePanelContext &context)
@@ -37,6 +38,8 @@ std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter
         return settings_apps_panel_create(context);
     case SettingsNativePage::TimeZone:
         return settings_timezone_panel_create(context);
+    case SettingsNativePage::StrokesTraining:
+        return settings_strokes_training_panel_create(context);
     case SettingsNativePage::None:
         break;
     }

@@ -24,15 +24,15 @@ const char *tools_default_table(const char *argv0, char *buf, size_t size)
     const char *env = getenv("STROKES_TABLE");
     if (env && *env)
         return env;
-    if (readable("share/glyphs.txt"))
-        return "share/glyphs.txt";
+    if (readable(STROKES_SHARE_DIR "/glyphs.txt"))
+        return STROKES_SHARE_DIR "/glyphs.txt";
     const char *slash = argv0 ? strrchr(argv0, '/') : NULL;
     if (slash) {
-        snprintf(buf, size, "%.*s/../../share/glyphs.txt", (int)(slash - argv0), argv0);
+        snprintf(buf, size, "%.*s/../../" STROKES_SHARE_DIR "/glyphs.txt", (int)(slash - argv0), argv0);
         if (readable(buf))
             return buf;
     }
-    return "share/glyphs.txt";
+    return STROKES_SHARE_DIR "/glyphs.txt";
 }
 
 strokes_table *tools_load_table(const char *table, const char **overlays, int n_overlays)

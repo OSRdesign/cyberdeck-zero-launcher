@@ -9,6 +9,8 @@
 #   tree's SDK/, which a fresh worktree lacks), takes flock /tmp/wsl-build.lock, then runs in order:
 #     cp0-unit        sh ext_components/cp0_lvgl/tests/run_tests.sh
 #     app-unit        sh projects/APPLaunch/tests/run_tests.sh
+#     strokes         make -C tools/strokes check   (the Strokes recogniser: -Werror build, unit tests, ASan + UBSan, the
+#                     synthetic accuracy gate, the end-to-end capture test, the name check; report 039, 041)
 #     render          bash projects/APPLaunch/tests/render/run.sh render   (builds the harness, renders every scene)
 #     compare         run.sh compare   (640x480 and 480x320 against golden/, byte-identical)
 #     twice           run.sh twice     (everything rendered twice, PNGs byte-identical)
@@ -80,6 +82,7 @@ step() { # name command...
 
 step cp0-unit sh ext_components/cp0_lvgl/tests/run_tests.sh
 step app-unit sh projects/APPLaunch/tests/run_tests.sh
+step strokes make -C tools/strokes check
 step render bash "$render" render
 step compare bash "$render" compare
 step twice bash "$render" twice

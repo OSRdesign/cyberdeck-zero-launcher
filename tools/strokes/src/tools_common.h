@@ -10,7 +10,14 @@
 
 #include <stdio.h>
 
-/* The shipped table path: $STROKES_TABLE, ./share/glyphs.txt, or <dir of argv0>/../../share/glyphs.txt. */
+/* Where the shipped tables are, relative to tools/strokes (the Makefile passes it; the launcher installs the same
+ * files as /usr/share/APPLaunch/strokes). */
+#ifndef STROKES_SHARE_DIR
+#define STROKES_SHARE_DIR "../../projects/APPLaunch/APPLaunch/strokes"
+#endif
+
+/* The shipped table path: $STROKES_TABLE, STROKES_SHARE_DIR/glyphs.txt from tools/strokes, or the same from
+ * <dir of argv0>/../../ (a tool in build/host). */
 const char *tools_default_table(const char *argv0, char *buf, size_t size);
 /* Loads the table and the overlays (in order); prints the error and returns NULL on failure. */
 strokes_table *tools_load_table(const char *table, const char **overlays, int n_overlays);

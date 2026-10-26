@@ -719,6 +719,20 @@ fi
     "$root/tests/test_ui_osk.c" -o "$binary"
 "$binary"
 
+# Report 041 (PDA S3): the writing zone's pure core (the band's geometry, the hit test, the touch router, the strip's
+# sticky modifiers, what a recogniser result types, the mode line) and the whole path through the real recogniser with
+# the shipped tables; AddressSanitizer + UndefinedBehaviorSanitizer when the compiler has them (mt_san above)
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $mt_san \
+    -I"$root/include" -I"$root/src" \
+    -DZONE_TABLE_DIR="\"$root/../../projects/APPLaunch/APPLaunch/strokes\"" \
+    "$root/src/cp0_zone.c" \
+    "$root/src/cp0_ui_osk.c" \
+    "$root/src/cp0_ui_metrics.c" \
+    "$root/src/cp0_app_contract.c" \
+    "$root"/src/strokes/strokes_*.c \
+    "$root/tests/test_zone.c" -lm -o "$binary"
+"$binary"
+
 # Task 014 P3a / P3b: info row layout (key / value, key cap, dots, the two-line wrap on Compact) and the dialog layout
 # (tokens, centred above the on-screen keyboard, buttons / padding / header / scrolling steps at the five sizes)
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \

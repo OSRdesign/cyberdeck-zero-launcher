@@ -45,6 +45,8 @@ typedef struct {
     float gap;      /* |end - start| / frame side */
     float turn;     /* signed net turning, radians, + = clockwise on screen */
     int corners;
+    float sharp;    /* the sharpest turn: largest |turning| over three consecutive vertices, radians (a V's point
+                     * against a U's round bottom) */
     float su, sv, eu, ev; /* start and end in the square frame, 0..1 */
     char dirs[STROKES_DIRS_MAX];
 } stk_feat;
@@ -57,6 +59,7 @@ typedef struct {
     int8_t cmin, cmax;             /* corners range, -1 = any */
     float line_dir;
     float turn_min; /* radians */
+    float sharp_min, sharp_max; /* sharpest turn range, radians; sharp_max 0 = any */
     char dirs[12]; /* numpad direction subsequence, "" = none */
 } stk_gates;
 

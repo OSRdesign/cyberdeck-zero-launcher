@@ -537,6 +537,18 @@ static void test_computed_grid(void)
                g->tile_h, g->top_extra, g->icon);
     }
 
+    /* the PDA portrait panels (report 042: with the writing zone on demand the home grid gets the whole panel): three
+     * columns on the Pi 3A+'s 4.3" DSI (94x56 mm, 8.57 px/mm) and on the Pi 4B's 5" DSI (108x65 mm, 7.4 px/mm), the
+     * tiles near square */
+    static const int pda[][2] = {{480, 857}, {480, 740}};
+    for (size_t i = 0; i < sizeof(pda) / sizeof(pda[0]); i++) {
+        m = compute(pda[i][0], 800, pda[i][1], 0);
+        CHECK_EQ(m.shell.cols, 3);
+        CHECK(m.shell.tile_h * 100 <= 120 * m.shell.tile_w && m.shell.tile_h * 100 >= 85 * m.shell.tile_w);
+        printf("pda 480x800 @%d: %dx%d tile %dx%d\n", pda[i][1], m.shell.cols, m.shell.rows, m.shell.tile_w,
+               m.shell.tile_h);
+    }
+
     /* every common size gives a sane grid */
     static const int sizes[][3] = {{800, 480, 0},  {800, 600, 0},  {854, 480, 0},  {1024, 768, 0}, {1280, 800, 0},
                                    {1920, 1080, 0}, {480, 480, 0},  {720, 720, 0},   {1280, 720, 0}, {1024, 600, 660},

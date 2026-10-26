@@ -1,0 +1,97 @@
+# Settings > System > On-screen keyboard on the PDA profile (report 042): Handwriting + keyboard (the profile's
+# default, nothing stored) puts the writing zone's band first: the Keyboard test's Text field shows it (vkb=zone); the
+# strip's Keyb puts the standard keyboard in its place, with the close cross at the right of its top row (vkb=auto),
+# and it stays for the next field (Tab: the Number field's number pad, the cross still there); the cross brings the
+# band back. The choice list has the three values of this profile (Auto, On, Handwriting + keyboard; two elsewhere,
+# pda_title_osk_choice). On: the standard keyboard only (no band, no cross), shown even with a physical keyboard
+# (vkb=force). Auto: the standard keyboard as on every board (no band): hidden with a physical keyboard, shown when it
+# goes. Goldens at both sizes.
+title zone keyboard
+sizes 480x640 480x800
+profile pda
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+expect_mode 3
+launch Settings
+# System (the last section); from its end: Shutdown, Reboot, Keyboard test, Strokes training, On-screen keyboard
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+expect_osk hidden
+expect_vkb zone
+zonekey Keyb
+expect_zone hidden
+expect_osk shown
+expect_vkb auto
+tapkey h
+tapkey i
+expect_text hi
+shot zone_keyb_text
+tapkey Tab
+expect_osk shown
+expect_zone hidden
+shot zone_keyb_numpad
+tapkey CLOSE
+expect_osk hidden
+expect_zone shown
+expect_vkb zone
+shot zone_keyb_back
+# Esc stops editing, Esc again leaves the form; Up twice: On-screen keyboard
+key ESC
+key ESC
+expect_zone hidden
+key UP
+key UP
+key ENTER
+wait 300
+shot zone_osk_choice
+header zone_osk_choice "On-screen keyboard"
+expect_text Auto
+expect_text On
+expect_text "Handwriting + keyboard"
+# the list opens on the current value (Handwriting + keyboard, the last row): Up is On
+key UP
+key ENTER
+expect_mode 2
+key DOWN
+key DOWN
+key ENTER
+expect_zone hidden
+expect_osk shown
+expect_vkb force
+shot zone_osk_on
+keyboards 1
+wait 400
+expect_osk shown
+expect_zone hidden
+key ESC
+key ESC
+key UP
+key UP
+key ENTER
+wait 300
+# On is the current row: Up is Auto
+key UP
+key ENTER
+expect_mode 0
+key DOWN
+key DOWN
+key ENTER
+wait 400
+expect_osk hidden
+expect_zone hidden
+expect_vkb auto
+keyboards 0
+wait 400
+expect_osk shown
+expect_zone hidden
+shot zone_osk_auto

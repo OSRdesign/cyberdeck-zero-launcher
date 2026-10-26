@@ -445,6 +445,24 @@ const cp0_ui_metrics_t *cp0_ui_metrics_current(void)
     return g_has_current ? &g_current : NULL;
 }
 
+static cp0_ui_metrics_t g_panel;
+static int g_has_panel;
+
+void cp0_ui_metrics_set_panel(const cp0_ui_metrics_t *m)
+{
+    if (!m) {
+        g_has_panel = 0;
+        return;
+    }
+    g_panel = *m;
+    g_has_panel = 1;
+}
+
+const cp0_ui_metrics_t *cp0_ui_metrics_panel(void)
+{
+    return g_has_panel ? &g_panel : cp0_ui_metrics_current();
+}
+
 /* ------------------------------------------------------------------ state file text */
 
 int cp0_ui_state_path(const char *runtime_dir, char *buf, size_t size)

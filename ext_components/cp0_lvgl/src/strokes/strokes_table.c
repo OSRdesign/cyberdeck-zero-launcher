@@ -428,6 +428,18 @@ static int parse_gate(const char *tok, stk_gates *g, char *msg, size_t msz)
             g->cmin = g->cmax = (int8_t)a;
         } else
             bad = 1;
+    } else if (strcmp(key, "sharp") == 0) {
+        /* sharp=MIN | MIN-MAX: the sharpest turn over three consecutive vertices, degrees (at most 3 x 180) */
+        int a, b;
+        char extra;
+        if (sscanf(v, "%d-%d%c", &a, &b, &extra) == 2 && a >= 0 && b >= a && b >= 1 && b <= 540) {
+            g->sharp_min = (float)a * STK_PI / 180.0f;
+            g->sharp_max = (float)b * STK_PI / 180.0f;
+        } else if (sscanf(v, "%d%c", &a, &extra) == 1 && a >= 0 && a <= 540) {
+            g->sharp_min = (float)a * STK_PI / 180.0f;
+            g->sharp_max = 3.0f * STK_PI;
+        } else
+            bad = 1;
     } else if (strcmp(key, "dirs") == 0) {
         size_t n = strlen(v);
         bad = n == 0 || n >= sizeof g->dirs;
@@ -850,6 +862,31 @@ int strokes_table_template_count(const strokes_table *t)
         if (t->g[i].n_variants > 0)
             n += t->g[i].n_variants;
     return n;
+}
+
+int strokes_table_template_points(const strokes_table *t, const char *id, int set, int v, float *xy, int max)
+{
+    if (!t || !id || v < 0)
+        return -1;
+    const int gi = stk_find_glyph(t, id, set);
+    if (gi < 0 || t->g[gi].n_variants <= 0)
+        return -1;
+    if (t->g[gi].is_tap)
+        return v == 0 ? 0 : -1;
+    int k = 0;
+    for (int i = 0; i < t->nt; ++i) {
+        const stk_tpl *tp = &t->tp[i];
+        if (tp->dead || tp->glyph != gi)
+            continue;
+        if (k++ != v)
+            continue;
+        for (int j = 0; xy && j < tp->nv && j < max; ++j) {
+            xy[2 * j] = t->v[tp->v0 + j].x;
+            xy[2 * j + 1] = t->v[tp->v0 + j].y;
+        }
+        return tp->nv;
+    }
+    return -1;
 }
 
 int strokes_table_glyph_info(const strokes_table *t, int i, char id[STROKES_ID_MAX], int *set, int *variants)

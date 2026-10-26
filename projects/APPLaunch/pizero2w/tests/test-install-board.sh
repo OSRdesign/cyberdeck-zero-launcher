@@ -287,12 +287,13 @@ APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
 APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store
+APPLAUNCH_PDA=1
 LV_LINUX_FBDEV_DEVICE=/dev/fb0
 APPLAUNCH_TOUCH_SWAP_XY=0
 APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0'
 GOT=$(grep -v '^#' "$P")
-if [ "$GOT" = "$EXPECT" ]; then ok "wsdsi43 portrait profile: exact keys and values (480x800, rotate 90, no compat scale, fixed-pixel tiles hidden)"; else ko "wsdsi43 portrait profile: exact keys and values (480x800, rotate 90, no compat scale, fixed-pixel tiles hidden)" "$GOT"; fi
+if [ "$GOT" = "$EXPECT" ]; then ok "wsdsi43 portrait profile: exact keys and values (480x800, rotate 90, no compat scale, fixed-pixel tiles hidden, the writing zone)"; else ko "wsdsi43 portrait profile: exact keys and values (480x800, rotate 90, no compat scale, fixed-pixel tiles hidden, the writing zone)" "$GOT"; fi
 # shellcheck disable=SC1090
 GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_BOARD $APPLAUNCH_LOGICAL $APPLAUNCH_ROTATE $APPLAUNCH_PANEL_MM ${APPLAUNCH_COMPAT_SCALE:-none}" ) )
 check "wsdsi43 portrait profile: valid sh syntax, no APPLAUNCH_COMPAT_SCALE" '[ "$GOT" = "pi3a-wsdsi43-portrait 480x800 90 94x56 none" ]'
@@ -308,6 +309,7 @@ R2="$TMP/wsdsi43-landscape"; rm -rf "$R2"; cp -R "$FIX/pi3a-wsdsi43" "$R2"   # a
 OUT=$(SYSROOT="$R2" sh "$INSTALL" --board-only 2>&1)
 check "wsdsi43 landscape profile body unchanged since v0.8.7 (checksum 833775195 571)" 'grep -qx "# applaunch-profile-sum: 833775195 571" "$R2/etc/applaunch/board.conf"'
 check "wsdsi43 landscape profile: no APPLAUNCH_HIDE_TILES (every tile shown, as before)" '! grep -q APPLAUNCH_HIDE_TILES "$R2/etc/applaunch/board.conf"'
+check "wsdsi43 landscape profile: no writing zone (APPLAUNCH_PDA only on the portrait profile, report 041)" '! grep -q APPLAUNCH_PDA "$R2/etc/applaunch/board.conf"'
 # the hand-edited 270 is kept by later installs, and --force puts the generated 90 back
 sed -i 's/^APPLAUNCH_ROTATE=90$/APPLAUNCH_ROTATE=270/' "$P"
 EDITED=$(cksum < "$P")

@@ -7,6 +7,7 @@
 #include "settings_keyboard_page.hpp"
 
 #include "settings_native_mode.hpp"
+#include "settings_strokes_page.hpp"
 
 #include "../launcher_osk.hpp"
 
@@ -15,13 +16,27 @@
 #include <utility>
 #include <vector>
 
-// ------------------------------------------------------------------ System > On-screen keyboard: Auto / Off
+// ------------------------------------------------------------------ System > On-screen keyboard
+
+namespace {
+
+/* the row of a value in the list (launcher_osk::choices: Auto, On, Handwriting + keyboard on the PDA profile) */
+int row_of(int value)
+{
+    int values[3];
+    const int n = launcher_osk::choices(values);
+    for (int i = 0; i < n; i++)
+        if (values[i] == value) return i;
+    return 0;
+}
+
+} // namespace
 
 LvSettingKeyboardChoicePage3::LvSettingKeyboardChoicePage3(lv_obj_t *parent, const NodeIter &parent_node,
                                                            std::function<void()> back_callback)
     : LvSettingValuePage3Base(parent_node, {})
 {
-    current_ = launcher_osk::mode(); /* read before initialize(): it selects this row (0 Auto, 1 Off) */
+    current_ = row_of(launcher_osk::mode()); /* read before initialize(): it selects this row */
     back_callback_ = std::move(back_callback);
     LeaveSelfPage = [this] { request_back(); };
     initialize(parent);
@@ -40,7 +55,10 @@ int LvSettingKeyboardChoicePage3::initial_selection() const
 
 SettingApiResult LvSettingKeyboardChoicePage3::activate_selected()
 {
-    if (selected_index != current_ && !launcher_osk::set_mode(selected_index)) return SettingApiResult::Failure;
+    int values[3];
+    const int n = launcher_osk::choices(values);
+    if (selected_index < 0 || selected_index >= n) return SettingApiResult::Failure;
+    if (selected_index != current_ && !launcher_osk::set_mode(values[selected_index])) return SettingApiResult::Failure;
     current_ = selected_index;
     request_back();
     return SettingApiResult::Success;
@@ -120,8 +138,18 @@ namespace settings_keyboard {
 void append_entries(Tree &tree, const NodeIter &system)
 {
     NodeIter keyboard = tree.append_child(system, SettingEntry{"On-screen keyboard", settings_keyboard_choice_page_factory});
-    tree.append_child(keyboard, SettingEntry{"Auto"}); /* index 0 = launcher_osk::kAuto */
-    tree.append_child(keyboard, SettingEntry{"Off"});  /* index 1 = launcher_osk::kOff */
+    /* the rows in launcher_osk::choices() order (report 042: Off is gone, a stored Off reads as Auto) */
+    int values[3];
+    const int n = launcher_osk::choices(values);
+    for (int i = 0; i < n; i++) {
+        const char *label = values[i] == launcher_osk::kOn     ? "On"
+                            : values[i] == launcher_osk::kHand ? "Handwriting + keyboard"
+                                                               : "Auto";
+        tree.append_child(keyboard, SettingEntry{label});
+    }
+    /* the PDA writing zone's training (report 042), next to the keyboard's entries: the rows counted from the end of
+     * the section (Shutdown, Reboot, Keyboard test) stay where they were */
+    settings_strokes::append_entry(tree, system);
     if (settings_ui::dev_pages())
         tree.append_child(system, SettingEntry{"Keyboard test", settings_keyboard_test_factory, PageType::Normal});
 }

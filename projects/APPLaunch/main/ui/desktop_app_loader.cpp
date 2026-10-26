@@ -202,7 +202,7 @@ void launcher_append_desktop_apps(std::list<app> &apps)
             // X-MinSize (app contract 1): hidden, like Hidden=true, on a screen smaller than the app needs. The
             // launcher's own metrics (the home grid's); none (stock / SDL builds) = shown. On a portrait launcher
             // (report 038 S2) a fullscreen app without X-Portrait runs turned: X-MinSize against the landscape canvas.
-            const cp0_ui_metrics_t *screen = cp0_ui_metrics_current();
+            const cp0_ui_metrics_t *screen = cp0_ui_metrics_panel(); /* the panel, not the PDA's app area (041) */
             const DesktopFit fit =
                 desktop_fit(*entry, screen != nullptr, screen ? screen->w : 0, screen ? screen->h : 0);
             if (fit == DesktopFit::Hidden) {

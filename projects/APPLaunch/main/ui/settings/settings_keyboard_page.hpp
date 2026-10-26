@@ -3,8 +3,9 @@
  *
  * Settings entries of the fallback on-screen keyboard (task 014 P2b), in the native Settings tree only:
  *
- *   System > On-screen keyboard   Auto / Off (a value page: a ChoicePage in the native host; persisted as config
- *                                 "osk_mode" through the config service, launcher_osk.hpp). Default Auto.
+ *   System > On-screen keyboard   Auto / On, and Handwriting + keyboard on the PDA profile (a value page: a ChoicePage
+ *                                 in the native host; persisted as config "osk_mode" through the config service,
+ *                                 launcher_osk.hpp). Default Auto, Handwriting + keyboard on the PDA profile.
  *   System > Keyboard test        development builds only (settings_ui::dev_pages(): APPLAUNCH_DEV=1 or a development
  *                                 channel build): a native form with a Text, a Number and a Password field, to try the
  *                                 keyboard on a board (APPLAUNCH_OSK=force shows it even with a physical keyboard).
@@ -26,7 +27,7 @@ class TextField;
 } // namespace ui
 } // namespace cp0
 
-// System > On-screen keyboard: Auto / Off.
+// System > On-screen keyboard: Auto / On (/ Handwriting + keyboard on the PDA profile).
 class LvSettingKeyboardChoicePage3 : public LvSettingValuePage3Base {
 public:
     LvSettingKeyboardChoicePage3(lv_obj_t *parent, const NodeIter &parent_node, std::function<void()> back_callback);

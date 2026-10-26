@@ -109,6 +109,21 @@ static void gates_shape(void)
     CHECK(!stk_gates_pass(&g, &tf, &f));
     strcpy(f.dirs, "3626");
     CHECK(stk_gates_pass(&g, &tf, &f));
+    /* sharp=: the sharpest turn (a V's point against a u's round bottom) */
+    g.dirs[0] = 0;
+    g.sharp_min = 120.0f * STK_PI / 180.0f; /* sharp=120: at least */
+    g.sharp_max = 3.0f * STK_PI;
+    f.sharp = 2.5f; /* 143 degrees */
+    CHECK(stk_gates_pass(&g, &tf, &f));
+    f.sharp = 1.6f; /* 92 degrees */
+    CHECK(!stk_gates_pass(&g, &tf, &f));
+    g.sharp_min = 0.0f; /* sharp=0-120 */
+    g.sharp_max = 120.0f * STK_PI / 180.0f;
+    CHECK(stk_gates_pass(&g, &tf, &f));
+    f.sharp = 2.5f;
+    CHECK(!stk_gates_pass(&g, &tf, &f));
+    g.sharp_max = 0.0f; /* not set: any */
+    CHECK(stk_gates_pass(&g, &tf, &f));
 }
 
 static void templates_recognise_themselves(void)

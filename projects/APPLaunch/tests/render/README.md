@@ -62,7 +62,7 @@ Each size runs in its own forked process (the display manager is process-wide). 
 | 640x480 | `deck` (no board.conf) | 640x480 XRGB8888, no rotation, no physical size (11.3 px/mm default), compat 2x at (0,0) |
 | 480x320 | `pi3a` (board.conf of the Pi 3A+: `APPLAUNCH_BOARD`, rotate 90, compat scale 1, `APPLAUNCH_PANEL_MM=79x49`, gpio backlight) | 320x480 RGB565, turned 90 deg clockwise, compat 1x at (80,25) |
 | others | `generic` | WxH XRGB8888, no rotation, reports the physical size of the size's density (`var.width/height` in mm), compat window placed by the layout service (`cp0_ui_metrics`) |
-| 480x640, 480x800 with `profile pda` (the PDA scenes) | `pda` (report 038 S2: the board.conf of `pi3a-wsdsi43-portrait`: `APPLAUNCH_BOARD`, rotate 90; `APPLAUNCH_PANEL_MM` 94x56 at 480x800, the 4.3" DSI, and 71x53 at 480x640, a 3.5" 640x480 panel) | the landscape panel (800x480 / 640x480) RGB565, turned 90 deg clockwise to the portrait canvas, compat 1x |
+| 480x640, 480x800 with `profile pda` (the PDA scenes) | `pda` (report 038 S2: the board.conf of `pi3a-wsdsi43-portrait`: `APPLAUNCH_BOARD`, rotate 90, `APPLAUNCH_PDA=1` (the writing zone, report 041; the `pda_*` scenes set it to 0); `APPLAUNCH_PANEL_MM` 94x56 at 480x800, the 4.3" DSI, and 71x53 at 480x640, a 3.5" 640x480 panel) | the landscape panel (800x480 / 640x480) RGB565, turned 90 deg clockwise to the portrait canvas, compat 1x; the native display is the whole panel, the band (the key strip and the writing zone, 318 / 240 px) a third display drawn over its bottom while text input is wanted (report 042) |
 
 `XDG_RUNTIME_DIR` is `out/<WxH>/runtime`, so the `screen.state` the display manager publishes lands there.
 
@@ -90,7 +90,7 @@ runs at those sizes only.
 | `ribbon` | the hold-Esc ribbon over a stock app, as `external_poll()` shows it |
 | `key NAME [press\|release]`, `type TEXT` | keys through the real queue (UP DOWN LEFT RIGHT ENTER ESC TAB SPACE BACKSPACE 0-9 ...) |
 | `tap X Y`, `drag X1 Y1 X2 Y2 [STEPS]`, `touch X Y` + `release` | touch through the display manager's touch path (logical coordinates) |
-| `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys, `SPACE` for the space bar; a label with `#` in quotes: `"#+="`), or on the text field under the field label LABEL |
+| `tapkey LABEL`, `tapfield LABEL` | a tap (touch path) on the on-screen keyboard key labelled LABEL (`SHIFT`, `ENTER`, `BACKSPACE`, `LEFT`/`UP`/`DOWN`/`RIGHT` for the symbol keys, `CLOSE` for the cross that brings the PDA writing zone back, `SPACE` for the space bar; a label with `#` in quotes: `"#+="`), or on the text field under the field label LABEL |
 | `ptyout TEXT`, `ptyprompt TEXT`, `ptyexit`, `ptylog NAME` | the fake PTY of the terminal pages (`src/harness_services.cpp`, no process): what the program prints next (`\n` = CR LF, `\e` = Esc); the prompt the fake shell prints after Enter and ^C; the program exits; what the terminal did with the PTY (open, every write as bytes, resize, close) as `out/<WxH>/NAME.txt`. Writes are echoed as a cooked tty and a shell would (^C: "^C" and a new prompt, ^D: "exit" and the end) |
 | `listdemo compact\|comfortable ROWS [readonly] [separators] [wrap] [kinds] [empty TEXT...]`, `listdemo update` | a `cp0::ui::CompactList` page (Page scaffold, status strip, the list in the page body, an input group on the keypad) with demo rows: Compact = a system monitor (sections, value tones, long labels), Comfortable = 3 serial ports or a 12-row settings menu; `kinds`: a device page with every row affordance (Edit, Open, Info with a Normal and a Bad value, Action idle, one Unspecified, a long label and a long value beside a chevron, an Action running with a value last; Compact adds a section first); an activation writes "Activated LABEL" into the title. `update` refreshes the values in place (`set_rows`, same rows); `value\|row INDEX normal\|ok\|warn\|bad\|muted TEXT` sets one row's value and tone through `set_value` / `update_row`; `kind\|setkind INDEX unspecified\|info\|open\|edit\|action\|action-running` sets one row's affordance through `update_row` (`kind`) or the live refresh `set_rows` with the other rows unchanged (`setkind`) |
 | `listtitle PART...` | the list demo page's title path (`Page::set_title`), one word per part; a quoted word may itself be a breadcrumb (`"Net Toolbox > Diagnosis"`) |
@@ -111,6 +111,12 @@ runs at those sizes only.
 | `sheet NAME`, `sheet off` | the legacy sheet "Close NAME?": the screen shown now stands for the frozen app's frame (snapshot, written back dimmed to 38 %), only the sheet's box is drawn (the native clip); the command fails unless every pixel outside the box is the dimmed frame and the box is drawn |
 | `dots NAME...` | these tiles' apps are left open (`native_ui::set_resident_apps`; tiles have the Exec line `tile:NAME`) |
 | `tapitem ITEM [edge]`, `expect_event TEXT`, `expect_targets` | a tap on `card0..3`, `close0..3` (an X), `home`, `closeall`, `keep`, `sheetclose` (`edge`: 2 px inside the corner of its touch target farthest from what is drawn); fail unless the last thing the switcher / sheet reported is TEXT (`pick NAME`, `close NAME`, `home`, `close-all`, `cancel`, `keep`, `sheet-close`); fail unless every touch target shown is at least 7 mm both ways and the cards and the bar stay inside the panel, apart |
+| `stroke letters\|digits X,Y ... [hold]` | the writing zone (report 041, profile `pda`): a pen stroke through the touch path (the router, the recogniser with the shipped tables, the ink, what it types); points in px from the box's top-left corner, a frame every 1 mm, each read at once, 10 ms of the fake clock apart; one point is a tap; then the lift and 400 ms (the heal window, the result, the fade), unless `hold` (the pen stays down: the ink of a stroke in progress; `release` lifts it) |
+| `zonekey NAME [hold MS]` | a tap (or a press held MS) through the touch path on a strip key (`Keyb Tab Ctrl Alt Left Up Down Right Enter`, the band shown) |
+| `expect_zone shown\|hidden`, `expect_osk shown\|hidden`, `expect_vkb auto\|off\|force\|zone`, `expect_mode 0\|2\|3` | fail unless the writing zone's band is shown / hidden; unless the standard on-screen keyboard is shown / hidden; unless the on-screen keyboard rule launcher_osk last published (input.state `vkb=`) is that one; unless Settings > On-screen keyboard reads as that value (`launcher_osk::mode()`: 0 Auto, 2 On, 3 Handwriting + keyboard; a stored 1, the old Off, reads as 0) |
+| `tapbutton TEXT` | a tap (touch path) on the centre of the object holding the first visible label TEXT on the native screen (a native page's button, a cell of the Strokes training picker) |
+| `strokesuser`, `expect_file NAME [lines N\|has TEXT]` | before the first drawing command: the writing zone's user overlay is `out/<WxH>/runtime/config/strokes-user.txt`, empty at the start (Strokes training saves it there, its capture log `strokes-training.txt` next to it; report 042); fail unless that directory has the file NAME (with N lines starting `# training`, or containing TEXT) |
+| `turnedapp on\|off` | a landscape fullscreen app run turned takes the panel (`display_handoff::enter_app_front`, the app in front for the keyboard rule) and draws a landscape test frame over the whole panel at rotate 0 as its own backend would (no zone, no strip); `off`: the launcher takes the panel back and draws everything again |
 | `metrics NAME` | the layout service's numbers for the size (class, density and its source, tokens, text sizes, compat window and toolbar, home layout, `APPLAUNCH_SCREEN_*`, the per-launch environment of both modes, `screen.state`) as `out/<WxH>/NAME.txt`; for `run.sh contract` also `NAME.compat.env` / `NAME.fullscreen.env` (the panel variables + `app_launch_env::export_for_current()`, as `export ...;` lines) and `NAME.facts` (size, class, ppmm, rot, compat window, scale) |
 
 PDA scenes (report 038 S2, profile `pda`, goldens at 480x640 and 480x800): `pda_home` (home grid, a compat app in its
@@ -120,7 +126,22 @@ wrap), `pda_titles` (report 040: the 18 px narrow title with the longest titles 
 On-screen keyboard, Keyboard test, and a breadcrumb, as a path and as one string, showing its last part only);
 `pda_switcher_dense` (review only: 480x640 at the deck's 11.3 px/mm, the name starting under the X). The
 `metrics` scene also renders 480x640 and 480x800 with that profile and writes `metrics.turned.env` there (what a
-landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe.
+landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe. The `pda_*` scenes run without the
+writing zone (`env APPLAUNCH_PDA 0`): the portrait launcher of S2, kept as its regression.
+
+Writing zone scenes (report 041, 042, profile `pda` with the zone, goldens at 480x640 and 480x800): `zone_home` (the
+home grid: no text field, the band hidden, the grid on the whole panel), `zone_text` (Settings with the band hidden, then
+System > Keyboard test: its field focused shows the band; written with pen strokes: the mode line after the shift
+gesture and after the extended prefix, "Lit £1" typed, a stroke in progress, an accent; Esc ends the editing and the
+band hides), `zone_strip` (the terminal: the band shown, Ctrl armed, a "c" stroke sending Ctrl+C, a pound sign reaching
+the terminal as text; Keyb: the terminal's standard keyboard with its close cross in the band's place, s, u, Enter
+reaching the PTY as keys, the cross bringing the band back), `zone_keyboard` (Settings > On-screen keyboard on the PDA
+profile: Handwriting + keyboard by default, Keyb on the Keyboard test kept for the next field (the number pad with the
+cross), the cross; the choice list with its three values; On: the standard keyboard only, shown with a physical
+keyboard; Auto: the standard keyboard, no band, hidden with a physical keyboard), `zone_old_off` (review only: a stored
+Off reads as Auto on the PDA profile too), `zone_turned` (the Keyboard test with the band, then a landscape app run turned: the whole panel
+its, no zone; the keyboard rule auto while it is in front, zone and the band again after), `zone_switcher` (the switcher,
+its targets; the screensaver). The `metrics` scene's text adds the band at those sizes. `strokes_training` (report 042: Settings > System > Strokes training with the band pinned: the first glyph b with its guide, three attempts judged (recognised, read as another glyph, refused) as thumbnails with the result line, the glyph done and the next one, the glyph picker with its marks, a picked glyph trained, the Reset all dialog, the re-test, the summary; the overlay and the capture log checked with `expect_file`).
 
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
@@ -134,8 +155,9 @@ drag, the header's Esc button, at 480x320 and 800x480) are review-only scenes
 `run.sh header`.
 `osk` (task 014 P2b, `APPLAUNCH_OSK=force`: Settings > System > On-screen keyboard, then the development page
 Keyboard test: letters, Shift armed, 123, Ctrl armed, number pad, password masked, Esc dismisses, a tap on the field
-brings the keyboard back, at all five sizes) and `osk_policy` (`APPLAUNCH_OSK=auto` at 640x480 and 800x480: setting
-Off, back to Auto through its choice list, a physical keyboard appears) are review-only scenes too.
+brings the keyboard back, at all five sizes) and `osk_policy` (`APPLAUNCH_OSK=auto` at 640x480 and 800x480: a stored
+Off, gone since report 042, reads as Auto, a physical keyboard appears, On through the choice list keeps the keyboard
+shown) are review-only scenes too.
 `settings_native_info` (task 014 P3a, a release build: Storage, Licenses as opened / scrolled / dragged, About, User,
 Date & Time Info), `settings_native_wifi` (task 014 P3b, `APPLAUNCH_OSK=force`: the network list, the password dialog
 with the keyboard, wrong password, connected, the connected network's actions and Details) and

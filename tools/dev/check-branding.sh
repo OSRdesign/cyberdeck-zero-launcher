@@ -25,6 +25,9 @@
 #   paths listed in the allow-list (default: branding-allow.txt next to this script): one git pathspec glob per
 #   line ("**" crosses directories), "#" starts a comment (the reason).
 #   Prints "file:line: text" for every other occurrence and exits 1 if there is one, 0 otherwise.
+#   Second check (report 041): the trademark of the handheld alphabet the Strokes recogniser's shapes resemble (the
+#   pattern is in the script, as a character class) must not appear in any line or file name outside docs/dev/ (the
+#   history: decisions, reports, tasks, which may cite it); the allow-list above does not apply to it.
 #
 #   REPO_ROOT defaults to the git top level of the current directory. The same script serves the apps repo with
 #   its own allow-list (--allow FILE, or the file next to the script). GIT=... picks the git command (default git;
@@ -101,9 +104,26 @@ FNR == NR { inblock[$0] = 1; next }
     if (t ~ words) print loc ": " text
 }' "$tmp/blocks" "$tmp/hits" > "$tmp/bad"
 
+# The trademark of the handheld alphabet the Strokes shapes resemble (report 038 section 5, report 041): never in code,
+# file names, identifiers, UI text, data or tests; only the history under docs/dev (decisions, reports, tasks) may cite
+# it. The pattern is a character class so that this file does not contain the word. Tracked and untracked files and
+# their names; the brand allow-list does not apply.
+tm_words='g[r]affiti'
+tm_except=':(exclude,glob)docs/dev/**'
+git_grep --untracked -n -I -i -E "$tm_words" -- . "$tm_except" > "$tmp/tm_hits"
+{ "$GIT" -c core.quotePath=false ls-files --cached --others --exclude-standard -- . "$tm_except" || true; } |
+    grep -i -E "$tm_words" | sed 's/$/: (file name)/' >> "$tmp/tm_hits" || true
+
+failed=0
 if [ -s "$tmp/bad" ]; then
     cat "$tmp/bad"
     echo "branding: $(wc -l < "$tmp/bad" | tr -d ' ') line(s) name M5Stack/CardputerZero outside the allowed places (see -h; allow-list $allow)" >&2
-    exit 1
+    failed=1
 fi
+if [ -s "$tmp/tm_hits" ]; then
+    cat "$tmp/tm_hits"
+    echo "branding: $(wc -l < "$tmp/tm_hits" | tr -d ' ') line(s) or file name(s) name the alphabet's trademark outside docs/dev (see -h): the input method is Strokes" >&2
+    failed=1
+fi
+[ "$failed" = 0 ] || exit 1
 echo "branding: OK"

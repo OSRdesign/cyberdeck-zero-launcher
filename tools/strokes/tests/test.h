@@ -8,6 +8,7 @@
 
 #include "sample.h"
 #include "strokes.h"
+#include "tools_common.h" /* STROKES_SHARE_DIR: the shipped tables, relative to tools/strokes */
 
 #include <math.h>
 #include <stdio.h>
@@ -65,5 +66,6 @@ void suite_engine(void);
 void suite_tools(void);
 void suite_fuzz(void);
 void suite_accuracy(void);
+void suite_train(void);
 
 #endif

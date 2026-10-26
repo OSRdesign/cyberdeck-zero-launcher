@@ -1,17 +1,22 @@
 #!/bin/sh
 # SPDX-License-Identifier: MIT
 #
-# check_names.sh: the Palm-era trademark of the alphabet our shapes resemble must not appear in tools/strokes (code,
-# data, tests, README, file names); report 038 section 5. The pattern is written with a character class so that this
-# file does not contain the word itself.
+# check_names.sh: the trademark of the handheld alphabet our shapes resemble must not appear in the Strokes files
+# (code, data, tests, README, file names): tools/strokes, the library in ext_components/cp0_lvgl (src/strokes,
+# include/strokes.h) and the shipped tables (projects/APPLaunch/APPLaunch/strokes); report 038 section 5. The pattern
+# is written with a character class so that this file does not contain the word itself. The whole repository is
+# checked by tools/dev/check-branding.sh (docs/dev may cite the word).
 set -eu
 here=$(cd -- "$(dirname -- "$0")/.." && pwd)
+repo=$(cd -- "$here/../.." && pwd)
 pattern='g[r]affiti'
-hits=$(grep -rniI --exclude-dir=build -e "$pattern" "$here" || true)
-names=$(find "$here" -path "$here/build" -prune -o -print | grep -i -e "$pattern" || true)
+set -- "$here" "$repo/ext_components/cp0_lvgl/src/strokes" "$repo/ext_components/cp0_lvgl/include/strokes.h" \
+    "$repo/ext_components/cp0_lvgl/include/strokes_train.h" "$repo/projects/APPLaunch/APPLaunch/strokes"
+hits=$(grep -rniI --exclude-dir=build -e "$pattern" "$@" || true)
+names=$(for d in "$@"; do find "$d" -path "$here/build" -prune -o -print; done | grep -i -e "$pattern" || true)
 if [ -n "$hits$names" ]; then
     printf '%s\n%s\n' "$hits" "$names"
-    echo "names: the trademark word appears above (keep it out of tools/strokes; docs/dev may cite it)" >&2
+    echo "names: the trademark word appears above (keep it out of the Strokes files; docs/dev may cite it)" >&2
     exit 1
 fi
 echo "names: OK"

@@ -139,8 +139,12 @@ input_presence::KeyboardSnapshot input_presence::keyboards()
     return snapshot;
 }
 
-/* input.state is not published by the harness (no presence watcher) */
-void input_presence::set_vkb(cp0_app_vkb_t) {}
+/* input.state is not published by the harness (no presence watcher); the rule launcher_osk publishes is kept for the
+ * scene command expect_vkb (report 041: zone while the writing zone is the text input) */
+void input_presence::set_vkb(cp0_app_vkb_t vkb)
+{
+    harness::fixtures().vkb = cp0_app_vkb_name(vkb);
+}
 void input_presence::set_pointer_nav(bool) {}
 
 /* ui_screensaver.cpp (the lock screen) is not linked: never locked */

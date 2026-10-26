@@ -30,7 +30,7 @@ static void usage(FILE *f)
 {
     fprintf(f,
             "usage: strokes-replay [options] CORPUS...\n"
-            "  --table FILE      glyph table (default: share/glyphs.txt)\n"
+            "  --table FILE      glyph table (default: the shipped glyphs.txt)\n"
             "  --overlay FILE    user overlay, applied after the table (repeatable)\n"
             "  --cfg KEY=VALUE   one recogniser setting (repeatable; see README)\n"
             "  --ppmm P          override the density written in the corpus\n"

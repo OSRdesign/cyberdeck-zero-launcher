@@ -6,6 +6,9 @@
 title pda settings
 sizes 480x640 480x800
 profile pda
+# the portrait launcher without the writing zone (report 040, S2): kept as the regression of a portrait canvas
+# without APPLAUNCH_PDA; the zone itself: the zone_* scenes (report 041)
+env APPLAUNCH_PDA 0
 env APPLAUNCH_DEV 1
 env APPLAUNCH_OSK force
 apps Settings Store CLI SSH Calculator

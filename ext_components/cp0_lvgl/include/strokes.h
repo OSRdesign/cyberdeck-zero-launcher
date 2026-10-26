@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#define STROKES_VERSION "0.2.0"
+#define STROKES_VERSION "0.3.0"
 #define STROKES_ID_MAX 16  /* glyph id incl. the terminating NUL */
 #define STROKES_MAX_CAND 4 /* candidates kept in a result */
 #define STROKES_DIRS_MAX 24 /* chain code string incl. NUL */
@@ -163,6 +163,11 @@ int strokes_table_glyph_count(const strokes_table *t);    /* glyphs that have at
 int strokes_table_template_count(const strokes_table *t); /* variants (tap glyphs count one) */
 /* Glyph i (0 <= i < strokes_table_glyph_count): id, set, and the number of variants. Returns -1 when out of range. */
 int strokes_table_glyph_info(const strokes_table *t, int i, char id[STROKES_ID_MAX], int *set, int *variants);
+/* Variant v (0 = the first live one: the shipped table's chart stroke) of glyph (id, set): its template's vertices as
+ * written in the table (x, y pairs, 0..100 by convention, y down) into xy, at most max points. Returns the number of
+ * points (the template's, even when more than max), 0 for a tap glyph, -1 when there is no such variant. (S6: the
+ * training page draws the glyph's shape.) */
+int strokes_table_template_points(const strokes_table *t, const char *id, int set, int v, float *xy, int max);
 
 /* ---- one complete stroke, no drop-out healing, no modes (eval, training preview) ------------------------------ */
 

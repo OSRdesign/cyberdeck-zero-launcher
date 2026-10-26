@@ -27,6 +27,10 @@
  *   APPLAUNCH_TOUCH_INVERT_X    1 to mirror touch X (after the optional swap)
  *   APPLAUNCH_TOUCH_INVERT_Y    1 to mirror touch Y (after the optional swap)
  *   APPLAUNCH_BACKLIGHT         see cp0_backlight_profile.h
+ *   APPLAUNCH_PDA               1 = the PDA profile's writing zone at the bottom of a portrait canvas (report 041, 042,
+ *                               cp0_zone.h): a third display draws the band (the key strip, the writing zone) over the
+ *                               bottom of the native display while text input is wanted, and the recogniser gets the
+ *                               pen strokes
  * Depth, channel layout and line length come from the framebuffer ioctls (16 bpp RGB565 layouts
  * and 32 bpp XRGB8888). All drawing goes through cp0_fb_output.c. Where the compat window goes and how
  * big the toolbar under it is are decided by the layout service (cp0_ui_metrics.h), which also exports
@@ -40,6 +44,8 @@
 #include "cp0_lvgl.h"
 #include "cp0_touch_reader.h"
 #include "cp0_ui_metrics.h"
+#include "cp0_zone.h"
+#include "cp0_zone_ui.h"
 #include "input_keys.h"
 #include "keyboard_input.h"
 
@@ -87,6 +93,20 @@ typedef struct {
 
 static dpi_ctx_t g;
 static bool fill_window_black_pending;
+
+/* The PDA writing zone (report 041, cp0_zone.h; on demand, report 042): the band at the bottom of the panel. The zone
+ * display covers the panel's rows strip_y..h and is drawn only while the band shows; the native display (the whole
+ * panel) does not draw those rows then (the band covers them; the pages keep them free, the on-screen keyboard's
+ * inset). */
+static struct {
+    bool on;
+    cp0_zone_layout_t l;
+    lv_display_t *disp;
+    lv_indev_t *indev;
+    cp0_zone_router_t router;
+    volatile bool shown;
+    volatile bool repaint; /* someone wrote over the band (an app's frame, a backdrop): redraw it */
+} zone;
 static struct { volatile bool active; int x, y, w, h; } overlay; /* compat coordinates */
 static void fill_window_black(void);
 
@@ -166,17 +186,28 @@ static void flush_compat(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
     lv_display_flush_ready(disp);
 }
 
+static void zone_repaint_if_needed(void);
+
 /* Native display: 1:1 copy, leaving the compat window alone while it is shown. */
 static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
 {
     const int w = lv_area_get_width(area);
-    const int h = lv_area_get_height(area);
+    int h = lv_area_get_height(area);
     const bool compat = g.mode == CP0_DISPLAY_MODE_COMPAT && !g.blackout;
 
+    zone_repaint_if_needed();
     if (!fb_begin()) {
         lv_display_flush_ready(disp);
         return;
     }
+    /* the writing zone's band, while it shows, covers the native display's bottom rows */
+    if (zone.on && zone.shown && area->y1 + h > zone.l.strip_y) h = zone.l.strip_y - area->y1;
+    if (h <= 0) {
+        fb_end();
+        lv_display_flush_ready(disp);
+        return;
+    }
+    const int y_end = area->y1 + h - 1; /* the last row written */
     cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
     if (compat) {
         cp0_fbo_blit_except(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp, g.ox, g.oy, g.ww, g.wh);
@@ -186,7 +217,7 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
         const int x1 = area->x1 > native_clip.x ? area->x1 : native_clip.x;
         const int y1 = area->y1 > native_clip.y ? area->y1 : native_clip.y;
         const int x2 = area->x2 < native_clip.x + native_clip.w - 1 ? area->x2 : native_clip.x + native_clip.w - 1;
-        const int y2 = area->y2 < native_clip.y + native_clip.h - 1 ? area->y2 : native_clip.y + native_clip.h - 1;
+        const int y2 = y_end < native_clip.y + native_clip.h - 1 ? y_end : native_clip.y + native_clip.h - 1;
         const int pb = g.bpp == 4 ? 3 : g.bpp; /* bytes compared per pixel (not XRGB's X) */
         for (int y = y1; y <= y2 && x2 >= x1; y++) {
             const uint8_t *row = px_map + (size_t)(y - area->y1) * (size_t)(w * g.bpp);
@@ -201,6 +232,23 @@ static void flush_native(lv_display_t *disp, const lv_area_t *area, uint8_t *px_
         }
     } else {
         cp0_fbo_blit(&g.out, area->x1, area->y1, w, h, px_map, w * g.bpp);
+    }
+    fb_end();
+    lv_display_flush_ready(disp);
+}
+
+/* The writing zone's display: its rows are the panel's from strip_y, drawn only while the band shows. */
+static void flush_zone(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
+{
+    const int w = lv_area_get_width(area);
+    const int h = lv_area_get_height(area);
+    if (!fb_begin()) {
+        lv_display_flush_ready(disp);
+        return;
+    }
+    if (zone.shown) {
+        cp0_fbo_to_buffer_format(&g.out, px_map, w, h, w * g.bpp);
+        cp0_fbo_blit(&g.out, area->x1, zone.l.strip_y + area->y1, w, h, px_map, w * g.bpp);
     }
     fb_end();
     lv_display_flush_ready(disp);
@@ -228,6 +276,7 @@ typedef struct {
     cp0_touch_reader_t rd;
     int slots;          /* screen.state touch_slots: 0 none, 1 single touch, N protocol B slots */
     lv_indev_t *indev_native, *indev_compat;
+    lv_indev_t *indev_zone; /* the writing zone's band (report 041), NULL without it */
 } touch_ctx_t;
 
 static touch_ctx_t tc;
@@ -385,6 +434,28 @@ static void touch_map(int raw_x, int raw_y, int *X, int *Y)
 
 static void cancel_key_gestures(void); /* the LIST / SWIPE gesture in progress (below) */
 
+/* The writing zone's clock: the touch frames' time base. The event times are CLOCK_MONOTONIC when the device took
+ * EVIOCSCLOCKID; otherwise (the render harness's pipe) the frames are stamped with the LVGL tick, so the recogniser
+ * (heal window, taps, polling) runs on one clock either way. */
+static int64_t zone_clock_us(void)
+{
+    return tc.rd.monotonic ? cp0_touch_now_us() : (int64_t)lv_tick_get() * 1000;
+}
+
+/* The touch in progress belongs to the app area (always, without the zone): the native and compat pointers, the LIST
+ * and SWIPE gestures act on it; a touch that started in the band never reaches them. */
+static bool app_touch(void)
+{
+    return !zone.on || zone.router.owner == CP0_ZONE_OWNER_APP;
+}
+
+static void zone_repaint_if_needed(void)
+{
+    if (!zone.on || !zone.repaint || !zone.disp || suspended) return;
+    zone.repaint = false;
+    lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
+}
+
 /* A gesture took the contacts down now (multitasking P-c): the pointer reads released until every finger is up, and
  * the press in progress on either pointer device ends with LV_EVENT_PRESS_LOST instead of a click (lv_indev_wait_release:
  * the toolbar keys and the on-screen keyboard send their owed key release on it). */
@@ -393,14 +464,21 @@ static void swallow_gesture(void)
     swallow_mode = 2;
     if (tc.indev_native) lv_indev_wait_release(tc.indev_native);
     if (tc.indev_compat) lv_indev_wait_release(tc.indev_compat);
+    if (tc.indev_zone) lv_indev_wait_release(tc.indev_zone);
     cancel_key_gestures();
+    if (zone.on) { /* a stroke in progress is not one: the gesture's fingers write nothing */
+        cp0_zone_pen_t pen;
+        cp0_zone_router_cancel(&zone.router, &pen);
+        if (pen.kind != CP0_ZONE_PEN_NONE) cp0_zone_ui_pen(&pen);
+    }
 }
 
-/* Each frame to the gesture callback, in landscape coordinates (only while the launcher draws). */
+/* Each frame to the gesture callback and to the writing zone's router, in landscape coordinates (only while the
+ * launcher draws). */
 static void deliver_frame(void *ctx, const cp0_touch_frame_t *raw)
 {
     (void)ctx;
-    if (!frame_cb || suspended) return;
+    if ((!frame_cb && !zone.on) || suspended) return;
     cp0_touch_frame_t f = *raw;
     for (int i = 0; i < f.n; i++) {
         int X, Y;
@@ -408,14 +486,23 @@ static void deliver_frame(void *ctx, const cp0_touch_frame_t *raw)
         f.c[i].x = X;
         f.c[i].y = Y;
     }
-    if (frame_cb(&f, f.t_us)) swallow_gesture();
+    if (zone.on) {
+        /* who owns the touch is decided by where its first contact lands; a pen stroke goes to the recogniser */
+        cp0_touch_frame_t zf = f;
+        if (!tc.rd.monotonic) zf.t_us = zone_clock_us();
+        cp0_zone_pen_t pen;
+        (void)cp0_zone_route(&zone.router, &zone.l, zone.shown ? 1 : 0, swallow_mode != 0, &zf, &pen);
+        if (pen.kind != CP0_ZONE_PEN_NONE) cp0_zone_ui_pen(&pen);
+    }
+    if (frame_cb && frame_cb(&f, f.t_us)) swallow_gesture();
 }
 
 /* Drain pending evdev events and refresh the mapped landscape position. */
 static void touch_update(void)
 {
+    zone_repaint_if_needed();
     /* the tracker keeps every slot; the single pointer is the first contact of a touch (one finger: as before) */
-    (void)cp0_touch_reader_read(&tc.rd, frame_cb ? deliver_frame : NULL, NULL);
+    (void)cp0_touch_reader_read(&tc.rd, (frame_cb || zone.on) ? deliver_frame : NULL, NULL);
     int32_t rx, ry;
     tc.pressed = cp0_touch_slots_pointer(&tc.rd.t, &rx, &ry) != 0;
     tc.raw_x = rx;
@@ -437,8 +524,21 @@ static void touch_read_native(lv_indev_t *indev, lv_indev_data_t *data)
     touch_update();
     data->point.x = tc.X;
     data->point.y = tc.Y;
-    const bool hidden = (g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y)) || swallow_mode != 0 || suspended;
+    const bool hidden = (g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y)) || swallow_mode != 0 || suspended ||
+                        !app_touch();
     data->state = (tc.pressed && !hidden) ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+/* Pointer for the writing zone's band (report 041): a touch that started on the key strip or the soft buttons, in the
+ * zone display's coordinates (its row 0 is the panel's strip_y). */
+static void touch_read_zone(lv_indev_t *indev, lv_indev_data_t *data)
+{
+    (void)indev;
+    touch_update();
+    data->point.x = tc.X;
+    data->point.y = tc.Y - zone.l.strip_y;
+    const bool mine = zone.on && zone.router.owner == CP0_ZONE_OWNER_BAND && swallow_mode == 0 && !suspended;
+    data->state = (tc.pressed && mine) ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
 }
 
 /* ---- list touch mode: gestures -> key events ---- */
@@ -498,7 +598,7 @@ static void cancel_key_gestures(void)
 
 static void swipe_gesture(void)
 {
-    const bool pressed = tc.pressed && g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y);
+    const bool pressed = tc.pressed && app_touch() && g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y);
     const int lx = (tc.X - g.ox) / g.scale;
     const int ly = (tc.Y - g.oy) / g.scale;
 
@@ -524,7 +624,7 @@ static void swipe_gesture(void)
 
 static void list_gesture(void)
 {
-    const bool pressed = tc.pressed && g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y);
+    const bool pressed = tc.pressed && app_touch() && g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y);
     const int lx = (tc.X - g.ox) / g.scale;
     const int ly = (tc.Y - g.oy) / g.scale;
 
@@ -605,7 +705,7 @@ static void touch_read_compat(lv_indev_t *indev, lv_indev_data_t *data)
         data->state = LV_INDEV_STATE_RELEASED; /* LVGL never sees the touch: keys only */
         return;
     }
-    const bool inside = g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y);
+    const bool inside = g.mode == CP0_DISPLAY_MODE_COMPAT && in_window(tc.X, tc.Y) && app_touch();
     if (inside) {
         last_x = (tc.X - g.ox) / g.scale;
         last_y = (tc.Y - g.oy) / g.scale;
@@ -669,6 +769,16 @@ static void init_touch(void)
     lv_indev_set_display(compat, g.compat);
     tc.indev_native = native;
     tc.indev_compat = compat;
+    if (zone.on && zone.disp) {
+        /* the band's pointer, and the frames' own event times for the recogniser (CLOCK_MONOTONIC) */
+        lv_indev_t *band = lv_indev_create();
+        lv_indev_set_type(band, LV_INDEV_TYPE_POINTER);
+        lv_indev_set_read_cb(band, touch_read_zone);
+        lv_indev_set_display(band, zone.disp);
+        tc.indev_zone = band;
+        zone.indev = band;
+        (void)cp0_touch_reader_use_monotonic(&tc.rd);
+    }
 
     printf("[dpi] touch %s raw x[%d..%d] y[%d..%d]\n", path, tc.min_x, tc.max_x, tc.min_y, tc.max_y);
     if (tc.buffer_mode)
@@ -683,7 +793,29 @@ static void init_touch(void)
     }
 }
 
+/* The writing zone's band was shown or hidden (a text field wants input, a page pins it: cp0_zone_ui.h): the native
+ * display redraws the rows the band gave back, the band draws itself. */
+static void zone_vis_changed(int shown)
+{
+    zone.shown = shown != 0;
+    if (!zone.shown && g.native) {
+        const lv_area_t rows = {0, zone.l.strip_y, g.lw - 1, g.lh - 1};
+        lv_obj_invalidate_area(lv_display_get_screen_active(g.native), &rows);
+        lv_obj_invalidate_area(lv_display_get_layer_top(g.native), &rows);
+    }
+    if (zone.shown && zone.disp) lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
+}
+
 /* -------------------------------------------------------------- public API */
+
+int cp0_display_zone_active(void) { return zone.on ? 1 : 0; }
+
+void cp0_display_zone_invalidate(void)
+{
+    if (!zone.on || !zone.disp) return;
+    zone.repaint = false;
+    lv_obj_invalidate(lv_display_get_screen_active(zone.disp));
+}
 
 int cp0_display_available(void) { return g.ready; }
 lv_display_t *cp0_display_native(void) { return g.native; }
@@ -713,7 +845,9 @@ int cp0_display_touch_sync(void)
 {
     if (!touch_path[0]) return 0;
     (void)cp0_touch_reader_read(&tc.rd, NULL, NULL);
-    return cp0_touch_slots_down(&tc.rd.t);
+    const int down = cp0_touch_slots_down(&tc.rd.t);
+    if (zone.on) cp0_zone_router_reset(&zone.router, down); /* a hand still down from the app writes nothing */
+    return down;
 }
 
 int cp0_display_touch_slots(void) { return touch_path[0] ? tc.slots : 0; }
@@ -736,6 +870,7 @@ int cp0_display_touch_resync(void)
     was_pressed = false;
     const int down = cp0_touch_slots_down(&tc.rd.t);
     if (down > 0) swallow_mode = 2; /* the finger that brought the app back presses nothing until it is lifted */
+    if (zone.on) cp0_zone_router_reset(&zone.router, down);
     return down;
 }
 
@@ -942,6 +1077,12 @@ void cp0_display_resume(void)
         lv_obj_invalidate(lv_display_get_layer_top(g.compat));
         lv_obj_invalidate(lv_display_get_layer_sys(g.compat));
     }
+    if (zone.on) {
+        /* the app drew over the band; a stroke or a held strip key from before is not finished now */
+        cp0_display_zone_invalidate();
+        cp0_zone_router_reset(&zone.router, 0); /* a finger still down is swallowed (swallow_mode, the launcher sets it) */
+        cp0_zone_ui_reset_input();
+    }
 }
 
 size_t cp0_display_fb_page_bytes(void)
@@ -1016,6 +1157,7 @@ int cp0_display_fb_backdrop(const void *src, size_t len, int keep_pct)
         }
     }
     pan_to(0);
+    zone.repaint = zone.on; /* the frame covers the band too: the LVGL thread redraws it (zone_repaint_if_needed) */
     pthread_mutex_unlock(&fb_lock);
     return 0;
 }
@@ -1144,6 +1286,18 @@ lv_display_t *cp0_dpi_scaled_create(void)
     cp0_ui_metrics_t metrics;
     if (cp0_ui_metrics_compute(g.lw, g.lh, g.rot, density.ppmm_x100, density.src, want > 0 ? want : 0, &metrics) != 0)
         return NULL;
+    /* The PDA profile (report 041, 042): the writing zone's band covers the bottom of a portrait panel while text input
+     * is wanted (the keyboard's inset); the pages get the whole panel, as without it. */
+    const cp0_ui_metrics_t panel_metrics = metrics;
+    const char *pda = getenv("APPLAUNCH_PDA");
+    if (pda && strcmp(pda, "1") == 0) {
+        zone.on = cp0_zone_layout(&metrics, &zone.l) == 0;
+        if (!zone.on)
+            fprintf(stderr, "[zone] APPLAUNCH_PDA=1 but %dx%d has no room for the writing zone (portrait only): none\n",
+                    g.lw, g.lh);
+    } else if (pda && pda[0] && strcmp(pda, "0") != 0) {
+        fprintf(stderr, "[display-profile] APPLAUNCH_PDA=%s is not 0|1: no writing zone\n", pda);
+    }
     if (cs && cs[0] && want < 0)
         fprintf(stderr, "[display-profile] APPLAUNCH_COMPAT_SCALE=%s is not 1|2: using %d\n", cs, metrics.compat.scale);
     else if (want > metrics.compat.scale_max)
@@ -1151,6 +1305,7 @@ lv_display_t *cp0_dpi_scaled_create(void)
                 metrics.compat.scale);
     if (cp0_display_configure_compat(metrics.compat.scale, metrics.compat.x, metrics.compat.y) != 0) return NULL;
     cp0_ui_metrics_set_current(&metrics);
+    cp0_ui_metrics_set_panel(&panel_metrics);
 
     {
         const char *orient = getenv("APPLAUNCH_TOUCH_ORIENT");
@@ -1176,17 +1331,30 @@ lv_display_t *cp0_dpi_scaled_create(void)
     }
 
     /* native: full landscape panel */
-    g.native = lv_display_create(g.lw, g.lh);
+    const int native_h = g.lh;
+    g.native = lv_display_create(g.lw, native_h);
     lv_display_set_color_format(g.native, cf);
     {
         /* portrait canvas (the PDA profile): the whole frame in one chunk (report 040: a 96-line strip drew the home grid
          * in 9 chunks, each walking every object; 480x800 RGB565 = 768 KB instead of 92 KB). Landscape keeps 96 lines. */
-        const size_t lines = g.lh > g.lw ? (size_t)g.lh : 96;
+        const size_t lines = g.lh > g.lw ? (size_t)native_h : 96;
         const size_t sz = (size_t)g.lw * lines * g.bpp;
         uint8_t *buf = malloc(sz);
         if (!buf) return NULL;
         lv_display_set_buffers(g.native, buf, NULL, sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
         lv_display_set_flush_cb(g.native, flush_native);
+    }
+
+    /* the writing zone's band (report 041): its own display at the bottom of the panel, drawn in one chunk */
+    if (zone.on) {
+        zone.shown = false;
+        zone.disp = lv_display_create(g.lw, zone.l.band_h);
+        lv_display_set_color_format(zone.disp, cf);
+        const size_t sz = (size_t)g.lw * (size_t)zone.l.band_h * g.bpp;
+        uint8_t *buf = malloc(sz);
+        if (!zone.disp || !buf) return NULL;
+        lv_display_set_buffers(zone.disp, buf, NULL, sz, LV_DISPLAY_RENDER_MODE_PARTIAL);
+        lv_display_set_flush_cb(zone.disp, flush_zone);
     }
 
     /* Legacy code builds its screens at startup: make compat the default until
@@ -1199,6 +1367,15 @@ lv_display_t *cp0_dpi_scaled_create(void)
            g.ph, g.bpp * 8, g.rot, g.lw, g.lh, g.ww, g.wh, g.ox, g.oy, g.scale);
 
     init_touch();
+
+    if (zone.on) {
+        int heal_ms = 50, heal_px = 0;
+        if (cp0_zone_ui_create(zone.disp, &zone.l, zone_clock_us) != 0) return NULL;
+        cp0_zone_ui_heal(&heal_ms, &heal_px);
+        cp0_zone_router_init(&zone.router, heal_ms, heal_px);
+        cp0_zone_ui_set_vis_cb(zone_vis_changed);
+        fprintf(stderr, "[zone] writing zone: %s\n", cp0_zone_ui_describe());
+    }
 
     const char *board = getenv("APPLAUNCH_BOARD");
     char backlight[300] = "default";
@@ -1217,14 +1394,15 @@ lv_display_t *cp0_dpi_scaled_create(void)
             g.oy, touch_desc, backlight);
     fprintf(stderr,
             "[display-metrics] class=%s%s ppmm=%d (%s, fb %ux%u mm) row=%d target=%d toolbar=%d@%d shell=%s\n",
-            cp0_ui_class_name(metrics.cls), metrics.preset != CP0_UI_PRESET_COMPUTED ? " (pinned)" : "",
-            metrics.ppmm_x100, cp0_ui_density_src_name(metrics.density_src), vi.width, vi.height,
-            metrics.tok[CP0_TOK_ROW_H], metrics.tok[CP0_TOK_TARGET], metrics.compat.toolbar_h,
-            metrics.compat.toolbar_y, metrics.shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck");
+            cp0_ui_class_name(panel_metrics.cls), panel_metrics.preset != CP0_UI_PRESET_COMPUTED ? " (pinned)" : "",
+            panel_metrics.ppmm_x100, cp0_ui_density_src_name(panel_metrics.density_src), vi.width, vi.height,
+            panel_metrics.tok[CP0_TOK_ROW_H], panel_metrics.tok[CP0_TOK_TARGET], panel_metrics.compat.toolbar_h,
+            panel_metrics.compat.toolbar_y, panel_metrics.shell_preset == CP0_UI_PRESET_COMPACT ? "compact" : "deck");
     /* Early in start-up, before the services' threads, like the other setenv calls of the display and
      * keyboard set-up (fbdev backend, keyboard init). */
+
     const cp0_ui_panel_t panel = {dev, g.bpp * 8, touch_path};
-    if (cp0_ui_metrics_publish(&metrics, &panel, getenv("XDG_RUNTIME_DIR")) != 0)
+    if (cp0_ui_metrics_publish(&panel_metrics, &panel, getenv("XDG_RUNTIME_DIR")) != 0)
         fprintf(stderr, "[display-metrics] screen state not written: %s\n", strerror(errno));
     return g.compat;
 }

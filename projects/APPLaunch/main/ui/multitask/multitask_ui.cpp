@@ -22,6 +22,7 @@
 #include "cp0_ui_widgets.hpp"
 #include "keyboard_input.h"
 #include "launcher_toast.h"
+#include "launcher_zone.hpp"
 #include "native_ui.hpp"
 #include "ui_screensaver.h"
 
@@ -349,6 +350,7 @@ void show_switcher(const multitask::SwitcherInfo &info)
         };
         s_switcher.reset(new SwitcherScreen(std::move(events)));
         s_switcher_prev = active_besides(s_switcher->screen());
+        launcher_zone::screen_changed(); /* the PDA writing zone hides while the switcher is in front (report 042) */
         lv_screen_load(s_switcher->screen()); /* while an app is still in front it is drawn when the launcher is */
         detach_keypad();
         std::fprintf(stderr, "[mt] switcher screen up: %zu card(s), from %s%s\n", info.cards.size(),
@@ -712,7 +714,7 @@ bool enabled()
     static const bool on = [] {
         if (!native_ui::enabled()) return false;
         const multitask::MultitaskFlag flag = multitask::parse_multitask_flag(std::getenv("APPLAUNCH_MULTITASK"));
-        const cp0_ui_metrics_t *m = cp0_ui_metrics_current();
+        const cp0_ui_metrics_t *m = cp0_ui_metrics_panel(); /* the panel, not the PDA's app area (report 041) */
         const int w = m ? m->w : 0, h = m ? m->h : 0;
         /* off: no log line at all, as before (the protocols count `[mt]` lines) */
         s_on_reason = flag == multitask::MultitaskFlag::On ? "APPLAUNCH_MULTITASK on" : "default";
@@ -746,7 +748,7 @@ bool start(Hooks hooks)
     }
     /* P-c: touch gestures. G1 needs a panel with at least 3 slots; G2 works on any touch screen. */
     const int slots = cp0_display_touch_slots();
-    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_current();
+    const cp0_ui_metrics_t *metrics = cp0_ui_metrics_panel(); /* the touch frames cover the whole panel */
     cfg.touch.w = metrics ? metrics->w : 640;
     cfg.touch.h = metrics ? metrics->h : 480;
     cfg.touch.ppmm_x100 = metrics ? metrics->ppmm_x100 : 1130;

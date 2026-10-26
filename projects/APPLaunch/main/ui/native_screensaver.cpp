@@ -12,6 +12,7 @@
 #include "hal_lvgl_bsp.h"
 #include "keyboard_input.h"
 #include "launcher_media_controls.h"
+#include "launcher_zone.hpp"
 #include "lvgl/lvgl.h"
 #include "model/screensaver_clock_layout.hpp"
 #include "model/screensaver_runtime_contract.hpp"
@@ -117,6 +118,7 @@ void wake()
     }
     if (s_overlay) lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
     cp0_display_set_blackout(0); // repaints whatever was on screen
+    launcher_zone::set_blank(false);
     if (s_saved_backlight > 0) launcher_media_controls::restore_backlight(s_saved_backlight);
     s_saved_backlight = -1;
     cp0_display_set_touch_swallow(2); // the touch that woke us must not click anything
@@ -138,6 +140,7 @@ void activate()
                             : launcher_media_controls::dim_backlight(launcher_media_controls::idle_dim_percent());
     // The compat window is drawn straight to the panel: stop that so the overlay covers everything.
     if (cp0_display_get_mode() == CP0_DISPLAY_MODE_COMPAT) cp0_display_set_blackout(1);
+    launcher_zone::set_blank(true); // the PDA writing zone's band (report 041) goes black with the rest
     update_clock(nullptr);
     lv_obj_remove_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
     lv_obj_move_foreground(s_overlay);

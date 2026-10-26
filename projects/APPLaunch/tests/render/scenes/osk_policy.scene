@@ -1,7 +1,8 @@
-# Fallback on-screen keyboard policy (task 014 P2b), end to end with APPLAUNCH_OSK=auto (the normal rule) and the
-# harness' presence fixture ("keyboards N"): Settings > System > On-screen keyboard Off: the Keyboard test field
-# edits without a keyboard; set back to Auto through its choice list: the keyboard shows; a physical keyboard
-# appears: it goes within the policy poll (250 ms). Review only, no golden.
+# Fallback on-screen keyboard policy (task 014 P2b; report 042: Settings > System > On-screen keyboard is Auto / On, Off
+# is gone), end to end with APPLAUNCH_OSK=auto (the normal rule) and the harness' presence fixture ("keyboards N"): a
+# stored Off (osk_mode 1, an earlier version's) reads as Auto, so the Keyboard test field gets the keyboard; a physical
+# keyboard appears: it goes within the policy poll (250 ms); On through the choice list: the keyboard shows even with
+# the physical keyboard (vkb=force). Review only, no golden.
 title on-screen keyboard policy
 review
 sizes 640x480 800x480
@@ -14,28 +15,35 @@ clock 20:30
 wifi 70
 bt on
 home
+expect_mode 0
 launch Settings
+# System (the last section); from its end: Shutdown, Reboot, Keyboard test, On-screen keyboard
 key UP
 key ENTER
 key UP
 key UP
 key UP
-key UP
-shot osk_policy_setting_off
-key DOWN
 key ENTER
-shot osk_policy_off
-# Esc stops editing, Esc again leaves the form; the choice list: Off is checked, Up then Enter picks Auto
-key ESC
-key ESC
-key UP
-key ENTER
-key UP
-key ENTER
-shot osk_policy_setting_auto
-key DOWN
-key ENTER
-shot osk_policy_auto
+expect_osk shown
+expect_vkb auto
+shot osk_policy_old_off
 keyboards 1
 wait 400
+expect_osk hidden
 shot osk_policy_keyboard_appeared
+# Esc stops editing, Esc again leaves the form; the choice list: Auto is checked, Down then Enter picks On
+key ESC
+key ESC
+key UP
+key ENTER
+wait 300
+shot osk_policy_choice
+key DOWN
+key ENTER
+expect_mode 2
+key DOWN
+key ENTER
+wait 400
+expect_osk shown
+expect_vkb force
+shot osk_policy_on

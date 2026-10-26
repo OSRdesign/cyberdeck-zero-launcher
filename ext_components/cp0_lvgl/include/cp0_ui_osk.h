@@ -36,8 +36,9 @@
  *             alone.
  *   policy    may the keyboard show (F1 rules): never with a physical keyboard present, nor for
  *             CP0_UI_OSK_BT_ASLEEP_S after a Bluetooth keyboard went away (it sleeps), nor for CP0_UI_OSK_GRACE_S after
- *             any keyboard went away; never with the setting Off, under the lock screen, or while a desktop session
- *             owns the screen. APPLAUNCH_OSK=force|auto|off (development, render harness) overrides.
+ *             any keyboard went away; never under the lock screen or while a desktop session owns the screen; the
+ *             setting On (report 042) shows it even with a physical keyboard. APPLAUNCH_OSK=force|auto|off
+ *             (development, render harness) overrides.
  *   dialogs   where a dialog sits so that it is centred in the room above the keyboard.
  */
 #pragma once
@@ -93,6 +94,8 @@ typedef struct {
     int util_key_w;    /* Esc, Tab, Ctrl: the TARGET token, at least one key, at most two keys and a gap */
     int arrows;        /* 1: the four arrow keys (one key wide each) at the right of the utility row */
     int alt;           /* 1: Alt after Ctrl in the utility row (a terminal's keyboard, cp0_ui_osk_layout_alt) */
+    int close;         /* 1: a close key (a cross, one key wide) at the right end of the utility row, the arrows left of
+                          it (the PDA profile: back to the writing zone, cp0_ui_osk_layout_add_close) */
     int row_x, row_w;  /* key area: 10 keys and 9 gaps, centred on the screen */
     int pad_x, pad_w;  /* number pad: 3 keys and 2 gaps, centred */
     int pad_key_w;     /* one number pad key: a letter key, on a portrait canvas (h > w) a third of the key area */
@@ -115,6 +118,10 @@ int cp0_ui_osk_layout(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);
 /* The same for a terminal's keyboard: Alt after Ctrl. The utility keys keep their width when the arrows still fit,
  * else they narrow (never under one key) so that the arrows stay; with no room even then, no arrows (as without Alt). */
 int cp0_ui_osk_layout_alt(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out);
+/* Adds the close key to a layout (report 042, the PDA profile: the keyboard's way back to the writing zone): one key
+ * wide at the right end of the utility row; the arrows stay left of it while the utility keys can narrow to make room
+ * (never under one key), else the arrows go. 0, -1 when l is NULL. */
+int cp0_ui_osk_layout_add_close(cp0_ui_osk_layout_t *l);
 
 /* ------------------------------------------------------------------ pages and keys */
 
@@ -137,6 +144,7 @@ typedef enum {
     CP0_UI_OSK_K_TAB,
     CP0_UI_OSK_K_ARROW,    /* code KEY_LEFT / KEY_UP / KEY_DOWN / KEY_RIGHT */
     CP0_UI_OSK_K_ALT,      /* code KEY_LEFTALT (a terminal's keyboard) */
+    CP0_UI_OSK_K_CLOSE,    /* the close cross (layout close): sends nothing, the widget closes the keyboard */
 } cp0_ui_osk_kind_t;
 
 typedef struct {
@@ -157,6 +165,12 @@ typedef struct {
 
 /* 1 for the keys that act while held (Esc, Backspace, arrows): press on finger down, release owed. */
 int cp0_ui_osk_is_hold_key(const cp0_ui_osk_key_t *key);
+
+/* The US layout key of a character, from the keyboard's own tables (the PDA writing zone types through it, report
+ * 041): 1 and *code = its KEY_*, *shift = 1 when the US layout needs Shift for it ('A' = KEY_A + Shift, '!' = KEY_1 +
+ * Shift, ' ' = KEY_SPACE); 0 (code 0, shift 0) for a character no US key types (the euro sign, an accented letter):
+ * it is sent as text alone. code / shift may be NULL. */
+int cp0_ui_osk_char_key(const char *utf8, uint32_t *code, int *shift);
 
 /* Places the keys of a page: fills out[0..n-1] (row by row, left to right) and returns n, or -1. */
 int cp0_ui_osk_place_keys(const cp0_ui_osk_layout_t *l, cp0_ui_osk_page_t page, cp0_ui_osk_place_t *out, int max);
@@ -229,7 +243,8 @@ cp0_ui_osk_env_t cp0_ui_osk_env_parse(const char *value);
 
 typedef struct {
     cp0_ui_osk_env_t env;
-    int setting_off;     /* Settings > System > On-screen keyboard: Off */
+    int setting_on;      /* Settings > System > On-screen keyboard: On (report 042: shown even with a physical keyboard,
+                            as APPLAUNCH_OSK=force); 0: Auto */
     int locked;          /* the lock screen is up */
     int desktop_session; /* a desktop session owns the screen */
     unsigned keyboards;  /* real keyboards present now (cp0_keyboard_presence.h rule) */
@@ -238,12 +253,32 @@ typedef struct {
     int64_t bt_gone_s;   /* when the last Bluetooth keyboard went away (monotonic s; 0: never) */
 } cp0_ui_osk_policy_t;
 
-/* The on-screen keyboard rule in force (published as input.state vkb=): env OFF -> off, env FORCE -> force, the setting
- * Off or a desktop session -> off, else auto. */
-cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting_off, int desktop_session);
+/* Settings > System > On-screen keyboard (config "osk_mode", report 042): Auto, On and, on the PDA profile only,
+ * Handwriting + keyboard (the writing zone first, the keyboard's rule is Auto's). 1 was Off until report 042: it is
+ * read as Auto, as any other value. */
+typedef enum {
+    CP0_UI_OSK_SETTING_AUTO = 0,
+    CP0_UI_OSK_SETTING_ON = 2,
+    CP0_UI_OSK_SETTING_HAND = 3,
+} cp0_ui_osk_setting_t;
+#define CP0_UI_OSK_SETTING_OLD_OFF 1
+
+/* The setting with nothing stored: Handwriting + keyboard where it is offered (hand_offered: the PDA profile, the
+ * writing zone exists), else Auto. */
+int cp0_ui_osk_setting_default(int hand_offered);
+/* A stored value as a profile reads it: Auto, On and (where offered) Handwriting + keyboard as they are; the old Off
+ * and Handwriting + keyboard where it is not offered read as Auto; anything else (garbage, a later version's value) as
+ * the default. */
+int cp0_ui_osk_setting_read(int stored, int hand_offered);
+
+/* The on-screen keyboard rule in force (published as input.state vkb=): env OFF -> off, env FORCE -> force, a desktop
+ * session -> off, the setting On -> force (shown even with a physical keyboard), else auto. setting:
+ * cp0_ui_osk_setting_t. */
+cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting, int desktop_session);
 
 /* 1 when the keyboard may show for a focused text field (rules at the top of this file): never while locked, else
- * cp0_app_osk_rule(cp0_ui_osk_effective_vkb(...), keyboards, now_s, any_gone_s, bt_gone_s). */
+ * cp0_app_osk_rule(cp0_ui_osk_effective_vkb(...), keyboards, now_s, any_gone_s, bt_gone_s). Where the PDA writing zone
+ * is the text input its band shows by this same answer instead of the keyboard (cp0::ui::osk::set_zone, report 042). */
 int cp0_ui_osk_policy_allows(const cp0_ui_osk_policy_t *p);
 
 /* ------------------------------------------------------------------ dialogs */

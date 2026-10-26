@@ -11,6 +11,7 @@
 #include "builtin_app_registry.hpp"
 #include "desktop_app_loader.hpp"
 #include "esc_hold_hint_controller.h"
+#include "launcher_zone.hpp"
 #include "native_ui.hpp"
 #include "multitask/display_handoff.hpp"
 #include "multitask/multitask_ui.hpp"
@@ -226,6 +227,7 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
     if (turned) SLOGI("Launching %s turned: the panel's landscape canvas", exec.c_str());
     const std::string command =
         fullscreen ? app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned) + exec : exec;
+    if (fullscreen) launcher_zone::set_app_front(true); // the app's own keyboard rule while it is in front (vkb)
     int result = -1;
     try {
         cp0_signal_process_api(
@@ -237,6 +239,10 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
     SLOGI("External app exited with code %d", result);
     // the launcher's description of the panel comes back if the app replaced it (report 023 F1)
     (void)cp0_ui_state_republish();
+    if (fullscreen) {
+        launcher_zone::set_app_front(false);
+        launcher_zone::repaint(); // the app drew over the writing zone's band too
+    }
 
     lv_timer_enable(true);
     if (indev) lv_indev_set_group(indev, UILaunchPage::home_input_group());
@@ -440,6 +446,7 @@ void Launch::mt_release_input_group()
 // An app takes the panel (a launch, a resume from Alt+Tab): the launcher stops drawing and goes quiet.
 void Launch::mt_app_front()
 {
+    launcher_zone::set_app_front(true); // the app's own keyboard rule while it is in front (vkb, report 041)
     ui_screensaver_set_foreground(0);
     LVGL_RUN_FLAGE = 0;
     mt_release_input_group();
@@ -453,6 +460,7 @@ void Launch::mt_app_front()
 // only the sheet's box is drawn over the frozen app's frame).
 void Launch::mt_launcher_front(bool after_exit)
 {
+    launcher_zone::set_app_front(false);
     if (after_exit) (void)cp0_ui_state_republish();
     display_handoff::leave_app_front();
     lv_disp_t *disp = lv_disp_get_default();

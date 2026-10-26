@@ -679,6 +679,8 @@ public:
     lv_obj_t *root() const { return root_; }
     /* A physical keyboard appeared: owed releases sent, Shift / Ctrl dropped. */
     void release_all();
+    /* What the close cross does (layout.close; run after the key's own event, the keyboard may be deleted then). */
+    void set_on_close(std::function<void()> on_close) { on_close_ = std::move(on_close); }
 
 private:
     struct Key {
@@ -690,6 +692,7 @@ private:
     static void key_event_cb(lv_event_t *event);
     static void root_delete_cb(lv_event_t *event);
     static void rebuild_cb(void *data);
+    static void close_cb(void *data);
 
     void build();
     void restyle();
@@ -704,11 +707,12 @@ private:
     lv_obj_t *root_ = nullptr;
     std::vector<Key> keys_;
     bool rebuild_armed_ = false;
+    std::function<void()> on_close_;
 };
 
 namespace osk {
 
-/* The host's policy (the launcher: presence, Settings Auto / Off, lock screen, desktop, APPLAUNCH_OSK): may the
+/* The host's policy (the launcher: presence, Settings Auto / On, lock screen, desktop, APPLAUNCH_OSK): may the
  * keyboard show now? Asked when a field requests it and every 250 ms while one does. Without a policy it never shows. */
 void set_policy(std::function<bool()> allowed);
 
@@ -721,7 +725,25 @@ void dismiss();
 
 bool visible();
 lv_obj_t *owner();   /* the field the keyboard is up (or wanted) for, or NULL */
-int bottom_inset();  /* the keyboard's height while shown, else 0 */
+int bottom_inset();  /* the keyboard's height while shown, else 0 (at least the reserved inset below) */
+/* The field that asked (owner) is a multi-line one (a terminal): Tab types a tab character there. */
+bool multiline();
+/* Room the host keeps free at the bottom of the display without a keyboard (the PDA writing zone while it shows, report
+ * 041, 042): the inset is the larger of this and the keyboard's height, so pages, the terminal and dialogs leave it free
+ * as they do for the keyboard. 0 = none (the default). */
+void set_reserved_inset(int px);
+
+/* The PDA writing zone (report 042): while zone_input() is true the zone is the text input instead of this keyboard.
+ * Where the keyboard would show (a field requested it, the policy allows it, and the field's screen is the one shown),
+ * show(true) is called instead and no keyboard is built; show(false) when that ends (released, dismissed, not allowed
+ * any more, another screen in front, zone_input() false). Without it (the default) the keyboard works as before. */
+void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> show);
+/* Asks the policy again on the next cycle (a screen came up over the field: the multitasking switcher). */
+void reevaluate();
+/* The keyboards get a close cross at the right of their utility row (report 042, the PDA profile: back to the writing
+ * zone); on_close runs when it is tapped (outside the key's event). NULL: no cross (the default). A keyboard up now is
+ * built again on the next cycle. */
+void set_close(std::function<void()> on_close);
 
 /* Called with the new inset whenever it changes. Returns an id for remove_inset_listener(). */
 int add_inset_listener(std::function<void(int inset)> listener);

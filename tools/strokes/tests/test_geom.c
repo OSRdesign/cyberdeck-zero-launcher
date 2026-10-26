@@ -117,11 +117,25 @@ static void features_shapes(void)
     CHECK(strcmp(f.dirs, "26") == 0);
     CHECK(f.straight < 0.8f);
     CHECK(f.turn < -1.3f && f.turn > -1.8f); /* down then right: a quarter turn counter-clockwise on screen */
+    CHECK_NEAR(f.sharp, STK_PI / 2, 0.02); /* the sharpest turn: the L's corner */
     stk_vec v[3] = {{0, 0}, {50, 100}, {100, 0}};
     stk_resample(v, 3, p, STK_N);
     stk_features(p, STK_N, &f);
     CHECK(f.corners == 1);
     CHECK(strcmp(f.dirs, "39") == 0);
+    CHECK_NEAR(f.sharp, 2.0f * atanf(2.0f), 0.02); /* the V's point: 127 degrees */
+    /* a narrow u (down, a round bottom, up): a half turn, spread over its bottom */
+    stk_vec u[STK_N + 8];
+    int nu = 0;
+    u[nu++] = (stk_vec){0, 0};
+    for (int i = 0; i <= 16; ++i) {
+        float a = STK_PI - STK_PI * (float)i / 16.0f;
+        u[nu++] = (stk_vec){20 + 20 * cosf(a), 50 + 20 * sinf(a)};
+    }
+    u[nu++] = (stk_vec){40, 0};
+    stk_resample(u, nu, p, STK_N);
+    stk_features(p, STK_N, &f);
+    CHECK(f.sharp < 70.0f * STK_PI / 180.0f);
     stk_vec z[4] = {{0, 0}, {100, 0}, {0, 100}, {100, 100}};
     stk_resample(z, 4, p, STK_N);
     stk_features(p, STK_N, &f);
@@ -139,6 +153,7 @@ static void features_shapes(void)
     CHECK(f.gap < 0.01f);
     CHECK(f.corners == 0);
     CHECK_NEAR(f.turn, -2 * STK_PI, 0.25);
+    CHECK(f.sharp < 40.0f * STK_PI / 180.0f); /* 3 x 11.6 degrees */
 }
 
 static void hooks_trimmed(void)
