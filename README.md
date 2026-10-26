@@ -11,7 +11,7 @@
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
 machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
 Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
-(800x480) or a 3.5" SPI panel (480x320) and a HackBerry CM5 (720x720). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
+(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
 time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
@@ -169,7 +169,7 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 **x86 PCs (amd64).** The same launcher also runs on x86_64 PCs with a touch panel, with no display server (report 028;
 reference: the Panasonic FZ-M1 tablet): take `cyberdeckzero-launcher-<version>-amd64.tar.gz` (or build it with
 `build.sh --arch amd64`) and run the same `sudo ./install.sh`. It needs glibc 2.38 or newer (Debian 13, Ubuntu 24.04
-or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Settings > Apps lists five apps built for amd64 (v0.8.2) and shows the tablet's battery (v0.8.3); from v0.8.4 every board detects its battery, brightness and sound at run time; from v0.8.5 the launcher publishes a status feed apps can read; from v0.8.6 apps can ask the launcher for sounds, notices and volume (launcher.sock); from v0.8.7 volume and brightness buttons on devices that are not keyboards are read too, and a double tap of the Windows key opens the app switcher; the x86 port is new in v0.8.1.
+or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Settings > Apps lists five apps built for amd64 (v0.8.2) and shows the tablet's battery (v0.8.3); from v0.8.4 every board detects its battery, brightness and sound at run time; from v0.8.5 the launcher publishes a status feed apps can read; from v0.8.6 apps can ask the launcher for sounds, notices and volume (launcher.sock); from v0.8.7 volume and brightness buttons on devices that are not keyboards are read too, and a double tap of the Windows key opens the app switcher; from v0.8.8 a portrait PDA profile with handwriting input, and the Pi 4 B board profile; the x86 port is new in v0.8.1.
 See [Install on a PC](projects/APPLaunch/pizero2w/README.md#install-on-a-pc-amd64).
 
 ## Licence
