@@ -1,0 +1,30 @@
+title s7 portrait text
+review
+sizes 800x1280 600x1024
+profile pda
+@800x1280 env APPLAUNCH_PANEL_MM 150x93
+@600x1024 env APPLAUNCH_PANEL_MM 154x90
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator Python "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+expect_vkb zone
+stroke letters 60,130 60,30
+stroke letters 60,30 60,130 121,130
+stroke letters 60,30 60,130
+stroke letters 60,30 118,30 121,130
+stroke digits 50,30 50,130
+shot s7_por_text
+stroke letters 120,30 120,90 hold
+shot s7_por_ink
+release

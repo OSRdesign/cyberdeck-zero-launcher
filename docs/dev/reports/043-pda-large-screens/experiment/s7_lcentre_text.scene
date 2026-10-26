@@ -1,0 +1,36 @@
+# S7 study (experiment patch): landscape band variant centre
+title s7 landscape centre text
+review
+sizes 1280x800 1024x600 800x480 720x720
+profile generic
+@1280x800 env APPLAUNCH_PANEL_MM 150x93
+@1024x600 ppmm 660
+@800x480 env APPLAUNCH_PANEL_MM 94x56
+env APPLAUNCH_PDA 1
+env APPLAUNCH_S7_LANDSCAPE 1
+env APPLAUNCH_S7_BAND centre
+env APPLAUNCH_S7_WRITE_MM_X10 310
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator Python "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+expect_vkb zone
+stroke letters 60,130 60,30
+stroke letters 60,30 60,130 121,130
+stroke letters 60,30 60,130
+stroke letters 60,30 118,30 121,130
+stroke digits 50,30 50,130
+shot s7_lcentre_text
+stroke letters 120,30 120,90 hold
+shot s7_lcentre_ink
+release

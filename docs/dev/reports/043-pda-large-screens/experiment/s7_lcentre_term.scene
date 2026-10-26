@@ -1,0 +1,25 @@
+title s7 landscape centre terminal
+review
+sizes 1280x800 1024x600 800x480 720x720
+profile generic
+@1280x800 env APPLAUNCH_PANEL_MM 150x93
+@1024x600 ppmm 660
+@800x480 env APPLAUNCH_PANEL_MM 94x56
+env APPLAUNCH_PDA 1
+env APPLAUNCH_S7_LANDSCAPE 1
+env APPLAUNCH_S7_BAND centre
+env APPLAUNCH_S7_WRITE_MM_X10 310
+apps Settings Store CLI SSH Calculator Python "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+launch CLI
+ptyout "user@pda:~$ "
+wait 300
+expect_zone shown
+zonekey Ctrl
+shot s7_lcentre_term
+zonekey Keyb
+expect_osk shown
+shot s7_lcentre_keyb

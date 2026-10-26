@@ -1,0 +1,21 @@
+title s7 portrait training
+review
+sizes 800x1280 600x1024
+profile pda
+@800x1280 env APPLAUNCH_PANEL_MM 150x93
+@600x1024 env APPLAUNCH_PANEL_MM 154x90
+strokesuser
+apps Settings Store CLI SSH Calculator Python "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+shot s7_por_train

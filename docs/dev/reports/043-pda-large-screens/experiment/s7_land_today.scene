@@ -1,0 +1,30 @@
+# S7 study: APPLAUNCH_PDA=1 on landscape and square canvases today: the zone refuses them (portrait only); Keyboard test shows the fallback keyboard
+title s7 landscape today
+review
+sizes 1280x800 1024x600 800x480 720x720
+profile generic
+@1280x800 env APPLAUNCH_PANEL_MM 150x93
+@1024x600 ppmm 660
+@800x480 env APPLAUNCH_PANEL_MM 94x56
+env APPLAUNCH_PDA 1
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings Store CLI SSH Calculator Python "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+metrics s7_land_metrics
+shot s7_land_home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key UP
+shot s7_land_system
+key DOWN
+key ENTER
+expect_osk shown
+shot s7_land_osk
