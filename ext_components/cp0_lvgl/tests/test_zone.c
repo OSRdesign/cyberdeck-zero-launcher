@@ -4,8 +4,8 @@
  * a stroke, a stroke that leaves the box, a second finger, a three-finger touch, a swallowed touch, a drop-out healed
  * wherever it lands, the band's rows, a gesture's cancel, a reset), the strip's sticky modifiers (arm, lock, off, used
  * by the next key, the held arrows and their repeat, Alt as a real key, release_all), what a recogniser result types
- * (US keys with Shift / Caps, the characters without a key as text alone, the keys' control text, Ctrl / Shift / Alt
- * from the strip), the mode line, the Latin-1 upper case, the US key table lookup, and the whole path end to end:
+ * (US keys with Shift / Caps, the characters without a key as text alone, the keys' control text, Ctrl / Alt
+ * from the strip), the mode line, the US key table lookup, and the whole path end to end:
  * synthetic strokes routed by frames into the real recogniser with the shipped table, polled, typed.
  */
 #include "cp0_zone.h"
@@ -99,9 +99,12 @@ static void test_layout(void)
     CHECK_EQ(l.strip_key[CP0_ZONE_KEY_ENTER].x + l.strip_key[CP0_ZONE_KEY_ENTER].w, 472);
     for (int i = 1; i < CP0_ZONE_KEY__COUNT; i++)
         CHECK_EQ(l.strip_key[i].x, l.strip_key[i - 1].x + l.strip_key[i - 1].w + l.gap);
+    /* report 042: Keyb first, no Shift; Enter and Keyb a little wider, every key at least 5 mm wide */
+    CHECK_EQ(l.strip_key[CP0_ZONE_KEY_KEYB].x, 8);
     CHECK(l.strip_key[CP0_ZONE_KEY_ENTER].w > l.strip_key[CP0_ZONE_KEY_CTRL].w);
-    CHECK(l.strip_key[CP0_ZONE_KEY_CTRL].w > l.strip_key[CP0_ZONE_KEY_LEFT].w);
-    CHECK(abs(l.strip_key[CP0_ZONE_KEY_LEFT].w - 38) <= 1);
+    CHECK(l.strip_key[CP0_ZONE_KEY_KEYB].w > l.strip_key[CP0_ZONE_KEY_TAB].w);
+    for (int i = 0; i < CP0_ZONE_KEY__COUNT; i++) CHECK(l.strip_key[i].w * 100 >= 5 * l.ppmm_x100);
+    CHECK(abs(l.strip_key[CP0_ZONE_KEY_LEFT].w - 46) <= 1);
     CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y, 490);
     CHECK_EQ(l.strip_key[CP0_ZONE_KEY_UP].y + l.strip_key[CP0_ZONE_KEY_UP].h, l.write_y);
     /* every target at least 5 mm high, the arrows at least 4 mm wide */
@@ -410,29 +413,28 @@ static void test_strip(void)
     CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_CTRL), CP0_UI_OSK_MOD_OFF);
 
     /* a second tap later than the double tap: off again; within it: locked, and it stays after a key */
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 3000, e, CP0_ZONE_MAX_EVENTS);
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 3000 + CP0_UI_OSK_DOUBLE_TAP_MS + 1, e, CP0_ZONE_MAX_EVENTS);
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_OFF);
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 4000, e, CP0_ZONE_MAX_EVENTS);
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 4200, e, CP0_ZONE_MAX_EVENTS);
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_LOCKED);
-    n = cp0_zone_strip_up(&s, CP0_ZONE_KEY_TAB, 0, 4300, e, CP0_ZONE_MAX_EVENTS); /* Shift+Tab: the previous field */
-    CHECK(n == 2 && is_ev(&e[0], KEY_TAB, KBD_KEY_PRESSED, KBD_MOD_SHIFT, ""));
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_LOCKED);
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 5000, e, CP0_ZONE_MAX_EVENTS);
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_OFF);
+    cp0_zone_strip_up(&s, CP0_ZONE_KEY_CTRL, 0, 3000, e, CP0_ZONE_MAX_EVENTS);
+    cp0_zone_strip_up(&s, CP0_ZONE_KEY_CTRL, 0, 3000 + CP0_UI_OSK_DOUBLE_TAP_MS + 1, e, CP0_ZONE_MAX_EVENTS);
+    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_CTRL), CP0_UI_OSK_MOD_OFF);
+    cp0_zone_strip_up(&s, CP0_ZONE_KEY_CTRL, 0, 4000, e, CP0_ZONE_MAX_EVENTS);
+    cp0_zone_strip_up(&s, CP0_ZONE_KEY_CTRL, 0, 4200, e, CP0_ZONE_MAX_EVENTS);
+    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_CTRL), CP0_UI_OSK_MOD_LOCKED);
+    n = cp0_zone_strip_up(&s, CP0_ZONE_KEY_TAB, 0, 4300, e, CP0_ZONE_MAX_EVENTS); /* Ctrl+Tab */
+    CHECK(n == 2 && is_ev(&e[0], KEY_TAB, KBD_KEY_PRESSED, KBD_MOD_CTRL, ""));
+    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_CTRL), CP0_UI_OSK_MOD_LOCKED);
+    cp0_zone_strip_up(&s, CP0_ZONE_KEY_CTRL, 0, 5000, e, CP0_ZONE_MAX_EVENTS);
+    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_CTRL), CP0_UI_OSK_MOD_OFF);
+    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_KEYB), -1); /* Keyb is no modifier */
+    CHECK_EQ(cp0_zone_strip_up(&s, CP0_ZONE_KEY_KEYB, 0, 5100, e, CP0_ZONE_MAX_EVENTS), 0); /* the band's own action */
 
-    /* an arrow held: press with the modifiers and its control text, repeats, release; Shift used at the release */
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 6000, e, CP0_ZONE_MAX_EVENTS);
+    /* an arrow held: press with its control text, repeats, release */
     n = cp0_zone_strip_down(&s, CP0_ZONE_KEY_RIGHT, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 1 && is_ev(&e[0], KEY_RIGHT, KBD_KEY_PRESSED, KBD_MOD_SHIFT, "\033[C"));
+    CHECK(n == 1 && is_ev(&e[0], KEY_RIGHT, KBD_KEY_PRESSED, 0, "\033[C"));
     n = cp0_zone_strip_repeat(&s, CP0_ZONE_KEY_RIGHT, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 1 && is_ev(&e[0], KEY_RIGHT, KBD_KEY_REPEATED, KBD_MOD_SHIFT, "\033[C"));
+    CHECK(n == 1 && is_ev(&e[0], KEY_RIGHT, KBD_KEY_REPEATED, 0, "\033[C"));
     CHECK_EQ(cp0_zone_strip_repeat(&s, CP0_ZONE_KEY_LEFT, e, CP0_ZONE_MAX_EVENTS), 0); /* not the held one */
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_ARMED);
     n = cp0_zone_strip_up(&s, CP0_ZONE_KEY_RIGHT, 0, 6500, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 1 && is_ev(&e[0], KEY_RIGHT, KBD_KEY_RELEASED, KBD_MOD_SHIFT, "\033[C"));
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_OFF);
+    CHECK(n == 1 && is_ev(&e[0], KEY_RIGHT, KBD_KEY_RELEASED, 0, "\033[C"));
     CHECK_EQ(cp0_zone_strip_up(&s, CP0_ZONE_KEY_RIGHT, 0, 6600, e, CP0_ZONE_MAX_EVENTS), 0); /* nothing owed */
     /* Ctrl + an arrow: no control text (a shortcut) */
     cp0_zone_strip_up(&s, CP0_ZONE_KEY_CTRL, 0, 7000, e, CP0_ZONE_MAX_EVENTS);
@@ -564,24 +566,13 @@ static void test_results(void)
     n = cp0_zone_result_events(&s, &r, 0, e, CP0_ZONE_MAX_EVENTS);
     CHECK(n == 2 && is_ev(&e[0], KEY_BACKSPACE, KBD_KEY_PRESSED, KBD_MOD_CTRL, ""));
 
-    /* the strip's Shift: a letter upper case (accented ones too), used once */
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 3000, e, CP0_ZONE_MAX_EVENTS);
-    r = result_char("g", 0);
+    /* upper case is the recogniser's (its shift gesture: "E" with an acute accent as text alone) */
+    r = result_char("\xc3\x89", STROKES_MODE_SHIFT);
     n = cp0_zone_result_events(&s, &r, 0, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 2 && is_ev(&e[0], KEY_G, KBD_KEY_PRESSED, KBD_MOD_SHIFT, "G"));
-    r = result_char("g", 0);
-    n = cp0_zone_result_events(&s, &r, 0, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 2 && is_ev(&e[0], KEY_G, KBD_KEY_PRESSED, 0, "g"));
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 4000, e, CP0_ZONE_MAX_EVENTS);
-    r = result_char("\xc3\xa9", 0);
-    n = cp0_zone_result_events(&s, &r, 0, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 2 && is_ev(&e[0], 0, KBD_KEY_PRESSED, KBD_MOD_SHIFT, "\xc3\x89"));
-    CHECK_EQ(cp0_zone_strip_mod_state(&s, CP0_ZONE_KEY_SHIFT), CP0_UI_OSK_MOD_OFF);
-    /* Shift + a stroke space: Shift+Space with its text */
-    cp0_zone_strip_up(&s, CP0_ZONE_KEY_SHIFT, 0, 5000, e, CP0_ZONE_MAX_EVENTS);
+    CHECK(n == 2 && is_ev(&e[0], 0, KBD_KEY_PRESSED, 0, "\xc3\x89"));
     r = result_key(STROKES_KEY_SPACE);
     n = cp0_zone_result_events(&s, &r, 0, e, CP0_ZONE_MAX_EVENTS);
-    CHECK(n == 2 && is_ev(&e[0], KEY_SPACE, KBD_KEY_PRESSED, KBD_MOD_SHIFT, " "));
+    CHECK(n == 2 && is_ev(&e[0], KEY_SPACE, KBD_KEY_PRESSED, 0, " "));
 
     /* the strip's Alt: Alt+f with its text (as a physical Alt+key), then Alt's release */
     n = cp0_zone_strip_up(&s, CP0_ZONE_KEY_ALT, 0, 6000, e, CP0_ZONE_MAX_EVENTS);
@@ -620,20 +611,8 @@ static void test_mode_text(void)
     CHECK_STR(hint, "Pun");
 }
 
-static void test_upper_and_us_keys(void)
+static void test_us_keys(void)
 {
-    char out[16];
-    CHECK_EQ(cp0_zone_upper("a", out, sizeof(out)), 1);
-    CHECK_STR(out, "A");
-    CHECK_EQ(cp0_zone_upper("\xc3\xa9", out, sizeof(out)), 1); /* e acute */
-    CHECK_STR(out, "\xc3\x89");
-    CHECK_EQ(cp0_zone_upper("\xc3\xb7", out, sizeof(out)), 0); /* the division sign has no upper case */
-    CHECK_STR(out, "\xc3\xb7");
-    CHECK_EQ(cp0_zone_upper("\xc3\xbf", out, sizeof(out)), 0); /* y diaeresis: none in Latin-1 */
-    CHECK_EQ(cp0_zone_upper("ab", out, sizeof(out)), 0);
-    CHECK_STR(out, "ab");
-    CHECK_EQ(cp0_zone_upper("7", out, sizeof(out)), 0);
-
     uint32_t code = 99;
     int shift = 9;
     CHECK(cp0_ui_osk_char_key("a", &code, &shift) == 1 && code == KEY_A && shift == 0);
@@ -836,7 +815,7 @@ int main(void)
     test_strip();
     test_results();
     test_mode_text();
-    test_upper_and_us_keys();
+    test_us_keys();
     test_end_to_end();
     if (failures) {
         fprintf(stderr, "test_zone: %d failure(s)\n", failures);

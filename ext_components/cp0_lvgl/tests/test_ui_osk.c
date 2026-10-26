@@ -550,9 +550,18 @@ static void test_policy(void)
     CHECK(!cp0_ui_osk_policy_allows(&p));
     p.any_gone_s = p.now_s - CP0_UI_OSK_GRACE_S;
     CHECK(cp0_ui_osk_policy_allows(&p));
-    /* Settings Off, the lock screen, a desktop session */
+    /* Settings On (report 042): shown even with a physical keyboard, never under the lock screen nor in a desktop
+     * session; the lock screen, a desktop session */
     p = base_policy();
-    p.setting_off = 1;
+    p.setting_on = 1;
+    p.keyboards = 1;
+    CHECK(cp0_ui_osk_policy_allows(&p));
+    p.bt_gone_s = p.any_gone_s = p.now_s - 1;
+    CHECK(cp0_ui_osk_policy_allows(&p));
+    p.locked = 1;
+    CHECK(!cp0_ui_osk_policy_allows(&p));
+    p.locked = 0;
+    p.desktop_session = 1;
     CHECK(!cp0_ui_osk_policy_allows(&p));
     p = base_policy();
     p.locked = 1;
@@ -560,11 +569,10 @@ static void test_policy(void)
     p = base_policy();
     p.desktop_session = 1;
     CHECK(!cp0_ui_osk_policy_allows(&p));
-    /* APPLAUNCH_OSK: force shows even with a keyboard and the setting Off (never under the lock), off never shows,
-     * auto is the normal rule */
+    /* APPLAUNCH_OSK: force shows even with a keyboard (never under the lock), off never shows (the setting On
+     * included), auto is the normal rule */
     p = base_policy();
     p.keyboards = 1;
-    p.setting_off = 1;
     p.env = CP0_UI_OSK_ENV_FORCE;
     CHECK(cp0_ui_osk_policy_allows(&p));
     p.locked = 1;
@@ -572,11 +580,26 @@ static void test_policy(void)
     p = base_policy();
     p.env = CP0_UI_OSK_ENV_OFF;
     CHECK(!cp0_ui_osk_policy_allows(&p));
+    p.setting_on = 1;
+    CHECK(!cp0_ui_osk_policy_allows(&p));
+    p.setting_on = 0;
     p.env = CP0_UI_OSK_ENV_AUTO;
     CHECK(cp0_ui_osk_policy_allows(&p));
     p.keyboards = 1;
     CHECK(!cp0_ui_osk_policy_allows(&p));
     CHECK(!cp0_ui_osk_policy_allows(NULL));
+
+    /* the stored setting (report 042): the old Off reads as Auto, Handwriting + keyboard only where offered */
+    CHECK_EQ(cp0_ui_osk_setting_default(0), CP0_UI_OSK_SETTING_AUTO);
+    CHECK_EQ(cp0_ui_osk_setting_default(1), CP0_UI_OSK_SETTING_HAND);
+    for (int hand = 0; hand < 2; hand++) {
+        CHECK_EQ(cp0_ui_osk_setting_read(0, hand), CP0_UI_OSK_SETTING_AUTO);
+        CHECK_EQ(cp0_ui_osk_setting_read(CP0_UI_OSK_SETTING_OLD_OFF, hand), CP0_UI_OSK_SETTING_AUTO);
+        CHECK_EQ(cp0_ui_osk_setting_read(2, hand), CP0_UI_OSK_SETTING_ON);
+        CHECK_EQ(cp0_ui_osk_setting_read(3, hand), hand ? CP0_UI_OSK_SETTING_HAND : CP0_UI_OSK_SETTING_AUTO);
+        CHECK_EQ(cp0_ui_osk_setting_read(4, hand), cp0_ui_osk_setting_default(hand));
+        CHECK_EQ(cp0_ui_osk_setting_read(-1, hand), cp0_ui_osk_setting_default(hand));
+    }
 
     CHECK_EQ(cp0_ui_osk_env_parse("force"), CP0_UI_OSK_ENV_FORCE);
     CHECK_EQ(cp0_ui_osk_env_parse("auto"), CP0_UI_OSK_ENV_AUTO);
@@ -653,6 +676,58 @@ static void test_alt_layout(void)
     cp0_ui_osk_layout_alt(&tablet, &l);
     CHECK(l.arrows && l.util_key_w == lp.util_key_w);
     CHECK_EQ(cp0_ui_osk_layout_alt(NULL, &l), -1);
+}
+
+/* The close cross (report 042, the PDA profile: the keyboard's way back to the writing zone): one key wide at the right
+ * end of the utility row, the arrows left of it, nothing overlapping, on the text fields' and the terminal's keyboards
+ * and the number pad; it sends nothing. */
+static void test_close_layout(void)
+{
+    const int sizes[][3] = {{480, 800, 857}, {480, 640, 900}, {640, 480, 1130}, {480, 320, 0}};
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
+        const cp0_ui_metrics_t m = metrics(sizes[i][0], sizes[i][1], sizes[i][2] ? sizes[i][2] : ppmm_pi3a());
+        for (int terminal = 0; terminal < 2; ++terminal) {
+            cp0_ui_osk_layout_t l, before;
+            CHECK_EQ(terminal ? cp0_ui_osk_layout_alt(&m, &l) : cp0_ui_osk_layout(&m, &l), 0);
+            before = l;
+            CHECK_EQ(l.close, 0);
+            CHECK_EQ(cp0_ui_osk_layout_add_close(&l), 0);
+            CHECK_EQ(l.close, 1);
+            CHECK(l.util_key_w >= l.key_w && l.util_key_w <= before.util_key_w);
+            CHECK(l.arrows <= before.arrows);
+            CHECK_EQ(l.height, before.height);
+            const cp0_ui_osk_page_t pages[] = {CP0_UI_OSK_PAGE_LETTERS, CP0_UI_OSK_PAGE_NUMPAD};
+            for (size_t pg = 0; pg < 2; ++pg) {
+                cp0_ui_osk_place_t p[CP0_UI_OSK_MAX_KEYS];
+                const int n = cp0_ui_osk_place_keys(&l, pages[pg], p, CP0_UI_OSK_MAX_KEYS);
+                CHECK(n > 0);
+                int row0 = 0, close_at = -1;
+                for (int k = 0; k < n && p[k].row == 0; ++k) {
+                    row0++;
+                    CHECK(p[k].x >= l.row_x && p[k].x + p[k].w <= l.row_x + l.row_w);
+                    if (k > 0) CHECK(p[k].x >= p[k - 1].x + p[k - 1].w + l.gap);
+                    if (p[k].key->kind == CP0_UI_OSK_K_CLOSE) close_at = k;
+                }
+                CHECK_EQ(row0, (terminal ? 4 : 3) + 4 * l.arrows + 1);
+                CHECK_EQ(close_at, row0 - 1);
+                if (close_at < 0) continue;
+                const cp0_ui_osk_place_t *c = &p[close_at];
+                CHECK_EQ(c->w, l.key_w);
+                CHECK_EQ(c->x + c->w, l.row_x + l.row_w);
+                if (l.arrows) CHECK_EQ(p[close_at - 1].x + p[close_at - 1].w + l.gap, c->x);
+                cp0_ui_osk_state_t st;
+                memset(&st, 0, sizeof(st));
+                cp0_ui_osk_event_t e[CP0_UI_OSK_MAX_EVENTS];
+                CHECK_EQ(cp0_ui_osk_key_down(&st, c->key, e, CP0_UI_OSK_MAX_EVENTS), 0);
+                CHECK_EQ(cp0_ui_osk_key_up(&st, c->key, 1000, e, CP0_UI_OSK_MAX_EVENTS), 0);
+            }
+            /* the PDA panels keep their arrows beside the cross */
+            if (sizes[i][0] == 480 && sizes[i][1] >= 640) CHECK(l.arrows);
+            printf("close %dx%d %s: util %d -> %d px, arrows %d\n", sizes[i][0], sizes[i][1],
+                   terminal ? "terminal" : "fields", before.util_key_w, l.util_key_w, l.arrows);
+        }
+    }
+    CHECK_EQ(cp0_ui_osk_layout_add_close(NULL), -1);
 }
 
 static int is_alt(const cp0_ui_osk_event_t *e, int state)
@@ -771,6 +846,7 @@ int main(void)
     test_layout_sizes();
     test_place_keys();
     test_alt_layout();
+    test_close_layout();
     test_alt_events();
     test_modifiers();
     test_events();

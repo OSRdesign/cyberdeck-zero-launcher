@@ -198,6 +198,10 @@ void OnScreenKeyboard::style_key(Key &key)
         label = arrow_symbol(k->code);
         font = cp0_ui_font_px(layout_.small_px);
         break;
+    case CP0_UI_OSK_K_CLOSE: /* back to the PDA writing zone (report 042) */
+        label = LV_SYMBOL_CLOSE;
+        font = cp0_ui_font_px(layout_.small_px);
+        break;
     default: /* Esc, Tab, Ctrl, Alt, 123 / abc / #+= */
         font = text_font(layout_.small_px);
         break;
@@ -258,12 +262,25 @@ void OnScreenKeyboard::on_key_event(int index, lv_event_code_t code)
     }
     inject(events, count);
     if (code == LV_EVENT_DELETE) return;
+    if (k->kind == CP0_UI_OSK_K_CLOSE && code == LV_EVENT_CLICKED && on_close_) {
+        /* the handler takes the keyboard away: after this event, never inside it */
+        auto *posted = new std::function<void()>(on_close_);
+        if (lv_async_call(close_cb, posted) != LV_RESULT_OK) delete posted;
+        return;
+    }
     if (state_.page != page) {
         // a page key: the keys change on the next cycle (this key is still processing its click)
         if (!rebuild_armed_) rebuild_armed_ = lv_async_call(rebuild_cb, this) == LV_RESULT_OK;
     } else if (state_.shift.state != shift || state_.ctrl.state != ctrl || state_.alt.state != alt) {
         restyle();
     }
+}
+
+void OnScreenKeyboard::close_cb(void *data)
+{
+    auto *posted = static_cast<std::function<void()> *>(data);
+    if (posted && *posted) (*posted)();
+    delete posted;
 }
 
 void OnScreenKeyboard::rebuild_cb(void *data)
@@ -302,6 +319,7 @@ struct Service {
     std::function<bool()> zone_input; /* the PDA writing zone is the text input (report 042) ... */
     std::function<void(bool)> zone_show; /* ... and shows instead of the keyboard */
     bool zone_shown = false;
+    std::function<void()> on_close; /* the keyboards' close cross (report 042), NULL: none */
 };
 
 constexpr uint32_t kPolicyPollMs = 250;
@@ -387,7 +405,9 @@ void apply()
             s.keyboard.reset(); /* another kind of field, or another display: built again below */
         cp0_ui_osk_layout_t layout;
         if (!s.keyboard && layer && layout_for(s.owner, s.multiline, layout)) {
+            if (s.on_close) cp0_ui_osk_layout_add_close(&layout);
             s.keyboard = std::make_unique<OnScreenKeyboard>(layer, layout, s.type, s.multiline);
+            if (s.on_close) s.keyboard->set_on_close(s.on_close);
             lv_obj_move_foreground(s.keyboard->root());
         }
         notify(s.keyboard ? s.keyboard->height() : 0);
@@ -519,6 +539,17 @@ void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> s
 
 void reevaluate()
 {
+    schedule();
+}
+
+void set_close(std::function<void()> on_close)
+{
+    Service &s = service();
+    s.on_close = std::move(on_close);
+    if (s.keyboard) {
+        s.keyboard->release_all(); /* latched Ctrl / Alt dropped, owed releases out */
+        s.keyboard.reset();        /* built again (with or without the cross) on the next cycle */
+    }
     schedule();
 }
 

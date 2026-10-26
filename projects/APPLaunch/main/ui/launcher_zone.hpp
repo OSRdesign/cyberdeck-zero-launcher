@@ -4,9 +4,13 @@
  * The launcher's side of the PDA writing zone (report 041, phase S3; report 042: on demand, no soft buttons). The band
  * itself (the key strip, the letters and digits boxes, the recogniser) lives in the display backend
  * (cp0_display_zone_active(), cp0_zone_ui.h); here are the parts that are the launcher's:
- *   - the input rule (launcher_osk): while the launcher is in front the band is the text input instead of the fallback
- *     keyboard: it shows where the keyboard would (a text field asks and the keyboard's policy allows it), input.state
- *     says vkb=zone while it shows; a fullscreen app in front (run turned, without the band) gets the usual rule;
+ *   - the input rule (launcher_osk): with Settings > On-screen keyboard on Handwriting + keyboard (the PDA profile's
+ *     default) and the launcher in front, the band is the text input instead of the fallback keyboard: it shows where
+ *     the keyboard would (a text field asks and the keyboard's policy allows it), input.state says vkb=zone while it
+ *     shows; the strip's Keyb key puts the standard keyboard in its place (for the following fields too, vkb= the
+ *     usual rule) until the keyboard's close cross brings the band back. Auto and On never show the band (the
+ *     standard keyboard as on every other board); a fullscreen app in front (run turned, without the band) gets the
+ *     usual rule;
  *   - a page may keep the band shown (Strokes training: set_pinned);
  *   - the screensaver draws the band black.
  * Nothing happens without the zone (every board but the PDA profile) or outside the Pi display backend. LVGL thread.
@@ -23,6 +27,11 @@ bool shown();
 /* Once (Launch::bind_ui): the band shows instead of the fallback keyboard (cp0::ui::osk::set_zone) and the input rule
  * is published again whenever it is shown or hidden. */
 void bind();
+
+/* Settings > On-screen keyboard changed (launcher_osk::set_mode): the band, the Keyb choice and the cross follow. */
+void mode_changed();
+/* The strip's Keyb chose the keyboard instead of the band (until its cross). */
+bool keyboard_instead();
 
 /* A fullscreen app takes the panel (true) or gives it back (false): the on-screen keyboard rule follows. */
 void set_app_front(bool front);

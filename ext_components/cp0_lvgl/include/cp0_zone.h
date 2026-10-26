@@ -13,14 +13,15 @@
  *   | app area (the native display: |
  *   | the whole panel)              |
  *   +-------------------------------+ strip_y      (while the band shows; hidden, the app area reaches the bottom)
- *   | Tab Ctrl Shift Alt < ^ v > Ent|   the key strip: pad, a key_h high key
+ *   |Keyb Tab Ctrl Alt < ^ v > Enter|   the key strip: pad, a key_h high key (Keyb: the on-screen keyboard instead)
  *   +-------------------------------+ write_y
  *   | letters box     | digits box  |   the writing zone, write_h high (a third of the panel), the boxes inset by pad
  *   +-------------------------------+ h
  *
  * The band behaves like the fallback on-screen keyboard: it shows while a text field wants input and the keyboard's
  * policy allows it (cp0::ui::osk::set_zone: the same triggers, the terminal pages included) or while a page pins it
- * (Strokes training), and is hidden otherwise. While it shows it covers the bottom band_h rows of the app area, which the
+ * (Strokes training), and is hidden otherwise. The strip's Keyb key (or Settings > On-screen keyboard On) puts the
+ * standard on-screen keyboard in its place, whose close cross brings the band back (report 042 section 13). While it shows it covers the bottom band_h rows of the app area, which the
  * pages leave free as for the keyboard (the cp0::ui::osk inset). Home, the switcher and the like are the multitasking
  * gestures' (three fingers, a hold on the clock).
  *
@@ -75,9 +76,9 @@ extern "C" {
 /* ------------------------------------------------------------------ layout */
 
 typedef enum {
-    CP0_ZONE_KEY_TAB = 0,
+    CP0_ZONE_KEY_KEYB = 0, /* the on-screen keyboard instead of the band, until its close cross (report 042) */
+    CP0_ZONE_KEY_TAB,
     CP0_ZONE_KEY_CTRL,
-    CP0_ZONE_KEY_SHIFT,
     CP0_ZONE_KEY_ALT,
     CP0_ZONE_KEY_LEFT,
     CP0_ZONE_KEY_UP,
@@ -198,11 +199,11 @@ void cp0_zone_router_reset(cp0_zone_router_t *r, int contacts_down);
 /* The sticky modifiers of the strip (as the on-screen keyboard's: a tap arms, a second tap within
  * CP0_UI_OSK_DOUBLE_TAP_MS locks, a tap on a locked or (later) armed one turns it off; an armed one is used by the
  * next key or character, a locked one stays). Ctrl: the next key with a code is sent with KBD_MOD_CTRL and no text
- * (Ctrl+C); Shift: KBD_MOD_SHIFT, a letter upper case; Alt: a real key, its press when it comes on and its release
- * when it goes off or after the key it was used by (Alt, Tab = a quick Alt+Tab), the keys in between carry
- * KBD_MOD_ALT. The arrows act while held (press, repeat, release); Tab and Enter on a click. */
+ * (Ctrl+C); Alt: a real key, its press when it comes on and its release when it goes off or after the key it was used
+ * by (Alt, Tab = a quick Alt+Tab), the keys in between carry KBD_MOD_ALT. The arrows act while held (press, repeat,
+ * release); Tab and Enter on a click. No Shift (report 042): upper case is the recogniser's (its shift gesture). */
 typedef struct {
-    cp0_ui_osk_mod_t ctrl, shift, alt;
+    cp0_ui_osk_mod_t ctrl, alt;
     uint32_t held_code; /* an arrow whose release is owed (0: none) ... */
     uint32_t held_mods; /* ... and the modifiers it was pressed with */
     char held_utf8[16];
@@ -241,10 +242,6 @@ int cp0_zone_result_events(cp0_zone_strip_t *s, const strokes_result *r, int mul
  * letters "abc" ("Abc" while the one-shot shift is on, "ABC" with caps lock); hint, empty when there is none: "Shift",
  * "Caps", "Punct", "Ext" and "Accent: <name>" (strokes_accent_name), joined by "  ". */
 void cp0_zone_mode_text(unsigned mode, int accent, char *letters, size_t letters_size, char *hint, size_t hint_size);
-
-/* The upper-case form of a lower-case letter (a-z and the Latin-1 letters U+00E0..U+00FE, except the division sign)
- * written to out; any other text is copied as it is. Returns 1 when it changed. */
-int cp0_zone_upper(const char *utf8, char *out, size_t size);
 
 #ifdef __cplusplus
 }

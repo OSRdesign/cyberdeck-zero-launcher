@@ -679,6 +679,8 @@ public:
     lv_obj_t *root() const { return root_; }
     /* A physical keyboard appeared: owed releases sent, Shift / Ctrl dropped. */
     void release_all();
+    /* What the close cross does (layout.close; run after the key's own event, the keyboard may be deleted then). */
+    void set_on_close(std::function<void()> on_close) { on_close_ = std::move(on_close); }
 
 private:
     struct Key {
@@ -690,6 +692,7 @@ private:
     static void key_event_cb(lv_event_t *event);
     static void root_delete_cb(lv_event_t *event);
     static void rebuild_cb(void *data);
+    static void close_cb(void *data);
 
     void build();
     void restyle();
@@ -704,11 +707,12 @@ private:
     lv_obj_t *root_ = nullptr;
     std::vector<Key> keys_;
     bool rebuild_armed_ = false;
+    std::function<void()> on_close_;
 };
 
 namespace osk {
 
-/* The host's policy (the launcher: presence, Settings Auto / Off, lock screen, desktop, APPLAUNCH_OSK): may the
+/* The host's policy (the launcher: presence, Settings Auto / On, lock screen, desktop, APPLAUNCH_OSK): may the
  * keyboard show now? Asked when a field requests it and every 250 ms while one does. Without a policy it never shows. */
 void set_policy(std::function<bool()> allowed);
 
@@ -736,6 +740,10 @@ void set_reserved_inset(int px);
 void set_zone(std::function<bool()> zone_input, std::function<void(bool show)> show);
 /* Asks the policy again on the next cycle (a screen came up over the field: the multitasking switcher). */
 void reevaluate();
+/* The keyboards get a close cross at the right of their utility row (report 042, the PDA profile: back to the writing
+ * zone); on_close runs when it is tapped (outside the key's event). NULL: no cross (the default). A keyboard up now is
+ * built again on the next cycle. */
+void set_close(std::function<void()> on_close);
 
 /* Called with the new inset whenever it changes. Returns an id for remove_inset_listener(). */
 int add_inset_listener(std::function<void(int inset)> listener);

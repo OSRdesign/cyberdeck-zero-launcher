@@ -156,6 +156,28 @@ int cp0_ui_osk_layout_alt(const cp0_ui_metrics_t *m, cp0_ui_osk_layout_t *out)
     return osk_layout(m, 1, out);
 }
 
+int cp0_ui_osk_layout_add_close(cp0_ui_osk_layout_t *l)
+{
+    if (!l) return -1;
+    l->close = 1;
+    const int util = l->alt ? 4 : 3;
+    const int right = 5 * l->key_w + 4 * l->gap; /* the four arrows and the cross */
+    if (util * l->util_key_w + util * l->gap + right <= l->row_w) {
+        l->arrows = 1;
+        return 0;
+    }
+    const int fit = (l->row_w - right - util * l->gap) / util;
+    if (fit >= l->key_w) {
+        l->util_key_w = fit;
+        l->arrows = 1;
+        return 0;
+    }
+    l->arrows = 0; /* no room for the arrows: the cross alone at the right */
+    if (util * l->util_key_w + util * l->gap + l->key_w > l->row_w)
+        l->util_key_w = imax(1, (l->row_w - l->key_w - util * l->gap) / util);
+    return 0;
+}
+
 /* ------------------------------------------------------------------ pages */
 
 #define CH(t, c) {CP0_UI_OSK_K_CHAR, t, t, c, 0, 10, CP0_UI_OSK_PAGE_LETTERS}
@@ -172,6 +194,7 @@ static const cp0_ui_osk_key_t k_utility[] = {
     KEYK(CP0_UI_OSK_K_CTRL, "Ctrl", 0, 0),
     KEYK(CP0_UI_OSK_K_ALT, "Alt", KEY_LEFTALT, 0), /* a terminal's keyboard only (l->alt) */
 };
+static const cp0_ui_osk_key_t k_close = KEYK(CP0_UI_OSK_K_CLOSE, NULL, 0, 10);
 static const cp0_ui_osk_key_t k_arrows[] = {
     KEYK(CP0_UI_OSK_K_ARROW, NULL, KEY_LEFT, 10),
     KEYK(CP0_UI_OSK_K_ARROW, NULL, KEY_UP, 10),
@@ -304,12 +327,15 @@ int cp0_ui_osk_place_keys(const cp0_ui_osk_layout_t *l, cp0_ui_osk_page_t page, 
         n = put(out, max, n, &k_utility[i], 0, x, y0, l->util_key_w, l->util_h);
         x += l->util_key_w + l->gap;
     }
+    /* the close cross at the right end (layout close), the arrows left of it */
+    const int right_end = l->row_x + l->row_w - (l->close ? l->key_w + l->gap : 0);
     if (l->arrows) {
         for (int i = 0; i < 4 && n >= 0; ++i) {
-            const int ax = l->row_x + l->row_w - (4 - i) * l->key_w - (3 - i) * l->gap;
+            const int ax = right_end - (4 - i) * l->key_w - (3 - i) * l->gap;
             n = put(out, max, n, &k_arrows[i], 0, ax, y0, l->key_w, l->util_h);
         }
     }
+    if (l->close && n >= 0) n = put(out, max, n, &k_close, 0, l->row_x + l->row_w - l->key_w, y0, l->key_w, l->util_h);
 
     /* rows 1-4: widths in letter keys x10, each row centred in the key area (the number pad's for NUMPAD); a key's
      * edges follow the cumulated units so a full row ends exactly at the area's right edge */
@@ -559,19 +585,34 @@ cp0_ui_osk_env_t cp0_ui_osk_env_parse(const char *value)
     return CP0_UI_OSK_ENV_UNSET;
 }
 
-cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting_off, int desktop_session)
+cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting, int desktop_session)
 {
     if (env == CP0_UI_OSK_ENV_OFF) return CP0_APP_VKB_OFF;
     if (env == CP0_UI_OSK_ENV_FORCE) return CP0_APP_VKB_FORCE;
-    if (setting_off || desktop_session) return CP0_APP_VKB_OFF;
-    return CP0_APP_VKB_AUTO;
+    if (desktop_session) return CP0_APP_VKB_OFF; /* the launcher does not draw the screen: nothing it could show */
+    if (setting == CP0_UI_OSK_SETTING_ON) return CP0_APP_VKB_FORCE; /* report 042: even with a physical keyboard */
+    return CP0_APP_VKB_AUTO;                                        /* Auto, Handwriting + keyboard, the old Off */
+}
+
+int cp0_ui_osk_setting_default(int hand_offered)
+{
+    return hand_offered ? CP0_UI_OSK_SETTING_HAND : CP0_UI_OSK_SETTING_AUTO;
+}
+
+int cp0_ui_osk_setting_read(int stored, int hand_offered)
+{
+    if (stored == CP0_UI_OSK_SETTING_AUTO || stored == CP0_UI_OSK_SETTING_ON) return stored;
+    if (stored == CP0_UI_OSK_SETTING_HAND) return hand_offered ? stored : CP0_UI_OSK_SETTING_AUTO;
+    if (stored == CP0_UI_OSK_SETTING_OLD_OFF) return CP0_UI_OSK_SETTING_AUTO; /* Off until report 042 */
+    return cp0_ui_osk_setting_default(hand_offered);
 }
 
 int cp0_ui_osk_policy_allows(const cp0_ui_osk_policy_t *p)
 {
     if (!p || p->locked) return 0;
-    return cp0_app_osk_rule(cp0_ui_osk_effective_vkb(p->env, p->setting_off, p->desktop_session), p->keyboards,
-                            p->now_s, p->any_gone_s, p->bt_gone_s);
+    const int setting = p->setting_on ? CP0_UI_OSK_SETTING_ON : CP0_UI_OSK_SETTING_AUTO;
+    return cp0_app_osk_rule(cp0_ui_osk_effective_vkb(p->env, setting, p->desktop_session), p->keyboards, p->now_s,
+                            p->any_gone_s, p->bt_gone_s);
 }
 
 /* ------------------------------------------------------------------ dialogs */

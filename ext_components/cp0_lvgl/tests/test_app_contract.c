@@ -396,7 +396,7 @@ static void test_osk_rule(void)
     const int64_t now = 100000;
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_AUTO, 0, now, 0, 0) == 1);     /* no keyboard ever seen */
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_AUTO, 1, now, 0, 0) == 0);     /* a keyboard is here */
-    CHECK(cp0_app_osk_rule(CP0_APP_VKB_OFF, 0, now, 0, 0) == 0);      /* the setting is Off */
+    CHECK(cp0_app_osk_rule(CP0_APP_VKB_OFF, 0, now, 0, 0) == 0);      /* APPLAUNCH_OSK=off, a desktop session */
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_FORCE, 2, now, now, now) == 1); /* forced, even with keyboards */
     CHECK(cp0_app_osk_rule(CP0_APP_VKB_ZONE, 0, now, 0, 0) == 0);      /* the writing zone is the text input */
     /* a Bluetooth keyboard asleep for 10 minutes */
@@ -420,7 +420,7 @@ static void test_osk_rule(void)
                                      CP0_UI_OSK_ENV_OFF};
     const int64_t gones[] = {0, now - 1, now - 2, now - 599, now - 600, now - 5000};
     for (size_t e = 0; e < 4; e++)
-        for (int setting_off = 0; setting_off < 2; setting_off++)
+        for (int setting = 0; setting < 4; setting++) /* Auto, the old Off (read as Auto), On, Handwriting + keyboard */
             for (int desktop = 0; desktop < 2; desktop++)
                 for (unsigned kb = 0; kb < 2; kb++)
                     for (size_t a = 0; a < 6; a++)
@@ -428,7 +428,7 @@ static void test_osk_rule(void)
                             cp0_ui_osk_policy_t p;
                             memset(&p, 0, sizeof(p));
                             p.env = envs[e];
-                            p.setting_off = setting_off;
+                            p.setting_on = setting == CP0_UI_OSK_SETTING_ON;
                             p.desktop_session = desktop;
                             p.keyboards = kb;
                             p.now_s = now;
@@ -436,14 +436,18 @@ static void test_osk_rule(void)
                             p.bt_gone_s = gones[b];
                             cp0_app_input_t app;
                             memset(&app, 0, sizeof(app));
-                            app.vkb = cp0_ui_osk_effective_vkb(envs[e], setting_off, desktop);
+                            app.vkb = cp0_ui_osk_effective_vkb(envs[e], setting, desktop);
                             app.keyboards = kb;
                             app.kb_gone = gones[a];
                             app.bt_gone = gones[b];
                             CHECK_EQ(cp0_ui_osk_policy_allows(&p), cp0_app_osk_allowed(&app, now));
                         }
     CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_UNSET, 0, 0), CP0_APP_VKB_AUTO);
-    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_AUTO, 1, 0), CP0_APP_VKB_OFF);
+    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_AUTO, 1, 0), CP0_APP_VKB_AUTO); /* the old Off: Auto */
+    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_UNSET, CP0_UI_OSK_SETTING_ON, 0), CP0_APP_VKB_FORCE);
+    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_UNSET, CP0_UI_OSK_SETTING_HAND, 0), CP0_APP_VKB_AUTO);
+    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_UNSET, CP0_UI_OSK_SETTING_ON, 1), CP0_APP_VKB_OFF);
+    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_OFF, CP0_UI_OSK_SETTING_ON, 0), CP0_APP_VKB_OFF);
     CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_UNSET, 0, 1), CP0_APP_VKB_OFF);
     CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_FORCE, 1, 1), CP0_APP_VKB_FORCE);
     CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_OFF, 0, 0), CP0_APP_VKB_OFF);

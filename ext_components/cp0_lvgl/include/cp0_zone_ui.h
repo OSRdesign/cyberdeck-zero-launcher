@@ -34,6 +34,8 @@ extern "C" {
 /* The band was shown (1) or hidden (0): the display manager moves the line between the app area and the band; the host
  * publishes its input rule (vkb=zone only while the band shows). */
 typedef void (*cp0_zone_vis_cb_t)(int shown);
+/* The strip's Keyb key was tapped (report 042): the host puts the on-screen keyboard in the band's place. */
+typedef void (*cp0_zone_keyb_cb_t)(void);
 
 /* One finished stroke while a capture is set (cp0_zone_ui_set_capture): nothing is typed, the modes are cleared after
  * it. All of it is valid during the callback only. */
@@ -71,6 +73,8 @@ void cp0_zone_ui_set_text_wanted(int on);
 void cp0_zone_ui_set_pinned(int on);
 void cp0_zone_ui_set_vis_cb(cp0_zone_vis_cb_t cb);       /* the display manager's */
 void cp0_zone_ui_set_vis_listener(cp0_zone_vis_cb_t cb); /* the host's */
+/* The strip's Keyb key (NULL: it does nothing). Not called while a page pins the band (Strokes training). */
+void cp0_zone_ui_set_keyb_cb(cp0_zone_keyb_cb_t cb);
 
 /* Every finished stroke goes to cb instead of being typed (NULL: typing again). */
 void cp0_zone_ui_set_capture(cp0_zone_capture_cb_t cb, void *user);

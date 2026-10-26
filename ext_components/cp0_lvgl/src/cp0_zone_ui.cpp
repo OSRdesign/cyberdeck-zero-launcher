@@ -57,6 +57,7 @@ struct Ui {
     int accent = STROKES_ACCENT_NONE;
     cp0_zone_vis_cb_t vis_cb = nullptr;
     cp0_zone_vis_cb_t vis_listener = nullptr;
+    cp0_zone_keyb_cb_t keyb_cb = nullptr;
     char describe[320] = "";
     std::string overlay;     /* the user overlay's path ("" none) */
     /* the stroke being written, in the corpus format (APPLAUNCH_STROKES_LOG, a capture) and as points (a capture) */
@@ -76,8 +77,9 @@ Ui &ui()
     return *u;
 }
 
-const char *const kKeyText[CP0_ZONE_KEY__COUNT] = {"Tab",         "Ctrl",          "Shift",          "Alt", LV_SYMBOL_LEFT,
-                                                   LV_SYMBOL_UP, LV_SYMBOL_DOWN, LV_SYMBOL_RIGHT, "Enter"};
+const char *const kKeyText[CP0_ZONE_KEY__COUNT] = {"Keyb",         "Tab",          "Ctrl",          "Alt",
+                                                   LV_SYMBOL_LEFT, LV_SYMBOL_UP, LV_SYMBOL_DOWN, LV_SYMBOL_RIGHT,
+                                                   "Enter"};
 
 bool is_arrow(int key)
 {
@@ -375,6 +377,10 @@ void key_cb(lv_event_t *event)
             n = cp0_zone_strip_up(&u.strip, key, 0, now_ms(), e, CP0_ZONE_MAX_EVENTS);
         else if (code == LV_EVENT_PRESS_LOST) n = cp0_zone_strip_cancel(&u.strip, e, CP0_ZONE_MAX_EVENTS);
         else return;
+    } else if (key == CP0_ZONE_KEY_KEYB) {
+        /* the on-screen keyboard instead of the band (report 042); not while a page keeps the band (Strokes training) */
+        if (code == LV_EVENT_CLICKED && !u.show.pinned && u.keyb_cb) u.keyb_cb();
+        return;
     } else {
         if (code != LV_EVENT_CLICKED) return;
         n = cp0_zone_strip_up(&u.strip, key, cp0::ui::osk::multiline() ? 1 : 0, now_ms(), e, CP0_ZONE_MAX_EVENTS);
@@ -631,6 +637,11 @@ void cp0_zone_ui_set_vis_cb(cp0_zone_vis_cb_t cb)
 void cp0_zone_ui_set_vis_listener(cp0_zone_vis_cb_t cb)
 {
     ui().vis_listener = cb;
+}
+
+void cp0_zone_ui_set_keyb_cb(cp0_zone_keyb_cb_t cb)
+{
+    ui().keyb_cb = cb;
 }
 
 void cp0_zone_ui_set_capture(cp0_zone_capture_cb_t cb, void *user)

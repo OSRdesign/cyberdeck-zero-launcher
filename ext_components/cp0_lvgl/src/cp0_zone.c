@@ -22,9 +22,9 @@ static int imin(int a, int b) { return a < b ? a : b; }
 
 /* ------------------------------------------------------------------ layout */
 
-/* the strip keys' widths, in tenths of an arrow key (the mockup: Tab 1.3, Ctrl 1.5, Shift 1.5, Alt 1.2, the four
- * arrows 1, Enter 1.8) */
-static const int k_strip_weight[CP0_ZONE_KEY__COUNT] = {13, 15, 15, 12, 10, 10, 10, 10, 18};
+/* the strip keys' widths, in tenths of an arrow key (report 042: Keyb 1.1, Tab 1, Ctrl 1, Alt 1, the four arrows 1,
+ * Enter 1.2; every key at least 5 mm wide on the 480 px panels) */
+static const int k_strip_weight[CP0_ZONE_KEY__COUNT] = {11, 10, 10, 10, 10, 10, 10, 10, 12};
 
 int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
 {
@@ -256,7 +256,6 @@ int cp0_zone_strip_mod_state(const cp0_zone_strip_t *s, cp0_zone_key_t key)
     if (!s) return -1;
     switch (key) {
     case CP0_ZONE_KEY_CTRL: return (int)s->ctrl.state;
-    case CP0_ZONE_KEY_SHIFT: return (int)s->shift.state;
     case CP0_ZONE_KEY_ALT: return (int)s->alt.state;
     default: return -1;
     }
@@ -265,15 +264,13 @@ int cp0_zone_strip_mod_state(const cp0_zone_strip_t *s, cp0_zone_key_t key)
 uint32_t cp0_zone_strip_mods(const cp0_zone_strip_t *s)
 {
     if (!s) return 0;
-    return (cp0_ui_osk_mod_on(&s->ctrl) ? KBD_MOD_CTRL : 0) | (cp0_ui_osk_mod_on(&s->shift) ? KBD_MOD_SHIFT : 0) |
-           (cp0_ui_osk_mod_on(&s->alt) ? KBD_MOD_ALT : 0);
+    return (cp0_ui_osk_mod_on(&s->ctrl) ? KBD_MOD_CTRL : 0) | (cp0_ui_osk_mod_on(&s->alt) ? KBD_MOD_ALT : 0);
 }
 
 /* The modifiers were used by a key: the armed ones go off (Alt: its release goes out); the locked ones stay. */
 static int mods_used(cp0_zone_strip_t *s, uint32_t used, cp0_ui_osk_event_t *out, int max, int at)
 {
     if (used & KBD_MOD_CTRL) cp0_ui_osk_mod_used(&s->ctrl);
-    if (used & KBD_MOD_SHIFT) cp0_ui_osk_mod_used(&s->shift);
     if ((used & KBD_MOD_ALT) && s->alt.state == CP0_UI_OSK_MOD_ARMED) {
         cp0_ui_osk_mod_used(&s->alt);
         at = emit(out, max, at, KEY_LEFTALT, KBD_KEY_RELEASED, 0, NULL);
@@ -345,7 +342,7 @@ int cp0_zone_strip_up(cp0_zone_strip_t *s, cp0_zone_key_t key, int multiline, ui
         return s->held_code == arrow_code(key) ? release_held(s, out, max, 0) : 0;
     case CP0_ZONE_KEY_TAB: {
         /* a tab character only in a multi-line field without other modifiers (the on-screen keyboard's rule); else the
-         * code alone (the next field, Shift+Tab the previous one, Alt+Tab the switcher) */
+         * code alone (the next field, Alt+Tab the switcher) */
         const uint32_t mods = cp0_zone_strip_mods(s);
         const int n = emit_pair(out, max, 0, KEY_TAB, mods, multiline && !mods ? "\t" : NULL);
         return mods_used(s, mods, out, max, n);
@@ -354,9 +351,6 @@ int cp0_zone_strip_up(cp0_zone_strip_t *s, cp0_zone_key_t key, int multiline, ui
         return key_with_mods(s, KEY_ENTER, cp0_keyboard_control_utf8(KEY_ENTER), out, max, 0);
     case CP0_ZONE_KEY_CTRL:
         cp0_ui_osk_mod_tap(&s->ctrl, now_ms);
-        return 0;
-    case CP0_ZONE_KEY_SHIFT:
-        cp0_ui_osk_mod_tap(&s->shift, now_ms);
         return 0;
     case CP0_ZONE_KEY_ALT: {
         /* a real key: Alt on = its press, Alt off = its release (armed -> locked sends nothing) */
@@ -383,28 +377,8 @@ int cp0_zone_strip_release_all(cp0_zone_strip_t *s, cp0_ui_osk_event_t *out, int
     int n = release_held(s, out, max, 0);
     if (cp0_ui_osk_mod_on(&s->alt)) n = emit(out, max, n, KEY_LEFTALT, KBD_KEY_RELEASED, 0, NULL);
     cp0_ui_osk_mod_reset(&s->ctrl);
-    cp0_ui_osk_mod_reset(&s->shift);
     cp0_ui_osk_mod_reset(&s->alt);
     return n;
-}
-
-int cp0_zone_upper(const char *utf8, char *out, size_t size)
-{
-    if (!out || size == 0) return 0;
-    out[0] = '\0';
-    if (!utf8) return 0;
-    snprintf(out, size, "%s", utf8);
-    const unsigned char *u = (const unsigned char *)utf8;
-    if (u[0] >= 'a' && u[0] <= 'z' && u[1] == '\0') {
-        out[0] = (char)(u[0] - 'a' + 'A');
-        return 1;
-    }
-    /* U+00E0..U+00FE (C3 A0..C3 BE) except U+00F7 (C3 B7): minus 0x20; U+00FF (y diaeresis) has no Latin-1 upper case */
-    if (u[0] == 0xC3 && u[1] >= 0xA0 && u[1] <= 0xBE && u[1] != 0xB7 && u[2] == '\0' && size >= 3) {
-        out[1] = (char)(u[1] - 0x20);
-        return 1;
-    }
-    return 0;
 }
 
 int cp0_zone_result_events(cp0_zone_strip_t *s, const strokes_result *r, int multiline, cp0_ui_osk_event_t *out,
@@ -424,25 +398,19 @@ int cp0_zone_result_events(cp0_zone_strip_t *s, const strokes_result *r, int mul
     }
     if (r->kind != STROKES_CHAR || !r->utf8[0]) return 0;
 
-    /* the strip's Shift makes a letter upper case (the recogniser's own shift already did, when it was on) */
-    char text[16];
-    const int strip_shift = cp0_ui_osk_mod_on(&s->shift);
-    if (strip_shift) cp0_zone_upper(r->utf8, text, sizeof(text));
-    else snprintf(text, sizeof(text), "%s", r->utf8);
-
+    /* upper case comes from the recogniser's own shift and caps lock (the strip has no Shift since report 042) */
+    const char *text = r->utf8;
     uint32_t code = 0;
     int us_shift = 0;
     (void)cp0_ui_osk_char_key(text, &code, &us_shift);
     const uint32_t strip = cp0_zone_strip_mods(s);
     uint32_t mods = 0;
-    if (us_shift) mods |= (text[0] >= 'A' && text[0] <= 'Z' && (r->mode & STROKES_MODE_CAPS) && !strip_shift)
-                              ? KBD_MOD_CAPS
-                              : KBD_MOD_SHIFT;
-    else if (strip_shift && strcmp(text, r->utf8) != 0) mods |= KBD_MOD_SHIFT; /* an accented letter made upper case */
+    if (us_shift)
+        mods |= (text[0] >= 'A' && text[0] <= 'Z' && (r->mode & STROKES_MODE_CAPS)) ? KBD_MOD_CAPS : KBD_MOD_SHIFT;
     int n = 0;
     if ((strip & KBD_MOD_CTRL) && code) {
-        /* Ctrl+C: the key code with CTRL (and Shift, Alt), no text */
-        const uint32_t used = KBD_MOD_CTRL | (strip & (KBD_MOD_SHIFT | KBD_MOD_ALT));
+        /* Ctrl+C: the key code with CTRL (and Alt), no text */
+        const uint32_t used = KBD_MOD_CTRL | (strip & KBD_MOD_ALT);
         n = emit_pair(out, max, 0, code, mods | used, NULL);
         return mods_used(s, used, out, max, n);
     }
@@ -450,7 +418,7 @@ int cp0_zone_result_events(cp0_zone_strip_t *s, const strokes_result *r, int mul
      * Ctrl waits for a key with a code */
     const uint32_t alt = code ? (strip & KBD_MOD_ALT) : 0;
     n = emit_pair(out, max, 0, code, mods | alt, text);
-    return mods_used(s, (strip & KBD_MOD_SHIFT) | alt, out, max, n);
+    return mods_used(s, alt, out, max, n);
 }
 
 /* ------------------------------------------------------------------ the mode line */
