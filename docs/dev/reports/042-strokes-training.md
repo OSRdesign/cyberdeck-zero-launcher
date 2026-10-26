@@ -355,16 +355,21 @@ Risks and open points:
 
 ## 14. Checks and bundle 0.8.8-pda.8
 
-- `check-all.sh` on the code of `9e75d51c`-`110b3aab`: cp0-unit, app-unit, strokes, render (74 scenes), compare (178
-  goldens identical), twice (1956 PNGs byte-identical), header (338), contract (509 checks), branding: all pass. (The
-  Windows side of that run was stopped for low memory while it waited; the WSL side finished every step and its logs
-  were read.)
+- `check-all.sh` on the code of `9e75d51c`-`110b3aab` (then, for `176d2a5a`, the zone and training scenes rendered
+  again and compared: only the 16 `strokes_training` goldens changed, in the Keyb key's box): cp0-unit, app-unit,
+  strokes, render (74 scenes), compare (178 goldens identical), twice (1956 PNGs byte-identical), header (338),
+  contract (509 checks), branding: all pass. (The Windows side of that run was stopped for low memory while it waited;
+  the WSL side finished every step and its logs were read.)
 - Install tests (`tests/test-install-board.sh` in a Linux clone of the branch at `110b3aab`): 375 passed, 0 failed.
 - Goldens: 36 changed only in the strip row (Keyb, no Shift: y 408-452 at 480x640, 490-532 at 480x800) or, for
   `pda_title_osk_choice`, the list's second row (On instead of Off); 16 new; the other 110 byte-identical (every
   640x480 and 480x320 golden among them).
 
-**Bundle `0.8.8-pda.8`: not built yet.** The machine was short of memory when the checks ended (2.5 of 16 GB free), so
-the arm64 build was left for the coordinator to start: `APPLAUNCH_VERSION=0.8.8-pda.8 tools/dev/wsl-build.sh --arch
-arm64 --with-store` inside WSL, then the version string checked in `payload/bin/cyberdeckzero` and the archive copied
-next to pda.7 with its `.sha256`.
+**Bundle `0.8.8-pda.8`**:
+`C:\Users\osrde\AppData\Local\Temp\claude\C--CLAUDE-zero7\5aaea98f-a498-4726-8890-7bd33adbcf64\scratchpad\pkg-out\pda\cyberdeckzero-launcher-0.8.8-pda.8-arm64.tar.gz`
+with its `.sha256`: 57,263,678 bytes, sha256 `5d2a3d858790bbc497a15ca7c2be8817b07c6d1cef90758508a5320c200501bc`;
+development channel, the Store included; `payload/bin/cyberdeckzero` an aarch64 ELF holding `0.8.8-pda.8` (and the
+strings "Handwriting + keyboard", "Keyb"). Built from this branch at `176d2a5a` (the Keyb dimmed on the training page
+included) with `APPLAUNCH_VERSION=0.8.8-pda.8 tools/dev/wsl-build.sh --arch arm64 --with-store` run inside WSL, alone
+(memory checked first); the build log has no warning in the files this round changed. pda.3-pda.7 stay next to it. Not
+installed anywhere.
