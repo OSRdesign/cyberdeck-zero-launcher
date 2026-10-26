@@ -80,6 +80,6 @@ tried by the owner on the Pi 3A+ with the 4.3" panel and on the Pi 4 B with the 
 
 - PDA S4: apps with their own band (`APPLAUNCH_ZONE`, `screen.state` orientation and zone, toolkit).
 - PDA S6 follow-ups: tuning from real stylus captures.
-- A Settings switch to turn Strokes off, and a Settings entry for the idle dim level.
+- A Settings entry for the idle dim level.
 - `install.sh` writes the power-key drop-in for the PC profile.
 - Launcher themes (colours); an idea, no study yet.
