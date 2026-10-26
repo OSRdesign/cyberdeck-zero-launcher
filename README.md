@@ -11,7 +11,7 @@
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
 machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
 Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
-(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
+(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
 time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
@@ -64,6 +64,21 @@ Calculator and the SSH form (deck, 640x480):
 The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog:
 
 ![Store syncing](docs/screenshots/store-sync.png)
+
+## The PDA profile in pictures
+
+Renders of the portrait profile (480x800), made by the launcher's own render harness, not photographs of the board.
+The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md).
+
+| Home grid | Text field and band | Pen ink | Terminal, Ctrl armed |
+| --- | --- | --- | --- |
+| ![Home grid, three columns](docs/images/pda/pda-home.png) | ![Handwriting band under a text field](docs/images/pda/pda-band-text.png) | ![A stroke drawn in the band](docs/images/pda/pda-band-ink.png) | ![Terminal with the key strip, Ctrl armed](docs/images/pda/pda-terminal-ctrl.png) |
+| Three columns, status strip drawn smaller | The band: key strip over two writing boxes | A stroke in the letters box, in amber | Ctrl armed on the key strip |
+
+| Keyboard | Keyboard setting | Strokes training | Glyph picker |
+| --- | --- | --- | --- |
+| ![Standard keyboard with its close cross](docs/images/pda/pda-keyboard-cross.png) | ![Settings, On-screen keyboard](docs/images/pda/pda-setting-keyboard.png) | ![Strokes training page](docs/images/pda/pda-training.png) | ![Glyph picker](docs/images/pda/pda-training-picker.png) |
+| Keyb shows it; the cross closes it | Auto, On, Handwriting + keyboard | A glyph with its chart stroke, four attempts | Grey, green and amber glyphs |
 
 ## Inspiration and credits
 

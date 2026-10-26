@@ -38,6 +38,21 @@ profile `pi4b-dsi`, the idle dim key)
   to when idle (default 10). The `pi4b-dsi` profile sets 20, because 10 % is black on that panel. There is no setting
   for it in Settings yet.
 
+## The PDA profile in pictures
+
+Renders of the portrait profile (480x800), made by the launcher's own render harness, not photographs of the board.
+The full guide is [docs/PDA-PROFILE.md](../PDA-PROFILE.md).
+
+| Home grid | Text field and band | Pen ink | Terminal, Ctrl armed |
+| --- | --- | --- | --- |
+| ![Home grid, three columns](../images/pda/pda-home.png) | ![Handwriting band under a text field](../images/pda/pda-band-text.png) | ![A stroke drawn in the band](../images/pda/pda-band-ink.png) | ![Terminal with the key strip, Ctrl armed](../images/pda/pda-terminal-ctrl.png) |
+| Three columns, status strip drawn smaller | The band: key strip over two writing boxes | A stroke in the letters box, in amber | Ctrl armed on the key strip |
+
+| Keyboard | Keyboard setting | Strokes training | Glyph picker |
+| --- | --- | --- | --- |
+| ![Standard keyboard with its close cross](../images/pda/pda-keyboard-cross.png) | ![Settings, On-screen keyboard](../images/pda/pda-setting-keyboard.png) | ![Strokes training page](../images/pda/pda-training.png) | ![Glyph picker](../images/pda/pda-training-picker.png) |
+| Keyb shows it; the cross closes it | Auto, On, Handwriting + keyboard | A glyph with its chart stroke, four attempts | Grey, green and amber glyphs |
+
 **Apps do not change with this release.** An app that declares `X-Portrait=WxH` is shown natively on a portrait
 launcher; the others run turned or are hidden, as above.
 
@@ -80,6 +95,6 @@ tried by the owner on the Pi 3A+ with the 4.3" panel and on the Pi 4 B with the 
 
 - PDA S4: apps with their own band (`APPLAUNCH_ZONE`, `screen.state` orientation and zone, toolkit).
 - PDA S6 follow-ups: tuning from real stylus captures.
-- A Settings switch to turn Strokes off, and a Settings entry for the idle dim level.
+- A Settings entry for the idle dim level.
 - `install.sh` writes the power-key drop-in for the PC profile.
 - Launcher themes (colours); an idea, no study yet.
