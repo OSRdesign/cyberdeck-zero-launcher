@@ -58,11 +58,11 @@ Pi 3A+, add `--board pi3a-wsdsi43-portrait`. Then reboot.
 CardputerZero/Store. Version 0.8.8, channel `release`.
 <!-- branding-allow-end -->
 
-**Verified:** `tools/dev/check-all.sh` passes: unit suites, the Strokes suite, the render harness (158 goldens; the
+**Verified:** `tools/dev/check-all.sh` passes: unit suites, the Strokes suite, the render harness (178 goldens; the
 goldens of the existing screens, 640x480 and 480x320 included, are byte-identical) and the install tests (375 passed).
-The portrait launcher and the band were tried by the owner on the Pi 3A+ with the 4.3" panel in test bundles
-`0.8.8-pda.4` and `0.8.8-pda.5` (the training page, the glyph picker and the Keyb key, bundles `.7` and `.8`, are
-checked by tests and renders only); the `pi4b-dsi` profile was tried on a Pi 4 B with the Freenove panel.
+The portrait launcher, the band, the Keyb key, the keyboard setting and the Strokes training with its glyph picker were
+tried by the owner on the Pi 3A+ with the 4.3" panel and on the Pi 4 B with the Freenove panel (test bundle
+`0.8.8-pda.8`); the `pi4b-dsi` profile was tried on that board.
 
 **Known limits**
 
