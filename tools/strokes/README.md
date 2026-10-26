@@ -383,7 +383,12 @@ refused, or read as another glyph. After the fourth attempt (`strokes_train.c`):
 A glyph with a block is done: the page resumes at the first glyph without one. Back (the previous glyph, written again),
 Skip, Redo (the glyph's block dropped), Reset all (every block dropped, hand-written lines kept), Finish (a re-test of
 the glyphs trained in the session, once each, then the summary: recognised before = the training attempts, after = the
-re-test). Personal only (`strokes_train_set_personal_only`: a `replace` line in the block) is in the session but not on
+re-test; the glyphs that improved least first). Pick a glyph (report 042 section 12, `strokes_train_open_picker` /
+`strokes_train_pick`): a grid of the letters and digits (a second page: the gestures and the punctuation) marked
+untrained (no block), trained, or hard (its latest rate, the re-test's else the training attempts', under 75 %); a
+glyph tapped is trained as in the order (four attempts, the same rules, its block replaced), then the picker comes
+back; a picked glyph is in Finish's re-test too. One block per glyph, its re-test line kept in it (`# re-test a/b
+time`); no template is kept beyond the table's limit (4096). Personal only (`strokes_train_set_personal_only`: a `replace` line in the block) is in the session but not on
 the page: in the simulation below it brings nothing for the user and the chart's strokes of those glyphs are lost.
 
 The simulation (`tests/test_train.c`): a writer whose ten letters b p s e m o q r y z are the chart's turned 32 degrees
@@ -443,8 +448,9 @@ a board prints the real number.
   none); `APPLAUNCH_STROKES_DIR` moves the tables (the render harness uses the repository's). A table that is refused is
   logged (`[zone] ... ignored`) and skipped.
 - The writing zone's band (the key strip on top of the letters and digits boxes) shows like the fallback on-screen
-  keyboard: where a text field asks for input and the keyboard's policy allows it (report 042), and on the training
-  page; hidden otherwise.
+  keyboard: where a text field asks for input and the keyboard's policy allows it (report 042), with Settings > System >
+  On-screen keyboard on Handwriting + keyboard (the PDA profile's default), and on the training page; hidden otherwise.
+  The strip's Keyb key puts the standard on-screen keyboard in its place until that keyboard's close cross.
 - The writing zone (`cp0_zone_ui.cpp`) gets the raw touch frames from the display manager (`cp0_touch_reader`,
   `CLOCK_MONOTONIC` event times), routed by `cp0_zone_route()`: a touch whose first contact lands in the writing zone is
   the pen's (`strokes_down` with the box of the press, `strokes_move`, `strokes_up`); a second contact cancels the
@@ -452,8 +458,8 @@ a board prints the real number.
   `cfg.ppmm` is the panel's density; `strokes_poll` runs from the zone's timer (paused while idle).
 - A `STROKES_CHAR` is typed as its US key (`cp0_ui_osk_char_key()`, the on-screen keyboard's table) with its text, or as
   text alone (key code 0) when no US key types it (`£`, `©`, `é`, ...): `cp0_keyboard_inject_key()` press + release.
-  A `STROKES_KEY` uses `strokes_key_linux_code()` with the keyboard's control text. The key strip's sticky Ctrl, Shift
-  and Alt apply to them (Ctrl+C). The mode line shows `strokes_get_mode()` (abc / Abc / ABC, Shift, Caps, Punct, Ext,
+  A `STROKES_KEY` uses `strokes_key_linux_code()` with the keyboard's control text. The key strip's sticky Ctrl and Alt
+  apply to them (Ctrl+C); upper case is the recogniser's own (the shift gesture, caps lock: the strip has no Shift). The mode line shows `strokes_get_mode()` (abc / Abc / ABC, Shift, Caps, Punct, Ext,
   the pending accent) in the box of the last stroke; a `STROKES_REJECT` flashes the ink red. The modes are cleared
   (`strokes_set_mode(e, 0)`) and a stroke in progress dropped when the panel goes to an app and comes back.
 - `APPLAUNCH_STROKES_LOG=FILE` (development) appends every stroke the zone sees to FILE in the corpus format (label `?`,

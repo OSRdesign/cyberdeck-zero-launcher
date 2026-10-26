@@ -256,13 +256,17 @@ What works in this phase:
   `APPLAUNCH_ROTATE=270`), and you turn the device while they run. They need no change: the launcher gives each one the
   landscape canvas on its command line (docs/APP-CONTRACT.md, section 3, "Portrait launcher"). An app that declares
   `X-Portrait` (none does yet) gets the portrait canvas instead;
-- text: the **writing zone** at the bottom of the screen (report 041, 042; `APPLAUNCH_PDA=1` in the profile). It comes
-  up where the fallback on-screen keyboard would (a text field or a terminal page wants input, no physical keyboard,
-  Settings > System > On-screen keyboard Auto) and goes away after: a strip with Tab, Ctrl, Shift, Alt, the arrows and
-  Enter (Ctrl, Shift and Alt act on the next key or character, a double tap locks them) on top of the letters box (left)
-  and the digits box (right), where you write with a pen or a finger, one stroke per character (the Strokes alphabet,
-  `tools/strokes/README.md`). Home and the switcher are the multitasking gestures (three fingers, a hold on the clock).
-  A Bluetooth or USB keyboard works as everywhere; the fallback on-screen keyboard never shows while the zone is there.
+- text: the **writing zone** at the bottom of the screen (report 041, 042; `APPLAUNCH_PDA=1` in the profile), with
+  Settings > System > On-screen keyboard on **Handwriting + keyboard** (this profile's default, offered here only). It
+  comes up where the fallback on-screen keyboard would (a text field or a terminal page wants input, no physical
+  keyboard) and goes away after: a strip with Keyb, Tab, Ctrl, Alt, the arrows and Enter (Ctrl and Alt act on the next
+  key or character, a double tap locks them) on top of the letters box (left) and the digits box (right), where you
+  write with a pen or a finger, one stroke per character (the Strokes alphabet, `tools/strokes/README.md`). **Keyb**
+  puts the standard on-screen keyboard in the band's place (exact typing: a sudo password in the terminal), for the
+  following fields too, until the **cross** at the right of its top row brings the band back. Home and the switcher are
+  the multitasking gestures (three fingers, a hold on the clock). A Bluetooth or USB keyboard works as everywhere (band
+  and keyboard hidden). Auto: the standard on-screen keyboard only when no physical keyboard is present, no band; On:
+  the standard keyboard for every text field, a physical keyboard or not, no band.
   A landscape app run turned has no zone: its own rule applies (a keyboard, else its own on-screen keyboard).
   `APPLAUNCH_PDA=0` in `/etc/applaunch/board.conf` shows the portrait launcher without the zone (the fallback keyboard
   then). Settings > System > Strokes training (report 042) learns the owner's own strokes;

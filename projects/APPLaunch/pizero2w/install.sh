@@ -563,7 +563,8 @@ EOF
 # the fixed-pixel built-in tiles (IP Panel, Snake, Tank: 320x170 pages; the Store) start hidden on the portrait panel;
 # Settings > Launcher shows them, and what is saved there wins
 APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store
-# the writing zone at the bottom (report 041): pen strokes, the soft buttons, the key strip; 0 = none
+# the writing zone at the bottom (report 041, 042): pen strokes and the key strip, Settings > On-screen keyboard
+# "Handwriting + keyboard" (its default on this profile while nothing is stored); 0 = none
 APPLAUNCH_PDA=1
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 # the deck's legacy touch axes (set in its user service) must not apply here: neutral values
