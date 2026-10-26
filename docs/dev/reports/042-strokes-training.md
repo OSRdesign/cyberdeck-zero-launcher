@@ -313,7 +313,8 @@ removed. What is built:
   other pages, the terminal) until its **cross**: one key wide at the right end of its top row (`LV_SYMBOL_CLOSE`), the
   arrows left of it; on the terminal's keyboard (Esc Tab Ctrl Alt) the utility keys narrow from 62 to 50 px at 480 px
   to keep the arrows. The cross brings the band back. Keyb does nothing on the Strokes training page (the page needs
-  the band). Changing the setting forgets a Keyb choice.
+  the band) and is drawn dimmed there, in its place (the coordinator's decision: the strip's layout stays; a disabled
+  dialog button's look: background 40 %, label 50 %). Changing the setting forgets a Keyb choice.
 - **In the terminal** the keyboard's keys reach the PTY exactly as a physical keyboard's (the scene's PTY log: `s`,
   `u`, `\x0d`): a sudo password is typed exactly with Keyb.
 - **A physical keyboard** hides the band and the keyboard for text fields (the fallback rule), except with On.
@@ -345,8 +346,8 @@ What the owner checks on the board (about 10 min):
 
 Risks and open points:
 
-1. **Keyb on the training page** is drawn like the other keys but does nothing; dimming or hiding it there is a visual
-   decision left to the owner.
+1. **Keyb on the training page**: dimmed and inert (decided by the coordinator; the 16 `strokes_training` goldens
+   changed in that key's box only).
 2. **No Shift on the strip**: upper case only by the shift gesture (or Keyb); Ctrl+Shift combinations need Keyb.
 3. **480x640 terminal**: the terminal's keyboard takes 285 of the 640 rows (the band takes 240).
 4. **A stored Auto from pda.7** (the default paragraph above): picked once, then it stays.

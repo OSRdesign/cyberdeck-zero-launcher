@@ -73,7 +73,8 @@ void cp0_zone_ui_set_text_wanted(int on);
 void cp0_zone_ui_set_pinned(int on);
 void cp0_zone_ui_set_vis_cb(cp0_zone_vis_cb_t cb);       /* the display manager's */
 void cp0_zone_ui_set_vis_listener(cp0_zone_vis_cb_t cb); /* the host's */
-/* The strip's Keyb key (NULL: it does nothing). Not called while a page pins the band (Strokes training). */
+/* The strip's Keyb key (NULL: it does nothing). Not called while a page pins the band (Strokes training): the key is
+ * drawn dimmed then. */
 void cp0_zone_ui_set_keyb_cb(cp0_zone_keyb_cb_t cb);
 
 /* Every finished stroke goes to cb instead of being typed (NULL: typing again). */

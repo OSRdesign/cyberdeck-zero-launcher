@@ -147,6 +147,13 @@ void refresh_strip()
         lv_obj_set_style_bg_color(u.key[k], lv_color_hex(bg), 0);
         lv_obj_set_style_text_color(u.key_label[k], lv_color_hex(fg), 0);
     }
+    /* Keyb does nothing while a page pins the band (Strokes training, report 042): dimmed as a disabled dialog button,
+     * in its place (the strip's layout stays) */
+    if (u.key[CP0_ZONE_KEY_KEYB]) {
+        const bool inert = u.show.pinned != 0;
+        lv_obj_set_style_bg_opa(u.key[CP0_ZONE_KEY_KEYB], inert ? LV_OPA_40 : LV_OPA_COVER, 0);
+        lv_obj_set_style_text_opa(u.key_label[CP0_ZONE_KEY_KEYB], inert ? LV_OPA_50 : LV_OPA_COVER, 0);
+    }
 }
 
 void refresh_mode()
@@ -627,6 +634,7 @@ void cp0_zone_ui_set_pinned(int on)
     Ui &u = ui();
     u.show.pinned = on ? 1 : 0;
     apply_shown();
+    refresh_strip(); /* Keyb dimmed while pinned */
 }
 
 void cp0_zone_ui_set_vis_cb(cp0_zone_vis_cb_t cb)
