@@ -120,6 +120,39 @@ Two files are kept in `~/.config/applaunch/`:
   variants by hand; lines you write are kept.
 - `strokes-training.txt`: every attempt, appended, for tuning. The PC tool `strokes-log` in `tools/strokes/` reads it.
 
+## Large screens: the tablet
+
+The profile was made for a 4.3" panel, but the setting is not tied to it. Since v0.8.9 any panel whose short side is at
+least 480 px, that is not square and leaves room for the band offers Settings > Screen > PDA mode: the 7-inch FZ-M1
+tablet, a 1024x600 panel, the 800x480 DSI panels (the Pi 3A+ and Pi 4 B screens). Square panels (the HackBerry's
+720x720) and the deck (640x480) do not have the row, and a 3.5" panel is not offered it either; there is no landscape PDA.
+
+The tablet's panel is 1280x800 (about 152 x 94 mm) and is landscape in its stock position. **On rotate left** holds the
+tablet a quarter turn to the left from that position: the launcher then draws a 800x1280 portrait screen, the panel's
+right edge at the top. **On rotate right** is the other quarter turn; the picture is then the other way up, and a landscape
+app run turned is drawn upside down from the panel's own landscape. The owner tried all three values and the restart on the
+tablet and says it is great; rotate right has not been tried on a DSI board.
+
+On the tablet nothing has to be edited. Open Settings > Screen > PDA mode, pick On rotate left or On rotate right,
+and answer the question: the launcher restarts (open apps are closed) and comes back in portrait. The choice is kept in
+the user's settings, so it survives updates; pick Off to go back. `board.conf` and the install flags do not need to
+change (the board profile is only what decides while nothing has been chosen).
+
+The band is sized by the screen's height, the same on every panel, and the tablet needs no change to it: on the 800x1280
+screen the two writing boxes are 427 px high (one third), the key strip is 51 px above them, and the page keeps the
+upper 802 px, a little under two thirds. Home grid, Settings and terminal use the room as they use it elsewhere; the
+status strip and the page titles are the ones of a wide portrait screen (a whole path such as "System > Keyboard
+test", where the 480 px screens show the last part only).
+
+These four pictures are renders made by the launcher's render harness at 800x1280 (scenes `pda_tablet`,
+`pda_tablet_terminal` and `pda_mode` in `projects/APPLaunch/tests/render/`), with the tablet's board name and panel
+size. They are not photographs of the tablet.
+
+| Home grid | Band under a text field | Terminal, Ctrl armed | Screen > PDA mode |
+| --- | --- | --- | --- |
+| ![Home grid at 800x1280](images/pda/tablet-home.png) | ![Band under a text field at 800x1280](images/pda/tablet-band-text.png) | ![Terminal with the key strip at 800x1280](images/pda/tablet-terminal-ctrl.png) | ![PDA mode values at 800x1280](images/pda/tablet-mode-choice.png) |
+| Four columns, nine tiles, no band: the grid has the whole screen | Keyboard test: three fields above, the key strip and the two boxes below | The terminal gives its rows up to the band; Ctrl is lit | Off, On rotate left (checked), On rotate right |
+
 ## Limits
 
 - Accuracy has only been measured on synthetic strokes made from the table's own templates (99.5 % correct on them,

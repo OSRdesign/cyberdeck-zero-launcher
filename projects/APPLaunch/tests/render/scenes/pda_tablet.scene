@@ -1,0 +1,29 @@
+# PDA mode on the FZ-M1 tablet turned to portrait (report 043, docs/PDA-PROFILE.md "Large screens: the tablet"):
+# 800x1280 on the profile pda with the tablet's board name and panel size (rotate 90, 150x93 mm). The band's writing
+# area is one third of the height (427 px) with the 51 px key strip on top; the page keeps the rest. Shots for the
+# documentation: the home grid (no text field, no band), Settings > System > Keyboard test with the band under its
+# Text field (the terminal: pda_tablet_terminal). Review only (no golden); the PDA mode settings
+# shots come from the pda_mode scene.
+title pda tablet
+sizes 800x1280
+review
+profile pda
+env APPLAUNCH_BOARD pc-fzm1-2
+env APPLAUNCH_PANEL_MM 150x93
+env APPLAUNCH_DEV 1
+apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+expect_zone hidden
+shot tablet_home
+launch Settings
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+shot tablet_band_text
