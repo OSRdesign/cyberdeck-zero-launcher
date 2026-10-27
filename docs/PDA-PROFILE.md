@@ -153,6 +153,10 @@ size. They are not photographs of the tablet.
 | ![Home grid at 800x1280](images/pda/tablet-home.png) | ![Band under a text field at 800x1280](images/pda/tablet-band-text.png) | ![Terminal with the key strip at 800x1280](images/pda/tablet-terminal-ctrl.png) | ![PDA mode values at 800x1280](images/pda/tablet-mode-choice.png) |
 | Four columns, nine tiles, no band: the grid has the whole screen | Keyboard test: three fields above, the key strip and the two boxes below | The terminal gives its rows up to the band; Ctrl is lit | Off, On rotate left (checked), On rotate right |
 
+**Pens on the tablet.** The tablet's touch controller reports fingers only (one USB touchscreen device, no pen or stylus
+reports), so the band takes whatever the panel detects as a touch. A finger and a capacitive stylus work well. The official
+Panasonic stylus is not detected, probably because it needs Panasonic's own driver, which Linux does not have.
+
 ## Limits
 
 - Accuracy has only been measured on synthetic strokes made from the table's own templates (99.5 % correct on them,

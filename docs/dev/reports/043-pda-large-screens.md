@@ -12,7 +12,7 @@ tablet (1280x800 panel, about 152 x 94 mm). What was decided, and what was built
   over `board.conf`; a change restarts the launcher.
 
 Owner test on the tablet: the three values and the restart work; portrait is "great". Not tested: rotate right on a DSI
-board, the tablet's pen (a separate input device, unknown). Apps with their own band remain S4.
+board, the tablet's pen (settled 2026-10-27: no separate device; the panel's controller reports fingers only, a finger or a capacitive stylus works well, and the official Panasonic stylus is not detected, probably because it needs Panasonic's own driver, which Linux lacks). Apps with their own band remain S4.
 
 The guide is `docs/PDA-PROFILE.md` (Large screens: the tablet); the renders are the harness scenes `pda_tablet`,
 `pda_tablet_terminal` and `pda_mode`.
