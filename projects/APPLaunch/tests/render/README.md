@@ -104,7 +104,8 @@ runs at those sizes only.
 | `tz ZONE\|none`, `tzset ok\|fail\|denied`, `tzlist on\|off` | Date & Time > Time zone: the zone in use (default `Etc/UTC`; `none`: it cannot be read), what a change answers (done, failed, refused by PolicyKit: the page then tries the sudo path, which the harness does not have), the list (`fixtures/timezones.txt`, a real `timedatectl list-timezones`; `off`: none, as without timedated and zoneinfo files). A zone set becomes the process's `TZ` when the page reports the change, so the clocks follow it (`harness_stubs.cpp`) |
 | `toast TEXT` (`\n` = new line) / `toast off`, `screensaver` (+ `wait`) | launcher toast (persistent) / hide it; arm the clock screensaver |
 | `osd level TITLE PCT`, `osd mute on`/`off`, `loading TEXT` / `loading off`, `compatpage` | the media OSD of the brightness / volume keys (it hides itself after 1000 ms: a shot settles 700 ms after the command), the "Loading..." overlay, a compat page (the compat window is default, a flat placeholder screen, no external app) |
-| `wifinet SSID IP`, `expect_text [end] TEXT` | the connected network the Wi-Fi fixture reports; fail the scene unless a visible label shows TEXT whole (`end`: a label whose text ends with TEXT) in a box wide enough for it (not cut with dots), see `settings_native_wifi_status` |
+| `wifinet SSID IP`, `expect_text [end] TEXT` | the connected network the Wi-Fi fixture reports; fail the scene unless a visible label (of the native screen, else of its top layer: the sudo prompt) shows TEXT whole (`end`: a label whose text ends with TEXT) in a box wide enough for it (not cut with dots), see `settings_native_wifi_status` |
+| `sudoprompt open\|busy\|wrong\|close` | the responsive sudo password prompt (`cp0_sudo_prompt_ui`, on the native display's top layer) without the sudo coordinator: open = SHOW_PROMPT (an input group around its field), busy = START_WORKER, wrong = SHOW_AUTH_ERROR, close = DESTROY_PROMPT. With `env HARNESS_SUDO prompt` a sudo request of the launcher (Settings > Apps' privileged step; `env HARNESS_APPS_PACKAGE job` makes the fake Store backend prepare one) opens the same prompt on the next cycle, and Cancel / Esc ends that request as cancelled; nothing ever runs |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
 | `panelshot NAME` | settle 500 ms and save the framebuffer as the panel shows it (its own orientation and size, no rotation undone) as `out/<WxH>/NAME.png`: which edge of the panel the picture's top is at (report 043). Not in the contact sheet |
 | `header NAME [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `cp0::ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home` taken on the home grid. The home grid has no title (rebranding plan 025): without TITLE the origin written is the shell's title origin (`shell.title_x/title_y`) and the command fails if a label stands there |
@@ -152,7 +153,11 @@ cross), the cross; the choice list with its three values; On: the standard keybo
 keyboard; Auto: the standard keyboard, no band, hidden with a physical keyboard), `zone_old_off` (review only: a stored
 Off reads as Auto on the PDA profile too), `zone_turned` (the Keyboard test with the band, then a landscape app run turned: the whole panel
 its, no zone; the keyboard rule auto while it is in front, zone and the band again after), `zone_switcher` (the switcher,
-its targets; the screensaver). The `metrics` scene's text adds the band at those sizes. `strokes_training` (report 042: Settings > System > Strokes training with the band pinned: the first glyph b with its guide, three attempts judged (recognised, read as another glyph, refused) as thumbnails with the result line, the glyph done and the next one, the glyph picker with its marks, a picked glyph trained, the Reset all dialog, the re-test, the summary; the overlay and the capture log checked with `expect_file`).
+its targets; the screensaver), `zone_sudo` (golden at 480x800 only, also rendered at 800x1280 with the tablet's board and
+panel size and checked there by its `expect_*` lines: Settings > Apps > Available, an install asks for the sudo password;
+the prompt's Password field on the top layer gets the band like any field, the dialog above it, two letters written and
+shown with the eye, Keyb and a tapped key, the cross, Enter (Authenticating..., the band hides), a wrong password (the
+band again), Esc: Cancelled). The `metrics` scene's text adds the band at those sizes. `strokes_training` (report 042: Settings > System > Strokes training with the band pinned: the first glyph b with its guide, three attempts judged (recognised, read as another glyph, refused) as thumbnails with the result line, the glyph done and the next one, the glyph picker with its marks, a picked glyph trained, the Reset all dialog, the re-test, the summary; the overlay and the capture log checked with `expect_file`).
 
 Scenes today: `home`, `home_grid` (computed grid at 800x480, 720x720, 1280x720, 1024x600 with 12 apps; no golden),  `home_status` (offline, weak + BT on, full + BT connected,
 focus moved, scrolled), `toolbar` (stock app, hold-Esc ribbon), `calculator` (empty, typing, result),
@@ -242,7 +247,8 @@ device screenshots, mostly in scaled FreeType text. `deck.py shot` stays the dev
 
 ## Not covered
 
-- Pages that need live services beyond the fixtures (Bluetooth scan/pairing, Apps sources, sudo prompt): add
+- Pages that need live services beyond the fixtures (Bluetooth scan/pairing, Apps sources, sudo itself: only its
+  prompt is drawn, `sudoprompt`): add
   fixtures in `src/harness_services.cpp` as P3 scenes need them. Storage reads the host's mounts: on a PC it shows
   "SD card information unavailable.".
 - Stock apps (only a placeholder picture), real programs in the terminal pages (the terminal runs on a fake PTY that

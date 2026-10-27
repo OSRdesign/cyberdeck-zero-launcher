@@ -44,6 +44,7 @@ int64_t harness_wall_clock(void);
 
 #ifdef __cplusplus
 #include <atomic>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -146,6 +147,11 @@ void pty_exit();
 std::vector<std::string> pty_log();
 void config_set(const std::string &key, const std::string &value);
 std::string resolve_resource(const std::string &name);
+/* A sudo request of the launcher (cp0_sudo_run_argv_async_ex, harness_stubs.cpp, with `env HARNESS_SUDO prompt`): the
+ * responsive prompt opens on the next cycle as cp0_sudo_async shows it (harness_main.cpp, the sudoprompt demo; the
+ * scene's sudoprompt busy / wrong / close drive it as well). Cancel / Esc calls `cancelled` (the request ends as
+ * cancelled); OK / Enter leaves it authenticating. False when a prompt is already open. LVGL thread. */
+bool sudo_prompt_request(std::function<void()> cancelled);
 
 } // namespace harness
 #endif

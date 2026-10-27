@@ -13,6 +13,7 @@
 #include "input_presence.hpp"
 #include "settings/settings_hw_profile.hpp"
 
+#include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -61,9 +62,18 @@ extern "C" int cp0_backlight_write(int val)
     return val;
 }
 
+/* Settings > Apps' privileged step (settings_apps_jobs.cpp). Refused, unless the scene sets `env HARNESS_SUDO prompt`:
+ * then the responsive password prompt opens as on the board (harness::sudo_prompt_request); Cancel / Esc ends the
+ * request as cancelled, nothing ever runs. */
 extern "C" int cp0_sudo_run_argv_async_ex(const char *const *, cp0_sudo_callback_thread_t, cp0_sudo_output_cb_t,
-                                          cp0_sudo_complete_cb_t, void *, int, int, uint64_t *)
+                                          cp0_sudo_complete_cb_t complete, void *user, int, int, uint64_t *request_id)
 {
+    const char *mode = std::getenv("HARNESS_SUDO");
+    if (mode && std::strcmp(mode, "prompt") == 0 && complete &&
+        harness::sudo_prompt_request([complete, user] { complete(CP0_SUDO_RESULT_CANCELLED, -ECANCELED, user); })) {
+        if (request_id) *request_id = 1;
+        return 0;
+    }
     std::fprintf(stderr, "[harness] sudo request refused (no sudo in the harness)\n");
     return -1;
 }

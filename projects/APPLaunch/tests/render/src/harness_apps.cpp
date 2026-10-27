@@ -14,7 +14,9 @@
  *   hold       the first list never comes ("Loading...")
  *   missing    the backend is not installed
  * Installs: --prepare-package answers that an earlier install is unfinished (no sudo in the harness); with
- * `env HARNESS_APPS_PACKAGE hold` it never answers (the app's row keeps its spinner: updating / installing).
+ * `env HARNESS_APPS_PACKAGE hold` it never answers (the app's row keeps its spinner: updating / installing); with
+ * `env HARNESS_APPS_PACKAGE job` it answers a package job, so the page asks for the sudo password (with
+ * `env HARNESS_SUDO prompt` the responsive prompt opens, harness_stubs.cpp).
  */
 #include "settings/apps_backend.hpp"
 
@@ -151,6 +153,9 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
         const char *package = std::getenv("HARNESS_APPS_PACKAGE");
         if (package && std::string(package) == "hold")
             for (;;) usleep(100 * 1000); /* the package job never ends */
+        if (package && std::string(package) == "job") /* prepared: the privileged step asks for the sudo password */
+            return answer(0, "PACKAGE_JOB\t" + arg(args, 1) + "\t" + arg(args, 2) +
+                                 "\t0\t\tharness-1\t/nonexistent/harness-appstore/pending\n");
     }
     std::lock_guard<std::mutex> lock(g_mutex);
     ensure_sources();
