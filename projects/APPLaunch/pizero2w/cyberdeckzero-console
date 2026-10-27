@@ -7,7 +7,11 @@
 #   cyberdeckzero-console bind                 give the panel back to the text console
 #   cyberdeckzero-console status               print the framebuffer console's state (bound, unbound or absent)
 #   cyberdeckzero-console restore-desktop UNIT bind, then start the display manager UNIT again (--no-block), unless
-#                                              the system is shutting down (a poweroff, reboot, halt or kexec is under way)
+#                                              the system is shutting down (a poweroff, reboot, halt or kexec is under
+#                                              way); nothing at all when the launcher exited with status 76 (it asked
+#                                              to be started again, its unit's RestartForceExitStatus=76: systemd passes
+#                                              EXIT_CODE=exited EXIT_STATUS=76 to ExecStopPost=) and the system is not
+#                                              shutting down
 #
 # Why: the launcher draws on the framebuffer and only redraws what changed. While fbcon is bound to that framebuffer,
 # any console repaint (a VT switch, kernel messages, a busy `apt install`) draws the old boot lines over the launcher.
@@ -69,8 +73,20 @@ shutting_down() {
         | grep -Eq '(^|[[:space:]])(poweroff|reboot|halt|kexec|soft-reboot)\.target([[:space:]]|$)'
 }
 
+# true when the launcher's unit is about to start it again: its main process exited with status 76 (Settings > Screen >
+# PDA mode); systemd sets EXIT_CODE / EXIT_STATUS for ExecStopPost=
+launcher_restarts() {
+    [ "${EXIT_CODE:-}" = exited ] && [ "${EXIT_STATUS:-}" = 76 ]
+}
+
 restore_desktop() {
     unit=$1
+    # the restart: the display manager must stay stopped (its start would stop the launcher again through Conflicts=)
+    # and the panel free (no console repaint before the launcher draws again)
+    if launcher_restarts && ! shutting_down; then
+        echo "the launcher restarts (exit status 76): $unit is not started, the console stays free"
+        return 0
+    fi
     set_bind 1 || true
     if shutting_down; then
         echo "the system is shutting down: $unit is not started again"
@@ -92,6 +108,6 @@ case "${1:-}" in
     restore-desktop)
         [ -n "${2:-}" ] || { echo "restore-desktop needs the display manager unit (e.g. lightdm.service)" >&2; exit 2; }
         restore_desktop "$2" ;;
-    -h|--help) sed -n '2,18p' "$0" ;;
+    -h|--help) sed -n '2,22p' "$0" ;;
     *) echo "usage: cyberdeckzero-console unbind|bind|status|restore-desktop UNIT" >&2; exit 2 ;;
 esac

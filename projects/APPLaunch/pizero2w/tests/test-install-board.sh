@@ -457,6 +457,7 @@ check "desktop unit: frees the panel from the text console as root, then a VT wi
 ExecStartPre=-+/usr/bin/timeout 5 /usr/bin/chvt 7"'
 check "desktop unit: gives the desktop back as root, the poweroff guard in the helper" 'uhas "ExecStopPost=+/usr/share/APPLaunch/bin/cyberdeckzero-console restore-desktop lightdm.service"'
 check "desktop unit: never restarted, no [Install] (cannot be enabled)" 'uhas "Restart=no" && ! printf "%s\n" "$U" | grep -qx "\[Install\]" && ! uhas "WantedBy"'
+check "desktop unit: started again on exit status 76 only (PDA mode changed)" 'printf "%s\n" "$U" | grep -qx "RestartForceExitStatus=76" && printf "%s\n" "$U" | grep -qx "Restart=no"'
 check "desktop unit: board profile, session marker, launcher" 'uhas "EnvironmentFile=-/etc/applaunch/board.conf" && uhas "WorkingDirectory=/usr/share/APPLaunch" && uhas "Environment=APPLAUNCH_SESSION=desktop" && uhas "Environment=APPLAUNCH_DISPLAY=dpi-scaled" && uhas "ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero"'
 check "desktop unit: described as the product" 'uhas "Description=CyberdeckZero Launcher (takes the screen"'
 check "desktop unit: every placeholder filled" '! uhas "@USER@" && ! uhas "@DM@"'
@@ -535,6 +536,7 @@ D="$HERE/.."
 check "console unit: after multi-user.target, inside the boot transaction" 'grep -qx "DefaultDependencies=no" "$D/cyberdeckzero-console.service" && grep -qx "After=multi-user.target" "$D/cyberdeckzero-console.service" && grep -qx "WantedBy=multi-user.target" "$D/cyberdeckzero-console.service"'
 check "console unit: unbind at start, bind at stop" 'grep -qx "ExecStart=/usr/share/APPLaunch/bin/cyberdeckzero-console unbind" "$D/cyberdeckzero-console.service" && grep -qx "ExecStop=/usr/share/APPLaunch/bin/cyberdeckzero-console bind" "$D/cyberdeckzero-console.service" && grep -qx "RemainAfterExit=yes" "$D/cyberdeckzero-console.service"'
 check "launcher user service still waits for the system to be running" 'grep -q "is-system-running --wait" "$D/cyberdeckzero.service"'
+check "user service: started again on a failure and on exit status 76 (PDA mode changed)" 'grep -qx "Restart=on-failure" "$D/cyberdeckzero.service" && grep -qx "RestartForceExitStatus=76" "$D/cyberdeckzero.service"'
 check "user service: the product's description, the new binary, the board profile and working directory as before" 'grep -qx "Description=CyberdeckZero Launcher" "$D/cyberdeckzero.service" && grep -qx "ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero" "$D/cyberdeckzero.service" && grep -qx "EnvironmentFile=-/etc/applaunch/board.conf" "$D/cyberdeckzero.service" && grep -qx "WorkingDirectory=/usr/share/APPLaunch" "$D/cyberdeckzero.service"'
 check "units: no board or panel name in a description" '! grep -h "^Description=" "$D"/*.service | grep -q -e "Zero 2" -e Waveshare'
 check "menu entry: starts the unit, no terminal" 'grep -qx "Exec=systemctl --no-block start cyberdeckzero-desktop.service" "$D/cyberdeckzero.desktop" && grep -qx "Terminal=false" "$D/cyberdeckzero.desktop" && grep -qx "Name=CyberdeckZero Launcher" "$D/cyberdeckzero.desktop"'
@@ -610,6 +612,28 @@ unset FAKE_JOBS FAKE_STATE
 check "restore-desktop (degraded, other jobs): the desktop comes back" '[ $RC = 0 ] && [ "$(cat "$SCTL_LOG")" = "--no-block start lightdm.service" ]'
 con restore-desktop
 check "restore-desktop without a unit: exit 2" '[ $RC = 2 ]'
+# the launcher restarts (exit status 76, Settings > Screen > PDA mode): its unit starts it again, so the desktop stays
+# stopped and the console free; any other exit status gives the desktop back as before; a shutdown still wins
+fake_vt 0; rm -f "$SCTL_LOG"
+EXIT_CODE=exited; EXIT_STATUS=76; export EXIT_CODE EXIT_STATUS
+con restore-desktop lightdm.service
+check "restore-desktop after exit status 76: no desktop, the console stays free" '[ $RC = 0 ] && [ "$(vt)" = 0 ] && [ ! -e "$SCTL_LOG" ] && has "restarts"'
+fake_vt 0
+FAKE_STATE=stopping; export FAKE_STATE
+con restore-desktop lightdm.service
+unset FAKE_STATE
+check "restore-desktop after exit status 76 during a poweroff: console bound, no desktop" '[ $RC = 0 ] && [ "$(vt)" = 1 ] && [ ! -e "$SCTL_LOG" ] && has "shutting down"'
+for ST in 0 1 75; do
+    fake_vt 0; rm -f "$SCTL_LOG"
+    EXIT_STATUS=$ST; export EXIT_STATUS
+    con restore-desktop lightdm.service
+    check "restore-desktop after exit status $ST: the desktop comes back" '[ $RC = 0 ] && [ "$(vt)" = 1 ] && [ "$(cat "$SCTL_LOG")" = "--no-block start lightdm.service" ]'
+done
+fake_vt 0; rm -f "$SCTL_LOG"
+EXIT_CODE=killed; EXIT_STATUS=TERM; export EXIT_CODE EXIT_STATUS
+con restore-desktop lightdm.service
+check "restore-desktop after a kill: the desktop comes back" '[ $RC = 0 ] && [ "$(cat "$SCTL_LOG")" = "--no-block start lightdm.service" ]'
+unset EXIT_CODE EXIT_STATUS
 
 # --- uninstall.sh plan for the units and files, both generations (a half-migrated board has some of each)
 R=$(root pi3a-luckfox35)

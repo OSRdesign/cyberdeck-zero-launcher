@@ -19,6 +19,9 @@ Vars variables(const Input &in)
     vars.emplace_back("APPLAUNCH_CANVAS", std::to_string(in.canvas_w) + "x" + std::to_string(in.canvas_h));
     vars.emplace_back("APPLAUNCH_CANVAS_SCALE", std::to_string(in.canvas_scale));
     if (!in.state_dir.empty()) vars.emplace_back("APPLAUNCH_STATE_DIR", in.state_dir);
+    /* the writing zone is the launcher's (report 043): an app never draws its own band, whatever the launcher's
+     * APPLAUNCH_PDA (PDA mode, the board profile) that it would otherwise inherit */
+    vars.emplace_back("APPLAUNCH_PDA", "0");
     if (in.turned && in.mode == Mode::Fullscreen) {
         /* the app's own cp0_lvgl backend reads APPLAUNCH_ROTATE / APPLAUNCH_LOGICAL (board profile names); an app with
          * its own glue (viz1090) reads APPLAUNCH_SCREEN_* first: both must describe the landscape canvas */

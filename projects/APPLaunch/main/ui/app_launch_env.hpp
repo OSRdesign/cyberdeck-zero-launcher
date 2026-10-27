@@ -5,7 +5,9 @@
  * puts on the command line of every app it starts, so the app knows its mode, where its picture is on the screen,
  * the canvas it draws and where the state files are:
  *   APPLAUNCH_CONTRACT=1 APPLAUNCH_APP_MODE=compat|fullscreen APPLAUNCH_WINDOW=x,y,w,h APPLAUNCH_CANVAS=WxH
- *   APPLAUNCH_CANVAS_SCALE=N [APPLAUNCH_STATE_DIR=<dir>]
+ *   APPLAUNCH_CANVAS_SCALE=N [APPLAUNCH_STATE_DIR=<dir>] APPLAUNCH_PDA=0
+ * (APPLAUNCH_PDA=0: the PDA writing zone is the launcher's, report 043; an app never draws its own band, whatever the
+ * launcher's own APPLAUNCH_PDA it would otherwise inherit)
  * and, for a landscape fullscreen app run turned on a portrait launcher (report 038 section 3.2, option b; the PDA
  * profile), the display variables of the panel's landscape canvas, which the app's own display backend and the panel
  * readers take instead of the inherited board profile's and the launcher's:
@@ -39,7 +41,8 @@ struct Input {
 
 using Vars = std::vector<std::pair<std::string, std::string>>;
 
-/* The variables, APPLAUNCH_CONTRACT first; a turned app's display variables after the contract's. */
+/* The variables, APPLAUNCH_CONTRACT first, APPLAUNCH_PDA=0 last of the contract's; a turned app's display variables
+ * after them. */
 Vars variables(const Input &in);
 
 /* 'value' for sh -c (a ' inside becomes '\''). */

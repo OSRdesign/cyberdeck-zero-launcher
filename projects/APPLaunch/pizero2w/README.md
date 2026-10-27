@@ -422,6 +422,13 @@ again and lightdm is started (`--no-block`, since that start waits for the unit'
 75, which restarts the user service on the appliance boards). `Restart=no`: the unit is never restarted, so there is
 no restart loop and never a board without a screen; open the launcher from the menu again.
 
+**The one restart: exit status 76.** A change of Settings > Screen > PDA mode ends the launcher with exit status 76
+(the new value is read when it starts). Both units start it again on that status (`RestartForceExitStatus=76`; the
+user service also has `Restart=on-failure`); on the desktop unit, `cyberdeckzero-console restore-desktop` sees
+`EXIT_STATUS=76` in `ExecStopPost=` and leaves the display manager stopped and the console free, so the desktop does
+not come back in between (its start would stop the launcher again through `Conflicts=`). A shutdown under way still
+wins: the console is bound and nothing starts.
+
 **Shutdown and reboot** from Settings > System (or anywhere else): the unit is stopped in the poweroff or reboot
 transaction itself. `restore-desktop` sees it (`systemctl is-system-running` answers `stopping` as soon as
 `shutdown.target` has a start job, which every poweroff, reboot, halt and kexec queues before the units stop; a queued

@@ -10,7 +10,8 @@
                                                           (--force is passed to install.sh: unknown board, edited profile)
     python board.py [--dry-run] test-start BOARD [--env K=V ...]
                                                           run the staged test launcher (desktop boards: stop the
-                                                          display manager first)
+                                                          display manager first); started again when it exits with
+                                                          status 76 (Settings > Screen > PDA mode, as its units do)
     python board.py [--dry-run] test-stop  BOARD          stop it, restore the desktop / the installed launcher, remove test files
     python board.py [--dry-run] grab       BOARD OUT.png  framebuffer screenshot, turned the way the user sees the panel
     python board.py [--dry-run] status     BOARD          launcher, services / desktop, text console, test files, board profile
@@ -290,9 +291,11 @@ def do_install(remote, board, args):
 
 def launch_command(board, env):
     assignments = " ".join("%s=%s" % (key, shlex.quote(value)) for key, value in env.items())
-    # detached (setsid nohup, all three streams redirected) so the ssh call returns; line-buffered log in run.log
+    # detached (setsid nohup, all three streams redirected) so the ssh call returns; line-buffered log in run.log; run
+    # again while it exits with status 76 (a PDA mode change asks for a restart, as the units' RestartForceExitStatus=)
     return ("cd {t} && test -x bin/{bin} || {{ echo 'no staged launcher in {t}: run upload first'; exit 1; }}; "
-            "(setsid nohup env {env} stdbuf -oL -eL ./bin/{bin} > run.log 2>&1 < /dev/null &) ; sleep 8; "
+            "(setsid nohup env {env} sh -c 'while stdbuf -oL -eL ./bin/{bin}; [ $? = 76 ]; do :; done' "
+            "> run.log 2>&1 < /dev/null &) ; sleep 8; "
             "pgrep -x {comm} | head -2; grep -E 'display-profile|rror|fail' run.log | head -8; tail -n 3 run.log"
             ).format(t=board.test_dir, bin=BINARY, env=assignments, comm=LAUNCHER_COMM)
 

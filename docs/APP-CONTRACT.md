@@ -50,6 +50,7 @@ exits).
 | `APPLAUNCH_CANVAS=WxH` | `320x170` (the pixels the app draws) | the logical screen, e.g. `640x480` |
 | `APPLAUNCH_CANVAS_SCALE` | screen pixels per canvas pixel: `2` or `1` | `1` |
 | `APPLAUNCH_STATE_DIR` | the state directory (absent without `XDG_RUNTIME_DIR`) | same |
+| `APPLAUNCH_PDA` | `0` | `0`: the PDA writing zone is the launcher's (report 043); an app never draws its own band, whatever the launcher runs with |
 | `APPLAUNCH_LIFECYCLE=1`, `APPLAUNCH_CONTROL_FD=<n>` | never | only for an app with `X-Background` and only from a launcher with multitasking on: the lifecycle control socket (section 13) |
 
 All coordinates are **logical**: the canvas as the launcher shows it (landscape on every board but the portrait PDA

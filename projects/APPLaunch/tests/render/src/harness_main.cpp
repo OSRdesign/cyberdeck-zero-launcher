@@ -1133,9 +1133,11 @@ void paint_turned_app(const Run &run)
     size_t size = 0;
     int stride = 0;
     uint8_t *mem = harness_fb_memory(&size, &stride);
-    /* the app's own output stage: the buffer seen through rotate 0 (the turned app's APPLAUNCH_ROTATE) */
-    if (cp0_fbo_setup(&landscape, mem, size, stride, run.profile.bpp / 8, run.profile.pw, run.profile.ph, 0, w, h,
-                      nullptr) < 0)
+    /* the app's own output stage: the buffer seen through the turned app's APPLAUNCH_ROTATE (a quarter turn back from
+     * the launcher's: 0 at rotate 90, 180 at rotate 270, app_launch_env::turned_rotation()) */
+    const int app_rot = app_launch_env::turned_rotation(run.profile.rot);
+    if (cp0_fbo_setup(&landscape, mem, size, stride, run.profile.bpp / 8, run.profile.pw, run.profile.ph, app_rot, w,
+                      h, nullptr) < 0)
         return;
     std::vector<uint8_t> row(static_cast<size_t>(w) * 4), scratch(static_cast<size_t>(w) * 4 * 16);
     for (int y = 0; y < h; ++y) {
@@ -1463,7 +1465,19 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         else if (cmd == "ppmm" && w.size() == 2) {
             run.ppmm = to_int(w[1], run.ppmm);
             run.ppmm_explicit = true;
-        } else if (cmd == "env" && w.size() == 3) run.profile.env[w[1]] = w[2];
+        } else if (cmd == "env" && w.size() == 3) {
+            run.profile.env[w[1]] = w[2];
+            /* the panel held the other way (report 043, PDA mode On rotate right: 270 for the pda profile's 90): the
+             * display manager draws through that rotation, and the harness looks at the framebuffer and touches it
+             * through the same one; only a rotation that keeps the fake framebuffer's size */
+            int rot = -1;
+            if (w[1] == "APPLAUNCH_ROTATE" && cp0_fbo_parse_rotation(w[2].c_str(), &rot) == 0) {
+                if ((rot % 180) != (run.profile.rot % 180))
+                    return fail(scene, line, "env APPLAUNCH_ROTATE: only a rotation of the same quarter as the "
+                                             "profile's (the framebuffer keeps its size)");
+                run.profile.rot = rot;
+            }
+        }
         else return fail(scene, line, "usage: profile deck|pi3a|pda|generic, ppmm N, env KEY VALUE");
         return true;
     }
@@ -2466,6 +2480,23 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         lv_refr_now(nullptr);
         const std::string path = run.out_dir + "/" + run.size.name() + "/" + w[1] + ".png";
         if (!save_png(path, grab(run))) return fail(scene, line, "cannot write " + path);
+        std::printf("%s\n", path.c_str());
+    } else if (cmd == "panelshot") {
+        /* panelshot NAME: the framebuffer as the panel shows it (its own orientation, pw x ph, no rotation undone):
+         * which edge of the panel the picture's top is at (report 043, PDA mode On rotate left / right) */
+        if (w.size() != 2) return fail(scene, line, "usage: panelshot NAME");
+        settle(500);
+        lv_refr_now(nullptr);
+        size_t size = 0;
+        int stride = 0;
+        uint8_t *mem = harness_fb_memory(&size, &stride);
+        Run panel = run;
+        panel.size = Size{run.profile.pw, run.profile.ph};
+        if (cp0_fbo_setup(&panel.view, mem, size, stride, run.profile.bpp / 8, run.profile.pw, run.profile.ph, 0,
+                          run.profile.pw, run.profile.ph, nullptr) < 0)
+            return fail(scene, line, "panelshot: no framebuffer view");
+        const std::string path = run.out_dir + "/" + run.size.name() + "/" + w[1] + ".png";
+        if (!save_png(path, grab(panel))) return fail(scene, line, "cannot write " + path);
         std::printf("%s\n", path.c_str());
     } else {
         return fail(scene, line, "unknown command " + cmd);

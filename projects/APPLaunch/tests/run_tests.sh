@@ -350,6 +350,28 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$build_dir/app_launch_env_contract.o" \
     -o "$build_dir/test_app_launch_env"
 "$build_dir/test_app_launch_env"
+# Report 043 (PDA S7b): Settings > Screen > PDA mode, the canvases of each value from the board profile, where it is
+# offered (the real layout service and writing zone), the stored value and the environment set at start
+for unit in cp0_zone cp0_ui_osk; do
+    ${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
+        -I"$test_root/../../../ext_components/cp0_lvgl/include" -I"$test_root/../../../ext_components/cp0_lvgl/src" \
+        -c "$test_root/../../../ext_components/cp0_lvgl/src/$unit.c" -o "$build_dir/pda_mode_$unit.o"
+done
+for source in "$test_root"/../../../ext_components/cp0_lvgl/src/strokes/strokes_*.c; do
+    ${CC:-gcc} -std=c11 -Wall -Wextra -Werror -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+        -c "$source" -o "$build_dir/pda_mode_$(basename "$source" .c).o"
+done
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_pda_mode.cpp" \
+    "$test_root/../main/ui/pda_mode.cpp" \
+    "$test_root/../main/ui/app_launch_env.cpp" \
+    "$build_dir/calculator_layout_metrics.o" \
+    "$build_dir/app_launch_env_contract.o" \
+    "$build_dir"/pda_mode_*.o -lm \
+    -o "$build_dir/test_pda_mode"
+"$build_dir/test_pda_mode"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_lockscreen_state_model.cpp" \

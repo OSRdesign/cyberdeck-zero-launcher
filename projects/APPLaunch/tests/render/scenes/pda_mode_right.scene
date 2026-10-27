@@ -1,0 +1,69 @@
+# PDA mode On rotate right (report 043, phase S7b): the same panels as pda_mode (the 4.3" DSI 480x800, the FZ-M1 tablet
+# 800x1280) at rotate 270, as the setting starts the launcher with it (APPLAUNCH_ROTATE=270): the picture's top at the
+# landscape panel's left edge (panelshot), the device turned a quarter to the right. The display manager draws through
+# rotate 270 and the touch screen is read through it (buffer orientation): Settings > Screen > PDA mode lists the three
+# values with the check on On rotate right (the side the launcher runs); System > Keyboard test shows the band, "lit" is
+# written with pen strokes in the letters box and Keyb, an s on the standard keyboard and its close cross are tapped,
+# all through the touch path at rotate 270. A landscape app run turned gets rotate 180 (a quarter turn back, the device
+# turned clockwise from portrait): its frame drawn as its own output stage would, the panelshot shows it upside down
+# from the panel's own landscape. Golden at 480x800.
+title pda mode right
+sizes 480x800 800x1280
+profile pda
+env APPLAUNCH_ROTATE 270
+@800x1280 env APPLAUNCH_BOARD pc-fzm1-2
+@800x1280 env APPLAUNCH_PANEL_MM 150x93
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+header home
+panelshot pda_right_panel
+shot pda_right_home
+launch Settings
+key ENTER
+wait 300
+expect_text "On rotate right"
+key DOWN
+key DOWN
+key ENTER
+wait 300
+expect_rows Off "On rotate left" "On rotate right"
+shot pda_right_choice
+header pda_right_choice "Settings > Screen > PDA mode" "Screen > PDA mode" "PDA mode"
+key ESC
+key ESC
+# System (the last section); from its end: Shutdown, Reboot, Keyboard test
+key UP
+key ENTER
+key UP
+key UP
+key UP
+key ENTER
+expect_zone shown
+expect_vkb zone
+stroke letters 60,30 60,130 121,130
+stroke letters 60,30 60,130
+stroke letters 60,30 118,30 121,130
+expect_text lit
+shot pda_right_text
+zonekey Keyb
+expect_zone hidden
+expect_osk shown
+tapkey s
+expect_text lits
+shot pda_right_keyb
+tapkey CLOSE
+expect_osk hidden
+expect_zone shown
+expect_vkb zone
+turnedapp on
+expect_vkb auto
+shot pda_right_turned
+panelshot pda_right_panel_turned
+turnedapp off
+expect_zone shown
+expect_vkb zone

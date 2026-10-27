@@ -44,8 +44,9 @@ static void test_compat_deck()
     app_launch_env::Input in;
     CHECK(app_launch_env::from_metrics(&m, app_launch_env::Mode::Compat, "/run/user/1000", &in));
     const app_launch_env::Vars vars = app_launch_env::variables(in);
-    CHECK(vars.size() == 6);
+    CHECK(vars.size() == 7);
     CHECK(vars[0].first == "APPLAUNCH_CONTRACT" && vars[0].second == "1");
+    CHECK(value_of(vars, "APPLAUNCH_PDA") == "0"); /* report 043: the writing zone is the launcher's */
     CHECK(value_of(vars, "APPLAUNCH_APP_MODE") == "compat");
     CHECK(value_of(vars, "APPLAUNCH_WINDOW") == "0,0,640,340");
     CHECK(value_of(vars, "APPLAUNCH_CANVAS") == "320x170");
@@ -53,7 +54,8 @@ static void test_compat_deck()
     CHECK(value_of(vars, "APPLAUNCH_STATE_DIR") == "/run/user/1000/applaunch");
     CHECK(app_launch_env::export_command(in) ==
           "export APPLAUNCH_CONTRACT='1' APPLAUNCH_APP_MODE='compat' APPLAUNCH_WINDOW='0,0,640,340' "
-          "APPLAUNCH_CANVAS='320x170' APPLAUNCH_CANVAS_SCALE='2' APPLAUNCH_STATE_DIR='/run/user/1000/applaunch'; ");
+          "APPLAUNCH_CANVAS='320x170' APPLAUNCH_CANVAS_SCALE='2' APPLAUNCH_STATE_DIR='/run/user/1000/applaunch' "
+          "APPLAUNCH_PDA='0'; ");
 }
 
 static void test_compat_and_fullscreen_sizes()
@@ -87,7 +89,8 @@ static void test_compat_and_fullscreen_sizes()
         CHECK(value_of(vars, "APPLAUNCH_CANVAS_SCALE") == std::to_string(m.compat.scale));
         CHECK(m.compat.w == 320 * m.compat.scale && m.compat.h == 170 * m.compat.scale);
         CHECK(value_of(vars, "APPLAUNCH_STATE_DIR") == "<absent>"); /* no XDG_RUNTIME_DIR: not exported */
-        CHECK(vars.size() == 5);
+        CHECK(vars.size() == 6);
+        CHECK(value_of(vars, "APPLAUNCH_PDA") == "0");
         CHECK(app_launch_env::from_metrics(&m, app_launch_env::Mode::Fullscreen, "", &in));
         vars = app_launch_env::variables(in);
         CHECK(value_of(vars, "APPLAUNCH_CANVAS") == std::to_string(s.w) + "x" + std::to_string(s.h));
@@ -116,7 +119,8 @@ static void test_no_metrics()
     setenv("XDG_RUNTIME_DIR", "/run/user/1000", 1);
     CHECK(app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen) ==
           "export APPLAUNCH_CONTRACT='1' APPLAUNCH_APP_MODE='fullscreen' APPLAUNCH_WINDOW='0,0,640,480' "
-          "APPLAUNCH_CANVAS='640x480' APPLAUNCH_CANVAS_SCALE='1' APPLAUNCH_STATE_DIR='/run/user/1000/applaunch'; ");
+          "APPLAUNCH_CANVAS='640x480' APPLAUNCH_CANVAS_SCALE='1' APPLAUNCH_STATE_DIR='/run/user/1000/applaunch' "
+          "APPLAUNCH_PDA='0'; ");
     cp0_ui_metrics_set_current(nullptr);
 }
 
@@ -134,7 +138,9 @@ static void test_quoting_through_a_shell()
                                 "printf '%s|%s|%s|%s|%s|%s' \"$APPLAUNCH_CONTRACT\" \"$APPLAUNCH_APP_MODE\" "
                                 "\"$APPLAUNCH_WINDOW\" \"$APPLAUNCH_CANVAS\" \"$APPLAUNCH_CANVAS_SCALE\" "
                                 "\"$APPLAUNCH_STATE_DIR\"";
-    std::string script = "sh -c " + app_launch_env::shell_quote(command);
+    /* the launcher's own APPLAUNCH_PDA=1 (PDA mode) does not reach the app */
+    std::string script =
+        "APPLAUNCH_PDA=1 sh -c " + app_launch_env::shell_quote(command + "; printf '|%s' \"$APPLAUNCH_PDA\"");
     FILE *p = popen(script.c_str(), "r");
     CHECK(p != nullptr);
     char out[512] = {0};
@@ -145,7 +151,7 @@ static void test_quoting_through_a_shell()
     }
     const std::string want = "1|compat|" + std::to_string(m.compat.x) + "," + std::to_string(m.compat.y) + "," +
                              std::to_string(m.compat.w) + "," + std::to_string(m.compat.h) + "|320x170|" +
-                             std::to_string(m.compat.scale) + "|/run/user/1000 it's/applaunch";
+                             std::to_string(m.compat.scale) + "|/run/user/1000 it's/applaunch|0";
     if (want != out) std::fprintf(stderr, "shell exported '%s', expected '%s'\n", out, want.c_str());
     CHECK(want == out);
 
@@ -181,7 +187,8 @@ static void test_turned()
     CHECK(app_launch_env::turned_from_metrics(&m, "/run/user/1000", &in));
     CHECK(in.mode == app_launch_env::Mode::Fullscreen && in.turned);
     const app_launch_env::Vars vars = app_launch_env::variables(in);
-    CHECK(vars.size() == 12);
+    CHECK(vars.size() == 13);
+    CHECK(value_of(vars, "APPLAUNCH_PDA") == "0"); /* a turned app: no band either */
     CHECK(vars[0].first == "APPLAUNCH_CONTRACT"); /* the contract's variables first, as for every app */
     CHECK(value_of(vars, "APPLAUNCH_APP_MODE") == "fullscreen");
     CHECK(value_of(vars, "APPLAUNCH_WINDOW") == "0,0,800,480");
@@ -198,8 +205,8 @@ static void test_turned()
     CHECK(app_launch_env::export_command(in) ==
           "export APPLAUNCH_CONTRACT='1' APPLAUNCH_APP_MODE='fullscreen' APPLAUNCH_WINDOW='0,0,800,480' "
           "APPLAUNCH_CANVAS='800x480' APPLAUNCH_CANVAS_SCALE='1' APPLAUNCH_STATE_DIR='/run/user/1000/applaunch' "
-          "APPLAUNCH_ROTATE='0' APPLAUNCH_LOGICAL='800x480' APPLAUNCH_SCREEN_W='800' APPLAUNCH_SCREEN_H='480' "
-          "APPLAUNCH_SCREEN_ROTATE='0' APPLAUNCH_SCREEN_CLASS='wide'; ");
+          "APPLAUNCH_PDA='0' APPLAUNCH_ROTATE='0' APPLAUNCH_LOGICAL='800x480' APPLAUNCH_SCREEN_W='800' "
+          "APPLAUNCH_SCREEN_H='480' APPLAUNCH_SCREEN_ROTATE='0' APPLAUNCH_SCREEN_CLASS='wide'; ");
 
     /* the turned density equals the portrait one: the layout service's mean of both axes, from the same panel mm */
     int mm_w = 0, mm_h = 0;
@@ -229,11 +236,11 @@ static void test_turned()
     CHECK(in.canvas_w == 7); /* untouched */
     app_launch_env::Input plain;
     CHECK(app_launch_env::from_metrics(&m, app_launch_env::Mode::Fullscreen, nullptr, &plain));
-    CHECK(!plain.turned && app_launch_env::variables(plain).size() == 5);
+    CHECK(!plain.turned && app_launch_env::variables(plain).size() == 6);
     CHECK(value_of(app_launch_env::variables(plain), "APPLAUNCH_CANVAS") == "480x800");
     plain.turned = true; /* the display variables are a fullscreen app's only */
     plain.mode = app_launch_env::Mode::Compat;
-    CHECK(app_launch_env::variables(plain).size() == 5);
+    CHECK(app_launch_env::variables(plain).size() == 6);
 
     /* export_for_current: turned only for a fullscreen app on a portrait canvas */
     unsetenv("XDG_RUNTIME_DIR");
