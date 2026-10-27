@@ -1,0 +1,21 @@
+# The terminal on the FZ-M1 tablet turned to portrait (report 043, docs/PDA-PROFILE.md "Large screens: the tablet"):
+# 800x1280 on the profile pda (rotate 90, 150x93 mm), the band shown with the key strip and Ctrl armed. Review only
+# (no golden). The band's writing area is one third of the height, the key strip on top of it.
+title pda tablet terminal
+sizes 800x1280
+review
+profile pda
+env APPLAUNCH_BOARD pc-fzm1-2
+env APPLAUNCH_PANEL_MM 150x93
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+expect_zone hidden
+launch CLI
+ptyout "user@tablet:~$ "
+wait 300
+expect_zone shown
+zonekey Ctrl
+shot tablet_terminal_ctrl

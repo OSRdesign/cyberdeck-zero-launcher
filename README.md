@@ -11,7 +11,7 @@
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
 machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
 Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
-(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
+(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)); since v0.8.9 Settings > Screen > PDA mode turns it on for any screen where portrait fits, among them the 7-inch tablet, which then runs 800x1280 (see [Large screens: the tablet](docs/PDA-PROFILE.md#large-screens-the-tablet)). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
 time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
@@ -74,6 +74,9 @@ The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md).
 | --- | --- | --- | --- |
 | ![Home grid, three columns](docs/images/pda/pda-home.png) | ![Handwriting band under a text field](docs/images/pda/pda-band-text.png) | ![A stroke drawn in the band](docs/images/pda/pda-band-ink.png) | ![Terminal with the key strip, Ctrl armed](docs/images/pda/pda-terminal-ctrl.png) |
 | Three columns, status strip drawn smaller | The band: key strip over two writing boxes | A stroke in the letters box, in amber | Ctrl armed on the key strip |
+
+On the 7-inch tablet the same profile is a choice in Settings > Screen > PDA mode, and runs 800x1280 in portrait
+(renders in [the guide](docs/PDA-PROFILE.md#large-screens-the-tablet)).
 
 | Keyboard | Keyboard setting | Strokes training | Glyph picker |
 | --- | --- | --- | --- |

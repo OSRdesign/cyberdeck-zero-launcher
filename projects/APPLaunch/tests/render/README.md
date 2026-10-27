@@ -138,6 +138,8 @@ picture the other way up, the list checked on On rotate right, the Keyboard test
 band and the standard keyboard through the touch path at rotate 270, a landscape app run turned at rotate 180 and its
 panelshot).
 
+Tablet scenes (report 043, review only, 800x1280 on the profile `pda` with `APPLAUNCH_BOARD pc-fzm1-2` and 150x93 mm; the pictures of `docs/PDA-PROFILE.md` "Large screens: the tablet"): `pda_tablet` (the home grid, Settings > System > Keyboard test with the band), `pda_tablet_terminal` (the terminal, the key strip, Ctrl armed); the PDA mode picture is `pda_mode`'s `pda_mode_choice`.
+
 Writing zone scenes (report 041, 042, profile `pda` with the zone, goldens at 480x640 and 480x800): `zone_home` (the
 home grid: no text field, the band hidden, the grid on the whole panel), `zone_text` (Settings with the band hidden, then
 System > Keyboard test: its field focused shows the band; written with pen strokes: the mode line after the shift
