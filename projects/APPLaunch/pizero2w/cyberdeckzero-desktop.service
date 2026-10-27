@@ -43,8 +43,15 @@ ExecStartPre=-+/usr/share/APPLaunch/bin/cyberdeckzero-console unbind
 ExecStartPre=-+/usr/bin/timeout 5 /usr/bin/chvt 7
 ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero
 # However the launcher ends (Settings > System > Quit to desktop: exit 0; the hold-Esc recovery: exit 75; a crash; a
-# kill), the unit stops and the desktop comes back. Never restarted: no restart loop, never a board without a screen.
+# kill), the unit stops and the desktop comes back. Never restarted on its own: no restart loop, never a board without a
+# screen.
 Restart=no
+# The one exception: exit status 76, the launcher asking to be started again (Settings > Screen > PDA mode changed: the
+# new launcher turns the screen before it draws). systemd restarts the unit whatever Restart= says; ExecStopPost= runs
+# in between and leaves the desktop stopped (cyberdeckzero-console sees EXIT_STATUS=76), so Conflicts= does not cancel
+# the restart.
+RestartForceExitStatus=76
 # As root: the text console back, then the desktop, unless the system is shutting down (Settings > System > Shutdown
-# or Reboot): then the poweroff or reboot goes on without the desktop coming back in between.
+# or Reboot): then the poweroff or reboot goes on without the desktop coming back in between; or unless the launcher
+# restarts (exit status 76, above): the console stays free and the desktop stopped.
 ExecStopPost=+/usr/share/APPLaunch/bin/cyberdeckzero-console restore-desktop @DM@

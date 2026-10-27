@@ -9,6 +9,7 @@
 #include "settings_capabilities_model.hpp"
 #include "settings_hw_profile.hpp"
 #include "settings_keyboard_page.hpp"
+#include "settings_pda_page.hpp"
 #include "settings_pointer_page.hpp"
 #include "settings_strokes_page.hpp"
 #include "settings_native_host.hpp"
@@ -694,6 +695,7 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
         for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
                                          confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
                                          settings_keyboard_choice_page_factory, settings_pointer_choice_page_factory,
+                                         settings_pda_mode_choice_page_factory, // its restart question: a host Dialog
                                          settings_rtc_confirm_page_factory, // Save?: its warning is a host Dialog
                                          volume_page3_factory})
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
@@ -762,6 +764,8 @@ void UISettingTreePage::create_page_detail()
             mode_tree.append_child(dark_time, SettingEntry{"60S"});
             mode_tree.append_child(dark_time, SettingEntry{"300S"});
         }
+        // PDA mode (report 043): where a portrait canvas with the writing zone fits; native Settings only
+        if (settings_ui::native_selected()) settings_pda::append_entry(mode_tree, screen);
     }
 
     // Speaker (the volume, 100 % to 0 %): our boards when they have a sound output (a non-HDMI card, a sound server's

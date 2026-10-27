@@ -13,6 +13,11 @@
  * cp0_lvgl_run() tears the launcher down and main() returns 0. A teardown that does not finish within the deadline
  * ends the process with exit status 0 anyway: the unit stops and the desktop comes back in every case.
  *
+ * A restart (Settings > Screen > PDA mode, report 043: the canvas is chosen when the launcher starts) is the same
+ * orderly exit with exit status kRestartExitStatus (76; 75 is the hold-Esc watchdog's): both units start the launcher
+ * again on it (RestartForceExitStatus=76; the desktop unit's ExecStopPost= then leaves the desktop stopped), and the
+ * new launcher reads the stored choice. Open apps end with the old launcher (the unit's processes are stopped).
+ *
  * Pure logic and the process-wide quit flag only (no LVGL, no settings tree): unit tested on the PC.
  */
 #pragma once
@@ -38,5 +43,16 @@ void request_quit(unsigned deadline_ms = kQuitDeadlineMs) noexcept;
 
 /* The main loop's should_quit(). */
 bool quit_requested() noexcept;
+
+/* The exit status that makes the launcher's units start it again (cyberdeckzero.service, cyberdeckzero-desktop.service:
+ * RestartForceExitStatus=; cyberdeckzero-console restore-desktop leaves the desktop stopped on it). */
+inline constexpr int kRestartExitStatus = 76;
+
+/* request_quit() that ends with kRestartExitStatus (the deadline's exit too). Idempotent: the first request counts
+ * (a restart asked after a quit is a quit). */
+void request_restart(unsigned deadline_ms = kQuitDeadlineMs) noexcept;
+
+/* A restart was requested: main() returns kRestartExitStatus. */
+bool restart_requested() noexcept;
 
 } // namespace launcher_session

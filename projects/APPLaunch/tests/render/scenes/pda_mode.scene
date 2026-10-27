@@ -1,0 +1,50 @@
+# Settings > Screen > PDA mode (report 043, phase S7b) on the PDA install profile (480x800: the Pi 3A+ 4.3" DSI turned,
+# rotate 90, pi3a-wsdsi43-portrait) and on the FZ-M1 tablet turned to portrait (800x1280 rotate 90, 150x93 mm, the
+# portrait canvas the setting gives the tablet): the panel as it shows the home grid (panelshot: the picture's top at
+# the landscape panel's right edge, the device turned a quarter to the left), the Screen section with the row and its
+# value (On rotate left: the profile's own side while nothing is stored), the list of the three values with the check on
+# it, the restart question when another value is picked (Cancel / Restart, over the list), and Esc: the question goes,
+# nothing is stored, the check stays. Every header is checked against the home grid's (run.sh header). Golden at
+# 480x800.
+title pda mode
+sizes 480x800 800x1280
+profile pda
+@800x1280 env APPLAUNCH_BOARD pc-fzm1-2
+@800x1280 env APPLAUNCH_PANEL_MM 150x93
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home
+panelshot pda_mode_panel_left
+launch Settings
+key ENTER
+wait 300
+expect_rows Brightness DarkTime "PDA mode"
+expect_text "On rotate left"
+shot pda_mode_screen
+header pda_mode_screen "Settings > Screen" Screen
+key DOWN
+key DOWN
+key ENTER
+wait 300
+expect_rows Off "On rotate left" "On rotate right"
+shot pda_mode_choice
+header pda_mode_choice "Settings > Screen > PDA mode" "Screen > PDA mode" "PDA mode"
+# On rotate right: the question first
+key DOWN
+key ENTER
+wait 300
+expect_text "Restart the launcher?"
+expect_text Cancel
+expect_text Restart
+shot pda_mode_dialog
+# Esc answers Cancel: the list again, the check still on On rotate left
+key ESC
+wait 300
+expect_rows Off "On rotate left" "On rotate right"
+shot pda_mode_cancelled
+key ESC
+wait 300
+expect_text "On rotate left"

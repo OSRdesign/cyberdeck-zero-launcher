@@ -27,6 +27,28 @@ sudo ./install.sh --board pi3a-wsdsi43-portrait
 
 Then reboot. The other flags (`--keyboard-name`, and so on) are as in the [README](../README.md#quick-start).
 
+## PDA mode in Settings
+
+Settings > Screen > **PDA mode** turns the profile on or off on any board whose screen has room for it: Off, **On rotate
+left** or **On rotate right**. Rotate left means the device is turned a quarter to the left from its landscape position
+(the landscape panel's right edge at the top, what the install profile above does); rotate right the other way round.
+Picking another value asks first: the launcher restarts and open apps are closed. The choice is kept in the user's
+settings (`~/.config/cardputerzero/config.json`, key `pda_mode`: 0 Off, 1 left, 2 right), so a later `install.sh`
+without the portrait flag does not undo it. While nothing is chosen, the board profile decides (the portrait profile:
+On rotate left).
+
+The row is there when the short side of the screen is 480 px or more, the screen is not square and the band leaves at
+least 400 px above it in portrait: the Pi 3A+ and Pi 4 B DSI panels, the FZ-M1 tablet (800x1280 in portrait), a
+HyperPixel 4. The deck, the 3.5" Luckfox panel and the HackBerry's square 720x720 screen do not have it. Landscape PDA
+is not offered.
+
+| Screen > PDA mode | The question |
+| --- | --- |
+| ![PDA mode values](images/pda/pda-mode-choice.png) | ![Restart question](images/pda/pda-mode-dialog.png) |
+
+On the right side, a landscape app run turned is drawn upside down from the panel's own landscape (rotation 180): turn
+the device clockwise from portrait to read it, as on the left side.
+
 ## The band and the key strip
 
 Where a text field asks for input, a band comes up at the bottom of the screen: a **key strip** over two writing boxes,
@@ -105,4 +127,5 @@ Two files are kept in `~/.config/applaunch/`:
   existed. A capture session with a real stylus is planned.
 - The physical size of the Pi 4 B's Freenove panel is a guess, to be checked with a ruler.
 - Keys from the band do not reach compat apps (they are hidden on portrait).
-- A turned app at rotation 180 has not run on a board.
+- A turned app at rotation 180 (PDA mode On rotate right) has not run on a board.
+- PDA mode's restart (exit status 76, restarted by both launcher units) has not run on a board yet.

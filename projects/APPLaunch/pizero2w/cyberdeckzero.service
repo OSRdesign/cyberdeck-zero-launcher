@@ -32,6 +32,9 @@ TimeoutStartSec=180
 ExecStartPre=-/usr/bin/timeout 150 /usr/bin/systemctl is-system-running --wait
 ExecStart=/usr/bin/stdbuf -oL -eL /usr/share/APPLaunch/bin/cyberdeckzero
 Restart=on-failure
+# Exit status 76: the launcher asks to be started again (Settings > Screen > PDA mode changed: the new launcher turns the
+# screen before it draws). on-failure restarts it already; named so that it holds whatever Restart= says.
+RestartForceExitStatus=76
 
 [Install]
 WantedBy=default.target

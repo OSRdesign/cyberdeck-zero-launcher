@@ -9,6 +9,7 @@
 #include "ui/input_presence.hpp"
 #include "ui/app_requests.hpp"
 #include "ui/launcher_media_controls.h"
+#include "ui/pda_mode.hpp"
 #include "ui/settings/settings_session_model.hpp"
 #include "ui/status_feed.hpp"
 #include "ui/ui.h"
@@ -26,6 +27,9 @@
 
 int main(void)
 {
+    // Settings > Screen > PDA mode (pda_mode.hpp): the stored choice turns board.conf's canvas before the display opens
+    // (APPLAUNCH_LOGICAL, APPLAUNCH_ROTATE, APPLAUNCH_PDA); nothing stored, the board's values as they are.
+    pda_mode::apply_at_start();
     Cp0LvglRunOptions options;
     options.after_resource_init = []() {
         // Once per launcher start (never on a wake from the screensaver or a return from an app): the saved
@@ -53,7 +57,8 @@ int main(void)
         launcher_ui::deinit();
     };
     // Settings > System > Quit to desktop (desktop boards) ends the main loop: teardown, then exit status 0, and
-    // applaunch-desktop.service gives the screen back to the desktop (settings_session_model.hpp).
+    // applaunch-desktop.service gives the screen back to the desktop (settings_session_model.hpp). A change of PDA mode
+    // ends it the same way with exit status 76, on which both units start the launcher again.
     launcher_session::set_wake(&cp0_lvgl_wake);
     options.should_quit = []() { return launcher_session::quit_requested(); };
     // Every keyboard (USB, Bluetooth) types in the launcher; its presence is published for apps. Before
@@ -62,5 +67,5 @@ int main(void)
     input_presence::start();
     const int rc = cp0_lvgl_run(std::move(options));
     input_presence::stop();
-    return rc;
+    return launcher_session::restart_requested() ? launcher_session::kRestartExitStatus : rc;
 }

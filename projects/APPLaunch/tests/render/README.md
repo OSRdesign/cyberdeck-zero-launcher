@@ -78,7 +78,7 @@ runs at those sizes only.
 |---|---|
 | `title TEXT`, `sizes WxH ...` | sheet title; sizes to render (default the five above) |
 | `review` | the scene's shots are for review only: no golden is expected (nor made by `run.sh golden`) at 640x480 / 480x320 |
-| `profile deck\|pi3a\|pda\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it |
+| `profile deck\|pi3a\|pda\|generic`, `env KEY VALUE`, `ppmm N` | before the first drawing command. `ppmm` (px/mm x100): the fake framebuffer reports the matching size in mm (default per size for `generic`: 800x480 920, 720x720 1000, 1280x720 1160, others 1130; with an explicit `ppmm` on every profile). `APPLAUNCH_PANEL_MM` (`env`) wins over it. `env APPLAUNCH_ROTATE N` with a rotation of the same quarter as the profile's (the `pda` profile's 90 -> 270: PDA mode On rotate right, report 043) also turns the harness's own view: the shots and the touch go through that rotation, as on a panel held the other way |
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings`, `Calculator`, `SSH` and `CLI` (the terminal page, on the fake PTY) open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
 | `battery off\|mains\|PCT discharging\|charging\|full\|notcharging` | the fake `power_supply` tree the launcher reads (`APPLAUNCH_POWER_SUPPLY_ROOT` = `out/<WxH>/runtime/power_supply`, set at boot, emptied before every scene: never the host's battery): nothing (the Pi boards, the default), an AC adapter alone, or the FZ-M1's `ADP1` + `BAT1` (energy units: 26.64 of 33.3 Wh, 7.412 V, 6.54 W discharging, 12 W charging). Status strip: `wait 2100` after a change; Settings > Battery's row follows the tree when Settings opens |
@@ -106,6 +106,7 @@ runs at those sizes only.
 | `osd level TITLE PCT`, `osd mute on`/`off`, `loading TEXT` / `loading off`, `compatpage` | the media OSD of the brightness / volume keys (it hides itself after 1000 ms: a shot settles 700 ms after the command), the "Loading..." overlay, a compat page (the compat window is default, a flat placeholder screen, no external app) |
 | `wifinet SSID IP`, `expect_text [end] TEXT` | the connected network the Wi-Fi fixture reports; fail the scene unless a visible label shows TEXT whole (`end`: a label whose text ends with TEXT) in a box wide enough for it (not cut with dots), see `settings_native_wifi_status` |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
+| `panelshot NAME` | settle 500 ms and save the framebuffer as the panel shows it (its own orientation and size, no rotation undone) as `out/<WxH>/NAME.png`: which edge of the panel the picture's top is at (report 043). Not in the contact sheet |
 | `header NAME [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `cp0::ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home` taken on the home grid. The home grid has no title (rebranding plan 025): without TITLE the origin written is the shell's title origin (`shell.title_x/title_y`) and the command fails if a label stands there |
 | `switcher CARD...`, `switcher select ITEM`, `switcher off` | multitasking P-d: the switcher screen (`multitask/switcher_view.cpp`) with the cards named `Name=front\|running\|paused\|nr` (front: the app it was opened from; the icon is the tile's of that name); `select card0..3\|home\|closeall` moves the selection |
 | `sheet NAME`, `sheet off` | the legacy sheet "Close NAME?": the screen shown now stands for the frozen app's frame (snapshot, written back dimmed to 38 %), only the sheet's box is drawn (the native clip); the command fails unless every pixel outside the box is the dimmed frame and the box is drawn |
@@ -128,6 +129,14 @@ On-screen keyboard, Keyboard test, and a breadcrumb, as a path and as one string
 `metrics` scene also renders 480x640 and 480x800 with that profile and writes `metrics.turned.env` there (what a
 landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe. The `pda_*` scenes run without the
 writing zone (`env APPLAUNCH_PDA 0`): the portrait launcher of S2, kept as its regression.
+
+PDA mode scenes (report 043, phase S7b; golden at 480x800, also rendered at 800x1280, the FZ-M1 tablet turned to
+portrait, board `pc-fzm1-2`, 150x93 mm): `pda_mode` (Settings > Screen with the PDA mode row and its value, the list of
+Off / On rotate left / On rotate right with the check on the profile's side, the restart question, Esc: nothing changes;
+a panelshot of the home grid at rotate 90), `pda_mode_right` (`env APPLAUNCH_ROTATE 270`: the panelshot with the
+picture the other way up, the list checked on On rotate right, the Keyboard test written with strokes and tapped on the
+band and the standard keyboard through the touch path at rotate 270, a landscape app run turned at rotate 180 and its
+panelshot).
 
 Writing zone scenes (report 041, 042, profile `pda` with the zone, goldens at 480x640 and 480x800): `zone_home` (the
 home grid: no text field, the band hidden, the grid on the whole panel), `zone_text` (Settings with the band hidden, then
