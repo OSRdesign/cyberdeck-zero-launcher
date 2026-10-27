@@ -1,0 +1,75 @@
+# The sudo password prompt in PDA mode (the writing zone, Handwriting + keyboard, the profile's default): Settings >
+# Apps > Available, Enter on Signal Meter; the fake Store backend prepares the package job (HARNESS_APPS_PACKAGE job) and
+# the privileged step opens the responsive prompt (HARNESS_SUDO prompt: cp0_sudo_prompt_ui on the display's top layer,
+# as cp0_sudo_async shows it). Its masked Password field gets the band as every text field does (the Wi-Fi password,
+# the Keyboard test), the dialog above it: until 0.8.9 neither the band nor the keyboard came (the field on the top
+# layer was taken for a screen not shown). Two letters written with strokes (masked, then shown with the eye); the
+# strip's Keyb: the standard keyboard in the band's place, a key tapped, the cross: the band again; Enter
+# (Authenticating...: the field stops editing, the band hides); a wrong password (the band again); Esc cancels (the
+# band hides, the page says Cancelled). Golden at 480x800; 800x1280 (the tablet turned to portrait) is checked by the
+# expect lines.
+title zone sudo
+sizes 480x800 800x1280
+profile pda
+@800x1280 env APPLAUNCH_BOARD pc-fzm1-2
+@800x1280 env APPLAUNCH_PANEL_MM 150x93
+env APPLAUNCH_DEV 0
+env HARNESS_APPS catalogue
+env HARNESS_APPS_PACKAGE job
+env HARNESS_SUDO prompt
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+# Apps, then Available (Bench Tools, Signal Meter)
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+key DOWN
+key ENTER
+wait 500
+expect_zone hidden
+key DOWN
+key ENTER
+wait 1000
+expect_zone shown
+expect_osk hidden
+expect_vkb zone
+shot zone_sudo_band
+# l and i written in the letters box (masked), then shown with the field's eye
+stroke letters 60,30 60,130 121,130
+stroke letters 60,30 60,130
+@480x800 tap 417 224
+@800x1280 tap 633 384
+expect_text li
+shot zone_sudo_written
+zonekey Keyb
+expect_zone hidden
+expect_osk shown
+expect_vkb auto
+tapkey x
+expect_text lix
+shot zone_sudo_keyb
+tapkey CLOSE
+expect_osk hidden
+expect_zone shown
+expect_vkb zone
+key ENTER
+expect_zone hidden
+shot zone_sudo_busy
+sudoprompt wrong
+expect_zone shown
+shot zone_sudo_wrong
+key ESC
+wait 300
+expect_zone hidden
+expect_osk hidden
+expect_vkb auto
+shot zone_sudo_cancelled

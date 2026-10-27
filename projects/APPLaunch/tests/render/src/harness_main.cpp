@@ -731,11 +731,14 @@ bool set_sound(const Run &run, const std::string &kind)
 /* sudoprompt: the responsive sudo prompt (cp0_sudo_prompt_ui) driven without the sudo coordinator, which the harness
  * does not link. open / busy / wrong / close stand for what cp0_sudo_async does: SHOW_PROMPT (an input group around the
  * field, as create_prompt makes it), START_WORKER, SHOW_AUTH_ERROR, DESTROY_PROMPT. OK / Enter ends in busy by itself;
- * Cancel / Esc closes it. */
+ * Cancel / Esc closes it. A launcher request (harness::sudo_prompt_request, Settings > Apps' install) opens the same
+ * prompt and is told when it is cancelled. */
 struct SudoPromptDemo {
     std::unique_ptr<cp0_sudo::PromptUi> ui;
     lv_group_t *group = nullptr;
     lv_group_t *saved = nullptr;
+    std::function<void()> cancelled; /* the launcher's request, while its prompt is open */
+    std::function<void()> requested; /* a request waiting for the next cycle */
 };
 SudoPromptDemo g_sudo_demo;
 
@@ -759,7 +762,12 @@ bool sudo_prompt_open()
     events.submit = [](const std::string &) {
         if (g_sudo_demo.ui) g_sudo_demo.ui->show_busy("Authenticating...");
     };
-    events.cancel = [] { sudo_prompt_close(); };
+    events.cancel = [] {
+        std::function<void()> cancelled = std::move(g_sudo_demo.cancelled);
+        g_sudo_demo.cancelled = nullptr;
+        sudo_prompt_close();
+        if (cancelled) cancelled();
+    };
     if (!d.ui->create(lv_display_get_layer_top(cp0_display_native()), std::move(events))) {
         d.ui.reset();
         return false;
@@ -772,6 +780,31 @@ bool sudo_prompt_open()
     d.ui->begin_edit();
     return true;
 }
+
+/* the launcher's request, one cycle later (cp0_sudo_async shows its prompt from an async hop too) */
+void sudo_prompt_request_cb(void *)
+{
+    std::function<void()> cancelled = std::move(g_sudo_demo.requested);
+    g_sudo_demo.requested = nullptr;
+    if (!sudo_prompt_open()) {
+        if (cancelled) cancelled();
+        return;
+    }
+    g_sudo_demo.cancelled = std::move(cancelled);
+}
+
+} // namespace
+
+bool harness::sudo_prompt_request(std::function<void()> cancelled)
+{
+    if (g_sudo_demo.ui || g_sudo_demo.requested) return false;
+    g_sudo_demo.requested = cancelled ? std::move(cancelled) : [] {};
+    if (lv_async_call(sudo_prompt_request_cb, nullptr) == LV_RESULT_OK) return true;
+    g_sudo_demo.requested = nullptr;
+    return false;
+}
+
+namespace {
 
 /* listdemo: a cp0::ui::CompactList on a page of its own (the Page scaffold, the shared status strip, an input group on
  * the keypad), as an app builds it. The rows are fixed demo data: Compact = a system monitor (sections, value tones,
@@ -1537,15 +1570,16 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         return true;
     }
     if (cmd == "expect_text") {
-        /* expect_text [end] TEXT: a visible label of the native screen shows TEXT whole (with `end`: a label whose text
-         * ENDS with TEXT), and its box is wide enough for its text: not cut with dots, not past the screen. A scene
-         * fails otherwise. */
+        /* expect_text [end] TEXT: a visible label of the native screen (or of its top layer: the sudo prompt) shows TEXT
+         * whole (with `end`: a label whose text ENDS with TEXT), and its box is wide enough for its text: not cut with
+         * dots, not past the screen. A scene fails otherwise. */
         const bool suffix = w.size() == 3 && w[1] == "end";
         if (w.size() != 2 && !suffix) return fail(scene, line, "usage: expect_text [end] TEXT");
         const std::string &text = w.back();
         settle(500);
         lv_refr_now(nullptr);
         lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), text, suffix);
+        if (!label) label = find_label_text(lv_display_get_layer_top(cp0_display_native()), text, suffix);
         if (!label)
             return fail(scene, line, "expect_text: no visible label " + std::string(suffix ? "ending with " : "") + text);
         lv_area_t area;

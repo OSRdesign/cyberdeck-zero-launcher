@@ -379,6 +379,17 @@ bool layout_for(lv_obj_t *field, bool multiline, cp0_ui_osk_layout_t &out)
     return layout(&other);
 }
 
+/* The field is in view: on its display's active screen, or on the top or system layer, drawn above whatever screen is
+ * shown (the sudo password prompt is a dialog on the top layer, cp0_sudo_prompt_ui; the keyboard itself goes there). */
+bool field_in_view(lv_obj_t *field)
+{
+    lv_display_t *display = lv_obj_get_display(field);
+    if (!display) return false;
+    lv_obj_t *screen = lv_obj_get_screen(field);
+    return screen == lv_display_get_screen_active(display) || screen == lv_display_get_layer_top(display) ||
+           screen == lv_display_get_layer_sys(display);
+}
+
 void poll_cb(lv_timer_t *);
 
 void apply()
@@ -387,13 +398,12 @@ void apply()
     if (s.owner && !lv_obj_is_valid(s.owner)) s.owner = nullptr;
     const bool want = s.owner && s.allowed && s.allowed();
     if (want && s.zone_input && s.zone_input()) {
-        /* the PDA writing zone instead of the keyboard (report 042), while the field's screen is the one shown */
+        /* the PDA writing zone instead of the keyboard (report 042), while the field is in view */
         if (s.keyboard) {
             s.keyboard->release_all();
             s.keyboard.reset();
         }
-        lv_display_t *display = lv_obj_get_display(s.owner);
-        zone_set(display && lv_obj_get_screen(s.owner) == lv_display_get_screen_active(display));
+        zone_set(field_in_view(s.owner));
         notify(0);
     } else if (!want) {
         hide_now(true);
