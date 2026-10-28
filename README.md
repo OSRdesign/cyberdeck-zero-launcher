@@ -77,6 +77,10 @@ The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md).
 
 On the 7-inch tablet the same profile is a choice in Settings > Screen > PDA mode, and runs 800x1280 in portrait
 (renders in [the guide](docs/PDA-PROFILE.md#large-screens-the-tablet)).
+Since v0.8.11 apps built for it draw the band too (the Serial Console first; see
+[Apps with the band](docs/PDA-PROFILE.md#apps-with-the-band)):
+
+![Serial Console with the handwriting band](docs/images/pda/serial-band-480x800.png)
 
 | Keyboard | Keyboard setting | Strokes training | Glyph picker |
 | --- | --- | --- | --- |

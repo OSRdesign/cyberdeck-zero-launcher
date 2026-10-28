@@ -78,6 +78,28 @@ Off no longer exists. A stored Off reads as Auto.
 
 ![Settings, On-screen keyboard](images/pda/pda-setting-keyboard.png)
 
+## Apps with the band
+
+Since v0.8.11 an app can have the band too. Set Settings > System > On-screen keyboard to **Handwriting + keyboard** (the
+default on the PDA profile). An app that declares a portrait size (`X-Portrait`) and is shown upright then draws the
+band itself: when one of its text fields asks for input, the band comes up where the on-screen keyboard would, the text
+above keeps its rows, and the app's field stays visible. The key strip acts as the keyboard's keys do (Enter sends the
+line in the terminal, Ctrl armed then a written letter is Ctrl plus that letter), **Keyb** swaps in the standard
+keyboard and its cross brings the band back, and a physical keyboard hides the band. With the setting on Auto or On the
+app shows the standard keyboard, as before.
+
+Serial Console is the first app to have it (version 0.6.0). Apps built with an older toolkit keep the on-screen
+keyboard, and so do landscape apps run turned. Nothing is set in the app's `.desktop` file: the launcher tells the app
+it runs upright, and the app reads your trained glyphs when it starts.
+
+The renders below are the Serial Console in its demonstration world, made by the apps repo's headless harness (scene
+`portrait-band`) with the shipped strokes table: "help" has been written into the line field. They are not photographs
+of a board.
+
+| 480x800, band | 800x1280, band | 480x800, Keyb (standard keyboard) |
+| --- | --- | --- |
+| ![Serial Console with the band at 480x800](images/pda/serial-band-480x800.png) | ![Serial Console with the band at 800x1280](images/pda/serial-band-800x1280.png) | ![Serial Console with the keyboard at 480x800](images/pda/serial-keyboard-480x800.png) |
+
 ## Writing with strokes
 
 The alphabet is a single-stroke handwriting alphabet: each letter, digit and gesture is one stroke of the pen. The
@@ -165,8 +187,8 @@ Panasonic stylus is not detected, probably because it needs Panasonic's own driv
 - The physical size of the Pi 4 B's Freenove panel is a guess, to be checked with a ruler.
 - Keys from the band do not reach compat apps (they are hidden on portrait).
 - An app shown upright in portrait (it declares `X-Portrait`) draws the band itself, by the same setting, once it is
-  built with a launcher toolkit that has it (report 044; Serial Console first). Its keys act as the on-screen
-  keyboard's. The app reads your trained glyphs when it starts: a glyph trained while it is open counts there after its
-  next start. Apps shown turned keep the standard keyboard.
+  built with a launcher toolkit that has it (v0.8.11, report 044; Serial Console so far, see "Apps with the band"). The
+  app reads your trained glyphs when it starts: a glyph trained while it is open counts there after its next start.
+  Apps shown turned, and apps built with an older toolkit, keep the standard keyboard.
 - A turned app at rotation 180 (PDA mode On rotate right) has not run on a board.
 - PDA mode's restart (exit status 76, restarted by both launcher units) has not run on a board yet.

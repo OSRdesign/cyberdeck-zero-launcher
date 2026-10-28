@@ -35,6 +35,10 @@ Owner of this file: the Controller. Status: `idea` > `brief` > `building` > `ver
 
 ## Exploration ideas (no development planned)
 
+- **Emulator of old handheld devices (parked).** An app for the toolkit that links an emulator's cores, so software from
+  old handheld devices (OS 4 and 5 generation) runs on the deck or a PDA-profile board as a native app. A study was
+  done and is kept as the apps repo tag `archive/cloudpilot-study` (report 045); nothing is planned.
+
 - **Smarter installer for unknown boards.** Detect the screen (HDMI EDID, DSI auto-detect, framebuffers) and write a
   generic profile (touch, rotation, panel size) instead of stopping without `--force`; a catalog of known panels with
   their overlays, asked before any boot change. A study first (report 031 when written).
