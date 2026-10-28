@@ -14,6 +14,8 @@
  *   - a page may keep the band shown (Strokes training: set_pinned);
  *   - the screensaver draws the band black.
  * Nothing happens without the zone (every board but the PDA profile) or outside the Pi display backend. LVGL thread.
+ * The rule itself (when the band is the text input, Keyb and the cross) is cp0_lvgl's (cp0_zone_host.hpp, report 044),
+ * shared with the apps the launcher runs upright with their own band; this binds it to the launcher's setting.
  */
 #pragma once
 

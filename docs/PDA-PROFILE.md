@@ -164,5 +164,9 @@ Panasonic stylus is not detected, probably because it needs Panasonic's own driv
   existed. A capture session with a real stylus is planned.
 - The physical size of the Pi 4 B's Freenove panel is a guess, to be checked with a ruler.
 - Keys from the band do not reach compat apps (they are hidden on portrait).
+- An app shown upright in portrait (it declares `X-Portrait`) draws the band itself, by the same setting, once it is
+  built with a launcher toolkit that has it (report 044; Serial Console first). Its keys act as the on-screen
+  keyboard's. The app reads your trained glyphs when it starts: a glyph trained while it is open counts there after its
+  next start. Apps shown turned keep the standard keyboard.
 - A turned app at rotation 180 (PDA mode On rotate right) has not run on a board.
 - PDA mode's restart (exit status 76, restarted by both launcher units) has not run on a board yet.

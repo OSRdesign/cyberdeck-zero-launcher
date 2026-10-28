@@ -224,9 +224,13 @@ void Launch::launch_Exec(const std::string &exec, bool keep_root, bool fullscree
     // The app contract (cp0_app_contract.h): a fullscreen app learns its mode, the whole logical screen as window and
     // canvas, and where the state files are. Without layout metrics (stock build, SDL) the command is unchanged.
     // Turned (a landscape app on a portrait launcher, report 038 S2): the panel's landscape canvas and its rotation.
+    // Upright on the PDA profile (report 044): APPLAUNCH_PDA=1, the app draws its own writing zone's band.
     if (turned) SLOGI("Launching %s turned: the panel's landscape canvas", exec.c_str());
     const std::string command =
-        fullscreen ? app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned) + exec : exec;
+        fullscreen ? app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned,
+                                                        launcher_zone::active()) +
+                         exec
+                   : exec;
     if (fullscreen) launcher_zone::set_app_front(true); // the app's own keyboard rule while it is in front (vkb)
     int result = -1;
     try {
@@ -429,9 +433,10 @@ void Launch::launch_fullscreen_supervised(const std::string &exec, bool keep_roo
     LVGL_RUN_FLAGE = 0;
     mt_release_input_group();
     lv_refr_now(disp);
-    // The app contract (cp0_app_contract.h) as in the legacy path (turned included); the lifecycle variables, when the
-    // app declares X-Background, are added by the supervisor.
-    const std::string command = app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned) + exec;
+    // The app contract (cp0_app_contract.h) as in the legacy path (turned and the band included); the lifecycle
+    // variables, when the app declares X-Background, are added by the supervisor.
+    const std::string command =
+        app_launch_env::export_for_current(app_launch_env::Mode::Fullscreen, turned, launcher_zone::active()) + exec;
     multitask_ui::launch(name.empty() ? exec : name, exec, command, keep_root, background);
 }
 

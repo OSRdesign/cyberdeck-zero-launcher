@@ -46,4 +46,9 @@ void set_vkb(cp0_app_vkb_t vkb);
  * Any thread. */
 void set_pointer_nav(bool on);
 
+/* Settings > System > On-screen keyboard is Handwriting + keyboard and the PDA writing zone exists (input.state hand=,
+ * report 044: an app run upright then shows its own band): set by launcher_osk with vkb; the file is rewritten (gen + 1)
+ * when the value changes. 0 until then. Any thread. */
+void set_hand(bool on);
+
 } // namespace input_presence

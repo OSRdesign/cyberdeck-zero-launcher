@@ -2487,6 +2487,12 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         if (w.size() != 2) return fail(scene, line, "usage: expect_vkb auto|off|force|zone");
         if (fx.vkb != w[1]) return fail(scene, line, "expect_vkb: published " + fx.vkb);
         std::printf("expect_vkb ok: %s\n", w[1].c_str());
+    } else if (cmd == "expect_hand") {
+        /* expect_hand 0|1: what launcher_osk publishes as input.state hand= (report 044: Handwriting + keyboard with the
+         * writing zone, so an app run upright shows its own band) */
+        if (w.size() != 2 || (w[1] != "0" && w[1] != "1")) return fail(scene, line, "usage: expect_hand 0|1");
+        if (fx.hand != to_int(w[1])) return fail(scene, line, "expect_hand: published " + std::to_string(fx.hand));
+        std::printf("expect_hand ok: %s\n", w[1].c_str());
     } else if (cmd == "turnedapp") {
         /* turnedapp on|off: a landscape fullscreen app run turned takes the panel (report 038 S2): the launcher is
          * suspended as by the supervisor, the app draws its landscape frame over the whole panel (no writing zone, no

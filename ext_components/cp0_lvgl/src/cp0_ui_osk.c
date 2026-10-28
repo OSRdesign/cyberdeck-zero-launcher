@@ -594,6 +594,11 @@ cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting, int de
     return CP0_APP_VKB_AUTO;                                        /* Auto, Handwriting + keyboard, the old Off */
 }
 
+int cp0_ui_osk_effective_hand(int setting, int hand_offered)
+{
+    return hand_offered && setting == CP0_UI_OSK_SETTING_HAND;
+}
+
 int cp0_ui_osk_setting_default(int hand_offered)
 {
     return hand_offered ? CP0_UI_OSK_SETTING_HAND : CP0_UI_OSK_SETTING_AUTO;

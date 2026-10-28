@@ -448,3 +448,36 @@ void cp0_zone_mode_text(unsigned mode, int accent, char *letters, size_t letters
         append(hint, hint_size, text);
     }
 }
+
+/* ------------------------------------------------------------------ the host's rule (report 044) */
+
+int cp0_zone_host_band_input(const cp0_zone_host_t *h, int zone, int gate, int hand)
+{
+    return h && zone && gate && hand && !h->keyb;
+}
+
+int cp0_zone_host_keyboard_instead(const cp0_zone_host_t *h, int zone, int hand)
+{
+    return h && zone && hand && h->keyb;
+}
+
+int cp0_zone_host_keyb(cp0_zone_host_t *h, int hand)
+{
+    if (!h || !hand || h->keyb) return 0;
+    h->keyb = 1;
+    return 1;
+}
+
+int cp0_zone_host_close(cp0_zone_host_t *h)
+{
+    if (!h || !h->keyb) return 0;
+    h->keyb = 0;
+    return 1;
+}
+
+int cp0_zone_host_hand_changed(cp0_zone_host_t *h, int hand)
+{
+    if (!h || hand || !h->keyb) return 0;
+    h->keyb = 0;
+    return 1;
+}

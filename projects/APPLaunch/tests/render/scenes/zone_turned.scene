@@ -26,6 +26,7 @@ expect_vkb zone
 shot zone_turned_text
 turnedapp on
 expect_vkb auto
+expect_hand 1
 expect_fb paused
 shot zone_turned
 turnedapp off

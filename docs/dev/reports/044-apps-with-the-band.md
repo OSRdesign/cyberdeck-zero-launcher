@@ -1,6 +1,7 @@
 # Report 044: apps with the band (PDA S4), plan
 
-Status: design only, 2026-10-28. No product code. Launcher at `github/main` 27954f43 (v0.8.10), apps repo at
+Status: design 2026-10-28; owner decisions in section 7 (they override the sections above where they differ); phase 1
+(launcher) committed on `pda-s4-plan`, not released. Launcher at `github/main` 27954f43 (v0.8.10), apps repo at
 `origin/main` 31779ac (Serial Console 0.5.0, toolkit pin `apps/_common/LAUNCHER_REF` = 25927c32, v0.8.9). Sources:
 reports 038 (section 3.1), 041, 042 (section 2, 13), 043, `docs/APP-CONTRACT.md` sections 3, 5, 10, 13, and the code
 cited below. (S) = read in the source, (I) = inferred, not measured.
@@ -235,3 +236,21 @@ Console 0.6.0 (question 5).
    only at the app's next start?
 5. **Release order:** ship the launcher part as v0.8.11 on its own (no visible change), then the pin and Serial
    Console 0.6.0; or hold the launcher release until Serial Console has passed the board test?
+
+## 7. Owner decisions (2026-10-28)
+
+1. **No opt-in key.** No `X-Handwriting`: every portrait-native app (`X-Portrait` that fits, run upright) gets
+   `APPLAUNCH_PDA=1` from a launcher with the writing zone and follows the user's Settings (Auto / On / Handwriting +
+   keyboard); the band shows only when a text field asks for input, exactly like the on-screen keyboard. Apps run
+   turned keep `APPLAUNCH_PDA=0` and the standard keyboard rule.
+2. **The band's keys are the on-screen keyboard's.** Nothing special for Serial Console: no `TextField` key hook, no
+   Tab-sends-line rule (P1 step 5 and the P3 key rules are dropped; question 2 closed).
+3. **Trained glyphs reach an app at its next start** (no reload on resume: P1 step 4 dropped).
+4. **Release with the board test.** The launcher part is not released alone: it ships with the toolkit pin and the
+   Serial Console board test (no tag, push or PR for phase 1 by itself).
+
+Phase 1 as built (differences from 4.5): the shared rule is `include/cp0_zone_host.hpp` / `src/cp0_zone_host.cpp`
+(`cp0::ui::zone_host::bind(Hooks{hand, gate, changed})`, `hand_changed()`, `gate_changed()`), its pure core
+`cp0_zone_host_*` in `cp0_zone.[ch]`; `bind(band_wanted)` alone was not enough, Keyb and the cross need the user's choice
+(`hand`) apart from the launcher's own condition (`gate`: no app in front). `hand=` is `cp0_ui_osk_effective_hand()`;
+`APPLAUNCH_PDA` is `app_launch_env::app_band(mode, turned, launcher_zone::active())`, no `.desktop` change.

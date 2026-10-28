@@ -9,6 +9,11 @@
 
 namespace app_launch_env {
 
+bool app_band(Mode mode, bool turned, bool launcher_band)
+{
+    return mode == Mode::Fullscreen && !turned && launcher_band;
+}
+
 Vars variables(const Input &in)
 {
     Vars vars;
@@ -19,9 +24,9 @@ Vars variables(const Input &in)
     vars.emplace_back("APPLAUNCH_CANVAS", std::to_string(in.canvas_w) + "x" + std::to_string(in.canvas_h));
     vars.emplace_back("APPLAUNCH_CANVAS_SCALE", std::to_string(in.canvas_scale));
     if (!in.state_dir.empty()) vars.emplace_back("APPLAUNCH_STATE_DIR", in.state_dir);
-    /* the writing zone is the launcher's (report 043): an app never draws its own band, whatever the launcher's
-     * APPLAUNCH_PDA (PDA mode, the board profile) that it would otherwise inherit */
-    vars.emplace_back("APPLAUNCH_PDA", "0");
+    /* the writing zone (report 044): an app run upright on a launcher with the band draws its own, as the launcher's;
+     * any other app none, whatever the launcher's APPLAUNCH_PDA (PDA mode, the board profile) it would inherit */
+    vars.emplace_back("APPLAUNCH_PDA", app_band(in.mode, in.turned, in.launcher_band) ? "1" : "0");
     if (in.turned && in.mode == Mode::Fullscreen) {
         /* the app's own cp0_lvgl backend reads APPLAUNCH_ROTATE / APPLAUNCH_LOGICAL (board profile names); an app with
          * its own glue (viz1090) reads APPLAUNCH_SCREEN_* first: both must describe the landscape canvas */
@@ -105,15 +110,16 @@ bool turned_from_metrics(const cp0_ui_metrics_t *m, const char *runtime_dir, Inp
     return true;
 }
 
-std::string export_for_current(Mode mode, bool turned)
+std::string export_for_current(Mode mode, bool turned, bool launcher_band)
 {
-    /* a fullscreen app gets the panel (report 041: on the PDA profile not the app area the launcher's pages draw in;
-     * the writing zone is the launcher's); a compat app the window the launcher draws it in (the same in both) */
+    /* a fullscreen app gets the panel (report 041: on the PDA profile not the app area the launcher's pages draw in);
+     * a compat app the window the launcher draws it in (the same in both) */
     const cp0_ui_metrics_t *m = mode == Mode::Fullscreen ? cp0_ui_metrics_panel() : cp0_ui_metrics_current();
     const char *runtime_dir = std::getenv("XDG_RUNTIME_DIR");
     Input in;
     if (turned && mode == Mode::Fullscreen && turned_from_metrics(m, runtime_dir, &in)) return export_command(in);
     if (!from_metrics(m, mode, runtime_dir, &in)) return std::string();
+    in.launcher_band = launcher_band && !turned; /* asked turned on a canvas that is not portrait: the plain variables */
     return export_command(in);
 }
 

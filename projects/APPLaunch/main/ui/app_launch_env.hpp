@@ -5,9 +5,11 @@
  * puts on the command line of every app it starts, so the app knows its mode, where its picture is on the screen,
  * the canvas it draws and where the state files are:
  *   APPLAUNCH_CONTRACT=1 APPLAUNCH_APP_MODE=compat|fullscreen APPLAUNCH_WINDOW=x,y,w,h APPLAUNCH_CANVAS=WxH
- *   APPLAUNCH_CANVAS_SCALE=N [APPLAUNCH_STATE_DIR=<dir>] APPLAUNCH_PDA=0
- * (APPLAUNCH_PDA=0: the PDA writing zone is the launcher's, report 043; an app never draws its own band, whatever the
- * launcher's own APPLAUNCH_PDA it would otherwise inherit)
+ *   APPLAUNCH_CANVAS_SCALE=N [APPLAUNCH_STATE_DIR=<dir>] APPLAUNCH_PDA=0|1
+ * (APPLAUNCH_PDA, report 044: 1 for a fullscreen app run upright (X-Portrait that fits, desktop_fit() Native) on a
+ * launcher whose PDA writing zone exists: the app's own display backend builds the band and shows it as the launcher
+ * does, by the user's Settings (input.state hand=); 0 in every other case (compat, turned, no band), whatever the
+ * launcher's own APPLAUNCH_PDA it would otherwise inherit (report 043))
  * and, for a landscape fullscreen app run turned on a portrait launcher (report 038 section 3.2, option b; the PDA
  * profile), the display variables of the panel's landscape canvas, which the app's own display backend and the panel
  * readers take instead of the inherited board profile's and the launcher's:
@@ -37,12 +39,19 @@ struct Input {
     bool turned = false;
     int turned_rotate = 0;                          // APPLAUNCH_ROTATE and APPLAUNCH_SCREEN_ROTATE
     std::string turned_class;                       // APPLAUNCH_SCREEN_CLASS of the landscape canvas
+    // The launcher's PDA writing zone exists (launcher_zone::active()): an app run upright gets the band (app_band).
+    bool launcher_band = false;
 };
 
 using Vars = std::vector<std::pair<std::string, std::string>>;
 
-/* The variables, APPLAUNCH_CONTRACT first, APPLAUNCH_PDA=0 last of the contract's; a turned app's display variables
- * after them. */
+/* APPLAUNCH_PDA=1 for an app (report 044, owner decision 2026-10-28: every portrait-native app, no opt-in key): a
+ * fullscreen app run upright (not turned; on a portrait launcher that means its X-Portrait fits) on a launcher whose
+ * writing zone exists. false for a compat app, a turned app and on a launcher without the band. */
+bool app_band(Mode mode, bool turned, bool launcher_band);
+
+/* The variables, APPLAUNCH_CONTRACT first, APPLAUNCH_PDA (app_band(), "1" or "0") last of the contract's; a turned app's
+ * display variables after them. */
 Vars variables(const Input &in);
 
 /* 'value' for sh -c (a ' inside becomes '\''). */
@@ -70,7 +79,8 @@ bool turned_from_metrics(const cp0_ui_metrics_t *m, const char *runtime_dir, Inp
  * cp0_ui_metrics_current(), the window as drawn; XDG_RUNTIME_DIR); "" when there are no
  * metrics (a build without the dpi-scaled backend, the SDL simulator): no contract there, the command stays as it was.
  * turned (fullscreen, desktop_fit() said Turned): turned_from_metrics(); on a canvas that is not portrait the plain
- * fullscreen variables. */
-std::string export_for_current(Mode mode, bool turned = false);
+ * fullscreen variables. launcher_band (launcher_zone::active()): APPLAUNCH_PDA=1 for a fullscreen app run upright
+ * (app_band). */
+std::string export_for_current(Mode mode, bool turned = false, bool launcher_band = false);
 
 } // namespace app_launch_env

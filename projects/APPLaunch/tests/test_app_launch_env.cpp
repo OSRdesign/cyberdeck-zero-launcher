@@ -311,6 +311,87 @@ static void test_turned()
         unsetenv(name);
 }
 
+/* Report 044 (owner decision 2026-10-28): every app run upright on a launcher with the writing zone gets APPLAUNCH_PDA=1
+ * (its own backend builds the band, shown by the user's Settings); a turned app, a compat app and any app of a launcher
+ * without the band get 0 */
+static void test_band()
+{
+    using app_launch_env::Mode;
+    CHECK(app_launch_env::app_band(Mode::Fullscreen, false, true));
+    CHECK(!app_launch_env::app_band(Mode::Fullscreen, true, true));  /* turned: landscape, no band */
+    CHECK(!app_launch_env::app_band(Mode::Compat, false, true));     /* compat: the launcher's window */
+    CHECK(!app_launch_env::app_band(Mode::Compat, true, true));
+    CHECK(!app_launch_env::app_band(Mode::Fullscreen, false, false)); /* PDA mode off, a landscape or square launcher */
+
+    /* the Pi 4 B DSI in PDA mode (480x800, rotate 90): an X-Portrait app upright */
+    const cp0_ui_metrics_t m = compute_rot(480, 800, 90, 1000);
+    app_launch_env::Input in;
+    CHECK(app_launch_env::from_metrics(&m, Mode::Fullscreen, "/run/user/1000", &in));
+    CHECK(!in.launcher_band); /* off unless the launcher says so */
+    CHECK(value_of(app_launch_env::variables(in), "APPLAUNCH_PDA") == "0");
+    in.launcher_band = true;
+    app_launch_env::Vars vars = app_launch_env::variables(in);
+    CHECK(vars.size() == 7 && value_of(vars, "APPLAUNCH_PDA") == "1");
+    CHECK(value_of(vars, "APPLAUNCH_CANVAS") == "480x800" && value_of(vars, "APPLAUNCH_ROTATE") == "<absent>");
+    CHECK(app_launch_env::export_command(in) ==
+          "export APPLAUNCH_CONTRACT='1' APPLAUNCH_APP_MODE='fullscreen' APPLAUNCH_WINDOW='0,0,480,800' "
+          "APPLAUNCH_CANVAS='480x800' APPLAUNCH_CANVAS_SCALE='1' APPLAUNCH_STATE_DIR='/run/user/1000/applaunch' "
+          "APPLAUNCH_PDA='1'; ");
+    /* the same launcher, a landscape app run turned, and a compat app: no band */
+    CHECK(app_launch_env::turned_from_metrics(&m, nullptr, &in));
+    in.launcher_band = true;
+    CHECK(value_of(app_launch_env::variables(in), "APPLAUNCH_PDA") == "0");
+    CHECK(app_launch_env::from_metrics(&m, Mode::Compat, nullptr, &in));
+    in.launcher_band = true;
+    CHECK(value_of(app_launch_env::variables(in), "APPLAUNCH_PDA") == "0");
+
+    /* export_for_current with the launcher's band: upright 1, turned 0, compat 0 */
+    unsetenv("XDG_RUNTIME_DIR");
+    cp0_ui_metrics_set_current(&m);
+    CHECK(app_launch_env::export_for_current(Mode::Fullscreen, false, true).find("APPLAUNCH_PDA='1'") !=
+          std::string::npos);
+    CHECK(app_launch_env::export_for_current(Mode::Fullscreen, false, false).find("APPLAUNCH_PDA='0'") !=
+          std::string::npos);
+    const std::string turned_cmd = app_launch_env::export_for_current(Mode::Fullscreen, true, true);
+    CHECK(turned_cmd.find("APPLAUNCH_PDA='0'") != std::string::npos);
+    CHECK(turned_cmd.find("APPLAUNCH_CANVAS='800x480'") != std::string::npos);
+    CHECK(app_launch_env::export_for_current(Mode::Compat, false, true).find("APPLAUNCH_PDA='0'") != std::string::npos);
+    /* asked turned on a canvas that is not portrait: the plain variables, no band either */
+    const cp0_ui_metrics_t deck = compute(640, 480, 0);
+    cp0_ui_metrics_set_current(&deck);
+    CHECK(app_launch_env::export_for_current(Mode::Fullscreen, true, true) ==
+          app_launch_env::export_for_current(Mode::Fullscreen));
+    cp0_ui_metrics_set_current(nullptr);
+
+    /* what the app reads: the launcher's own APPLAUNCH_PDA=1 stays 1 for an app run upright, becomes 0 turned */
+    CHECK(app_launch_env::from_metrics(&m, Mode::Fullscreen, nullptr, &in));
+    in.launcher_band = true;
+    std::string script = "APPLAUNCH_PDA=1 sh -c " +
+                         app_launch_env::shell_quote(app_launch_env::export_command(in) + "printf '%s' \"$APPLAUNCH_PDA\"");
+    FILE *p = popen(script.c_str(), "r");
+    CHECK(p != nullptr);
+    char out[64] = {0};
+    if (p) {
+        const size_t n = std::fread(out, 1, sizeof(out) - 1, p);
+        out[n] = '\0';
+        pclose(p);
+    }
+    CHECK(std::strcmp(out, "1") == 0);
+    CHECK(app_launch_env::turned_from_metrics(&m, nullptr, &in));
+    in.launcher_band = true;
+    script = "APPLAUNCH_PDA=1 sh -c " +
+             app_launch_env::shell_quote(app_launch_env::export_command(in) + "printf '%s' \"$APPLAUNCH_PDA\"");
+    p = popen(script.c_str(), "r");
+    CHECK(p != nullptr);
+    std::memset(out, 0, sizeof(out));
+    if (p) {
+        const size_t n = std::fread(out, 1, sizeof(out) - 1, p);
+        out[n] = '\0';
+        pclose(p);
+    }
+    CHECK(std::strcmp(out, "0") == 0);
+}
+
 int main()
 {
     test_compat_deck();
@@ -318,6 +399,7 @@ int main()
     test_no_metrics();
     test_quoting_through_a_shell();
     test_turned();
+    test_band();
     if (failures) {
         std::fprintf(stderr, "test_app_launch_env: %d failure(s)\n", failures);
         return 1;

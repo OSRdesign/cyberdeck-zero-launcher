@@ -59,12 +59,15 @@ bool offered(int value)
 }
 
 /* input.state vkb=: the rule in force for apps (the app contract), the same inputs as allowed(); zone while the PDA
- * writing zone's band shows (report 042: the launcher is in front and text input is wanted) */
+ * writing zone's band shows (report 042: the launcher is in front and text input is wanted). hand=: the user chose
+ * Handwriting + keyboard (report 044: an app run upright shows its own band where it would show its keyboard), whoever
+ * is in front. */
 void publish_vkb()
 {
     input_presence::set_vkb(launcher_zone::shown() && !launcher_zone::app_front()
                                 ? CP0_APP_VKB_ZONE
                                 : cp0_ui_osk_effective_vkb(s_env, mode(), !native_ui::enabled()));
+    input_presence::set_hand(cp0_ui_osk_effective_hand(mode(), hand_offered() ? 1 : 0) != 0);
 }
 
 bool allowed()

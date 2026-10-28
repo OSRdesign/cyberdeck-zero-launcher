@@ -183,6 +183,15 @@ finished strokes instead of typing them; `cp0_zone_ui_reload()` loads the tables
 touch router, the strip's sticky modifiers and what a result types are pure C (`cp0_zone.c`, `tests/test_zone.c`); the
 render harness scenes `zone_*` draw it at 480x640 and 480x800.
 
+The host side (report 044) is shared: `cp0::ui::zone_host` (`include/cp0_zone_host.hpp`) does the zone hook, the Keyb
+choice and the cross for any process that has the band, the launcher and an app it runs upright with `APPLAUNCH_PDA=1`
+alike. `bind(Hooks)` once, after the keyboard policy is installed, with `hand` (the user chose Handwriting + keyboard:
+the launcher's setting, an app's `input.state` `hand=1`, `cp0_app_input_t.hand`), an optional `gate` (the launcher: not
+while a fullscreen app is in front) and an optional `changed` (the band showed or hid, Keyb or the cross switched: the
+launcher publishes `input.state` again); `hand_changed()` / `gate_changed()` when those answers change;
+`band_input()`, `keyboard_instead()`, `active()`, `shown()`. Its rule is pure C (`cp0_zone_host_*` in `cp0_zone.h`,
+`tests/test_zone.c`); without the band, or on SDL, it does nothing.
+
 ## Public C ABI
 
 Declarations are in `include/cp0_lvgl_app.h` and `include/hal_lvgl_bsp.h`. Unless noted otherwise, 0 means success and a negative value means failure.

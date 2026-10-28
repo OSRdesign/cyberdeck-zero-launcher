@@ -28,10 +28,12 @@ key ENTER
 expect_zone shown
 expect_osk hidden
 expect_vkb zone
+expect_hand 1
 zonekey Keyb
 expect_zone hidden
 expect_osk shown
 expect_vkb auto
+expect_hand 1
 tapkey h
 tapkey i
 expect_text hi
@@ -68,6 +70,7 @@ key ENTER
 expect_zone hidden
 expect_osk shown
 expect_vkb force
+expect_hand 0
 shot zone_osk_on
 keyboards 1
 wait 400
@@ -90,6 +93,7 @@ wait 400
 expect_osk hidden
 expect_zone hidden
 expect_vkb auto
+expect_hand 0
 keyboards 0
 wait 400
 expect_osk shown

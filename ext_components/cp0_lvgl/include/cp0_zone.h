@@ -243,6 +243,30 @@ int cp0_zone_result_events(cp0_zone_strip_t *s, const strokes_result *r, int mul
  * "Caps", "Punct", "Ext" and "Accent: <name>" (strokes_accent_name), joined by "  ". */
 void cp0_zone_mode_text(unsigned mode, int accent, char *letters, size_t letters_size, char *hint, size_t hint_size);
 
+/* ------------------------------------------------------------------ the host's rule (report 044) */
+
+/* When the band is a process's text input, the same in the launcher and in an app it runs upright (report 044: the band
+ * runs in the app's own process; cp0_zone_host.hpp binds this to the on-screen keyboard service). The band is the text
+ * input when it exists (zone: APPLAUNCH_PDA=1 on a portrait canvas), the user chose Handwriting + keyboard (hand: the
+ * launcher's Settings > On-screen keyboard; an app's input.state hand=1), the host lets it (gate: the launcher, not while
+ * a fullscreen app is in front; an app, always) and the strip's Keyb did not put the standard keyboard in its place. Keyb
+ * holds for the following fields too, until that keyboard's close cross; it is forgotten when the user's choice is no
+ * longer Handwriting + keyboard. The keyboard has its close cross only while hand. */
+typedef struct {
+    int keyb; /* the strip's Keyb chose the standard keyboard, until its cross */
+} cp0_zone_host_t;
+
+/* 1 when the band is the text input: where the on-screen keyboard would show, the band shows instead. */
+int cp0_zone_host_band_input(const cp0_zone_host_t *h, int zone, int gate, int hand);
+/* 1 when the standard keyboard is the text input instead of the band by the user's Keyb (zone and hand only). */
+int cp0_zone_host_keyboard_instead(const cp0_zone_host_t *h, int zone, int hand);
+/* The strip's Keyb was tapped: the keyboard instead of the band (with hand only). 1 when that changed the state. */
+int cp0_zone_host_keyb(cp0_zone_host_t *h, int hand);
+/* The keyboard's close cross was tapped: the band again. 1 when that changed the state. */
+int cp0_zone_host_close(cp0_zone_host_t *h);
+/* The user's choice may have changed: Keyb is forgotten without hand. 1 when that changed the state. */
+int cp0_zone_host_hand_changed(cp0_zone_host_t *h, int hand);
+
 #ifdef __cplusplus
 }
 #endif

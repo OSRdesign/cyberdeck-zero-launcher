@@ -26,6 +26,7 @@ key UP
 key ENTER
 expect_osk shown
 expect_vkb auto
+expect_hand 0
 shot osk_policy_old_off
 keyboards 1
 wait 400
