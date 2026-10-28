@@ -50,7 +50,7 @@ exits).
 | `APPLAUNCH_CANVAS=WxH` | `320x170` (the pixels the app draws) | the logical screen, e.g. `640x480` |
 | `APPLAUNCH_CANVAS_SCALE` | screen pixels per canvas pixel: `2` or `1` | `1` |
 | `APPLAUNCH_STATE_DIR` | the state directory (absent without `XDG_RUNTIME_DIR`) | same |
-| `APPLAUNCH_PDA` | `0` | `0`: the PDA writing zone is the launcher's (report 043); an app never draws its own band, whatever the launcher runs with |
+| `APPLAUNCH_PDA` | `0` | `1` for an app run upright on a launcher with the PDA writing zone (PDA mode on, report 044: `X-Portrait` that fits, see "Portrait launcher" below): its own display backend builds the band; `0` in every other case (turned, no writing zone), whatever the launcher runs with |
 | `APPLAUNCH_LIFECYCLE=1`, `APPLAUNCH_CONTROL_FD=<n>` | never | only for an app with `X-Background` and only from a launcher with multitasking on: the lifecycle control socket (section 13) |
 
 All coordinates are **logical**: the canvas as the launcher shows it (landscape on every board but the portrait PDA
@@ -68,7 +68,7 @@ A board profile may show the launcher in portrait (the PDA profile, report 038; 
 | App | What it gets on a portrait launcher |
 |---|---|
 | fullscreen, **without** `X-Portrait` (every app today) | runs **turned**: full screen on the panel seen in landscape (480x800 -> `800x480`), the user turns the device. On its command line, after the variables above (window `0,0,800,480`, canvas `800x480`, scale `1`), the display variables of that canvas, which replace the inherited board profile's and the launcher's: `APPLAUNCH_ROTATE` and `APPLAUNCH_SCREEN_ROTATE` (a quarter turn back from the launcher's: `90` -> `0`, `270` -> `180`), `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_SCREEN_W=800`, `APPLAUNCH_SCREEN_H=480`, `APPLAUNCH_SCREEN_CLASS` of that canvas (`wide`). A `cp0_lvgl` app's display backend and touch (`buffer` mapping) follow by themselves; nothing to change in the app. `X-MinSize` is checked against that landscape canvas |
-| fullscreen **with** `X-Portrait=WxH` that fits the portrait canvas | the portrait canvas as it is (the variables above, e.g. canvas `480x800`), no turning |
+| fullscreen **with** `X-Portrait=WxH` that fits the portrait canvas | the portrait canvas as it is (the variables above, e.g. canvas `480x800`), no turning; with the writing zone (PDA mode on) also `APPLAUNCH_PDA=1`: the app draws its own band (below) |
 | fullscreen with an `X-Portrait` larger than the portrait canvas | turned, as without it |
 | compat (320x170), a terminal app (`Terminal=true`) | as on every board: a terminal app runs in the launcher's terminal page; `X-MinSize` against the portrait canvas |
 | compat (320x170), not a terminal | **not listed** (see below) |
@@ -92,12 +92,25 @@ it shows while one of the launcher's own text fields (its terminal pages include
 rule (section 5), and is hidden otherwise; the strip's Keyb key puts the standard on-screen keyboard in its place (for
 the following fields too) until that keyboard's close cross brings the band back. With Auto or On the band never shows
 (the standard keyboard, as on every board); the launcher's pages get the whole panel and leave the band's rows free while it
-shows, as for the keyboard. The band is the launcher's and it is never drawn over a fullscreen app: an app run turned
-owns the whole panel in landscape and sees none of it. While the launcher is in front and the band shows, `input.state`
-says `vkb=zone` (section 5): the zone is the text input and no on-screen keyboard is shown; otherwise (the standard
-keyboard chosen with Keyb included) it says the usual rule. `screen.state` and the `APPLAUNCH_SCREEN_*` variables keep describing the whole panel. Reserved for portrait apps
-that draw the zone in their own process (phase S4, not written by this launcher yet): `APPLAUNCH_ZONE`, `screen.state`
-`orient=` and `zone=`.
+shows, as for the keyboard. The launcher never draws its band over a fullscreen app: an app run turned owns the whole
+panel in landscape and sees none of it. While the launcher is in front and the band shows, `input.state` says `vkb=zone`
+(section 5): the zone is the text input and no on-screen keyboard is shown; otherwise (the standard keyboard chosen with
+Keyb included) it says the usual rule. `screen.state` and the `APPLAUNCH_SCREEN_*` variables keep describing the whole
+panel.
+
+**The band in an app (report 044, phase S4).** An app run upright (`X-Portrait` that fits) on a launcher with the
+writing zone gets `APPLAUNCH_PDA=1`; its own `cp0_lvgl` display backend then builds the same band at the bottom of its
+portrait canvas (the tables and the user's trained glyphs are read from disk when the app starts). There is no opt-in key: every
+such app follows the user's Settings > System > On-screen keyboard, which `input.state` says with `hand=` (section 5):
+with `hand=1` (Handwriting + keyboard) the band shows where the app would show its own on-screen keyboard (a text field
+wants input and `cp0_app_osk_allowed()` says yes) and leaves its rows free through the keyboard's inset; the strip's
+Keyb puts the app's standard keyboard in its place until that keyboard's cross; its keys reach the app exactly as the
+on-screen keyboard's (`cp0_keyboard_inject_key()`). With `hand=0` (Auto, On) the app shows its standard keyboard, as
+before. The rule is `cp0_lvgl`'s, shared with the launcher (`cp0::ui::zone_host`, `include/cp0_zone_host.hpp`; the app
+binds it with `hand` from `input.state`); an app built before it builds the band but never shows it. An app run turned,
+a compat app and every app of a launcher without the writing zone get `APPLAUNCH_PDA=0`. The variables reserved for
+this phase by earlier versions of this document (`APPLAUNCH_ZONE`, `screen.state` `orient=` and `zone=`) are not used:
+the backend computes the band from the canvas (`cp0_zone_layout()`).
 
 ### Panel (process-wide; always the panel, never the app's canvas)
 
@@ -177,6 +190,7 @@ kb_gone=0
 bt_gone=0
 vkb=auto
 pointer=off
+hand=0
 gen=4
 ```
 
@@ -188,10 +202,12 @@ gen=4
 | `kb_gone`, `bt_gone` | **monotonic** seconds (`CLOCK_MONOTONIC`, same in every process of the boot) when the keyboard / Bluetooth keyboard count last dropped to 0; `0` = never |
 | `vkb` | the on-screen keyboard rule in force: `auto` (Settings > System > On-screen keyboard Auto, and Handwriting + keyboard while its band is not shown), `off` (`APPLAUNCH_OSK=off`, or a desktop session owns the screen; the setting has no Off since report 042, a stored Off reads as Auto), `force` (Settings > System > On-screen keyboard On: shown even with a physical keyboard; `APPLAUNCH_OSK=force`, development and the HackBerry), `zone` (the PDA profile's writing zone is shown as the text input while the launcher is in front: no on-screen keyboard; report 041, 042) |
 | `pointer` | Settings > System > Pointer navigation: `on` or `off` (the default). See section 10b |
+| `hand` | `1` while Settings > System > On-screen keyboard is Handwriting + keyboard on a launcher with the PDA writing zone, whoever is in front; else `0` (report 044). An app run with `APPLAUNCH_PDA=1` shows its own band instead of its keyboard while it is `1` (section 3, "The band in an app"); `vkb` stays `auto` then, so an app without the band shows its keyboard |
 | `gen` | increases on every write |
 
-A file without `vkb` (an older launcher) means `auto`; a file without `pointer` means `off`. A reader that does not know
-`zone` (an SDK copy from before report 041) keeps `auto` for it; a fullscreen app never sees `zone` while it is in front.
+A file without `vkb` (an older launcher) means `auto`; a file without `pointer` means `off`; a file without `hand` means
+`0`. A reader that does not know `zone` (an SDK copy from before report 041) keeps `auto` for it; a fullscreen app never
+sees `zone` while it is in front.
 
 ## 5b. `status.state`
 
@@ -325,7 +341,7 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 
 | Files | What | Needs |
 |---|---|---|
-| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav` and `hand`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
 | `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
@@ -382,7 +398,9 @@ keyboard, and only when the shared rule says so: `cp0_app_osk_allowed(&input, cp
 probably asleep) and not within 2 s of any keyboard going away. `vkb=off` and `vkb=zone` never. The launcher's own keyboard uses
 exactly this function, so the app and the launcher agree. Re-read `input.state` when its `gen` changes (a keyboard
 connects, the user switches the setting). The keyboard must never be the only way in: the policy is "physical
-keyboard first, fallback keyboard only when none is connected, never summoned by hand".
+keyboard first, fallback keyboard only when none is connected, never summoned by hand". An app started with
+`APPLAUNCH_PDA=1` shows the writing zone's band instead of its keyboard by the same rule while `hand=1` (section 3, "The
+band in an app").
 
 ## 10b. Pointer navigation
 

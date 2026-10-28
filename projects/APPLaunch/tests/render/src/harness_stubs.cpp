@@ -156,6 +156,11 @@ void input_presence::set_vkb(cp0_app_vkb_t vkb)
     harness::fixtures().vkb = cp0_app_vkb_name(vkb);
 }
 void input_presence::set_pointer_nav(bool) {}
+/* input.state hand= (report 044), kept for the scene command expect_hand */
+void input_presence::set_hand(bool on)
+{
+    harness::fixtures().hand = on ? 1 : 0;
+}
 
 /* ui_screensaver.cpp (the lock screen) is not linked: never locked */
 extern "C" int ui_screensaver_is_active(void)

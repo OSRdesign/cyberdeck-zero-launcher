@@ -43,7 +43,7 @@ static void test_format_parse(void)
     const int n = cp0_input_state_format(&state, text, sizeof(text));
     CHECK(n > 0);
     CHECK(strcmp(text, "v=1\nkeyboards=2\nlast_seen=1760000000\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\n"
-                       "pointer=off\ngen=7\n") == 0);
+                       "pointer=off\nhand=0\ngen=7\n") == 0);
     char tiny[8];
     CHECK(cp0_input_state_format(&state, tiny, sizeof(tiny)) == -1);
 
@@ -60,20 +60,34 @@ static void test_format_parse(void)
     full.vkb = CP0_APP_VKB_OFF;
     CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0);
     CHECK(strcmp(text, "v=1\nkeyboards=1\nlast_seen=1760000000\nbt_keyboards=1\nkb_gone=120\nbt_gone=130\nvkb=off\n"
-                       "pointer=off\ngen=9\n") == 0);
+                       "pointer=off\nhand=0\ngen=9\n") == 0);
     CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0);
     CHECK(parsed.keyboards == 1 && parsed.bt_keyboards == 1 && parsed.kb_gone == 120 && parsed.bt_gone == 130 &&
           parsed.vkb == CP0_APP_VKB_OFF && parsed.gen == 9 && parsed.pointer_nav == 0);
     /* pointer navigation (Settings > System > Pointer navigation): on, read back; a missing line or a stray value is
      * off */
     full.pointer_nav = 1;
-    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\npointer=on\ngen=9\n") != NULL);
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\npointer=on\nhand=0\ngen=9\n") != NULL);
     CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0 && parsed.pointer_nav == 1);
     const char *crlf_on = "v=1\r\npointer=on\r\ngen=4\r\n";
     CHECK(cp0_input_state_parse(crlf_on, strlen(crlf_on), &parsed) == 0 && parsed.pointer_nav == 1);
     const char *stray = "v=1\npointer=yes\ngen=4\n";
     CHECK(cp0_input_state_parse(stray, strlen(stray), &parsed) == 0 && parsed.pointer_nav == 0);
     full.pointer_nav = 0;
+    /* hand (report 044: Handwriting + keyboard on the PDA profile): 1 read back; a missing line or a stray value is 0 */
+    CHECK(parsed.hand == 0);
+    full.hand = 1;
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\npointer=off\nhand=1\ngen=9\n") != NULL);
+    CHECK(cp0_input_state_parse(text, strlen(text), &parsed) == 0 && parsed.hand == 1 && parsed.gen == 9);
+    full.hand = 7; /* any non-zero value is written as 1 */
+    CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\nhand=1\n") != NULL);
+    full.hand = 0;
+    const char *crlf_hand = "v=1\r\nhand=1\r\ngen=4\r\n";
+    CHECK(cp0_input_state_parse(crlf_hand, strlen(crlf_hand), &parsed) == 0 && parsed.hand == 1);
+    const char *stray_hand = "v=1\nhand=2\ngen=4\n";
+    CHECK(cp0_input_state_parse(stray_hand, strlen(stray_hand), &parsed) == 0 && parsed.hand == 0);
+    const char *no_hand = "v=1\nvkb=auto\ngen=4\n";
+    CHECK(cp0_input_state_parse(no_hand, strlen(no_hand), &parsed) == 0 && parsed.hand == 0);
     full.vkb = CP0_APP_VKB_FORCE;
     CHECK(cp0_input_state_format(&full, text, sizeof(text)) > 0 && strstr(text, "\nvkb=force\n") != NULL);
     full.vkb = CP0_APP_VKB_ZONE; /* report 041: the PDA writing zone is the text input */
@@ -152,7 +166,7 @@ static void test_write(void)
     fclose(f);
     text[len] = '\0';
     CHECK(strcmp(text, "v=1\nkeyboards=0\nlast_seen=1760000100\nbt_keyboards=0\nkb_gone=0\nbt_gone=0\nvkb=auto\n"
-                       "pointer=off\ngen=2\n") == 0);
+                       "pointer=off\nhand=0\ngen=2\n") == 0);
 
     /* unwritable place: error, no crash */
     CHECK(cp0_input_state_write("/proc/applaunch-test/input.state", &state) == -1);

@@ -6,7 +6,8 @@
  * by the next key, the held arrows and their repeat, Alt as a real key, release_all), what a recogniser result types
  * (US keys with Shift / Caps, the characters without a key as text alone, the keys' control text, Ctrl / Alt
  * from the strip), the mode line, the US key table lookup, and the whole path end to end:
- * synthetic strokes routed by frames into the real recogniser with the shipped table, polled, typed.
+ * synthetic strokes routed by frames into the real recogniser with the shipped table, polled, typed; and the host's rule
+ * (report 044: when the band is the text input, Keyb and the cross), shared by the launcher and the apps.
  */
 #include "cp0_zone.h"
 
@@ -807,6 +808,46 @@ static void test_end_to_end(void)
     strokes_table_free(t);
 }
 
+/* Report 044: the host's rule, shared by the launcher (gate: no app in front) and an app run upright (gate always) */
+static void test_host(void)
+{
+    cp0_zone_host_t h = {0};
+    /* the band is the input only with the band, the gate, Handwriting + keyboard and no Keyb */
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 1, 1), 1);
+    CHECK_EQ(cp0_zone_host_band_input(&h, 0, 1, 1), 0); /* no band in this process (APPLAUNCH_PDA=0, landscape) */
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 0, 1), 0); /* the launcher while a fullscreen app is in front */
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 1, 0), 0); /* Auto or On: the standard keyboard (an app: hand=0) */
+    CHECK_EQ(cp0_zone_host_band_input(NULL, 1, 1, 1), 0);
+    CHECK_EQ(cp0_zone_host_keyboard_instead(&h, 1, 1), 0);
+
+    /* Keyb: the standard keyboard, for the next fields too, until the cross */
+    CHECK_EQ(cp0_zone_host_keyb(&h, 0), 0); /* without Handwriting + keyboard Keyb does nothing */
+    CHECK_EQ(h.keyb, 0);
+    CHECK_EQ(cp0_zone_host_keyb(&h, 1), 1);
+    CHECK_EQ(cp0_zone_host_keyb(&h, 1), 0); /* already chosen: nothing changes */
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 1, 1), 0);
+    CHECK_EQ(cp0_zone_host_keyboard_instead(&h, 1, 1), 1);
+    CHECK_EQ(cp0_zone_host_keyboard_instead(&h, 0, 1), 0);
+    CHECK_EQ(cp0_zone_host_keyboard_instead(&h, 1, 0), 0);
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 0, 1), 0); /* the gate does not forget Keyb */
+    CHECK_EQ(h.keyb, 1);
+    CHECK_EQ(cp0_zone_host_close(&h), 1); /* the cross: the band again */
+    CHECK_EQ(cp0_zone_host_close(&h), 0);
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 1, 1), 1);
+
+    /* the user's choice: Keyb is kept while it stays Handwriting + keyboard, forgotten when it goes */
+    CHECK_EQ(cp0_zone_host_keyb(&h, 1), 1);
+    CHECK_EQ(cp0_zone_host_hand_changed(&h, 1), 0);
+    CHECK_EQ(h.keyb, 1);
+    CHECK_EQ(cp0_zone_host_hand_changed(&h, 0), 1);
+    CHECK_EQ(h.keyb, 0);
+    CHECK_EQ(cp0_zone_host_hand_changed(&h, 0), 0);
+    CHECK_EQ(cp0_zone_host_band_input(&h, 1, 1, 1), 1); /* back to Handwriting + keyboard: the band first */
+    CHECK_EQ(cp0_zone_host_keyb(NULL, 1), 0);
+    CHECK_EQ(cp0_zone_host_close(NULL), 0);
+    CHECK_EQ(cp0_zone_host_hand_changed(NULL, 0), 0);
+}
+
 int main(void)
 {
     test_layout();
@@ -817,6 +858,7 @@ int main(void)
     test_mode_text();
     test_us_keys();
     test_end_to_end();
+    test_host();
     if (failures) {
         fprintf(stderr, "test_zone: %d failure(s)\n", failures);
         return 1;

@@ -380,6 +380,8 @@ static void input_line(const char *key, size_t key_len, const char *v, size_t le
             if (strcmp(word, "on") == 0) in->pointer_nav = 1;
             else if (strcmp(word, "off") == 0) in->pointer_nav = 0;
         }
+    } else if (key_is(key, key_len, "hand")) {
+        if (parse_int(v, len, 0, 1, &n)) in->hand = (int)n;
     } else if (key_is(key, key_len, "gen")) {
         if (parse_int(v, len, 0, UINT_MAX, &n)) in->gen = (unsigned)n;
     }

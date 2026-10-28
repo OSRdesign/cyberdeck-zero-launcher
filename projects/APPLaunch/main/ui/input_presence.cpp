@@ -215,6 +215,19 @@ void set_pointer_nav(bool on)
     write_locked(p);
 }
 
+void set_hand(bool on)
+{
+    std::lock_guard<std::mutex> lock(s_mutex);
+    Publisher &p = s_publisher;
+    const int value = on ? 1 : 0;
+    if (p.state.hand == value) return;
+    p.state.hand = value;
+    if (!p.published || !p.path[0]) return; // the first presence report writes it
+    p.state.gen += 1;
+    SLOGI("[KBD] hand=%d gen=%u", value, p.state.gen);
+    write_locked(p);
+}
+
 } // namespace input_presence
 
 #else
@@ -227,6 +240,7 @@ void stop() {}
 KeyboardSnapshot keyboards() { return KeyboardSnapshot(); }
 void set_vkb(cp0_app_vkb_t) {}
 void set_pointer_nav(bool) {}
+void set_hand(bool) {}
 
 } // namespace input_presence
 

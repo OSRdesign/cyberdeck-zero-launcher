@@ -361,11 +361,23 @@ static void test_input_files(void)
     const int n_on = cp0_input_state_format(&st, text, sizeof(text));
     CHECK(n_on > 0 && cp0_app_input_parse(text, (size_t)n_on, &in) == 0 && in.pointer_nav == 1 && in.gen == 12);
     st.pointer_nav = 0;
+    /* hand (report 044): 0 as written by default, 1 when the launcher says Handwriting + keyboard */
+    CHECK(in.hand == 0);
+    st.hand = 1;
+    const int n_hand = cp0_input_state_format(&st, text, sizeof(text));
+    CHECK(n_hand > 0 && cp0_app_input_parse(text, (size_t)n_hand, &in) == 0 && in.hand == 1 && in.gen == 12 &&
+          in.vkb == CP0_APP_VKB_OFF);
+    st.hand = 0;
+    const char *bad_hand = "v=1\nhand=yes\ngen=6\n";
+    CHECK(cp0_app_input_parse(bad_hand, strlen(bad_hand), &in) == 0 && in.hand == 0 && in.gen == 6);
+    const char *crlf_hand = "v=1\r\nhand=1\r\n";
+    CHECK(cp0_app_input_parse(crlf_hand, strlen(crlf_hand), &in) == 0 && in.hand == 1);
 
     /* an F1 phase 0 file (before the contract): vkb reads auto, pointer navigation off */
     const char *phase0 = "v=1\nkeyboards=0\nlast_seen=1760000100\ngen=4\n";
     CHECK(cp0_app_input_parse(phase0, strlen(phase0), &in) == 0);
-    CHECK(in.keyboards == 0 && in.vkb == CP0_APP_VKB_AUTO && in.kb_gone == 0 && in.gen == 4 && in.pointer_nav == 0);
+    CHECK(in.keyboards == 0 && in.vkb == CP0_APP_VKB_AUTO && in.kb_gone == 0 && in.gen == 4 && in.pointer_nav == 0 &&
+          in.hand == 0);
     const char *stray = "v=1\npointer=maybe\r\ngen=5\n";
     CHECK(cp0_app_input_parse(stray, strlen(stray), &in) == 0 && in.pointer_nav == 0 && in.gen == 5);
     const char *v2 = "v=2\nkeyboards=1\n";

@@ -600,6 +600,14 @@ static void test_policy(void)
         CHECK_EQ(cp0_ui_osk_setting_read(4, hand), cp0_ui_osk_setting_default(hand));
         CHECK_EQ(cp0_ui_osk_setting_read(-1, hand), cp0_ui_osk_setting_default(hand));
     }
+    /* input.state hand= (report 044): Handwriting + keyboard where the band exists, nothing else */
+    CHECK_EQ(cp0_ui_osk_effective_hand(CP0_UI_OSK_SETTING_HAND, 1), 1);
+    CHECK_EQ(cp0_ui_osk_effective_hand(CP0_UI_OSK_SETTING_HAND, 0), 0);
+    CHECK_EQ(cp0_ui_osk_effective_hand(CP0_UI_OSK_SETTING_AUTO, 1), 0);
+    CHECK_EQ(cp0_ui_osk_effective_hand(CP0_UI_OSK_SETTING_ON, 1), 0);
+    CHECK_EQ(cp0_ui_osk_effective_hand(CP0_UI_OSK_SETTING_OLD_OFF, 1), 0);
+    /* while hand=1 the rule an app reads stays the keyboard's own (auto), so an older app shows its keyboard */
+    CHECK_EQ(cp0_ui_osk_effective_vkb(CP0_UI_OSK_ENV_UNSET, CP0_UI_OSK_SETTING_HAND, 0), CP0_APP_VKB_AUTO);
 
     CHECK_EQ(cp0_ui_osk_env_parse("force"), CP0_UI_OSK_ENV_FORCE);
     CHECK_EQ(cp0_ui_osk_env_parse("auto"), CP0_UI_OSK_ENV_AUTO);

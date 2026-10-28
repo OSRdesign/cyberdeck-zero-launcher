@@ -97,6 +97,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_lvgl_app_page_assets.c \
     $(CP0)/src/cp0_zone.c \
     $(CP0)/src/cp0_zone_ui.cpp \
+    $(CP0)/src/cp0_zone_host.cpp \
     $(wildcard $(CP0)/src/strokes/strokes_*.c)
 
 # The display manager: compiled unchanged, then its open/ioctl/mmap references are renamed to the

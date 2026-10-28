@@ -233,6 +233,7 @@ static void report(const probe_t *p, text_t *t)
     put(t, "env.canvas=%s\n", env_or(CP0_APP_ENV_CANVAS));
     put(t, "env.canvas_scale=%s\n", env_or(CP0_APP_ENV_CANVAS_SCALE));
     put(t, "env.state_dir=%s\n", e->state_dir);
+    put(t, "env.pda=%s\n", env_or("APPLAUNCH_PDA")); /* report 044: 1 = this app draws its own writing zone's band */
     put(t, "env.screen_w=%s\n", env_or(CP0_APP_ENV_SCREEN_W));
     put(t, "env.screen_h=%s\n", env_or(CP0_APP_ENV_SCREEN_H));
     put(t, "env.screen_rotate=%s\n", env_or(CP0_APP_ENV_SCREEN_ROTATE));
@@ -270,6 +271,7 @@ static void report(const probe_t *p, text_t *t)
         put(t, "input.kb_gone=%lld\n", (long long)in->kb_gone);
         put(t, "input.bt_gone=%lld\n", (long long)in->bt_gone);
         put(t, "input.vkb=%s\n", cp0_app_vkb_name(in->vkb));
+        put(t, "input.hand=%d\n", in->hand);
         put(t, "input.gen=%u\n", in->gen);
     }
     /* 4. the framebuffer (fbdev ioctls only: what any app sees) */

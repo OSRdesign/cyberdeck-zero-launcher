@@ -38,9 +38,12 @@
  *      0 = never) vkb=auto|off|force|zone (the on-screen keyboard rule in force: Settings > System > On-screen keyboard,
  *      APPLAUNCH_OSK, off when a desktop session owns the screen; zone while the PDA profile's writing zone is the
  *      text input, report 041: no on-screen keyboard then) pointer=on|off (Settings > System > Pointer
- *      navigation; missing = off) gen=
+ *      navigation; missing = off) hand=0|1 (report 044: 1 while Settings > System > On-screen keyboard is
+ *      Handwriting + keyboard on the PDA profile; missing = 0) gen=
  *    An app that has text fields and no physical keyboard draws its own on-screen keyboard when
- *    cp0_app_osk_allowed() says so (the launcher never draws over a fullscreen app). An app linking cp0_lvgl that
+ *    cp0_app_osk_allowed() says so (the launcher never draws over a fullscreen app); an app the launcher runs upright
+ *    on the PDA profile (APPLAUNCH_PDA=1) shows its own writing zone's band there instead while hand=1
+ *    (cp0_zone_host.hpp, the launcher's rule). An app linking cp0_lvgl that
  *    reads every keyboard (cp0_keyboard_set_read_all_keyboards) follows pointer= by itself (cp0_pointer_nav.h): a
  *    mouse or trackpoint then sends Up / Down / Left / Right, Enter (click) and Ctrl+O (held click, "options").
  *
@@ -186,6 +189,8 @@ typedef struct {
     cp0_app_vkb_t vkb;           /* missing line (an older launcher): CP0_APP_VKB_AUTO */
     int pointer_nav;             /* pointer=on: 1 (Settings > System > Pointer navigation); missing line or off: 0 */
     unsigned gen;
+    int hand;                    /* hand=1: the user chose Handwriting + keyboard and the launcher has the PDA writing
+                                    zone (report 044); missing line (an older launcher) or 0: 0 */
 } cp0_app_input_t;
 
 /* Parses input.state text. 0 when it is a v=1 file, else -1 (out cleared). */

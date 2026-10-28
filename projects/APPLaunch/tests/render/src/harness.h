@@ -128,6 +128,7 @@ struct Fixtures {
     bool time_settable = false;        /* cp0_timedate_set_time (Date & Time > Set Manually > Save?) succeeds; "timeset ok|fail" */
     std::atomic<int64_t> time_set_epoch{-1}; /* the time it was last set to (LocalTime answers it from then on), -1: none */
     std::string vkb = "(none)"; /* the on-screen keyboard rule launcher_osk last published (input.state vkb=) */
+    int hand = -1;              /* what launcher_osk last published as input.state hand= (report 044), -1: nothing */
 };
 
 Fixtures &fixtures();

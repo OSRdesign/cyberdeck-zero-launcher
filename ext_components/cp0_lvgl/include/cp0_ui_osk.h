@@ -275,6 +275,10 @@ int cp0_ui_osk_setting_read(int stored, int hand_offered);
  * session -> off, the setting On -> force (shown even with a physical keyboard), else auto. setting:
  * cp0_ui_osk_setting_t. */
 cp0_app_vkb_t cp0_ui_osk_effective_vkb(cp0_ui_osk_env_t env, int setting, int desktop_session);
+/* input.state hand= (report 044): 1 while the setting is Handwriting + keyboard where it is offered (hand_offered: the
+ * writing zone exists), else 0. An app run upright with its own band shows it where it would show its keyboard while
+ * hand=1 (vkb= stays auto then, so an app without the band shows its keyboard). */
+int cp0_ui_osk_effective_hand(int setting, int hand_offered);
 
 /* 1 when the keyboard may show for a focused text field (rules at the top of this file): never while locked, else
  * cp0_app_osk_rule(cp0_ui_osk_effective_vkb(...), keyboards, now_s, any_gone_s, bt_gone_s). Where the PDA writing zone

@@ -171,7 +171,7 @@ contract() {
     # --report mode, what an app started by this launcher would see: the per-launch environment the metrics scene
     # wrote with the launcher's own builder (out/<WxH>/metrics.{compat,fullscreen}.env = the APPLAUNCH_SCREEN_* panel
     # variables + app_launch_env::export_for_current), screen.state from the harness's runtime directory
-    # (out/<WxH>/runtime/applaunch) and an input.state fixture written there (vkb=force). Its facts must equal the
+    # (out/<WxH>/runtime/applaunch) and an input.state fixture written there (vkb=force, hand=1). Its facts must equal the
     # layout service's numbers (out/<WxH>/metrics.facts): size, class, density, rotation, canvas, window, scale. Then the
     # degrade rules: no environment (screen.state only) and nothing at all.
     local probe_dir="$root/tools/dev/app-contract-probe" probe size dir facts mode rep n=0 bad=0 sizes_done=0
@@ -210,7 +210,7 @@ contract() {
         want_compat=$(fact compat) want_scale=$(fact scale)
         w=${want_size%x*} h=${want_size#*x}
         [[ $size == "$want_size" ]] || { echo "$size: the layout service says $want_size"; bad=$((bad + 1)); }
-        printf 'v=1\nkeyboards=0\nbt_keyboards=0\nlast_seen=0\nkb_gone=0\nbt_gone=0\nvkb=force\ngen=7\n' \
+        printf 'v=1\nkeyboards=0\nbt_keyboards=0\nlast_seen=0\nkb_gone=0\nbt_gone=0\nvkb=force\nhand=1\ngen=7\n' \
             >"$dir/runtime/applaunch/input.state"
 
         for mode in compat fullscreen; do
@@ -236,6 +236,8 @@ contract() {
             expect "$rep" screen.kb_inset 0
             expect "$rep" input.ok 1
             expect "$rep" input.vkb force
+            expect "$rep" input.hand 1
+            expect "$rep" env.pda 0
             expect "$rep" derived.source contract
             expect "$rep" derived.mode "$mode"
             expect "$rep" derived.screen "$want_size"
@@ -259,6 +261,7 @@ contract() {
             rep="$dir/contract.turned.txt"
             env -i bash -c ". '$dir/metrics.turned.env' && exec '$probe' --report --no-fb --tag turned" >"$rep"
             expect "$rep" env.ok 1
+            expect "$rep" env.pda 0
             expect "$rep" env.screen_class "$turned_class"
             expect "$rep" screen.size "$want_size"
             expect "$rep" screen.rot "$want_rot"
