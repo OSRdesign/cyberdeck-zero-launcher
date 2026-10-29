@@ -10,20 +10,29 @@ python board.py upload     pi3a C:/path/cyberdeckzero-launcher-dev-arm64.tar.gz 
 python board.py upload     fzm1 C:/path/cyberdeckzero-launcher-dev-amd64.tar.gz   # the PC tablet takes the amd64 bundle
 python board.py install    pi3a [--check] [--force]              # sudo install.sh --user <user> (--check = install.sh --dry-run)
 python board.py test-start pi5 --env APPLAUNCH_OSK=force
-python board.py grab       pi5 C:/tmp/pi5.png [--raw]            # framebuffer, turned the way the user sees it
+python board.py grab       pi5 C:/tmp/pi5.png [--raw] [--rotate 90]   # framebuffer, turned the way the user sees it
 python board.py test-stop  pi5                                   # restore desktop / service, remove test files
 python board.py status     deck
 ```
 
-| Board | Host | Kind | Framebuffer | Turn for the screenshot |
+| Board | Host | Kind | Framebuffer | Fallback turn for the screenshot |
 | --- | --- | --- | --- | --- |
 | deck | zero7.local | service | /dev/fb0 640x480 32 bpp | none |
 | pi3a | 192.168.68.170 | service | /dev/fb1 320x480 RGB565 (Luckfox 3.5" SPI) | 90 deg CCW |
-| pi3a-dsi | 192.168.68.170 | service | /dev/fb0 800x480 RGB565 (Waveshare 4.3" DSI) | none |
-| pi4b | 192.168.68.167 | service | /dev/fb0 800x480 RGB565 (Pi 4 B, Freenove 5" DSI) | none |
+| pi3a-dsi | 192.168.68.170 | service | /dev/fb0 800x480 RGB565 (Waveshare 4.3" DSI) | 90 deg CCW (PDA portrait) |
+| pi4b | 192.168.68.167 | service | /dev/fb0 800x480 RGB565 (Pi 4 B, Freenove 5" DSI) | 90 deg CCW (PDA portrait) |
 | pi5 | 192.168.68.175 | desktop | /dev/fb0 480x800 32 bpp | 90 deg CCW |
 | hackberry | 192.168.68.214 | desktop | /dev/fb0 720x720 32 bpp | none |
-| fzm1 | 192.168.68.183 | service, **amd64** | /dev/fb0 1280x800 32 bpp (Panasonic FZ-M1 mk2 tablet, i915) | none |
+| fzm1 | 192.168.68.183 | desktop, **amd64** | /dev/fb0 1280x800 32 bpp (Panasonic FZ-M1 mk2 tablet, i915) | 90 deg CCW (PDA portrait) |
+
+- **grab rotation:** `grab` turns the raw framebuffer by the launcher's *current* rotation, read on the board over the
+  same ssh session: `/etc/applaunch/board.conf` (`APPLAUNCH_LOGICAL`, `APPLAUNCH_ROTATE`) and the stored Settings >
+  Screen > PDA mode (`"pda_mode"` in `~/.config/cardputerzero/config.json`: 0 Off = the landscape canvas, 1 On rotate
+  left = +90, 2 On rotate right = +270, applied as `projects/APPLaunch/main/ui/pda_mode.cpp` does, only on a board
+  where the setting is offered). It prints the rotation it chose and why. The table's turn (`rotate` in
+  `boards.json`) is only the fallback: no board.conf (the deck), or a result that does not fit the framebuffer's
+  orientation. `--rotate 0|90|180|270` forces a value, e.g. for a test launcher started with `test-start --env
+  APPLAUNCH_ROTATE=...` (the state read is the installed launcher's, not the test run's environment).
 
 - **arch** (`boards.json`, default `arm64`): the bundle a board takes. `upload` refuses a bundle of the other arch:
   by its file name (`-arm64` / `-amd64`), by its launcher's ELF header when the tarball is on this machine, and on the

@@ -13,7 +13,11 @@
                                                           display manager first); started again when it exits with
                                                           status 76 (Settings > Screen > PDA mode, as its units do)
     python board.py [--dry-run] test-stop  BOARD          stop it, restore the desktop / the installed launcher, remove test files
-    python board.py [--dry-run] grab       BOARD OUT.png  framebuffer screenshot, turned the way the user sees the panel
+    python board.py [--dry-run] grab       BOARD OUT.png [--raw] [--rotate DEG]
+                                                          framebuffer screenshot, turned the way the user sees the panel:
+                                                          by the launcher's current rotation (board.conf + the stored PDA
+                                                          mode, read on the board), else boards.json "rotate"; --rotate
+                                                          forces it
     python board.py [--dry-run] status     BOARD          launcher, services / desktop, text console, test files, board profile
 
 Password: the PW environment variable (PIPW, as docs/dev/deck/deck.py uses, is accepted too). It is never written to
@@ -356,13 +360,103 @@ def do_test_stop(remote, board, args):
     return status
 
 
+ROTATIONS = (0, 90, 180, 270)
+STATE_SPLIT = "--8<-- config.json --8<--"
+
+
+def parse_board_conf(text):
+    """KEY=VALUE lines of /etc/applaunch/board.conf (comments, export and quotes allowed) -> dict."""
+    values = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        if line.startswith("export "):
+            line = line[7:].strip()
+        key, value = line.split("=", 1)
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
+            value = value[1:-1]
+        values[key.strip()] = value
+    return values
+
+
+def parse_size(text):
+    try:
+        w, h = (int(x) for x in (text or "").lower().split("x"))
+    except ValueError:
+        return None
+    return (w, h) if w > 0 and h > 0 else None
+
+
+def stored_pda_mode(text):
+    """config.json's "pda_mode": 0 Off, 1 On rotate left, 2 On rotate right; None when absent or unreadable."""
+    try:
+        value = json.loads(text).get("pda_mode")
+    except (ValueError, AttributeError):
+        return None
+    value = str(value) if value is not None else None
+    return {"0": 0, "1": 1, "2": 2}.get(value)
+
+
+def launcher_rotation(conf, stored):
+    """The APPLAUNCH_ROTATE the launcher runs with (its clockwise pre-rotation into the framebuffer, so the
+    counter-clockwise turn of a raw capture): board.conf's, or the stored PDA mode applied to it the way
+    projects/APPLaunch/main/ui/pda_mode.cpp does (Off = the landscape canvas, On rotate left = +90, On rotate right =
+    +270; only where the setting is offered: geometry known, not square, short side >= 480). Returns
+    ((width, height, rotation) of the canvas that runs, why), or (None, why) when board.conf has no usable geometry."""
+    size = parse_size(conf.get("APPLAUNCH_LOGICAL"))
+    rotate = conf.get("APPLAUNCH_ROTATE")
+    if not size or rotate not in ("0", "90", "180", "270"):
+        return None, "board.conf has no APPLAUNCH_LOGICAL/APPLAUNCH_ROTATE"
+    (w, h), rot = size, int(rotate)
+    base = "board.conf %dx%d rotate %d (APPLAUNCH_PDA %s)" % (w, h, rot, conf.get("APPLAUNCH_PDA", "unset"))
+    if stored is None or w == h or min(w, h) < 480:
+        return (w, h, rot), base + ("" if stored is None else ", pda_mode %d not applied (not offered)" % stored)
+    if w > h:
+        landscape = (w, h, rot)
+    else:                                                         # a portrait board: its panel's landscape canvas
+        landscape = (h, w, 0 if rot in (90, 270) else 90)
+    lw, lh, lrot = landscape
+    canvas = landscape if stored == 0 else (lh, lw, (lrot + (90 if stored == 1 else 270)) % 360)
+    return canvas, base + ", stored pda_mode %d (%s)" % (stored, ("Off", "On rotate left", "On rotate right")[stored])
+
+
+def grab_rotation(remote, board, args):
+    """(degrees counter-clockwise, why) for the capture: --rotate, else the launcher's current state read on the board
+    (board.conf + the stored PDA mode), else boards.json "rotate"."""
+    if args.rotate is not None:
+        return args.rotate, "--rotate"
+    fallback = "boards.json rotate %d" % board.rotate
+    state = remote.read_bytes("cat /etc/applaunch/board.conf 2>/dev/null; echo '%s'; cat %s/.config/cardputerzero/"
+                              "config.json 2>/dev/null" % (STATE_SPLIT, board.home))
+    if remote.dry_run:
+        return board.rotate, "dry run: the board's state is read on a real run, " + fallback + " otherwise"
+    text = state.decode("utf-8", "replace")
+    conf_text, _, config_text = text.partition(STATE_SPLIT)
+    canvas, why = launcher_rotation(parse_board_conf(conf_text), stored_pda_mode(config_text.strip() or "{}"))
+    if canvas is None:
+        return board.rotate, why + ": " + fallback
+    # the canvas turned into the framebuffer must have the framebuffer's orientation, else what was read is not what
+    # draws on this framebuffer (another panel's board.conf, say): fall back
+    w, h, rotation = canvas
+    turned_landscape = (h > w) if rotation in (90, 270) else (w > h)
+    fb_w, fb_h = int(board.fb["width"]), int(board.fb["height"])
+    if w != h and fb_w != fb_h and turned_landscape != (fb_w > fb_h):
+        return board.rotate, why + " -> %dx%d rotate %d does not fit the %dx%d framebuffer: %s" % (
+            w, h, rotation, fb_w, fb_h, fallback)
+    return rotation, why + " -> launcher %dx%d rotate %d" % (w, h, rotation)
+
+
 def do_grab(remote, board, args):
     fb = board.fb
     width, height, bpp, fmt = int(fb["width"]), int(fb["height"]), int(fb["bpp"]), fb["format"]
     size = width * height * bpp // 8
+    rotation, why = grab_rotation(remote, board, args)
+    print("rotation %d (%s)" % (rotation, why))
     data = remote.read_bytes("head -c %d %s" % (size, fb["device"]))
     if remote.dry_run:
-        print("decode %dx%d %s, rotate %d deg counter-clockwise, save %s" % (width, height, fmt, board.rotate, args.out))
+        print("decode %dx%d %s, rotate %d deg counter-clockwise, save %s" % (width, height, fmt, rotation, args.out))
         return 0
     if len(data) < size:
         raise BoardError("read %d bytes of %s, expected %d" % (len(data), fb["device"], size))
@@ -381,8 +475,8 @@ def do_grab(remote, board, args):
     if args.raw:
         base, ext = os.path.splitext(args.out)
         image.save(base + "-raw" + (ext or ".png"))
-    if board.rotate:
-        image = image.rotate(board.rotate, expand=True)          # counter-clockwise: what the user sees
+    if rotation:
+        image = image.rotate(rotation, expand=True)              # counter-clockwise: what the user sees
     image.save(args.out)
     print("saved %s (%dx%d)" % (args.out, image.width, image.height))
     return 0
@@ -452,6 +546,8 @@ def build_parser(board_names):
     board_arg(p)
     p.add_argument("out", help="output PNG")
     p.add_argument("--raw", action="store_true", help="also save the unrotated buffer as <out>-raw.png")
+    p.add_argument("--rotate", type=int, choices=ROTATIONS, metavar="DEG", help="force the counter-clockwise turn "
+                   "(0|90|180|270) instead of the one read from the board's state (board.conf + stored PDA mode)")
     p = sub.add_parser("status", help="launcher, service or desktop, test files, board profile")
     board_arg(p)
     return parser
