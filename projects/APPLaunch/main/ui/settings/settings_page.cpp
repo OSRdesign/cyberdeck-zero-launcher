@@ -11,6 +11,7 @@
 #include "settings_keyboard_page.hpp"
 #include "settings_pda_page.hpp"
 #include "settings_pointer_page.hpp"
+#include "settings_ssh_indicator_page.hpp"
 #include "settings_strokes_page.hpp"
 #include "settings_native_host.hpp"
 #include "settings_native_mode.hpp"
@@ -697,6 +698,7 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
         for (PageFactoryFn value_page : {brightness_page3_factory, dark_time_page3_factory, rtc_page3_factory,
                                          confirm_page3_factory, roller_page3_factory, settings_touch_choice_page_factory,
                                          settings_keyboard_choice_page_factory, settings_pointer_choice_page_factory,
+                                         settings_ssh_indicator_choice_page_factory,
                                          settings_pda_mode_choice_page_factory, // its restart question: a host Dialog
                                          settings_rtc_confirm_page_factory, // Save?: its warning is a host Dialog
                                          volume_page3_factory})
@@ -808,8 +810,9 @@ void UISettingTreePage::create_page_detail()
         mode_tree.append_child(bluetooth, SettingEntry{"Alias: ", bluetooth_alias_page_factory});
         mode_tree.append_child(bluetooth, SettingEntry{"Discoverable", bluetooth_discoverable_api, true});
         mode_tree.append_child(bluetooth, SettingEntry{"Named Only", bluetooth_named_only_api, true});
-        mode_tree.append_child(bluetooth,
-                               SettingEntry{"Paired Devices", bluetooth_connected_page_factory, PageType::FullCustom});
+        NodeIter paired = mode_tree.append_child(
+            bluetooth, SettingEntry{"Paired Devices", bluetooth_connected_page_factory, PageType::FullCustom});
+        paired->page_title = "Paired"; /* the native page header: whole beside the strip's reserved slot (2026-10-30) */
         mode_tree.append_child(bluetooth, SettingEntry{"Scan", bluetooth_scan_page_factory, PageType::FullCustom});
     }
 
@@ -905,6 +908,9 @@ void UISettingTreePage::create_page_detail()
         // before them, so the rows counted from the end of the section (Shutdown, Reboot, Keyboard test, On-screen
         // keyboard) stay where they were
         if (settings_ui::native_selected()) settings_pointer::append_entries(mode_tree, system);
+        // the SSH indicator (the status strip's terminal glyph, 2026-10-30): native Settings only, after Pointer
+        // navigation, for the same reason
+        if (settings_ui::native_selected()) settings_ssh_indicator::append_entries(mode_tree, system);
         if (settings_ui::native_selected()) settings_keyboard::append_entries(mode_tree, system);
         // Quit to desktop: a launcher started by the desktop boards' unit only (settings_session_model.hpp)
         settings_session::append_quit_to_desktop(mode_tree, system, confirm_page3_factory);

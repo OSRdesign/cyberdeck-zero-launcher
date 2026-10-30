@@ -33,12 +33,13 @@ key DOWN
 key ENTER
 wait 1500
 shot bt_paired
-header bt_paired "Settings > Bluetooth > Paired Devices" "Bluetooth > Paired Devices" "Paired Devices"
+# the page title is "Paired" (the row "Paired Devices": whole left of the strip's reserved SSH slot, 2026-10-30)
+header bt_paired "Settings > Bluetooth > Paired" "Bluetooth > Paired" "Paired"
 # the connected keyboard's actions (Disconnect first), then the headphones' (a title too long: cut with dots)
 key ENTER
 wait 300
 shot bt_device_connected
-header bt_device_connected "Settings > Bluetooth > Paired Devices > M4 keyboard" "Bluetooth > Paired Devices > M4 keyboard" "Paired Devices > M4 keyboard" "M4 keyboard"
+header bt_device_connected "Settings > Bluetooth > Paired > M4 keyboard" "Bluetooth > Paired > M4 keyboard" "Paired > M4 keyboard" "M4 keyboard"
 key ESC
 wait 300
 key DOWN
@@ -62,7 +63,7 @@ shot bt_rename
 tapkey ENTER
 wait 1500
 shot bt_renamed
-header bt_renamed "Settings > Bluetooth > Paired Devices" "Bluetooth > Paired Devices" "Paired Devices"
+header bt_renamed "Settings > Bluetooth > Paired" "Bluetooth > Paired" "Paired"
 # back to the section, then Alias (row 1)
 key ESC
 wait 300

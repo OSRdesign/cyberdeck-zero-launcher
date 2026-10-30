@@ -22,7 +22,7 @@ expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
 key UP
 key ENTER
 wait 300
-expect_rows Storage Licenses About "Pointer navigation" "On-screen keyboard" Reboot Shutdown
+expect_rows Storage Licenses About "Pointer navigation" "SSH indicator" "On-screen keyboard" Reboot Shutdown
 # About on every board (also without a board profile): Storage, Licenses, About
 key DOWN
 key DOWN

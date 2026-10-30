@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Pure logic of the shared status strip (task L1, report 024): where the strip sits on a native display, the Wi-Fi
- * rule of its bars, the battery's rule and the strip's leftmost drawn column. The LVGL widget is cp0::ui::StatusStrip
+ * rule of its bars, the battery's rule, the SSH indicator's rule and blink, and the strip's leftmost drawn column. The LVGL widget is cp0::ui::StatusStrip
  * (cp0_ui_widgets.hpp); the pixels come from the cp0_statusbar renderer. Plain C, no LVGL.
  */
 #pragma once
@@ -42,6 +42,16 @@ int cp0_ui_status_first_column(const uint32_t *argb, int w, int rows);
 /* The battery's rule (decision X12): a battery from cp0_power_supply_battery() shows its charge (0..100), green while
  * it charges; NULL (no battery) shows none (battery = 0: the strip looks as it did before batteries). */
 void cp0_ui_status_set_battery(cp0_statusbar_state_t *state, const cp0_power_battery_t *battery);
+
+/* The SSH indicator's rule (2026-10-30): connections > 0 shows the glyph (ssh = connections), active (bytes moved since
+ * the previous sample) makes it blink; no connection shows none (ssh = 0, ssh_active = 0). The blink phase ssh_bright
+ * goes back to 0 (blue) whenever there is no traffic. A source calls it with what it knows (status.state ssh= and
+ * ssh_act=); the strip calls it again after the source, so a source that sets nothing shows nothing. */
+void cp0_ui_status_set_ssh(cp0_statusbar_state_t *state, int connections, int active);
+
+/* The strip's 1 s tick: with a session and traffic, the blink phase ssh_bright flips, but only while screen_active
+ * (no work for a hidden strip); without traffic it is 0. Returns 1 when ssh_bright changed. */
+int cp0_ui_status_ssh_tick(cp0_statusbar_state_t *state, int screen_active);
 
 #ifdef __cplusplus
 }

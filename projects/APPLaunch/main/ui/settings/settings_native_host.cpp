@@ -254,10 +254,11 @@ bool SettingsNativeHost::create_binding(Row &row, int index)
 std::vector<std::string> SettingsNativeHost::title_path() const
 {
     std::vector<std::string> path;
-    for (const NodeIter &node : path_) path.push_back(node->label);
-    if (choice_row_ >= 0) path.push_back(rows_[static_cast<size_t>(choice_row_)]->node->label);
+    // header_title(): the label, or the entry's shorter page title (settings_tree_types.hpp)
+    for (const NodeIter &node : path_) path.push_back(node->header_title());
+    if (choice_row_ >= 0) path.push_back(rows_[static_cast<size_t>(choice_row_)]->node->header_title());
     if (native_row_ >= 0 && native_row_ < static_cast<int>(rows_.size()))
-        path.push_back(rows_[static_cast<size_t>(native_row_)]->node->label);
+        path.push_back(rows_[static_cast<size_t>(native_row_)]->node->header_title());
     return path;
 }
 

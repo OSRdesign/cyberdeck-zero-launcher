@@ -17,7 +17,7 @@ own page factory and API, in this order:
 | `Native` | `settings_native_page(node)` is not `None` (checked first) |
 | `Custom` | the entry's `page_type == PageType::FullCustom`, or any other factory not listed below (hidden: no compat path any more) |
 | `Section` | factory `roller_page_factory` or `bluetooth_roller_page_factory` |
-| `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `settings_rtc_confirm_page_factory` (Save?), `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory`, `settings_pointer_choice_page_factory`, `volume_page3_factory` (Speaker; options all percentages, so the host draws a slider, as for the Brightness levels) |
+| `Choice` | a value-page factory: `brightness_page3_factory`, `dark_time_page3_factory`, `rtc_page3_factory`, `settings_rtc_confirm_page_factory` (Save?), `confirm_page3_factory`, `roller_page3_factory`, `settings_touch_choice_page_factory`, `settings_keyboard_choice_page_factory`, `settings_pointer_choice_page_factory`, `settings_ssh_indicator_choice_page_factory`, `volume_page3_factory` (Speaker; options all percentages, so the host draws a slider, as for the Brightness levels) |
 | `Toggle` | no factory, `icon_enabled` and `has_api()` |
 | `Action` | no factory, `has_api()` |
 | `Plain` | nothing to open |
@@ -30,6 +30,10 @@ A Native row that picks a value can show it, then a chevron (`settings_native_ro
 `TimeZone`, Date & Time > Time zone, `settings_native_timezone_page.cpp`, a two-level picker on a `Roller`); the other
 Native rows show their label alone.
 The host itself (`settings_native_host.hpp/.cpp`) shows the panel instead of its roller in `open_native()`.
+The page header's title is the path of the entries' labels; an entry whose label is too long for the header (the title
+ends left of the status strip's reserved SSH indicator slot) sets a shorter `SettingEntry::page_title`, which only the
+header uses (`header_title()`): today On-screen keyboard ("Screen keyboard"), Keyboard test ("Key test") and Bluetooth >
+Paired Devices ("Paired").
 
 ## 2. Steps for a new page
 
@@ -124,6 +128,7 @@ not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
 | System > Storage, Licenses | none | every board | aligned |
 | System > About | none (its "Board:" line only with `APPLAUNCH_BOARD`) | every board | changed: was a board profile only |
 | System > Pointer navigation | native Settings host | every board (stock: no) | aligned |
+| System > SSH indicator (Off / On, default On: the status strip's terminal glyph while an incoming SSH session exists) | native Settings host | every board (stock: no) | aligned |
 | System > On-screen keyboard | native Settings host | every board (stock: no, built-in keyboard) | aligned |
 | System > Keyboard test | `settings_ui::dev_pages()`: development channel or `APPLAUNCH_DEV=1` | development builds only | dev-only |
 | System > Quit to desktop | `APPLAUNCH_SESSION=desktop` (desktop unit), native host, `APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP` | desktop session only | hardware-dependent (meaningless without a desktop) |

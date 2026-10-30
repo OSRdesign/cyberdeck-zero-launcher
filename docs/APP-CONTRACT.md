@@ -25,7 +25,7 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 | panel environment (`APPLAUNCH_SCREEN_*`) | the launcher, process-wide at display creation | once | every child process |
 | `screen.state` | **only** the launcher (atomic rename) | at display creation, and again after **every** app exits (`gen + 1`) | any app |
 | `input.state` | **only** the launcher (atomic rename) | keyboard list change, Settings > System > On-screen keyboard or Pointer navigation change | any app |
-| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth, battery, volume, mute or brightness value changes (checked every 2 s; volume and brightness at least every 10 s, at once after a change by the launcher) | any app |
+| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth, battery, volume, mute, brightness or SSH indicator value changes (checked every 2 s; volume and brightness at least every 10 s, at once after a change by the launcher) | any app |
 | `board.state` | **only** the launcher (atomic rename, from a thread of its own) | at start, again after the first sound-server probe, then when a fact changes (sound re-probed every 30 s) | any app |
 | `launcher.sock` | the launcher serves it (a thread of its own, mode 0600) | while the launcher runs | any process of the same user: apps, scripts, ssh (section 14) |
 | `.desktop` keys | the app's package | install | the launcher |
@@ -227,6 +227,8 @@ battery_state=Discharging
 volume=40
 mute=0
 brightness_pct=70
+ssh=1
+ssh_act=0
 ```
 
 | Key | Meaning |
@@ -242,6 +244,17 @@ brightness_pct=70
 | `mute` | `1` = muted |
 | `brightness_pct` | the backlight as a percent of its maximum, `-1` = no backlight to drive. Snapped to the launcher's 10 steps; while an app is dimmed by section 14 `dim allow` it shows the dimmed level |
 | `gen` | increases on every write (a restarted launcher continues from the old file) |
+| `ssh` | incoming SSH connections to the board's sshd (the SSH indicator, 2026-10-30): established TCP connections whose local port is one sshd listens on, each seen in two consecutive samples (so a port scan never shows); `ssh localhost` and connections still at the password prompt count. `0` = none, Settings > System > SSH indicator is Off (the launcher then does not look), or an older launcher (the reader gives `0` too). A count only: peer addresses never appear in this file |
+| `ssh_act` | `1` = bytes moved on one of them since the launcher's previous sample, 2 s earlier (typing, output, a transfer, an SSH keepalive); `0` otherwise and whenever `ssh` is `0` |
+
+`ssh` and `ssh_act` drive the strip's SSH indicator: the terminal glyph (U+F120) in the strip's leftmost slot while `ssh`
+is above 0, the Bluetooth "connected" blue, alternating with white on the strip's 1 s clock tick while `ssh_act` is 1;
+on a board with a battery the percentage is left out while it shows (the level glyph stays).
+`cp0::ui::StatusStrip` with the default source draws it by itself (an app built against a toolkit from before it shows
+nothing until rebuilt). The slot is always reserved in `cp0::ui::status_strip_left()`, so a page header's controls never
+move when a session starts or ends. A non-LVGL app that draws its own bar sets `ssh`, `ssh_active` and, for the blink,
+`ssh_bright` in `cp0_statusbar_state_t` (`cp0_ui_status_set_ssh()` and `cp0_ui_status_ssh_tick()` in
+`cp0_ui_status_strip.h` are the rules); a zeroed state draws nothing.
 
 `volume`, `mute` and `brightness_pct` are for an app that draws its own level bar: the launcher draws nothing over a fullscreen app (section 10), so the user who presses a volume key in your app only hears the change unless the app shows it. Poll the file with the rest of the status; do not call `launcher.sock` for it.
 

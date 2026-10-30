@@ -23,7 +23,8 @@ key UP
 key UP
 key UP
 key UP
-# highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 253,5 57x30 / 484,8 83x40
+# highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 218,5 57x30 / 435,8 83x40 (left of
+# the SSH indicator's reserved slot, 2026-10-30)
 @480x320 tap 240 180
 @800x480 tap 400 268
 wait 3000
@@ -38,8 +39,8 @@ shot apps_touch_moved
 wait 500
 shot apps_touch_available
 header apps_touch_available "Settings > Apps > Available" "Apps > Available" Available
-@480x320 tap 281 20
-@800x480 tap 525 28
+@480x320 tap 246 20
+@800x480 tap 476 28
 wait 500
 shot apps_touch_root_back
 @480x320 tap 240 224
@@ -72,12 +73,12 @@ shot apps_touch_confirm
 @800x480 tap 256 306
 wait 300
 shot apps_touch_cancelled
-@480x320 tap 281 20
-@800x480 tap 525 28
+@480x320 tap 246 20
+@800x480 tap 476 28
 wait 500
 shot apps_touch_back_sources
-@480x320 tap 281 20
-@800x480 tap 525 28
+@480x320 tap 246 20
+@800x480 tap 476 28
 wait 500
 shot apps_touch_esc
 header apps_touch_esc "Settings > Apps" Apps

@@ -45,11 +45,11 @@ key UP
 key ENTER
 tapkey h
 tapkey i
-# the development page's title "Keyboard test" whole: the 18 px title of a narrow canvas (report 040; at 32 px it was
-# cut beside the 230 px strip)
+# the development page's title whole: the 18 px title of a narrow canvas (report 040; at 32 px it was cut beside
+# the 230 px strip); "Key test" since the strip's reserved SSH slot (2026-10-30; the row stays "Keyboard test")
 shot pda_osk_letters
-header pda_osk_letters "Keyboard test"
-expect_text "Keyboard test"
+header pda_osk_letters "Key test"
+expect_text "Key test"
 tapkey 123
 shot pda_osk_123
 # the Number field: its number pad is the full key area wide on a portrait canvas (keys about 148 px at 480 wide, the

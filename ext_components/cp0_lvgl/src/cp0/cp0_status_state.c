@@ -31,10 +31,11 @@ int cp0_status_state_format(const cp0_app_status_t *state, char *buf, size_t siz
     const char *bt = state->bt == CP0_APP_BT_CONNECTED ? "connected" : state->bt == CP0_APP_BT_ON ? "on" : "off";
     const int n = snprintf(buf, size,
                            "v=1\ngen=%u\npid=%d\nwifi=%d\nwifi_pct=%d\neth=%d\nbt=%s\nbattery=%d\nbattery_state=%s\n"
-                           "volume=%d\nmute=%d\nbrightness_pct=%d\n",
+                           "volume=%d\nmute=%d\nbrightness_pct=%d\nssh=%d\nssh_act=%d\n",
                            state->gen, state->pid, state->wifi ? 1 : 0, state->wifi_pct, state->eth ? 1 : 0, bt,
                            state->battery, state->battery_state[0] ? state->battery_state : "Unknown",
-                           state->volume, state->mute ? 1 : 0, state->brightness_pct);
+                           state->volume, state->mute ? 1 : 0, state->brightness_pct, state->ssh > 0 ? state->ssh : 0,
+                           state->ssh > 0 && state->ssh_act ? 1 : 0);
     if (n < 0 || (size_t)n >= size) return -1;
     return n;
 }

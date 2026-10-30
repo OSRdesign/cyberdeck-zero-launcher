@@ -12,7 +12,8 @@ bt on
 home
 header home
 launch Settings
-# highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 253,5 57x30 / 484,8 83x40
+# highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 218,5 57x30 / 435,8 83x40 (left of
+# the SSH indicator's reserved slot, 2026-10-30)
 @480x320 tap 240 224
 @800x480 tap 400 332
 shot settings_touch_moved
@@ -23,7 +24,7 @@ header settings_touch_opened "Settings > Wi-Fi" Wi-Fi
 @480x320 drag 240 240 240 180 20
 @800x480 drag 400 340 400 255 20
 shot settings_touch_dragged
-@480x320 tap 281 20
-@800x480 tap 525 28
+@480x320 tap 246 20
+@800x480 tap 476 28
 shot settings_touch_esc
 header settings_touch_esc Settings

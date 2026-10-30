@@ -35,6 +35,7 @@
 
 #include "launch.h"
 #include "launcher_osk.hpp"
+#include "launcher_ssh.hpp"
 #include "launcher_zone.hpp"
 #include "multitask/display_handoff.hpp"
 #include "multitask/switcher_model.hpp"
@@ -726,6 +727,66 @@ bool set_sound(const Run &run, const std::string &kind)
         return true;
     }
     return false;
+}
+
+/* ---------------------------------------------------------------- incoming SSH sessions (the SSH indicator) */
+
+/* The launcher's SSH watch (cp0_ssh_watch.h) reads /proc/net/tcp, /proc/net/tcp6 and /etc/ssh under a root: here a fake
+ * tree next to the shots (out/<WxH>/runtime/sshroot), never the host's own sessions. The harness has no status feed
+ * thread: the scene command takes the feed's samples itself, with the launcher's own Sampler and its setting
+ * (launcher_ssh::enabled()), and publishes them as the feed thread does; the strips read them at their next 2 s
+ * refresh. No sshd_config in the tree: port 22, the watch's default. */
+std::string ssh_root(const Run &run) { return runtime_path(run, "sshroot"); }
+
+struct SshFeed {
+    std::unique_ptr<ssh_indicator::Sampler> sampler;
+    int64_t clock_ms = 0; /* the feed's own clock: one sample every 2 s */
+};
+SshFeed g_ssh_feed; /* one per process: per scene and size */
+
+/* ssh_status off | N [idle|active]: sshd listening on 0.0.0.0:22 and N (1..8) incoming connections from 192.168.68.12
+ * (ports 50000 + i) to 192.168.68.20:22; active: bytes waiting in their send queue (a fake tree has no socket for the
+ * watch's netlink counters: its queue fallback). Then two samples 2 s apart, as the feed thread takes them, so a new
+ * connection is confirmed (seen in two consecutive samples) */
+bool set_ssh_status(const Run &run, const std::vector<std::string> &w)
+{
+    int connections = 0;
+    bool active = false;
+    if (w.size() == 2 && w[1] == "off") {
+        connections = 0;
+    } else if (w.size() == 2 || w.size() == 3) {
+        if (w[1].size() != 1 || w[1][0] < '1' || w[1][0] > '8') return false;
+        connections = w[1][0] - '0';
+        if (w.size() == 3 && w[2] != "idle" && w[2] != "active") return false;
+        active = w.size() == 3 && w[2] == "active";
+    } else {
+        return false;
+    }
+    const std::string header = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  "
+                               "timeout inode\n";
+    std::string tcp = header + "   0: 00000000:0016 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0  "
+                               "      0 1000 1 0000000000000000 100 0 0 10 0\n";
+    for (int i = 0; i < connections; ++i) {
+        char line[200];
+        std::snprintf(line, sizeof(line),
+                      "%4d: 1444A8C0:0016 0C44A8C0:%04X 01 %08X:00000000 02:000AFC7B 00000000     0        0 %d 4 "
+                      "0000000000000000 20 4 31 10 -1\n",
+                      i + 1, 50000 + i, active ? 0x24 : 0, 2000 + i);
+        tcp += line;
+    }
+    const std::string net = ssh_root(run) + "/proc/net";
+    put_file(net, "tcp", tcp);
+    put_file(net, "tcp6", header);
+    SshFeed &feed = g_ssh_feed;
+    if (!feed.sampler) feed.sampler = std::make_unique<ssh_indicator::Sampler>(ssh_root(run).c_str());
+    for (int i = 0; i < 2; ++i) {
+        feed.clock_ms += 2000;
+        launcher_ssh::publish(feed.sampler->sample(launcher_ssh::enabled(), feed.clock_ms));
+    }
+    const ssh_indicator::Snapshot s = launcher_ssh::snapshot();
+    std::printf("ssh_status: feed ssh=%d ssh_act=%d (setting %s)\n", s.count, s.active,
+                launcher_ssh::enabled() ? "On" : "Off");
+    return true;
 }
 
 /* sudoprompt: the responsive sudo prompt (cp0_sudo_prompt_ui) driven without the sudo coordinator, which the harness
@@ -1990,6 +2051,10 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     if (cmd == "battery") {
         if (!set_power_supply(run, w))
             return fail(scene, line, "usage: battery off|mains|PCT discharging|charging|full|notcharging");
+        return true;
+    }
+    if (cmd == "ssh_status") { /* after "home": the launcher reads Settings > SSH indicator there */
+        if (!set_ssh_status(run, w)) return fail(scene, line, "usage: ssh_status off|N [idle|active] (N 1..8)");
         return true;
     }
     if (cmd == "backlight") { /* detected once per launcher run: before the first drawing command */

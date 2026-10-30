@@ -138,6 +138,7 @@ namespace settings_keyboard {
 void append_entries(Tree &tree, const NodeIter &system)
 {
     NodeIter keyboard = tree.append_child(system, SettingEntry{"On-screen keyboard", settings_keyboard_choice_page_factory});
+    keyboard->page_title = "Screen keyboard"; /* the page header: whole beside the strip's reserved slot (2026-10-30) */
     /* the rows in launcher_osk::choices() order (report 042: Off is gone, a stored Off reads as Auto) */
     int values[3];
     const int n = launcher_osk::choices(values);
@@ -150,8 +151,10 @@ void append_entries(Tree &tree, const NodeIter &system)
     /* the PDA writing zone's training (report 042), next to the keyboard's entries: the rows counted from the end of
      * the section (Shutdown, Reboot, Keyboard test) stay where they were */
     settings_strokes::append_entry(tree, system);
-    if (settings_ui::dev_pages())
-        tree.append_child(system, SettingEntry{"Keyboard test", settings_keyboard_test_factory, PageType::Normal});
+    if (settings_ui::dev_pages()) {
+        NodeIter test = tree.append_child(system, SettingEntry{"Keyboard test", settings_keyboard_test_factory, PageType::Normal});
+        test->page_title = "Key test"; /* the page header, as above */
+    }
 }
 
 } // namespace settings_keyboard

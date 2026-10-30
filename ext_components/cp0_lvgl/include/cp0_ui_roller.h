@@ -46,7 +46,8 @@ typedef struct {
     int title_x, title_y, title_px;          /* = the home grid's title */
     int title_max_w;                         /* up to the Esc button */
     int strip_x, strip_y, strip_w, strip_h;  /* the shared status strip canvas, exactly the home grid's */
-    int strip_left;                          /* the leftmost pixel it draws (its Bluetooth icon) */
+    int strip_left;                          /* the leftmost pixel it draws (the SSH indicator's
+                                                slot, kept free: cp0::ui::status_strip_left) */
     int esc_x, esc_y, esc_w, esc_h;          /* a 9 mm toolbar key wide (cp0_ui_toolbar_key_px, not TARGET); as high
                                                 but not above header_h - 2 status_top;
                                                 centred on the clock pill's line; SPACE_M left of strip_left */
@@ -73,8 +74,8 @@ typedef struct {
 } cp0_ui_roller_page_t;
 
 /* The roller page for the metrics m. strip_left: the screen x of the leftmost pixel the shared status strip draws
- * (its Bluetooth icon; the launcher measures it with the strip renderer), <= 0 or past the screen = the strip canvas'
- * left edge. Returns 0, or -1 (out untouched) when m is NULL or the screen has no room. */
+ * (its SSH indicator's slot, kept free; the launcher measures it with the strip renderer: status_strip_left), <= 0 or
+ * past the screen = the strip canvas' left edge. Returns 0, or -1 (out untouched) when m is NULL or the screen has no room. */
 int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_page_t *out);
 
 /* Roller width: screen width minus a margin on each side, capped by the class (CP0_UI_ROLLER_CAP_W[_LARGE]). */

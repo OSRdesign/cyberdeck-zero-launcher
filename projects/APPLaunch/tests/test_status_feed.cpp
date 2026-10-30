@@ -61,6 +61,18 @@ int main()
     c = a;
     c.brightness_pct = 50;
     CHECK(status_feed::differs(a, c));
+    // the SSH indicator (2026-10-30): a session starts or ends, traffic starts or stops
+    c = a;
+    c.ssh = 1;
+    CHECK(status_feed::differs(a, c));
+    cp0_app_status_t d = c;
+    d.ssh_act = 1;
+    CHECK(status_feed::differs(c, d));
+    d = c;
+    d.ssh = 2;
+    CHECK(status_feed::differs(c, d));
+    d = c;
+    CHECK(!status_feed::differs(c, d));
 
     // the SDL stub: start and stop do nothing, twice or unpaired
     status_feed::stop();

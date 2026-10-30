@@ -1,7 +1,8 @@
 /*
  * The status feed (report 032): status.state written by the launcher (cp0_status_state.c) and read back by the app
  * contract's reader (cp0_app_status_*): path, exact text, format / parse round trip, atomic write, a missing file, a
- * wrong version, unknown keys, and a launcher that is gone (stale pid) or alive (own pid, a pid of another user).
+ * wrong version, unknown keys, and a launcher that is gone (stale pid) or alive (own pid, a pid of another user); the
+ * SSH indicator's keys (ssh=, ssh_act=, 2026-10-30) and a file of an older launcher without them.
  */
 #define _GNU_SOURCE
 
@@ -72,7 +73,7 @@ static void test_format_parse(void)
     char want[256];
     snprintf(want, sizeof(want),
              "v=1\ngen=7\npid=%d\nwifi=1\nwifi_pct=72\neth=1\nbt=connected\nbattery=64\nbattery_state=Not charging\n"
-             "volume=40\nmute=0\nbrightness_pct=70\n",
+             "volume=40\nmute=0\nbrightness_pct=70\nssh=0\nssh_act=0\n",
              (int)getpid());
     CHECK(strcmp(text, want) == 0);
     char tiny[20];
@@ -97,6 +98,39 @@ static void test_format_parse(void)
     CHECK(back.volume == -1 && back.mute == 0 && back.brightness_pct == -1 && back.battery == 50);
     const char *bad = "v=1\nvolume=101\nmute=2\nbrightness_pct=-2\n";
     CHECK(cp0_app_status_parse(bad, strlen(bad), &back) == 0 && back.volume == -1 && back.mute == 0 && back.brightness_pct == -1);
+
+    /* the SSH indicator: the count and the activity flag (never an address); no session writes ssh_act=0 whatever the
+     * flag says; an older launcher's file has neither key (0, 0); out of range values keep 0 */
+    cp0_app_status_t ssh = s;
+    ssh.ssh = 2;
+    ssh.ssh_act = 1;
+    CHECK(cp0_status_state_format(&ssh, text, sizeof(text)) > 0 && strstr(text, "brightness_pct=70\nssh=2\nssh_act=1\n"));
+    CHECK(cp0_app_status_parse(text, strlen(text), &back) == 0 && back.ssh == 2 && back.ssh_act == 1);
+    ssh.ssh_act = 0;
+    CHECK(cp0_status_state_format(&ssh, text, sizeof(text)) > 0 && strstr(text, "ssh=2\nssh_act=0\n"));
+    CHECK(cp0_app_status_parse(text, strlen(text), &back) == 0 && back.ssh == 2 && back.ssh_act == 0);
+    ssh.ssh = 0;
+    ssh.ssh_act = 1;
+    CHECK(cp0_status_state_format(&ssh, text, sizeof(text)) > 0 && strstr(text, "ssh=0\nssh_act=0\n"));
+    ssh.ssh = -3;
+    CHECK(cp0_status_state_format(&ssh, text, sizeof(text)) > 0 && strstr(text, "ssh=0\nssh_act=0\n"));
+    CHECK(cp0_app_status_parse(old_file, strlen(old_file), &back) == 0 && back.ssh == 0 && back.ssh_act == 0);
+    const char *bad_ssh = "v=1\nssh=-1\nssh_act=2\n";
+    CHECK(cp0_app_status_parse(bad_ssh, strlen(bad_ssh), &back) == 0 && back.ssh == 0 && back.ssh_act == 0);
+    const char *many = "v=1\nssh=16\nssh_act=1\n";
+    CHECK(cp0_app_status_parse(many, strlen(many), &back) == 0 && back.ssh == 16 && back.ssh_act == 1);
+    /* the longest file still fits the writer's buffer (cp0_status_state_write: 320 bytes) */
+    cp0_app_status_t longest = sample();
+    longest.gen = 4294967295u;
+    longest.pid = 2147483647;
+    longest.wifi_pct = 100;
+    longest.battery = 100;
+    longest.volume = 100;
+    longest.brightness_pct = 100;
+    longest.ssh = 9999;
+    longest.ssh_act = 1;
+    char big[320];
+    CHECK(cp0_status_state_format(&longest, big, sizeof(big)) > 0);
 
     /* every bluetooth word, charging, no battery */
     s.bt = CP0_APP_BT_ON;

@@ -8,7 +8,8 @@
  * Geometry, colours and thresholds are the ones of the home grid (native_ui.cpp): a 104x40 brown clock pill
  * 16 px from the right edge and 8 px from the top, four Wi-Fi bars (8 px wide, 12 px pitch) left of it and
  * the Bluetooth glyph left of the bars; a battery, when the state has one, left of the Bluetooth glyph's place
- * (its level glyph from the symbol font, its percentage at 18 px). Text and glyphs are rendered with FreeType
+ * (its level glyph from the symbol font, its percentage at 18 px); the SSH indicator, when the state has an incoming
+ * SSH session, in the leftmost slot (the terminal glyph). Text and glyphs are rendered with FreeType
  * from the same fonts the launcher's builtin Montserrat 28 is made of (Montserrat-Medium.ttf and the
  * FontAwesome symbol font).
  *
@@ -35,6 +36,14 @@ typedef struct {
     int battery;                         /* a battery is present */
     int battery_pct;                     /* 0..100 */
     int battery_charging;                /* charging */
+    /* The SSH indicator (2026-10-30; 0 = no incoming SSH session, nothing drawn: a zeroed state looks as before): the
+     * terminal glyph U+F120 (">_") in the leftmost slot, left of the battery's level glyph, else left of the Bluetooth
+     * glyph's place; the Bluetooth "connected" blue, white (the battery's colour) while ssh_bright. With a battery its
+     * percentage is left out while the glyph is shown (the level glyph stays), so the strip keeps its width. */
+    int ssh;                             /* incoming SSH connections (0 = none) */
+    int ssh_active;                      /* bytes moved on one since the source's previous sample: the strip then
+                                            alternates ssh_bright on its 1 s tick. Not drawn itself */
+    int ssh_bright;                      /* the blink phase: the glyph white instead of blue */
 } cp0_statusbar_state_t;
 
 typedef struct cp0_statusbar cp0_statusbar_t;
@@ -45,7 +54,8 @@ void cp0_statusbar_destroy(cp0_statusbar_t *bar);
 
 /* Reads Wi-Fi / Bluetooth state from sysfs and procfs and the time from the system clock (what an app that
  * has no access to the launcher's own services can see). Cheap, but not meant for every frame: ~2 s. The battery
- * fields stay 0 (cp0::ui::StatusStrip reads the battery itself, cp0_power_supply.h). */
+ * fields stay 0 (cp0::ui::StatusStrip reads the battery itself, cp0_power_supply.h), and so do the SSH fields (only the
+ * launcher looks for SSH sessions: status.state ssh=, cp0_app_contract.h). */
 void cp0_statusbar_read_state(cp0_statusbar_state_t *state);
 
 /* Draws the bar into the top CP0_STATUSBAR_HEIGHT rows of an ARGB8888 buffer `width` pixels wide

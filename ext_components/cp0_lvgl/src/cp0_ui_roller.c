@@ -110,7 +110,8 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
 
     /* the on-screen Esc: a 9 mm toolbar key wide (not TARGET, 7 mm since 2026-10-18: the header Esc keeps its size,
      * the same in the launcher and every app), as high but inside the bar's margins (status_top above and below, like
-     * the clock pill), centred on the pill's line, right-aligned SPACE_M left of the strip's Bluetooth icon */
+     * the clock pill), centred on the pill's line, right-aligned SPACE_M left of the strip's leftmost slot (the SSH
+     * indicator's, kept free even without a session: owner decision 2026-10-30) */
     const int esc_key = cp0_ui_toolbar_key_px(m->ppmm_x100);
     p.esc_w = esc_key;
     p.esc_h = imax(1, imin(esc_key, p.header_h - 2 * s->status_top));

@@ -42,6 +42,11 @@
 #define BATT_TEXT_GAP 3         /* between the percentage and the level glyph */
 #define BATT_TEXT_PX 18         /* the percentage: the caption size beside the 28 px clock */
 #define BATT_COLOR 0xFFFFFFu    /* the clock's text; BAR_ON while charging */
+/* ---- the SSH indicator (2026-10-30): the leftmost slot, colours of the strip's own (no new colour) */
+#define SSH_CODEPOINT 0xF120    /* Font Awesome 5 Solid "terminal" (">_"), in the icon font the strip loads */
+#define SSH_GAP BATT_GAP        /* between it and the battery's level glyph, or the Bluetooth glyph's place */
+#define SSH_IDLE BT_CONNECTED   /* a session: the strip's "connected" blue */
+#define SSH_BRIGHT BATT_COLOR   /* traffic: the blink's other phase, the clock's white */
 
 static const int kBarHeights[4] = {9, 15, 21, 28};
 static const int kBarThresholds[4] = {1, 30, 60, 80};
@@ -277,6 +282,13 @@ static int battery_place(cp0_statusbar_t *bar, const cp0_statusbar_state_t *stat
     return 1;
 }
 
+/* The advance of an icon glyph at the face's current size, -1 when the face cannot load it. */
+static int icon_advance(cp0_statusbar_t *bar, unsigned long codepoint)
+{
+    if (!bar->icon_face || FT_Load_Char(bar->icon_face, codepoint, FT_LOAD_DEFAULT) != 0) return -1;
+    return (int)(bar->icon_face->glyph->advance.x >> 6);
+}
+
 /* Scales a design pixel value by pct percent (exact at 100). */
 #define SC(v) (((v) * pct + 50) / 100)
 
@@ -299,10 +311,25 @@ void cp0_statusbar_render_scaled(cp0_statusbar_t *bar, uint32_t *argb, int width
     battery_place_t battery = {0};
     const int has_battery = state->battery && battery_place(bar, state, bt_right, SC(BATT_GAP), SC(BATT_TEXT_GAP),
                                                             SC(BATT_TEXT_PX), SC(FONT_PX), &battery);
+    /* the SSH indicator: the leftmost slot, its right edge SSH_GAP left of the battery's level glyph (the percentage is
+     * left out while it shows), else of the Bluetooth glyph's place (drawn or not) */
+    int ssh_x = 0;
+    int has_ssh = 0;
+    if (state->ssh > 0) {
+        const int bt_advance = icon_advance(bar, BT_CODEPOINT);
+        const int ssh_advance = icon_advance(bar, SSH_CODEPOINT);
+        if (bt_advance >= 0 && ssh_advance >= 0) {
+            const int right = has_battery ? battery.glyph_x : bt_right - bt_advance;
+            ssh_x = right - SC(SSH_GAP) - ssh_advance;
+            has_ssh = 1;
+        }
+    }
+    const int battery_text = has_battery && !has_ssh;
 
     if (backing_alpha > 0) {
         int left = bt_right - SC(34);
-        if (has_battery && battery.text_x - SC(6) < left) left = battery.text_x - SC(6);
+        if (battery_text && battery.text_x - SC(6) < left) left = battery.text_x - SC(6);
+        if (has_ssh && ssh_x - SC(6) < left) left = ssh_x - SC(6);
         round_rect(argb, width, stride_px, left, pill_y - SC(2), pill_x + pill_w + SC(6) - left, pill_h + SC(4), SC(12),
                    0x000000u, backing_alpha);
     }
@@ -345,15 +372,22 @@ void cp0_statusbar_render_scaled(cp0_statusbar_t *bar, uint32_t *argb, int width
             middle = icon_baseline - (int)((gm->horiBearingY - gm->height / 2 + 32) >> 6);
         }
         draw_glyph(bar->icon_face, battery.glyph, argb, width, stride_px, battery.glyph_x, icon_baseline, rgb);
-        FT_Set_Pixel_Sizes(bar->text_face, 0, SC(BATT_TEXT_PX));
-        int digit_h = SC(13);
-        if (FT_Load_Char(bar->text_face, '0', FT_LOAD_DEFAULT) == 0)
-            digit_h = (int)((bar->text_face->glyph->metrics.horiBearingY + 32) >> 6);
-        int x = battery.text_x;
-        for (const char *c = battery.text; *c; ++c)
-            x += draw_glyph(bar->text_face, (unsigned char)*c, argb, width, stride_px, x, middle + digit_h / 2, rgb);
-        FT_Set_Pixel_Sizes(bar->text_face, 0, SC(FONT_PX));
+        if (battery_text) {
+            FT_Set_Pixel_Sizes(bar->text_face, 0, SC(BATT_TEXT_PX));
+            int digit_h = SC(13);
+            if (FT_Load_Char(bar->text_face, '0', FT_LOAD_DEFAULT) == 0)
+                digit_h = (int)((bar->text_face->glyph->metrics.horiBearingY + 32) >> 6);
+            int x = battery.text_x;
+            for (const char *c = battery.text; *c; ++c)
+                x += draw_glyph(bar->text_face, (unsigned char)*c, argb, width, stride_px, x, middle + digit_h / 2, rgb);
+            FT_Set_Pixel_Sizes(bar->text_face, 0, SC(FONT_PX));
+        }
     }
+
+    /* SSH indicator: the terminal glyph on the Bluetooth glyph's baseline */
+    if (has_ssh)
+        draw_glyph(bar->icon_face, SSH_CODEPOINT, argb, width, stride_px, ssh_x, pill_y + SC(BT_Y_OFFSET) + ascent,
+                   state->ssh_bright ? SSH_BRIGHT : SSH_IDLE);
     if (pct != 100) {
         FT_Set_Pixel_Sizes(bar->text_face, 0, FONT_PX);
         if (bar->icon_face) FT_Set_Pixel_Sizes(bar->icon_face, 0, FONT_PX);

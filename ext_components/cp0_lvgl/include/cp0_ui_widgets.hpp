@@ -189,14 +189,15 @@ private:
 
 /* Fills the Wi-Fi and Bluetooth fields of the strip's state (wifi_up, wifi_pct, bt_on, bt_connected; the strip sets
  * the clock itself, and the battery fields from cp0_power_supply_battery() right before the source runs: a board
- * without a power_supply battery shows none). Called on the LVGL thread when the strip is added, then every 2 s while
- * the strip's screen is the active one, and by StatusStrip::refresh(). Must return quickly: start slow queries
- * elsewhere and report the last known values. cp0_ui_status_set_wifi() (cp0_ui_status_strip.h) applies the bars'
- * rule. */
+ * without a power_supply battery shows none), and the SSH indicator's (ssh, ssh_active through
+ * cp0_ui_status_set_ssh(); a source that sets nothing shows none; the strip owns the blink phase ssh_bright). Called on
+ * the LVGL thread when the strip is added, then every 2 s while the strip's screen is the active one, and by
+ * StatusStrip::refresh(). Must return quickly: start slow queries elsewhere and report the last known values.
+ * cp0_ui_status_set_wifi() (cp0_ui_status_strip.h) applies the bars' rule. */
 using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
 
-/* The default source: the launcher's status feed while it is alive (status.state, cp0_app_status_read: Wi-Fi, Bluetooth
- * and battery as the home grid shows them), else sysfs / procfs (cp0_statusbar_read_state: the Wi-Fi interface found
+/* The default source: the launcher's status feed while it is alive (status.state, cp0_app_status_read: Wi-Fi, Bluetooth,
+ * battery and the SSH indicator as the home grid shows them), else sysfs / procfs (no SSH indicator) (cp0_statusbar_read_state: the Wi-Fi interface found
  * under any name, the hci devices and rfkill). Needs no cp0_lvgl service, works in any process. */
 StatusSource default_status_source();
 
@@ -243,9 +244,11 @@ private:
     lv_timer_t *status_timer_ = nullptr;
 };
 
-/* x of the strip's leftmost drawn pixel on the native display (its fullest state: Bluetooth glyph, all bars, a clock;
- * a battery at "100%" when the board has a power_supply battery at the first call, which fixes the value):
- * what a page header keeps free, the strip_left argument of cp0_ui_roller_page(). 0 under the SDL simulator. */
+/* x of the strip's leftmost drawn pixel on the native display (its fullest state: the SSH indicator's slot, always kept
+ * whether a session or the setting shows it or not, Bluetooth glyph, all bars, a clock; a battery at "100%" when the
+ * board has a power_supply battery at the first call, which fixes the value, and the leftmost of "100%" and the
+ * indicator beside the level glyph): what a page header keeps free, the strip_left argument of cp0_ui_roller_page().
+ * 0 under the SDL simulator. */
 int status_strip_left();
 
 /* The home grid's title: a label at the shell's title_x / title_y, title_px, gold (#F0B400). Use it as Page's

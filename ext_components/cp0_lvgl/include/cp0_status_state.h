@@ -14,6 +14,9 @@
  *   volume=-1|0..100   the launcher's output volume, -1 = no sound output (report 035)
  *   mute=0|1
  *   brightness_pct=-1|0..100  the backlight, -1 = none to drive
+ *   ssh=N              incoming SSH connections (the SSH indicator, cp0_ssh_watch.h); 0 = none, or Settings > System >
+ *                      SSH indicator Off. A count only: no peer address is ever written here
+ *   ssh_act=0|1        bytes moved on one since the launcher's previous 2 s sample (the indicator blinks); 0 when ssh=0
  *
  * Readers must ignore unknown keys. Apps read it with cp0_app_status_read() (cp0_app_contract.h).
  *

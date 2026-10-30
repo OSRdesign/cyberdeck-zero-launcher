@@ -118,12 +118,52 @@ static void test_battery(void)
     cp0_ui_status_set_battery(NULL, &b); /* no crash */
 }
 
+/* The SSH indicator (2026-10-30): the source's rule and the 1 s blink tick */
+static void test_ssh(void)
+{
+    cp0_statusbar_state_t s;
+    memset(&s, 0, sizeof(s));
+    cp0_ui_status_set_ssh(&s, 0, 1); /* no session: nothing, activity ignored */
+    assert(s.ssh == 0 && s.ssh_active == 0 && s.ssh_bright == 0);
+    cp0_ui_status_set_ssh(&s, -2, 1);
+    assert(s.ssh == 0 && s.ssh_active == 0);
+    cp0_ui_status_set_ssh(&s, 2, 0); /* idle session: steady blue */
+    assert(s.ssh == 2 && s.ssh_active == 0 && s.ssh_bright == 0);
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 0 && s.ssh_bright == 0);
+
+    /* traffic: the phase flips on each tick while the screen is active, holds while it is not */
+    cp0_ui_status_set_ssh(&s, 1, 1);
+    assert(s.ssh == 1 && s.ssh_active == 1 && s.ssh_bright == 0);
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 1 && s.ssh_bright == 1);
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 1 && s.ssh_bright == 0);
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 1 && s.ssh_bright == 1);
+    assert(cp0_ui_status_ssh_tick(&s, 0) == 0 && s.ssh_bright == 1);
+    /* the source still says active: the phase is kept (no jump back to blue between ticks) */
+    cp0_ui_status_set_ssh(&s, 1, 1);
+    assert(s.ssh_bright == 1);
+    /* traffic stops (or the lock screen: the launcher's source says idle): blue at once, and the tick keeps it */
+    cp0_ui_status_set_ssh(&s, 1, 0);
+    assert(s.ssh_bright == 0);
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 0 && s.ssh_bright == 0);
+    /* the session ends while bright: nothing drawn, phase reset */
+    cp0_ui_status_set_ssh(&s, 1, 1);
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 1 && s.ssh_bright == 1);
+    cp0_ui_status_set_ssh(&s, 0, 0);
+    assert(s.ssh == 0 && s.ssh_active == 0 && s.ssh_bright == 0);
+    /* a stale phase without a session is cleared by the tick */
+    s.ssh_bright = 1;
+    assert(cp0_ui_status_ssh_tick(&s, 1) == 1 && s.ssh_bright == 0);
+    cp0_ui_status_set_ssh(NULL, 1, 1);
+    assert(cp0_ui_status_ssh_tick(NULL, 1) == 0);
+}
+
 int main(void)
 {
     test_geom();
     test_signal();
     test_first_column();
     test_battery();
+    test_ssh();
     printf("test_ui_status_strip: ok\n");
     return 0;
 }

@@ -2,8 +2,9 @@
 # 18 px (the 32 px one cut "Date & Time", "Keyboard test", "Network Time" beside the narrowed status strip) and a
 # breadcrumb title shows its last part only. Every title is checked whole (expect_text) and against the home grid's
 # header (run.sh header):
-#   Settings > Date & Time, its Set Manually section, System > On-screen keyboard (the longest title, about 186 px) and
-#   the development page Keyboard test;
+#   Settings > Date & Time, its Set Manually section, System > On-screen keyboard (titled "Screen keyboard" since the
+#   strip's reserved SSH slot, 2026-10-30: still the longest, whole in the 152 / 156 px room) and the development page
+#   Keyboard test (titled "Key test");
 #   the list demo page with a path ("Net Toolbox", "Diagnosis") and with one string written as a breadcrumb
 #   ("Net Toolbox > Diagnosis", as an app may pass it): both show "Diagnosis" only.
 # Goldens at both PDA sizes.
@@ -50,15 +51,15 @@ key UP
 key ENTER
 wait 300
 shot pda_title_osk_choice
-header pda_title_osk_choice "On-screen keyboard"
-expect_text "On-screen keyboard"
+header pda_title_osk_choice "Screen keyboard"
+expect_text "Screen keyboard"
 key ESC
 key DOWN
 key ENTER
 wait 300
 shot pda_title_keyboard_test
-header pda_title_keyboard_test "Keyboard test"
-expect_text "Keyboard test"
+header pda_title_keyboard_test "Key test"
+expect_text "Key test"
 key ESC
 key ESC
 key ESC

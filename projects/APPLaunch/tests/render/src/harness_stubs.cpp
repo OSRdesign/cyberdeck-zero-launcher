@@ -11,6 +11,7 @@
 #include "cp0_timedate_client.hpp"
 #include "cp0_timezone.hpp"
 #include "input_presence.hpp"
+#include "native_screensaver.hpp"
 #include "settings/settings_hw_profile.hpp"
 
 #include <cerrno>
@@ -162,10 +163,11 @@ void input_presence::set_hand(bool on)
     harness::fixtures().hand = on ? 1 : 0;
 }
 
-/* ui_screensaver.cpp (the lock screen) is not linked: never locked */
+/* ui_screensaver.cpp (the stock lock screen) is not linked: on the native port it answers the clock screensaver's
+ * state (native_screensaver.cpp, linked here), so this does too */
 extern "C" int ui_screensaver_is_active(void)
 {
-    return 0;
+    return native_screensaver::active() ? 1 : 0;
 }
 
 /* Date & Time > Set Manually > Save? (a worker thread): the scene's "timeset ok|fail". A set time is what LocalTime

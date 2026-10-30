@@ -455,6 +455,10 @@ static void status_line(const char *key, size_t key_len, const char *v, size_t l
         if (parse_int(v, len, -1, 100, &n)) s->brightness_pct = (int)n;
     } else if (key_is(key, key_len, "gen")) {
         if (parse_int(v, len, 0, UINT_MAX, &n)) s->gen = (unsigned)n;
+    } else if (key_is(key, key_len, "ssh")) {
+        if (parse_int(v, len, 0, 9999, &n)) s->ssh = (int)n;
+    } else if (key_is(key, key_len, "ssh_act")) {
+        if (parse_int(v, len, 0, 1, &n)) s->ssh_act = (int)n;
     }
 }
 

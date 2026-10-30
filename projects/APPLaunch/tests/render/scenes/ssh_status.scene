@@ -1,0 +1,99 @@
+# The SSH indicator (owner decisions 2026-10-30) on a board without a battery (the deck, the Pi boards): the terminal
+# glyph U+F120 in the status strip's leftmost slot while an incoming SSH session exists. "ssh_status" writes a fake
+# /proc/net/tcp (sshd on 22, N sessions from 192.168.68.12, traffic as a non-empty send queue) and takes two samples
+# with the launcher's own watch and setting, as the status feed thread does every 2 s; the strip reads them at its next
+# 2 s refresh. No session: nothing drawn, the slot stays reserved (the header's Esc and title are where they are with
+# one). Idle: steady blue. Traffic: blue and white on the strip's 1 s clock tick (both phases shot, the third tick back
+# to the first). The Settings root with a session (the glyph right of the Esc, nothing moved; the header check runs
+# without one, against the home grid's). Settings > System > SSH indicator: On (the default), its choice page, Off (the
+# glyph gone at once, the Esc unmoved), sessions not even looked for while Off, On again (confirmed again). The lock
+# screen (the clock screensaver, DarkTime 10 s) over a session with traffic: it covers the strip; after waking, the
+# glyph as before. Goldens at 640x480 and 480x800 (the PDA profile's 72 % strip).
+title ssh status
+sizes 640x480 480x800 720x720 1024x600
+@480x800 profile pda
+@480x800 env APPLAUNCH_PDA 0
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+config dark_time 10
+home
+header home
+shot ssh_none
+# a session from the PC, idle
+ssh_status 1 idle
+wait 2100
+shot ssh_idle
+# traffic: the glyph alternates on the 1 s tick
+ssh_status 1 active
+wait 2100
+shot ssh_active_a
+wait 500
+shot ssh_active_b
+wait 500
+expect_same ssh_active_a
+# two sessions draw the same glyph (no count badge); traffic stops: steady blue again
+ssh_status 2 idle
+wait 2100
+expect_same ssh_idle
+# the session ends: the strip as before
+ssh_status off
+wait 2100
+expect_same ssh_none
+# Settings without a session: the header against the home grid's; then with one: the glyph right of the Esc
+launch Settings
+wait 300
+header ssh_settings_root Settings
+ssh_status 1 idle
+wait 2100
+shot ssh_settings_root
+# System: Up from Screen wraps to the last section; its rows (release): Storage, Licenses, About, Pointer navigation,
+# SSH indicator, On-screen keyboard, Reboot, Shutdown; Up wraps from the top to SSH indicator in four
+key UP
+key ENTER
+wait 300
+expect_rows Storage Licenses About "Pointer navigation" "SSH indicator" "On-screen keyboard" Reboot Shutdown
+key UP
+key UP
+key UP
+key UP
+wait 300
+shot ssh_setting_on
+key ENTER
+wait 300
+shot ssh_choice_on
+# Off: the glyph goes at the strip's next refresh, the feed stops looking
+key UP
+key ENTER
+wait 2100
+shot ssh_setting_off
+ssh_status 1 active
+wait 2100
+expect_same ssh_setting_off
+# On again: the session is confirmed again by the feed's next samples
+key ENTER
+wait 300
+key DOWN
+key ENTER
+ssh_status 1 idle
+wait 2100
+expect_same ssh_setting_on
+# the lock screen: DarkTime's clock covers everything; the glyph does not blink behind it
+key ESC
+wait 300
+key ESC
+wait 300
+ssh_status 1 active
+screensaver
+wait 10600
+shot ssh_locked
+# a tap wakes it (the harness has no lock-screen key filter: ui_screensaver.cpp is not linked) and is swallowed: the
+# home grid with the glyph blue, the blink resumes at the strip's next refresh. That the glyph does not blink behind
+# the clock (the launcher's source says idle while locked) cannot be seen here: the clock covers the strip, and the
+# resumed blink falls in step with the old one (tests/test_ssh_indicator_model.cpp checks the rule).
+wait 3200
+tap 20 20
+wait 300
+expect_same ssh_idle

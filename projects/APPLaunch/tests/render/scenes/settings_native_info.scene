@@ -19,7 +19,7 @@ launch Settings
 # System: Up from Screen wraps to the last section
 key UP
 key ENTER
-# System (release): Storage, Licenses, About, Pointer navigation, On-screen keyboard, Reboot, Shutdown
+# System (release): Storage, Licenses, About, Pointer navigation, SSH indicator, On-screen keyboard, Reboot, Shutdown
 key ENTER
 shot info_storage
 header info_storage "Settings > System > Storage" "System > Storage" Storage

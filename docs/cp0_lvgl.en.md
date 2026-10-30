@@ -45,7 +45,7 @@ The runner supports one successful run per process. Its order is `lv_init`, `aft
 
 ### Status strip and title (`include/cp0_ui_widgets.hpp`, `include/cp0_ui_status_strip.h`)
 
-The launcher's top-right status strip (clock pill, Wi-Fi bars, Bluetooth glyph) and the home grid's title are part of the `cp0::ui` widget set. Native apps use them as they are: never draw your own clock or icons and never copy the code.
+The launcher's top-right status strip (clock pill, Wi-Fi bars, Bluetooth glyph, a battery, the SSH indicator) and the home grid's title are part of the `cp0::ui` widget set. Native apps use them as they are: never draw your own clock or icons and never copy the code.
 
 ```cpp
 using StatusSource = std::function<void(cp0_statusbar_state_t &state)>;
@@ -56,13 +56,15 @@ public:
     void refresh();
     lv_obj_t *canvas() const;
 };
-int status_strip_left();                       // x of the strip's leftmost drawn pixel
+int status_strip_left();                       // x of the strip's leftmost drawn pixel (the SSH slot included)
 lv_obj_t *add_title(lv_obj_t *parent, const char *text);
 ```
 
 - `StatusStrip::add(parent)` draws the strip at the top right of `parent` (a full-width screen or `Page::header()`, at y 0), placed and scaled by the layout service (shell `bar_h`, `status_w`, `status_top`, `status_pct`). It belongs to `parent`: its 1 s clock timer and 2 s status timer stop and it frees itself when `parent` is deleted. Never delete it yourself. Under the SDL simulator it returns NULL (the FreeType renderer `cp0_statusbar.c` is built for the device only).
 - The source fills `wifi_up`, `wifi_pct`, `bt_on` and `bt_connected`; the strip sets the clock itself. It runs on the LVGL thread when the strip is added, every 2 s while the strip's screen is active, and on `refresh()`. It must return at once. Without a source the strip uses the launcher's status feed while the launcher is alive (`status.state`, `cp0_app_status_read()`: Wi-Fi, Bluetooth "Powered" and connected, battery, as the home grid shows them; APP-CONTRACT section 5b), else sysfs and procfs (`cp0_statusbar_read_state`, which finds the Wi-Fi interface under any name; `$APPLAUNCH_STATUS_SYSFS_ROOT` points it at a fake tree in host tests). The launcher passes its own source (`native_ui::fill_status`: its Wi-Fi and Bluetooth services). `cp0_ui_status_set_wifi()` applies the bars' rule: connected shows at least one bar.
 - The battery: the strip reads it itself before the source runs (`cp0_power_supply_battery()`, `include/cp0_power_supply.h`: a Linux `power_supply` device of type Battery). A board with one shows its level glyph and percentage left of the Bluetooth glyph's place, green while charging (`cp0_ui_status_set_battery()`); a board without one (the Pi boards) shows the strip as before. `status_strip_left()` includes the battery when the board has one at its first call.
+- The SSH indicator (2026-10-30): while the launcher sees an incoming SSH session (`status.state` `ssh=` above 0, APP-CONTRACT section 5b) the strip draws the terminal glyph U+F120 in its leftmost slot, left of the battery's level glyph or of the Bluetooth glyph's place, in the Bluetooth "connected" blue; while `ssh_act=1` (traffic in the launcher's last 2 s sample) it alternates with white on the strip's 1 s clock tick, and only while the strip's screen is the active one (no timer of its own, at most one redraw a second; the strip redraws only when what it draws changed). With a battery the percentage is left out while the glyph shows (the level glyph stays), so the strip keeps its width. The default source sets it from the feed (none without the launcher); a source of your own sets `ssh` / `ssh_active` with `cp0_ui_status_set_ssh()` or leaves them 0 (nothing drawn); the strip owns the blink phase `ssh_bright` (`cp0_ui_status_ssh_tick()`). The launcher's source shows nothing while Settings > System > SSH indicator is Off and keeps the glyph steady while its lock screen is up.
+- `status_strip_left()` always includes the SSH indicator's slot (owner decision 2026-10-30), whether a session, the setting or the board shows it or not: a header's Esc and title never move when a session starts. On a board without a battery that puts the Esc 49 px further left at 100 % (35 px on the 72 % strips) than before the indicator, and the title's room shrinks as much (a long title is cut with dots sooner: the launcher gave three Settings pages a shorter header title, "Key test", "Paired", "Screen keyboard", with `SettingEntry::page_title`; arbitrary text such as a long Wi-Fi network name ends in dots); on a battery board the glyph fits where "100%" was, so nothing moves.
 - Call `refresh()` right after loading the screen, so the icons are current at once.
 - Fonts: `share/font/Montserrat-Medium.ttf` and `FontAwesome5-Solid+Brands+Regular.woff` through `cp0_file_path_c`, else `/usr/share/APPLaunch/share/font`. Apps do not bundle them.
 - `status_strip_left()` is the `strip_left` argument of `cp0_ui_roller_page()`: a header keeps its own controls left of it. `add_title()` is the label `Page`'s `TitleFactory` makes (shell `title_x`, `title_y`, `title_px`, gold `#F0B400`). On a narrow header (`cp0_ui_narrow_header()`: the portrait 480x640 / 480x800) `title_px` is 18 and `Page::set_title()` shows only the last part of a breadcrumb, a path or one string with `" > "` (`title_last_only`).
@@ -269,7 +271,8 @@ Report 035; contract text in [`APP-CONTRACT.md`](APP-CONTRACT.md) sections 5b, 5
 /* board.state: board, arch, RAM, battery, backlight, sound (and its kind), the verbs launcher.sock answers here */
 int cp0_app_board_read(const char *path, cp0_app_board_t *out);   /* NULL = default path; -1 = nothing to assume */
 int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb);
-/* status.state gained volume (-1 = no sound), mute, brightness_pct (-1 = no backlight) in cp0_app_status_t */
+/* status.state gained volume (-1 = no sound), mute, brightness_pct (-1 = no backlight) in cp0_app_status_t,
+   then (2026-10-30) ssh (incoming SSH connections, 0 = none) and ssh_act (0|1) */
 
 /* launcher.sock: one request line, one reply line; 0 "ok ...", 1 "err ...", -1 no service / timeout (200 ms default) */
 int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_ms);

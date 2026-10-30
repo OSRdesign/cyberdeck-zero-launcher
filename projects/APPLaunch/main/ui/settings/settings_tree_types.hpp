@@ -193,6 +193,13 @@ struct SettingEntry {
     // the root-level LvSettingRoller never reads it, so a gate on a root-level
     // entry would be silently ignored.
     std::function<const ActivationBlock *()> activation_gate;
+    // The native Settings page header's title for this entry when it must be shorter than its row label (empty: the
+    // label). The header's title room ends left of the status strip's reserved SSH indicator slot (2026-10-30), so a
+    // few long labels get a short title that fits whole; the row keeps its label.
+    std::string page_title;
+
+    const std::string &header_title() const { return page_title.empty() ? label : page_title; }
+
     // An action that asks first (see SettingActionConfirm): the native host shows the row as an action and asks
     std::shared_ptr<const SettingActionConfirm> action_confirm;
 
