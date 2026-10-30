@@ -660,8 +660,15 @@ if printf '#include <ft2build.h>\n' | "${CC:-cc}" -E $ft_flags -x c - >/dev/null
         "$root/src/cp0/cp0_statusbar.c" \
         "$root/tests/test_statusbar_wifi.c" -lfreetype -lm -o "$binary"
     "$binary"
+    # the SSH indicator in the renderer, with the shipped fonts: no session draws as before, the slot's width at 100 %
+    # and 72 % (how far the header's Esc moves), nothing else moves, the colours, the battery's percentage yielding
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
+        -I"$root/include" $ft_flags \
+        "$root/src/cp0/cp0_statusbar.c" \
+        "$root/tests/test_statusbar_ssh.c" -lfreetype -lm -o "$binary"
+    "$binary" "$root/../../projects/APPLaunch/APPLaunch/share/font"
 else
-    echo "SKIP test_statusbar_wifi (libfreetype-dev missing: sudo apt install libfreetype-dev)"
+    echo "SKIP test_statusbar_wifi, test_statusbar_ssh (libfreetype-dev missing: sudo apt install libfreetype-dev)"
 fi
 
 # Task 014 P1b: layout service (classes, density, tokens, pinned deck / Pi 3A+ presets, compat placement,
@@ -692,7 +699,7 @@ fi
 "$binary"
 
 # Task L1: the shared status strip's place from the shell tokens, the Wi-Fi signal rule, the leftmost drawn column
-# (X12: and the battery rule)
+# (X12: and the battery rule; 2026-10-30: the SSH indicator's rule and blink tick)
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror \
     -I"$root/include" \
     "$root/src/cp0_ui_metrics.c" \
@@ -706,6 +713,17 @@ fi
     -I"$root/include" \
     "$root/src/cp0_power_supply.c" \
     "$root/tests/test_power_supply.c" -o "$binary"
+"$binary"
+
+# SSH indicator P1: the incoming SSH watch (cp0_ssh_watch.h) on fake trees (/proc/net/tcp(6) lines, sshd's ports from
+# Port / ListenAddress / Include and $APPLAUNCH_SSH_PORTS, the LISTEN filter, the two-sample confirmation, activity from
+# byte counters and the queue fallback, malformed files) and on real loopback sockets (count, activity through
+# NETLINK_SOCK_DIAG: SKIP when the kernel refuses it, REQUIRE_SOCK_DIAG=1 makes that a failure); AddressSanitizer +
+# UndefinedBehaviorSanitizer when the compiler has them (mt_san above)
+"${CC:-cc}" -std=c11 -g -Wall -Wextra -Werror $mt_san \
+    -I"$root/include" \
+    "$root/src/cp0_ssh_watch.c" \
+    "$root/tests/test_ssh_watch.c" -o "$binary"
 "$binary"
 
 # Task 014 P2b: on-screen keyboard core (layout from the tokens, pages, Shift / Ctrl state machine, key event

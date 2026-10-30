@@ -16,8 +16,9 @@ launch Settings
 # System: Up from Screen wraps to the last section
 key UP
 key ENTER
-# System (release): Storage, Licenses, About, Pointer navigation, On-screen keyboard, Reboot, Shutdown;
+# System (release): Storage, Licenses, About, Pointer navigation, SSH indicator, On-screen keyboard, Reboot, Shutdown;
 # Up wraps from the top
+key UP
 key UP
 key UP
 key UP

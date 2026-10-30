@@ -29,7 +29,8 @@ key ENTER
 tapkey h
 tapkey i
 shot osk_letters
-header osk_letters "Settings > System > Keyboard test" "System > Keyboard test" "Keyboard test"
+# the page title is "Key test" (the row "Keyboard test": the title fits whole left of the strip's reserved SSH slot)
+header osk_letters "Settings > System > Key test" "System > Key test" "Key test"
 tapkey SHIFT
 shot osk_shift
 tapkey A

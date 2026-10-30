@@ -65,6 +65,7 @@ CP0_SRCS := \
     $(CP0)/src/cp0_ui_status_strip.c \
     $(CP0)/src/cp0_ui_status_strip_widget.cpp \
     $(CP0)/src/cp0_power_supply.c \
+    $(CP0)/src/cp0_ssh_watch.c \
     $(CP0)/src/cp0_capabilities.c \
     $(CP0)/src/cp0_ui_osk.c \
     $(CP0)/src/cp0_ui_osk_widget.cpp \
@@ -120,6 +121,7 @@ APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp launcher_zone.cpp     pda_mode.cpp \
+    launcher_ssh.cpp model/ssh_indicator_model.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
     page_app/ui_app_calculator.cpp \
     page_app/ui_app_ssh.cpp page_app/ui_app_ssh_view.cpp page_app/ui_app_ssh_native.cpp \

@@ -1,0 +1,41 @@
+# The SSH indicator (owner decisions 2026-10-30) on a board with a battery (the FZ-M1 tablet, the HackBerry: the
+# harness's fake power_supply, there before the launcher starts as on the board): the glyph takes the place of the
+# battery's percentage, which is left out while a session is shown (the level glyph stays), so the strip keeps its width
+# at 100 % (640x480 and up) and at 72 % (480x800); the header's Esc stays where "100%" puts it. No session: "85%" as
+# before; idle; traffic in both blink phases; charging (green battery, blue glyph); the session ends: "85%" back; the
+# Settings root with a session. No header check (another scene's home grid has no battery). Goldens at 640x480 and
+# 480x800.
+title ssh status battery
+sizes 640x480 480x800 720x720 1024x600
+@480x800 profile pda
+@480x800 env APPLAUNCH_PDA 0
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+battery 85 discharging
+home
+shot ssh_battery_none
+ssh_status 1 idle
+wait 2100
+shot ssh_battery_idle
+ssh_status 1 active
+wait 2100
+shot ssh_battery_active_a
+wait 500
+shot ssh_battery_active_b
+battery 100 charging
+ssh_status 1 idle
+wait 2100
+shot ssh_battery_charging
+battery 85 discharging
+ssh_status off
+wait 2100
+expect_same ssh_battery_none
+launch Settings
+wait 300
+shot ssh_battery_settings_none
+ssh_status 1 idle
+wait 2100
+shot ssh_battery_settings

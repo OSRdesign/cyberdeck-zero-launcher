@@ -54,6 +54,23 @@ void cp0_ui_status_set_battery(cp0_statusbar_state_t *state, const cp0_power_bat
     state->battery_charging = battery->state == CP0_BATTERY_CHARGING;
 }
 
+void cp0_ui_status_set_ssh(cp0_statusbar_state_t *state, int connections, int active)
+{
+    if (!state) return;
+    state->ssh = connections > 0 ? connections : 0;
+    state->ssh_active = state->ssh > 0 && active ? 1 : 0;
+    if (!state->ssh_active) state->ssh_bright = 0;
+}
+
+int cp0_ui_status_ssh_tick(cp0_statusbar_state_t *state, int screen_active)
+{
+    if (!state) return 0;
+    const int before = state->ssh_bright;
+    if (state->ssh <= 0 || !state->ssh_active) state->ssh_bright = 0;
+    else if (screen_active) state->ssh_bright = !state->ssh_bright;
+    return state->ssh_bright != before;
+}
+
 int cp0_ui_status_first_column(const uint32_t *argb, int w, int rows)
 {
     if (!argb || w <= 0) return w > 0 ? w : 0;

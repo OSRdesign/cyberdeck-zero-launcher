@@ -13,7 +13,7 @@ bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 {
     return a.wifi != b.wifi || a.wifi_pct != b.wifi_pct || a.eth != b.eth || a.bt != b.bt || a.battery != b.battery ||
            std::strcmp(a.battery_state, b.battery_state) != 0 || a.volume != b.volume || a.mute != b.mute ||
-           a.brightness_pct != b.brightness_pct;
+           a.brightness_pct != b.brightness_pct || a.ssh != b.ssh || a.ssh_act != b.ssh_act;
 }
 
 } // namespace status_feed
@@ -22,6 +22,8 @@ bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 
 #include "app_media.hpp"
 #include "cp0_lvgl_app.h"
+#include "cp0_ssh_watch.h"
+#include "launcher_ssh.hpp"
 #include "cp0_power_supply.h"
 #include "cp0_statusbar.h"
 #include "cp0_status_state.h"
@@ -105,8 +107,20 @@ void sample_levels(cp0_app_status_t &now)
     now.brightness_pct = levels.brightness_pct;
 }
 
-void sample(cp0_app_status_t &now)
+// The SSH indicator (2026-10-30): this thread owns the launcher's one watch (not thread-safe); nothing is read while
+// Settings > System > SSH indicator is Off. The sample goes to the launcher's own strip (launcher_ssh::snapshot) and
+// into the file: the count and the activity flag only, never a peer address.
+void sample_ssh(cp0_app_status_t &now, ssh_indicator::Sampler &ssh)
 {
+    const ssh_indicator::Snapshot s = ssh.sample(launcher_ssh::enabled(), cp0_ssh_monotonic_ms());
+    launcher_ssh::publish(s);
+    now.ssh = s.count;
+    now.ssh_act = s.active;
+}
+
+void sample(cp0_app_status_t &now, ssh_indicator::Sampler &ssh)
+{
+    sample_ssh(now, ssh);
     cp0_wifi_status_t wifi{};
     const bool read_ok = cp0_wifi_status_read(&wifi) == 0;
     if (!read_ok) wifi = cp0_wifi_status_t{};
@@ -159,10 +173,11 @@ void run()
     bool have_written = false;
     bool write_failed = false;
     Feed &f = feed();
+    ssh_indicator::Sampler ssh;
     for (;;) {
         cp0_app_status_t now;
         std::memset(&now, 0, sizeof(now));
-        sample(now);
+        sample(now, ssh);
         if (!have_written || status_feed::differs(now, written)) {
             now.pid = static_cast<int>(::getpid());
             now.gen = ++gen;

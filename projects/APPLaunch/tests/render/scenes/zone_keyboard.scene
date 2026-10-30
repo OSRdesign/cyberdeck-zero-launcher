@@ -56,7 +56,8 @@ key UP
 key ENTER
 wait 300
 shot zone_osk_choice
-header zone_osk_choice "On-screen keyboard"
+# the page title "Screen keyboard" (the row "On-screen keyboard"), whole beside the strip's reserved SSH slot
+header zone_osk_choice "Screen keyboard"
 expect_text Auto
 expect_text On
 expect_text "Handwriting + keyboard"

@@ -133,9 +133,10 @@ tries again. `install.sh` still seeds the same source in the backend file (the t
 
 An app can take over the whole 640x480 panel instead of running in the scaled 320x170 window with the toolbar:
 add `X-Fullscreen=true` to its `.desktop` file. The launcher then stops drawing and waits for the app to exit
-(the Esc-hold watchdog still applies). The launcher's top bar (clock, Wi-Fi bars, Bluetooth) is one shared
-renderer, `ext_components/cp0_lvgl/{include/cp0_statusbar.h,src/cp0/cp0_statusbar.c}`, so a full-screen app can
-draw exactly the same bar into its own frame. An LVGL app that links `cp0_lvgl` gets it ready-made as a widget,
+(the Esc-hold watchdog still applies). The launcher's top bar (clock, Wi-Fi bars, Bluetooth, a battery, the SSH
+indicator) is one shared renderer, `ext_components/cp0_lvgl/{include/cp0_statusbar.h,src/cp0/cp0_statusbar.c}`, so a
+full-screen app can draw exactly the same bar into its own frame; the values come from the launcher's `status.state`
+(`docs/APP-CONTRACT.md` section 5b: `ssh=` and `ssh_act=` for the SSH indicator). An LVGL app that links `cp0_lvgl` gets it ready-made as a widget,
 with the launcher's title: `cp0::ui::StatusStrip::add(header)` and `cp0::ui::add_title()` (`cp0_ui_widgets.hpp`,
 API in `docs/cp0_lvgl.en.md`); it keeps no copy. The viz1090 package in the apps repository is a complete example
 of a non-LVGL app (SDL2 programs run through a small display and input bridge; it also draws a close button).

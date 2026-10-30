@@ -107,8 +107,8 @@ shot time_warning_cancelled
 # Yes again, then the header's Esc button (at 480x320 and 800x480; the others take the key) closes the question
 key ENTER
 wait 600
-@480x320 tap 281 20
-@800x480 tap 525 28
+@480x320 tap 246 20
+@800x480 tap 476 28
 @640x480,720x720,1280x720 key ESC
 wait 300
 shot time_warning_header_esc

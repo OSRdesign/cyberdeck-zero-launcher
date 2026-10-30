@@ -82,6 +82,7 @@ runs at those sizes only.
 | `apps Name Name=icon.png Name=fixture:file.png ...` | home tiles (built-in icons by name); `Settings`, `Calculator`, `SSH` and `CLI` (the terminal page, on the fake PTY) open the real pages |
 | `clock HH:MM [YYYY-MM-DD]`, `wifi off\|PCT`, `bt off\|on\|connected`, `config KEY VALUE` | fixtures (the status strip polls every 2 s: `wait 2100` after a change) |
 | `battery off\|mains\|PCT discharging\|charging\|full\|notcharging` | the fake `power_supply` tree the launcher reads (`APPLAUNCH_POWER_SUPPLY_ROOT` = `out/<WxH>/runtime/power_supply`, set at boot, emptied before every scene: never the host's battery): nothing (the Pi boards, the default), an AC adapter alone, or the FZ-M1's `ADP1` + `BAT1` (energy units: 26.64 of 33.3 Wh, 7.412 V, 6.54 W discharging, 12 W charging). Status strip: `wait 2100` after a change; Settings > Battery's row follows the tree when Settings opens |
+| `ssh_status off\|N [idle\|active]` | after `home` (the launcher reads Settings > System > SSH indicator there): the SSH indicator's input (2026-10-30). Writes a fake `/proc/net/tcp` under `out/<WxH>/runtime/sshroot` (sshd listening on 22, N = 1..8 incoming sessions from 192.168.68.12; `active`: bytes in their send queue, the watch's fallback, as a fake tree has no sockets for netlink) and takes two samples 2 s apart with the launcher's own watch and setting (`ssh_indicator::Sampler`, `launcher_ssh::enabled()`), published as the status feed thread does (the harness has no feed thread). Never the host's own sessions. The strips read it at their next refresh: `wait 2100` |
 | `backlight levels\|onoff\|none` | before the first drawing command (detected once per launcher run). The fake `/sys/class/backlight` the launcher detects its backlight in when the profile has no `APPLAUNCH_BACKLIGHT` (`APPLAUNCH_BACKLIGHT_ROOT` = `out/<WxH>/runtime/backlight`, report 030): `levels` (the default) the deck's PWM `backlight` (max = the fixture's 255: today's default path), `onoff` the Pi 5 HyperPixel's `gpio-backlight` (max 1: Brightness On / Off), `none` no device (the HackBerry: no Brightness row) |
 | `sound off\|hdmi\|card\|bluetooth` | what the launcher finds as Settings opens (report 030; `APPLAUNCH_ASOUND_ROOT` = `out/<WxH>/runtime/asound`, `APPLAUNCH_AMIXER` / `APPLAUNCH_PACTL` = fake programs in `out/<WxH>/runtime/fakebin`, never the host's): `off` (the default) nothing, `hdmi` vc4-hdmi cards only, `card` the tablet's HDA Intel PCH with Master, `bluetooth` no card but a sound server with a Bluetooth speaker's sink. The audio service's VolumeRead / VolumeWrite answer the fixture volume (50 at start) |
 | `home` | build the grid and show it (`native_ui::refresh_apps` + `show_home`) |
@@ -108,7 +109,7 @@ runs at those sizes only.
 | `sudoprompt open\|busy\|wrong\|close` | the responsive sudo password prompt (`cp0_sudo_prompt_ui`, on the native display's top layer) without the sudo coordinator: open = SHOW_PROMPT (an input group around its field), busy = START_WORKER, wrong = SHOW_AUTH_ERROR, close = DESTROY_PROMPT. With `env HARNESS_SUDO prompt` a sudo request of the launcher (Settings > Apps' privileged step; `env HARNESS_APPS_PACKAGE job` makes the fake Store backend prepare one) opens the same prompt on the next cycle, and Cancel / Esc ends that request as cancelled; nothing ever runs |
 | `wait MS`, `shot NAME` | advance the fake clock; settle 500 ms and save `out/<WxH>/NAME.png` |
 | `panelshot NAME` | settle 500 ms and save the framebuffer as the panel shows it (its own orientation and size, no rotation undone) as `out/<WxH>/NAME.png`: which edge of the panel the picture's top is at (report 043). Not in the contact sheet |
-| `header NAME [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the Bluetooth icon, `cp0::ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home` taken on the home grid. The home grid has no title (rebranding plan 025): without TITLE the origin written is the shell's title origin (`shell.title_x/title_y`) and the command fails if a label stands there |
+| `header NAME [TITLE ...]` | the home grid's status strip rectangle (from its leftmost drawn pixel, the SSH indicator's reserved slot since 2026-10-30, `cp0::ui::status_strip_left()`, to the right edge, `bar_h` high) cut out as `out/<WxH>/header/NAME.png`, and the origin of the visible label whose text is one of TITLE as `NAME.txt`; `run.sh header` checks them against `header home` taken on the home grid. The home grid has no title (rebranding plan 025): without TITLE the origin written is the shell's title origin (`shell.title_x/title_y`) and the command fails if a label stands there |
 | `switcher CARD...`, `switcher select ITEM`, `switcher off` | multitasking P-d: the switcher screen (`multitask/switcher_view.cpp`) with the cards named `Name=front\|running\|paused\|nr` (front: the app it was opened from; the icon is the tile's of that name); `select card0..3\|home\|closeall` moves the selection |
 | `sheet NAME`, `sheet off` | the legacy sheet "Close NAME?": the screen shown now stands for the frozen app's frame (snapshot, written back dimmed to 38 %), only the sheet's box is drawn (the native clip); the command fails unless every pixel outside the box is the dimmed frame and the box is drawn |
 | `dots NAME...` | these tiles' apps are left open (`native_ui::set_resident_apps`; tiles have the Exec line `tile:NAME`) |
@@ -125,7 +126,9 @@ PDA scenes (report 038 S2, profile `pda`, goldens at 480x640 and 480x800): `pda_
 1x window, the terminal with the fallback keyboard), `pda_settings` (titles whole beside the narrow strip, Screen,
 DarkTime, System, the keyboard test page), `pda_switcher` (the switcher on the portrait panels, targets, taps, name
 wrap), `pda_titles` (report 040: the 18 px narrow title with the longest titles whole, Date & Time, Set Manually,
-On-screen keyboard, Keyboard test, and a breadcrumb, as a path and as one string, showing its last part only);
+On-screen keyboard and Keyboard test (their page titles "Screen keyboard" and "Key test" since the status strip's
+reserved SSH slot, 2026-10-30: `SettingEntry::page_title`), and a breadcrumb, as a path and as one string, showing its
+last part only);
 `pda_switcher_dense` (review only: 480x640 at the deck's 11.3 px/mm, the name starting under the X). The
 `metrics` scene also renders 480x640 and 480x800 with that profile and writes `metrics.turned.env` there (what a
 landscape fullscreen app run turned gets); `run.sh contract` checks it with the probe. The `pda_*` scenes run without the
@@ -196,6 +199,15 @@ with the new offset, the home grid's clock, then Europe > Paris. `settings_nativ
 the root menu and System with `expect_rows` (and the About page's lines: a "Board" line only with a board profile) for
 the deck without a board profile, pi3a-wsdsi43, hackberry-cm5 in its desktop session, pc-fzm1-2, release and
 development, at 480x320 to 1280x800 (`docs/dev/native-settings-page-howto.md` section 5).
+`ssh_status` (the SSH indicator, 2026-10-30; goldens at 640x480 and 480x800 (`pda` profile), also 720x720 and
+1024x600): no session (the slot empty, `header` against the home grid), idle (steady blue), active in both blink phases
+(the third tick back to the first, `expect_same`), two sessions (the same glyph), the session gone, the Settings root
+with a session (the glyph right of the Esc), Settings > System > SSH indicator On / its choice page / Off (the glyph gone,
+sessions not looked for) / On again, and the clock screensaver over a session with traffic (it covers the strip; a tap
+wakes it, the glyph as before; that it does not blink behind the clock is not visible in a shot, the unit test
+`test_ssh_indicator_model.cpp` checks that rule). `ssh_status_battery` (same sizes and goldens): a battery board (`battery` before `home`), "85%" without a
+session, the glyph in its place idle and active, charging, the session gone ("85%" back), the Settings root without and
+with a session (the Esc where "100%" puts it).
 `battery_status`, `settings_battery`, `settings_battery_none` (decision X12, review-only, at 320x170 to 1280x800; the
 tablet's density at 1280x800): the home strip with a battery discharging, charging, full, low with Bluetooth off, gone;
 Settings with the Battery row and its page (discharging, charging, full, the battery removed while it is open); no

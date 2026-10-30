@@ -51,8 +51,9 @@
  *    battery as it shows them. v=1 gen= pid=<launcher pid> wifi=0|1 wifi_pct=0..100 eth=0|1 bt=off|on|connected
  *    battery=-1|0..100 (-1 = none) battery_state=Charging|Discharging|Full|Not charging|Unknown, and (report 035)
  *    volume=-1|0..100 (-1 = no sound output) mute=0|1 brightness_pct=-1|0..100 (-1 = no backlight to drive): the levels
- *    an app draws its own bar from. Written only when a value changes. cp0_app_status_read() returns -1 (use sysfs)
- *    when the file is missing, not v=1, or its pid is gone.
+ *    an app draws its own bar from, and (the SSH indicator, 2026-10-30) ssh=<incoming SSH connections, 0 = none>
+ *    ssh_act=0|1 (traffic in the last sample: the glyph blinks). Written only when a value changes.
+ *    cp0_app_status_read() returns -1 (use sysfs) when the file is missing, not v=1, or its pid is gone.
  *
  * 3c. <state dir>/board.state (same rules; report 035): the facts of the board that do not change while the launcher
  *    runs (the sound output may: it is re-probed). cp0_app_board_read(): board, arch, ram_mb, battery, backlight,
@@ -217,10 +218,13 @@ typedef struct {
     int mute;                    /* 1 = muted */
     int brightness_pct;          /* -1 = no backlight to drive (or an older launcher), else 0..100 */
     unsigned gen;
+    int ssh;                     /* incoming SSH connections the launcher sees (the SSH indicator); 0 = none, Settings >
+                                    System > SSH indicator Off, or an older launcher */
+    int ssh_act;                 /* 1 = bytes moved on one in the launcher's last 2 s sample (the indicator blinks) */
 } cp0_app_status_t;
 
 /* Parses status.state text. 0 when it is a v=1 file, else -1 (out cleared). A missing key stays 0 (battery, volume and
- * brightness_pct -1, bt off).
+ * brightness_pct -1, bt off, ssh and ssh_act 0).
  * Does not look at pid. */
 int cp0_app_status_parse(const char *text, size_t len, cp0_app_status_t *out);
 /* Reads and parses `path` (NULL: cp0_app_state_path("status.state")), without the liveness check. 0 or -1. */

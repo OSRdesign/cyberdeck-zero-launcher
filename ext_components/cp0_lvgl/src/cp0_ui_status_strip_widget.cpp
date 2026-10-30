@@ -93,6 +93,8 @@ StatusSource default_status_source()
                 state.battery_pct = feed.battery > 100 ? 100 : feed.battery;
                 state.battery_charging = feed.battery_charging;
             }
+            // the SSH indicator: only the launcher looks for sessions (0 while its setting is Off)
+            cp0_ui_status_set_ssh(&state, feed.ssh, feed.ssh_act);
             return;
         }
         cp0_statusbar_state_t read{};
@@ -100,6 +102,7 @@ StatusSource default_status_source()
         cp0_ui_status_set_wifi(&state, read.wifi_up, read.wifi_pct);
         state.bt_on = read.bt_on;
         state.bt_connected = read.bt_connected;
+        cp0_ui_status_set_ssh(&state, 0, 0); // no launcher, no indicator
     };
 }
 
@@ -161,6 +164,9 @@ void StatusStrip::clock_tick()
     std::tm local{};
     localtime_r(&now, &local);
     std::strftime(state_.clock, sizeof(state_.clock), "%H:%M", &local);
+    // the SSH indicator's blink: on traffic the glyph alternates blue / white on this tick (no timer of its own, at most
+    // one redraw a second), only while the strip's screen is the active one
+    cp0_ui_status_ssh_tick(&state_, screen_active() ? 1 : 0);
     redraw();
 }
 
@@ -179,6 +185,7 @@ void StatusStrip::refresh()
     cp0_power_battery_t battery{};
     cp0_ui_status_set_battery(&state_, cp0_power_supply_battery(&battery) ? &battery : nullptr);
     if (source_) source_(state_);
+    cp0_ui_status_set_ssh(&state_, state_.ssh, state_.ssh_active); // the rule, whatever the source set
     redraw();
 }
 
@@ -186,10 +193,13 @@ void StatusStrip::redraw()
 {
     cp0_statusbar_t *bar = renderer();
     if (!bar || !canvas_) return;
-    if (drawn_ && std::memcmp(&state_, &shown_, sizeof(state_)) == 0) return;
+    // only what is drawn counts: ssh_active itself is not (its blink phase ssh_bright is)
+    cp0_statusbar_state_t drawn = state_;
+    drawn.ssh_active = 0;
+    if (drawn_ && std::memcmp(&drawn, &shown_, sizeof(drawn)) == 0) return;
     std::fill(pixels_.begin(), pixels_.end(), 0u);
-    cp0_statusbar_render_scaled(bar, pixels_.data(), width_, width_, 0, top_, 0, &state_, pct_);
-    shown_ = state_;
+    cp0_statusbar_render_scaled(bar, pixels_.data(), width_, width_, 0, top_, 0, &drawn, pct_);
+    shown_ = drawn;
     drawn_ = true;
     lv_obj_invalidate(canvas_);
 }
@@ -218,24 +228,36 @@ int status_strip_left()
     cp0_ui_status_strip_geom(m, m->w, &g);
     cp0_statusbar_t *bar = renderer();
     if (!bar || g.w <= 0) return g.x; /* not kept: measured when the renderer is there */
-    // draw the strip in its fullest state (Bluetooth glyph shown, all bars, a clock; a battery at 100 % when the board
-    // has one now) into a scratch canvas and take its first column that has a pixel: the strip's own geometry, not a
-    // copy of it
+    // draw the strip in its fullest state (Bluetooth glyph shown, all bars, a clock, the SSH indicator; a battery at
+    // 100 % when the board has one now) into a scratch canvas and take its first column that has a pixel: the strip's
+    // own geometry, not a copy of it. The SSH indicator's slot is always kept (owner decision 2026-10-30): the header's
+    // controls never move when a session starts or ends, whatever the setting. With a battery its "100%" yields to the
+    // indicator, so the leftmost of both states counts.
     const int rows = g.rows + 16;
     std::vector<uint32_t> pixels(static_cast<size_t>(g.w) * rows, 0u);
+    auto first_column = [&](const cp0_statusbar_state_t &state) {
+        std::fill(pixels.begin(), pixels.end(), 0u);
+        cp0_statusbar_render_scaled(bar, pixels.data(), g.w, g.w, 0, g.top, 0, &state, g.pct);
+        return cp0_ui_status_first_column(pixels.data(), g.w, rows);
+    };
     cp0_statusbar_state_t full{};
     full.wifi_up = 1;
     full.wifi_pct = 100;
     full.bt_on = 1;
     full.bt_connected = 1;
     std::snprintf(full.clock, sizeof(full.clock), "%s", "00:00");
+    cp0_ui_status_set_ssh(&full, 1, 0);
     cp0_power_battery_t battery{};
-    if (cp0_power_supply_battery(&battery)) {
+    const bool has_battery = cp0_power_supply_battery(&battery);
+    if (has_battery) {
         battery.percent = 100;
         cp0_ui_status_set_battery(&full, &battery);
     }
-    cp0_statusbar_render_scaled(bar, pixels.data(), g.w, g.w, 0, g.top, 0, &full, g.pct);
-    const int first = cp0_ui_status_first_column(pixels.data(), g.w, rows);
+    int first = first_column(full);
+    if (has_battery) {
+        cp0_ui_status_set_ssh(&full, 0, 0); // the percentage drawn
+        first = std::min(first, first_column(full));
+    }
     left = g.x + (first < g.w ? first : 0);
     return left;
 }

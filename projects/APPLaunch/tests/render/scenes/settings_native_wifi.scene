@@ -42,8 +42,10 @@ tapkey s
 tapkey s
 shot wifi_password
 # at 480x320 and 640x480 the dialog's title (the network) shows in the header while the keyboard is up
-# (cp0_ui_dialog.h step 3): the header itself stays the home grid's
-header wifi_password "Settings > Wi-Fi" Wi-Fi Neighbour-5G
+# (cp0_ui_dialog.h step 3): the header itself stays the home grid's. A network name is any text: at 640x480 this one
+# is too long for the title's room left of the strip's reserved SSH slot (2026-10-30) and ends in dots
+@480x320,800x480,720x720,1280x720 header wifi_password "Settings > Wi-Fi" Wi-Fi Neighbour-5G
+@640x480 header wifi_password "Neighbour..."
 tapkey ENTER
 wait 1500
 shot wifi_wrong_password
@@ -54,7 +56,10 @@ shot wifi_connected
 # the highlight stayed on Neighbour-5G, now first and connected: Enter opens its actions
 key ENTER
 shot wifi_actions
-header wifi_actions "Settings > Wi-Fi > Neighbour-5G" "Wi-Fi > Neighbour-5G" Neighbour-5G
+# (at 640x480 the long name ends in dots, as above; the page opens all the same)
+@480x320,800x480,720x720,1280x720 header wifi_actions "Settings > Wi-Fi > Neighbour-5G" "Wi-Fi > Neighbour-5G" Neighbour-5G
+@640x480 header wifi_actions "Neighbour..."
+@640x480 expect_text Forget
 key ENTER
 wait 1000
 shot wifi_details

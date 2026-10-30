@@ -57,6 +57,18 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -DHAL_PLATFORM_SDL=1 \
     "$test_root/../main/ui/status_feed.cpp" \
     -o "$build_dir/test_status_feed"
 "$build_dir/test_status_feed"
+# The SSH indicator (2026-10-30): the feed's samples with the setting On and Off on a fake /proc tree, what the
+# launcher's own strip shows (Off, locked), the setting's config value (absent = On)
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_ssh_watch.c" -o "$build_dir/cp0_ssh_watch.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../main/ui" \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_ssh_indicator_model.cpp" \
+    "$test_root/../main/ui/model/ssh_indicator_model.cpp" \
+    "$build_dir/cp0_ssh_watch.o" \
+    -o "$build_dir/test_ssh_indicator_model"
+"$build_dir/test_ssh_indicator_model"
 # Report 035: requests from apps (launcher.sock: the protocol, the rate limits, the server against the real client) and
 # the facts of board.state on fake trees
 cp0_root="$test_root/../../../ext_components/cp0_lvgl"

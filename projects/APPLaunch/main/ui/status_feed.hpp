@@ -1,5 +1,6 @@
 /*
- * The launcher's status feed for apps (report 032): Wi-Fi, Ethernet, Bluetooth and battery as the home grid shows them,
+ * The launcher's status feed for apps (report 032): Wi-Fi, Ethernet, Bluetooth, battery and the SSH indicator (its
+ * sample is taken here, launcher_ssh.hpp) as the home grid shows them,
  * published as $XDG_RUNTIME_DIR/applaunch/status.state (cp0_status_state.h) so the status strip of a fullscreen app can
  * show the same values. Written from a thread of its own (the legacy fullscreen path turns the LVGL timers off), only
  * when a value changes. Device builds only; elsewhere these calls do nothing.

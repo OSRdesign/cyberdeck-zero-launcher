@@ -10,11 +10,13 @@
 #include "launch.h"
 #include "launcher_osk.hpp"
 #include "launcher_pointer.hpp"
+#include "launcher_ssh.hpp"
 #include "launcher_toast.h"
 #include "native_vkbd.hpp"
 #include "settings/settings_apps_jobs.hpp"
 #include "touch_settings.hpp"
 #include "ui_global_hint.h"
+#include "ui_screensaver.h"
 
 #include "cp0_display.h"
 #include "cp0_statusbar.h"
@@ -661,6 +663,13 @@ void fill_status(cp0_statusbar_state_t &state)
     });
     state.bt_on = bt_powered.load();
     state.bt_connected = bt_connected.load();
+
+    // The SSH indicator (2026-10-30): the status feed's last sample (launcher_ssh.hpp), the same values the apps read in
+    // status.state. Nothing while Settings > System > SSH indicator is Off; steady while the lock screen is up (no blink,
+    // so no redraw, behind it).
+    const ssh_indicator::Snapshot ssh =
+        ssh_indicator::shown(launcher_ssh::snapshot(), launcher_ssh::enabled(), ui_screensaver_is_active() != 0);
+    cp0_ui_status_set_ssh(&state, ssh.count, ssh.active);
 }
 
 bool enabled()
@@ -729,6 +738,8 @@ void show_home()
     launcher_osk::dismiss();
     // Settings > System > Pointer navigation, applied once (the launcher's pointer reader and input.state)
     launcher_pointer::install();
+    // Settings > System > SSH indicator, once: the status feed's thread starts sampling when it is On
+    launcher_ssh::install();
     ensure_home();
 
     // Park an empty screen on the compat display so a finishing app's screen is
