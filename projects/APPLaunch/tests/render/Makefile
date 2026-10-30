@@ -123,6 +123,7 @@ APP_SRCS := $(addprefix $(UI)/,\
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp launcher_zone.cpp     pda_mode.cpp \
     launcher_ssh.cpp model/ssh_indicator_model.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
+    home_order_launcher.cpp model/home_order.cpp model/desktop_app_order.cpp model/home_move.cpp \
     page_app/ui_app_calculator.cpp \
     page_app/ui_app_ssh.cpp page_app/ui_app_ssh_view.cpp page_app/ui_app_ssh_native.cpp \
     model/ssh_connection_model.cpp model/ssh_native_form_model.cpp \

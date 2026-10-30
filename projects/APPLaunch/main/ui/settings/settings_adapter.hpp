@@ -77,6 +77,9 @@ void append_boot_action_child(Tree &tree,
                               BootActionController::Completion completion = {});
 #ifdef LAUNCHER_BUILD
 SettingApiCallBackFunc make_launcher_toggle_api(const AppDescriptor &descriptor);
+// Settings > Launcher's last row "Reset app order" (study 046 D8, native Settings only): asks first, then clears the
+// home grid's user order (launcher_home_order_reset()) and reloads the grid.
+void append_launcher_reset_order(Tree &tree, const NodeIter &parent);
 
 class LauncherRegistryRefreshSubscription
 {

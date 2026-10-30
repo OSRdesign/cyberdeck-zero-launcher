@@ -131,6 +131,7 @@ void activate()
     if (s_active || !s_enabled) return;
     ensure_overlay();
     if (!s_overlay) return;
+    native_ui::cancel_move_mode(); // study 046 P2: a tile being moved on the home grid goes back
     s_active = true;
     // An on/off backlight (board profile gpio:<dir>, or detected at max 1) has no dim level: the clock shows at full
     // backlight instead of risking a dark panel. No backlight at all: nothing to dim.

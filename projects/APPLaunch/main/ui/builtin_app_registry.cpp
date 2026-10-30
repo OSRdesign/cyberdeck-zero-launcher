@@ -170,7 +170,10 @@ void launcher_append_enabled_builtin_apps(std::list<app> &apps)
     for (std::size_t index = 0; index < sizeof(BUILTIN_APPS) / sizeof(BUILTIN_APPS[0]); ++index) {
         if (!is_first_registration(index)) continue;
         const auto &registration = BUILTIN_APPS[index];
-        if (launcher_app_registry_is_enabled(registration.desc)) append_builtin_app(apps, registration);
+        if (!launcher_app_registry_is_enabled(registration.desc)) continue;
+        const std::size_t before = apps.size();
+        append_builtin_app(apps, registration);
+        if (apps.size() > before && registration.desc.config_key) apps.back().Id = registration.desc.config_key;
     }
 }
 

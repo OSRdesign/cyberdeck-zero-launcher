@@ -1684,6 +1684,85 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_rows ok: %s\n", joined.c_str());
         return true;
     }
+    if (cmd == "expect_tiles") {
+        /* expect_tiles NAME...: the home grid's tiles, in the grid's child order (what is drawn, a carried tile's place
+         * included: study 046 P2 move mode), are exactly these. The grid is the parent of the tile holding the label of
+         * the first NAME; each tile's name is its own label (a direct child). */
+        if (w.size() < 2) return fail(scene, line, "usage: expect_tiles NAME...");
+        const std::vector<std::string> want(w.begin() + 1, w.end());
+        settle(300);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), want.front(), false);
+        lv_obj_t *tile = label ? lv_obj_get_parent(label) : nullptr;
+        lv_obj_t *grid = tile ? lv_obj_get_parent(tile) : nullptr;
+        if (!grid) return fail(scene, line, "expect_tiles: no tile " + want.front());
+        std::vector<std::string> have;
+        const uint32_t count = lv_obj_get_child_count(grid);
+        for (uint32_t i = 0; i < count; ++i) {
+            lv_obj_t *child = lv_obj_get_child(grid, static_cast<int32_t>(i));
+            const char *text = nullptr;
+            const uint32_t parts = child ? lv_obj_get_child_count(child) : 0;
+            for (uint32_t j = 0; j < parts && !text; ++j) {
+                lv_obj_t *part = lv_obj_get_child(child, static_cast<int32_t>(j));
+                if (lv_obj_check_type(part, &lv_label_class)) text = lv_label_get_text(part);
+            }
+            have.push_back(text ? text : "?");
+        }
+        std::string joined;
+        for (const std::string &s : have) joined += (joined.empty() ? "" : " | ") + s;
+        if (have != want) return fail(scene, line, "expect_tiles: the grid shows " + joined);
+        std::printf("expect_tiles ok: %s\n", joined.c_str());
+        return true;
+    }
+    if (cmd == "expect_grid_view") {
+        /* expect_grid_view NAME: the home grid's view is inside its content (no blank space under the last row nor above
+         * the first; a grid shorter than the view starts at its first row) and the tile NAME is wholly inside the grid's
+         * area (study 046 P2: the view follows a carried tile by the least scroll) */
+        if (w.size() != 2) return fail(scene, line, "usage: expect_grid_view NAME");
+        settle(300);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), w[1], false);
+        lv_obj_t *tile = label ? lv_obj_get_parent(label) : nullptr;
+        lv_obj_t *grid = tile ? lv_obj_get_parent(tile) : nullptr;
+        if (!grid) return fail(scene, line, "expect_grid_view: no tile " + w[1]);
+        lv_obj_update_layout(grid);
+        const int32_t above = lv_obj_get_scroll_top(grid), below = lv_obj_get_scroll_bottom(grid);
+        const bool short_content = above + below < 0;
+        if (above < 0 || (short_content ? above != 0 : below < 0))
+            return fail(scene, line, "expect_grid_view: the view is outside the content (scroll top " +
+                                         std::to_string(above) + ", bottom " + std::to_string(below) + ")");
+        lv_area_t t, g;
+        lv_obj_get_coords(tile, &t);
+        lv_obj_get_coords(grid, &g);
+        if (t.y1 < g.y1 || t.y2 > g.y2)
+            return fail(scene, line, "expect_grid_view: " + w[1] + " is not wholly in the grid (tile y " +
+                                         std::to_string(t.y1) + ".." + std::to_string(t.y2) + ", grid y " +
+                                         std::to_string(g.y1) + ".." + std::to_string(g.y2) + ")");
+        std::printf("expect_grid_view ok: %s, scroll top %d bottom %d\n", w[1].c_str(), static_cast<int>(above),
+                    static_cast<int>(below));
+        return true;
+    }
+    if (cmd == "grid_scroll_mark" || cmd == "expect_grid_scroll_same") {
+        /* grid_scroll_mark NAME: remember the home grid's scroll (the grid holding the tile NAME) now;
+         * expect_grid_scroll_same NAME: fail unless it is still the same (study 046 P2: a press and the 3 s pick-up hold
+         * on a tile do not scroll the grid) */
+        if (w.size() != 2) return fail(scene, line, "usage: " + cmd + " NAME");
+        settle(300);
+        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), w[1], false);
+        lv_obj_t *tile = label ? lv_obj_get_parent(label) : nullptr;
+        lv_obj_t *grid = tile ? lv_obj_get_parent(tile) : nullptr;
+        if (!grid) return fail(scene, line, cmd + ": no tile " + w[1]);
+        static int32_t marked = -1;
+        const int32_t now = lv_obj_get_scroll_y(grid);
+        if (cmd == "grid_scroll_mark") {
+            marked = now;
+            std::printf("grid_scroll_mark: %d\n", static_cast<int>(now));
+            return true;
+        }
+        if (now != marked)
+            return fail(scene, line, "expect_grid_scroll_same: the grid scrolled from " + std::to_string(marked) +
+                                         " to " + std::to_string(now));
+        std::printf("expect_grid_scroll_same ok: %d\n", static_cast<int>(now));
+        return true;
+    }
     if (cmd == "expect_color") {
         /* expect_color TEXT RRGGBB: a visible label of the native screen shows TEXT, its text colour is RRGGBB and the
          * screen as drawn has pixels of that colour (within the RGB565 rounding) inside the label's box: a colour change
@@ -2026,6 +2105,11 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         fx.keyboards = static_cast<unsigned>(std::max(0, to_int(w[1])));
         return true;
     }
+    if (cmd == "configfull") {
+        if (w.size() != 2 || (w[1] != "on" && w[1] != "off")) return fail(scene, line, "usage: configfull on|off");
+        fx.config_full = w[1] == "on";
+        return true;
+    }
 
     boot(run);
 
@@ -2087,16 +2171,25 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         lv_screen_load(screen);
         settle(300);
     } else if (cmd == "key") {
-        if (w.size() < 2 || w.size() > 3) return fail(scene, line, "usage: key NAME [press|release|tap]");
-        const uint32_t code = key_code(w[1]);
+        if (w.size() < 2 || w.size() > 3) return fail(scene, line, "usage: key [CTRL+]NAME [press|release|tap]");
+        /* CTRL+NAME: the key with KBD_MOD_CTRL, as a physical keyboard or the pointer's held click (Ctrl+O) sends it */
+        const bool ctrl = w[1].compare(0, 5, "CTRL+") == 0;
+        const std::string name = ctrl ? w[1].substr(5) : w[1];
+        const uint32_t mods = ctrl ? KBD_MOD_CTRL : 0;
+        static const uint32_t letters[26] = {KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I,
+                                             KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R,
+                                             KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z};
+        /* a letter only with CTRL+ (no text: a control key); plain letters are `type` / `shortcut` */
+        const uint32_t code = ctrl && name.size() == 1 && name[0] >= 'A' && name[0] <= 'Z' ? letters[name[0] - 'A']
+                                                                                            : key_code(name);
         if (!code) return fail(scene, line, "unknown key " + w[1]);
         const std::string mode = w.size() == 3 ? w[2] : "tap";
         if (mode == "press" || mode == "tap") {
-            cp0_keyboard_inject(code, KBD_KEY_PRESSED, 0);
+            cp0_keyboard_inject(code, KBD_KEY_PRESSED, mods);
             settle(60);
         }
         if (mode == "release" || mode == "tap") {
-            cp0_keyboard_inject(code, KBD_KEY_RELEASED, 0);
+            cp0_keyboard_inject(code, KBD_KEY_RELEASED, mods);
             settle(300);
         }
     } else if (cmd == "type") {
@@ -2187,6 +2280,17 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         settle(80);
         touch_at(run, 0, x, y);
         settle(400);
+    } else if (cmd == "touchbutton") {
+        /* touchbutton TEXT: as tapbutton, but the finger stays down (until release): a hold on a home tile (study 046
+         * P2: `touchbutton Calculator`, `wait 3200`, `release` picks it up) */
+        if (w.size() != 2) return fail(scene, line, "usage: touchbutton TEXT   (finger stays down until release)");
+        lv_obj_t *label = find_label(lv_display_get_screen_active(cp0_display_native()), {w[1]});
+        lv_obj_t *button = label ? lv_obj_get_parent(label) : nullptr;
+        if (!button) return fail(scene, line, "no visible label " + w[1]);
+        lv_area_t area;
+        lv_obj_get_coords(button, &area);
+        touch_at(run, 1, (area.x1 + area.x2) / 2, (area.y1 + area.y2) / 2);
+        settle(150);
     } else if (cmd == "tapfield") {
         /* tapfield LABEL: a tap on the field under the TextField label LABEL (the label's next sibling) */
         if (w.size() != 2) return fail(scene, line, "usage: tapfield LABEL");

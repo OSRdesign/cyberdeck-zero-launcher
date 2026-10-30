@@ -1,0 +1,45 @@
+# The home grid's user order (study 046 P1): a stored order (config home_order, the FNV-1a keys of the tiles' ids as
+# comma separated hex: 2048, Calculator, Mesh, Settings, Store, Python (hidden: no tile), CLI, SSH) puts the tiles in
+# that order; Browser, not in the list (a new app), comes last. Checked with expect_same against the same tiles listed
+# in that order with no stored order. Then Settings > Launcher's last row "Reset app order", its question, Reset: the
+# stored order is cleared and the grid is today's again (the harness reloads its tiles with `apps`; on the board the
+# registry callback reloads the grid).
+# Review only: no golden. The ids are the board's (harness_launch.cpp tile_id: a built-in's config key, else the
+# desktop loader's id of "<name>.desktop").
+title home order
+review
+sizes 640x480 480x800 720x720
+env APPLAUNCH_DEV 0
+clock 20:30
+wifi 70
+bt on
+# today's grid with the tiles listed in the expected order, nothing stored
+apps 2048=fixture:2048_128.png Calculator Mesh Settings Store CLI SSH Browser
+home
+shot home_order_expected
+# the same tiles in today's order, with the stored order
+config home_order 5db35fa9,1af49623,81ac1fe3,9b6f26cf,30c82f22,6cbae6b3,cd07a96d,3df2309d
+apps Settings Store CLI SSH Calculator 2048=fixture:2048_128.png Mesh Browser
+home
+shot home_order_seeded
+expect_same home_order_expected
+# Settings > Launcher: the reset row is the section's last
+launch Settings
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 300
+key UP
+wait 300
+shot home_order_reset_row
+key ENTER
+wait 300
+shot home_order_reset_ask
+key ENTER
+wait 300
+shot home_order_reset_done
+# the grid reloaded: today's order
+apps Settings Store CLI SSH Calculator 2048=fixture:2048_128.png Mesh Browser
+home
+shot home_order_after_reset

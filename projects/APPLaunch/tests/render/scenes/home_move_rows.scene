@@ -1,0 +1,63 @@
+# Move mode on a long home grid (study 046 P2): 20 tiles, 7 rows of 3, at 640x480 (the deck: 2 rows in view) and
+# 480x800 (PDA portrait on the profile pda: 5 rows in view). The carried tile goes from the first row to the last and
+# back with the arrows, then halfway and a tap on the next tile places it. The view follows by the least scroll that
+# shows the carried tile whole: no row snapped to the top, no blank space under the last row nor above the first
+# (expect_grid_view), and the outline only while the tile is wholly in the grid. Review only: no golden.
+title home move rows
+review
+sizes 640x480 480x800
+@480x800 profile pda
+env APPLAUNCH_DEV 0
+clock 20:30
+wifi 70
+bt on
+keyboards 1
+apps Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048=fixture:2048_128.png "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" Notes=math_100.png Maps=game_100.png Radio=tank_100.png Weather=setting_100.png Clock=python_100.png Files=cli_100.png
+home
+# Settings (the first tile, selected) picked up with Ctrl+O
+key CTRL+O
+shot move_rows_picked
+expect_grid_view Settings
+# down to the last row (slot 18 of 20; a seventh Down stays)
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+shot move_rows_bottom
+expect_grid_view Settings
+expect_tiles Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Settings Files
+# and back to the first row
+key UP
+key UP
+key UP
+key UP
+key UP
+key UP
+shot move_rows_top
+expect_grid_view Settings
+expect_tiles Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Files
+# halfway (slot 9, the fourth row), then a tap on Mesh Hop (slot 10): placed there and dropped, the grid rebuilt with
+# the tile in view
+key DOWN
+key DOWN
+key DOWN
+shot move_rows_middle
+expect_grid_view Settings
+tapbutton "Mesh Hop"
+shot move_rows_tap
+expect_grid_view Settings
+expect_tiles Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" Settings "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Files
+# a press and the 3 s hold on a tile in the second row of the grid do not move the grid (LVGL's click focus used to
+# scroll the pressed tile's row to the top); the hold is then given up
+key ESC
+home
+shot hold_before
+grid_scroll_mark SSH
+touchbutton SSH
+wait 1300
+shot hold_bar
+expect_grid_scroll_same SSH
+release
