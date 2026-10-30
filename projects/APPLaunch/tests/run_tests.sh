@@ -437,6 +437,21 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_desktop_app_order"
 "$build_dir/test_desktop_app_order"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/src" \
+    "$test_root/test_home_order.cpp" \
+    "$test_root/../main/ui/model/home_order.cpp" \
+    "$test_root/../main/ui/model/desktop_app_order.cpp" \
+    "$test_root/../../../ext_components/cp0_lvgl/src/cp0_config_service.cpp" \
+    -o "$build_dir/test_home_order"
+"$build_dir/test_home_order"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_home_move.cpp" \
+    "$test_root/../main/ui/model/home_move.cpp" \
+    "$test_root/../main/ui/model/home_order.cpp" \
+    "$test_root/../main/ui/model/desktop_app_order.cpp" \
+    -o "$build_dir/test_home_move"
+"$build_dir/test_home_move"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/test_launcher_media_model.cpp" \
     "$(dirname "$0")/../main/ui/model/launcher_media_model.cpp" \
     -o "$build_dir/test_launcher_media_model"

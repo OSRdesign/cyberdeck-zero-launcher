@@ -48,8 +48,17 @@ void begin_page(bool native_layout, bool touch_list = false, bool touch_swipe = 
 /* The app about to be launched (its display name): touch behaviour follows Settings > Touch. */
 void set_launching_app(const std::string &name);
 
-/* Rebuild the home grid from the launcher's app list. */
+/* Rebuild the home grid from the launcher's app list (a tile being moved is dropped where it is first). */
 void refresh_apps();
+
+/* Study 046 P2, move mode on the home grid: a tile picked up (held 3 s, or Ctrl+O) to change its place.
+ *   cancel_move_mode  the tile goes back where it was and a pick-up hold in progress ends: an app launched by other
+ *                     means, the screen dimmed, another screen shown (the home screen's unload calls it too).
+ *   finish_move_mode  move mode ends with the tile where it is now, saved when it moved ("cannot save" toast when the
+ *                     store refuses): before the app list is rebuilt (refresh_apps() does it too).
+ * LVGL thread; nothing happens when no tile is picked up. */
+void cancel_move_mode();
+void finish_move_mode();
 
 /* Multitasking P-d (task 015-pd; only called with multitasking on): the apps left open, by their .desktop Exec
  * line. Their tiles get a small green dot at the top right (a ring of the tile's colour around it); the others none.

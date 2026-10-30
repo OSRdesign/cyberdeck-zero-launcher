@@ -9,6 +9,10 @@
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
 
+#ifdef LAUNCHER_BUILD
+#include "../home_order_launcher.hpp"
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <exception>
@@ -457,6 +461,19 @@ SettingApiCallBackFunc make_launcher_toggle_api(const AppDescriptor &descriptor)
         }
         if (succeeded) launcher_app_registry_notify_changed();
     };
+}
+
+void append_launcher_reset_order(Tree &tree, const NodeIter &parent)
+{
+    SettingEntry entry{"Reset app order"};
+    entry.action_confirm = std::make_shared<const SettingActionConfirm>(SettingActionConfirm{
+        "Reset app order?", "Put the apps back in their default order?", "Cancel", "Reset",
+        "Cannot reset the app order", [] {
+            if (!launcher_home_order_reset()) return false;
+            launcher_app_registry_notify_changed(); /* the home grid reloads in today's order */
+            return true;
+        }});
+    tree.append_child(parent, std::move(entry));
 }
 
 struct LauncherRegistryRefreshSubscription::State

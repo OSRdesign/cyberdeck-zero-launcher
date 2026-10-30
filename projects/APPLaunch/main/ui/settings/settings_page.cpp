@@ -231,6 +231,8 @@ void prepare_section(const NodeIter &page_node)
         Tree *tree = settings_tree_factory_context();
         if (tree) {
             settings_t12b::populate_launcher_children(*tree, page_node);
+            // the home grid's order (study 046 D8): its Dialog is the native host's, so native Settings only
+            if (settings_ui::native_selected()) settings_t12b::append_launcher_reset_order(*tree, page_node);
         }
     }
 #endif
@@ -703,6 +705,7 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
         // hidden in a release build)
         return SettingsNodeKind::Custom;
     }
+    if (entry.action_confirm) return SettingsNodeKind::Action; /* asks first (Settings > Launcher > Reset app order) */
     if (entry.icon_enabled && entry.has_api()) return SettingsNodeKind::Toggle;
     if (entry.has_api()) return SettingsNodeKind::Action;
     return SettingsNodeKind::Plain;

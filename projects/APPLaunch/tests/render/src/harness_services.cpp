@@ -425,6 +425,11 @@ void install_services()
             config()[arg(args, 1)] = arg(args, 2);
             if (reply) reply(0, "ok");
         } else if (command == "SetManyAndSave") {
+            /* "configfull on": the refusal of a full store (cp0_config_service.cpp: nothing written) */
+            if (fixtures().config_full) {
+                if (reply) reply(-1, "invalid config transaction");
+                return;
+            }
             for (std::size_t i = 1; i + 1 < args.size(); i += 2) config()[arg(args, i)] = arg(args, i + 1);
             if (reply) reply(0, "ok");
         } else if (command == "Save" || command == "Init") {

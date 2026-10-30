@@ -162,6 +162,17 @@ struct ActivationBlock {
     const char *title;
     const char *message;
 };
+// An action row that asks first (native Settings only): Enter / a tap shows a Dialog with `title`, `text` and the
+// buttons `cancel` / `confirm` over the list; confirm runs `run`, and a false result shows `failure` as the page's
+// error caption. Strings must outlive the entry (use literals).
+struct SettingActionConfirm {
+    const char *title;
+    const char *text;
+    const char *cancel;
+    const char *confirm;
+    const char *failure;
+    std::function<bool()> run;
+};
 struct SettingEntry {
     std::string label;
     SettingPageFactory page_factory;
@@ -182,6 +193,8 @@ struct SettingEntry {
     // the root-level LvSettingRoller never reads it, so a gate on a root-level
     // entry would be silently ignored.
     std::function<const ActivationBlock *()> activation_gate;
+    // An action that asks first (see SettingActionConfirm): the native host shows the row as an action and asks
+    std::shared_ptr<const SettingActionConfirm> action_confirm;
 
     SettingEntry() = default;
     SettingEntry(const std::string &name) : label(name)

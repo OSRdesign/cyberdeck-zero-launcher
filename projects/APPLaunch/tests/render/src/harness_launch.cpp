@@ -15,9 +15,13 @@
 #include "settings/settings_page.hpp"
 
 #include "harness_launch.hpp"
+#include "app_registry.h"
+#include "home_order_launcher.hpp"
 #include "launch.h"
+#include "model/home_order.hpp"
 #include "native_ui.hpp"
 
+#include <cctype>
 #include <cstdio>
 
 namespace {
@@ -49,12 +53,38 @@ Launch *launcher()
 
 int app_index(const std::string &name)
 {
+    // the grid's index: a stored home order (scene `config home_order ...`) may have moved the tile
+    if (s_launch) {
+        for (std::size_t i = 0; i < s_launch->app_count(); ++i)
+            if (const app *item = s_launch->app_at(i); item && item->Name == name) return static_cast<int>(i);
+        return -1;
+    }
     for (std::size_t i = 0; i < specs().size(); ++i)
         if (specs()[i].name == name) return static_cast<int>(i);
     return -1;
 }
 
 } // namespace harness
+
+namespace {
+
+/* The tile's id as on the board: a built-in's config key (the registry copy in harness_stubs.cpp), else the id the
+ * desktop loader would give "<name>.desktop" (app_desktop_<name>_desktop_<fnv of the file name>). */
+std::string tile_id(const std::string &name)
+{
+    std::size_t count = 0;
+    const AppDescriptor *entries = launcher_app_registry_entries(&count);
+    for (std::size_t i = 0; entries && i < count; ++i)
+        if (entries[i].label && name == entries[i].label) return entries[i].config_key;
+    const std::string file = name + ".desktop";
+    std::string id = "app_desktop_";
+    for (const unsigned char c : file) id.push_back(std::isalnum(c) ? static_cast<char>(c) : '_');
+    char suffix[16];
+    std::snprintf(suffix, sizeof(suffix), "_%08x", static_cast<unsigned>(home_order::key_of(file)));
+    return id + suffix;
+}
+
+} // namespace
 
 Launch::Launch()
 {
@@ -70,7 +100,10 @@ Launch::Launch()
         else // a tile only: stock apps are shown with the harness placeholder (scene "stockapp"); the Exec line
              // "tile:NAME" names it for the multitasking scenes (dots, switcher icons); launch_Exec does nothing here
             app_list.emplace_back(spec.name, spec.icon, "tile:" + spec.name, false);
+        app_list.back().Id = tile_id(spec.name);
     }
+    // the scene's tiles are today's order; a stored user order (study 046) applies as in Launch::applications_load()
+    launcher_home_order_apply(app_list);
 }
 
 std::size_t Launch::app_count() const
@@ -105,6 +138,7 @@ void Launch::launch_app()
 {
     const app *selected = app_at_index(current_app);
     if (!selected) return;
+    native_ui::cancel_move_mode(); // as launch.cpp (study 046 P2)
     native_ui::set_launching_app(selected->Name);
     try {
         selected->launch(this);
