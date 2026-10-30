@@ -415,6 +415,12 @@ void SettingsNativeHost::activate_entry(int index)
         toggle(index);
         break;
     case RowType::Action:
+        if (const auto &ask = row.node->action_confirm) {
+            /* an action that asks first: the same Dialog as a value page's question; answer_confirm() runs it */
+            choice_confirm(index, ask->title ? ask->title : "", ask->text ? ask->text : "",
+                           ask->cancel ? ask->cancel : "Cancel", ask->confirm ? ask->confirm : "OK");
+            break;
+        }
         try {
             if (row.node->Componens_api) row.node->Componens_api(SettingApiActivate, nullptr);
             else if (row.node->Async_api) row.node->Async_api(SettingApiActivate, nullptr);
@@ -574,8 +580,27 @@ void SettingsNativeHost::answer_confirm(bool confirmed)
         lv_group_add_obj(group, roller_->focus_object());
         lv_group_focus_obj(roller_->focus_object());
     }
-    if (row_index >= 0 && row_index < static_cast<int>(rows_.size()) && rows_[static_cast<size_t>(row_index)]->binding)
-        rows_[static_cast<size_t>(row_index)]->binding->choice_confirm_reply(confirmed);
+    if (row_index < 0 || row_index >= static_cast<int>(rows_.size())) return;
+    Row &row = *rows_[static_cast<size_t>(row_index)];
+    if (row.binding) {
+        row.binding->choice_confirm_reply(confirmed);
+        return;
+    }
+    /* an action row that asked first (SettingActionConfirm): run it on confirm; a failure shows as the caption */
+    const std::shared_ptr<const SettingActionConfirm> ask = row.node->action_confirm;
+    if (!confirmed || !ask || !ask->run) return;
+    bool done = false;
+    try {
+        done = ask->run();
+    } catch (...) {
+        done = false;
+    }
+    if (done) {
+        clear_caption();
+    } else {
+        caption_row_ = row_index;
+        page_->set_caption(ask->failure ? ask->failure : "Failed", true);
+    }
 }
 
 void SettingsNativeHost::clear_caption()

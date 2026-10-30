@@ -7,6 +7,8 @@
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
 #include "app_launch_env.hpp"
+#include "home_order_launcher.hpp"
+#include "input_presence.hpp"
 #include "launch.h"
 #include "launcher_osk.hpp"
 #include "launcher_pointer.hpp"
@@ -17,6 +19,7 @@
 #include "ui_global_hint.h"
 
 #include "cp0_display.h"
+#include "cp0_font_service.hpp"
 #include "cp0_statusbar.h"
 #include "cp0_ui_status_strip.h"
 #include "cp0_ui_widgets.hpp"
@@ -32,6 +35,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -177,10 +181,11 @@ void launch_tile(int index)
     s_launch->launch_index(static_cast<std::size_t>(index));
 }
 
-void tile_clicked_cb(lv_event_t *event)
-{
-    launch_tile(static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(event))));
-}
+// Move mode (study 046 P2), defined after the tiles below: the tiles' touch events (a tap launches, as before) and the
+// keys it owns while a tile is picked up (true: the key is used)
+void tile_event_cb(lv_event_t *event);
+bool move_key(const struct key_item &item, uint32_t code);
+void move_update_outline();
 
 uint32_t nav_alias(uint32_t key)
 {
@@ -202,6 +207,7 @@ void home_key_cb(lv_event_t *event)
         return;
 
     const uint32_t code = item->semantic_key ? item->semantic_key : nav_alias(item->key_code);
+    if (move_key(*item, code)) return;
     if (item->key_state) {
         switch (code) {
         case KEY_LEFT: select_tile(s_selected - 1, true); break;
@@ -233,6 +239,9 @@ void ensure_home()
 
     s_home = make_black_screen();
     lv_obj_add_event_cb(s_home, home_key_cb, static_cast<lv_event_code_t>(LV_EVENT_KEYBOARD), nullptr);
+    // another screen (Settings, a page, the switcher, the toolbar of a stock app): a tile being moved goes back
+    lv_obj_add_event_cb(s_home, [](lv_event_t *) { native_ui::cancel_move_mode(); }, LV_EVENT_SCREEN_UNLOAD_START,
+                        nullptr);
     build_status_bar(s_home);
 
     s_grid = lv_obj_create(s_home);
@@ -249,6 +258,8 @@ void ensure_home()
     lv_obj_set_scroll_dir(s_grid, LV_DIR_VER);
     lv_obj_set_scroll_snap_y(s_grid, LV_SCROLL_SNAP_START);
     lv_obj_set_scrollbar_mode(s_grid, LV_SCROLLBAR_MODE_OFF);
+    // move mode (study 046 P2): the carried tile's outline follows its visibility while the grid scrolls
+    lv_obj_add_event_cb(s_grid, [](lv_event_t *) { move_update_outline(); }, LV_EVENT_SCROLL, nullptr);
 }
 
 void build_tile(int index, const app &item)
@@ -258,7 +269,9 @@ void build_tile(int index, const app &item)
 
     lv_obj_t *tile = lv_obj_create(s_grid);
     lv_obj_remove_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_flag(tile, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    // no LV_OBJ_FLAG_SCROLL_ON_FOCUS: a press gives the tile LVGL's click focus, whose scroll-to-view would snap its row
+    // to the top (grid snap) the moment the finger lands, during the pick-up hold too. The keyboard scrolls through
+    // select_tile() (scroll_to_view), not through focus.
     lv_obj_set_size(tile, width, l.tile_h);
     lv_obj_set_style_radius(tile, l.tile_radius, 0);
     lv_obj_set_style_bg_color(tile, lv_color_hex(kTileBg), 0);
@@ -272,8 +285,11 @@ void build_tile(int index, const app &item)
     lv_obj_set_style_bg_color(tile, lv_color_hex(0x262626), LV_STATE_CHECKED);
     // pressed (touch)
     lv_obj_set_style_bg_color(tile, lv_color_hex(0x33414D), LV_STATE_PRESSED);
-    lv_obj_add_event_cb(tile, tile_clicked_cb, LV_EVENT_CLICKED,
-                        reinterpret_cast<void *>(static_cast<intptr_t>(index)));
+    // a tap launches (CLICKED); the press, its moves and its end time the 3 s pick-up hold (study 046 P2)
+    void *const user_data = reinterpret_cast<void *>(static_cast<intptr_t>(index));
+    for (const lv_event_code_t code :
+         {LV_EVENT_CLICKED, LV_EVENT_PRESSED, LV_EVENT_PRESSING, LV_EVENT_RELEASED, LV_EVENT_PRESS_LOST})
+        lv_obj_add_event_cb(tile, tile_event_cb, code, user_data);
 
     lv_obj_t *icon = lv_image_create(tile);
     lv_obj_remove_flag(icon, LV_OBJ_FLAG_CLICKABLE);
@@ -337,6 +353,419 @@ void apply_resident_dots()
         }
         lv_obj_remove_flag(dot, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+// ------------------------------------------------------------ move mode (study 046 P2)
+//
+// A tile is picked up (touch: held 3 s while a bar fills under it; keys: Ctrl+O, the options key, on the selected tile;
+// the trackpoint's held click sends Ctrl+O), moved (arrows: one slot or one row, clamped; a tap on another tile puts it
+// there and drops it), dropped (Enter, a tap on the picked tile) or put back (Esc). While it is carried only the LVGL
+// children move (lv_obj_move_to_index): s_tiles, s_dots and the tiles' captured indices keep the app list's order, and
+// home_move::Session holds the grid order, until the drop rebuilds the grid. No animation: one reflow per step and a
+// bar of a few pixels every 100 ms during the hold (the Pi Zero 2 W).
+
+constexpr uint32_t kHoldShowMs = 500;  // the bar shows (the apps' hold cue: HoldTracker kShowMs)
+constexpr uint32_t kHoldFireMs = 3000; // the pick-up (the bar fills over the whole hold)
+constexpr uint32_t kHoldTickMs = 100;
+constexpr int kHoldSlopPx = 10;        // LVGL's scroll limit (lv_indev.c LV_INDEV_DEF_SCROLL_LIMIT; cp0 keeps it)
+constexpr int kPickedOutlinePx = 3;
+constexpr uint32_t kMoveGlyph = 0xF0B2; // "arrows-alt" of the status strip's icon font
+constexpr const char *kMoveGlyphUtf8 = "\xEF\x82\xB2";
+constexpr const char *kIconFont = "FontAwesome5-Solid+Brands+Regular.woff";
+constexpr const char *kMoveCaptionKeys = "Move: arrows or tap a spot  -  Enter drop  -  Esc cancel";
+constexpr const char *kMoveCaptionTouch = "Tap a spot to place the app";
+constexpr const char *kMoveCannotSave = "Cannot save the order (settings full)";
+
+struct TouchHold {
+    lv_timer_t *timer = nullptr;
+    lv_indev_t *indev = nullptr;
+    int index = -1;            // the pressed tile (its app index)
+    lv_point_t start{};
+    uint32_t t0 = 0;
+    lv_obj_t *track = nullptr; // the bar under the tile, made when it shows
+    lv_obj_t *fill = nullptr;
+    int track_w = 0, track_h = 0;
+};
+TouchHold s_hold;
+bool s_swallow_click = false; // the release of a hold whose bar showed (or that picked the tile up) is not a tap
+
+struct MoveMode {
+    bool active = false;
+    home_move::Session session; // order[slot] = app index; picked() = the carried tile's app index
+    lv_obj_t *badge = nullptr;  // on the carried tile
+    lv_obj_t *caption = nullptr;
+    bool outline = false;       // the carried tile's outline is drawn (only while the tile is wholly in the grid)
+    int32_t scroll_y = 0;       // the grid's view at the pick-up: Esc gives it back with the order
+};
+MoveMode s_move;
+
+// The carried tile's outline, only while the tile is wholly inside the grid's area: a tile scrolled just out of it
+// would leave a sliver of outline in the grid's padding (under the caption). Called after every move and on every
+// scroll of the grid (a swipe, the view following).
+void move_update_outline()
+{
+    if (!s_move.active || s_move.session.picked() >= s_tiles.size()) return;
+    lv_obj_t *tile = s_tiles[s_move.session.picked()];
+    lv_area_t t, g;
+    lv_obj_get_coords(tile, &t);
+    lv_obj_get_coords(s_grid, &g);
+    const bool inside = t.y1 >= g.y1 && t.y2 <= g.y2 && t.x1 >= g.x1 && t.x2 <= g.x2;
+    if (inside == s_move.outline) return;
+    s_move.outline = inside;
+    lv_obj_set_style_outline_width(tile, inside ? kPickedOutlinePx : 0, 0);
+}
+
+// Move mode only: the view follows the carried tile by the least scroll that shows it whole inside the grid's padding
+// (the outline included), and never past the content: no blank space under the last row nor above the first (a press
+// or a snap may have left some: it goes). Not lv_obj_scroll_to_view(): with the grid's snap it puts the tile's row at
+// the top, even past the last row (what select_tile() keeps doing for the normal navigation). Returns the scroll asked
+// for (> 0: the content moves down).
+int32_t move_keep_in_view(lv_obj_t *tile, lv_anim_enable_t anim)
+{
+    if (!tile || !s_grid) return 0;
+    lv_obj_update_layout(s_grid);
+    lv_area_t t, g;
+    lv_obj_get_coords(tile, &t);
+    lv_obj_get_coords(s_grid, &g);
+    const int32_t top = g.y1 + lv_obj_get_style_pad_top(s_grid, LV_PART_MAIN);
+    const int32_t bottom = g.y2 - lv_obj_get_style_pad_bottom(s_grid, LV_PART_MAIN);
+    int32_t dy = 0; // > 0: the content moves down
+    if (t.y1 < top) dy = top - t.y1;
+    else if (t.y2 > bottom) dy = bottom - t.y2;
+    const int32_t above = lv_obj_get_scroll_top(s_grid), below = lv_obj_get_scroll_bottom(s_grid);
+    const int32_t lo = -below, hi = above; // the range that keeps the content filling the view
+    dy = lo > hi ? hi : std::clamp(dy, lo, hi); // content shorter than the view: its first row at the top
+    if (dy != 0) lv_obj_scroll_by(s_grid, 0, dy, anim);
+    return dy;
+}
+
+void hold_stop()
+{
+    if (s_hold.timer) lv_timer_delete(s_hold.timer);
+    if (s_hold.track) lv_obj_delete(s_hold.track);
+    s_hold = TouchHold{};
+}
+
+// The finger is still down on the tile, has not moved past the scroll limit and nothing scrolls (the three-finger
+// switcher gesture's own swallow ends the press with PRESS_LOST).
+bool hold_still()
+{
+    if (!s_hold.indev || s_hold.index < 0 || s_hold.index >= static_cast<int>(s_tiles.size())) return false;
+    if (lv_indev_get_state(s_hold.indev) != LV_INDEV_STATE_PRESSED) return false;
+    if (lv_indev_get_scroll_obj(s_hold.indev)) return false;
+    lv_point_t point;
+    lv_indev_get_point(s_hold.indev, &point);
+    return std::abs(point.x - s_hold.start.x) <= kHoldSlopPx && std::abs(point.y - s_hold.start.y) <= kHoldSlopPx;
+}
+
+// The bar: under the pressed tile, in the middle of the gap below it (the grid's padding under the last row), the
+// tile's width less half its corner radius each side; the grid's border grey, filling with the accent.
+void hold_show(uint32_t elapsed)
+{
+    const Layout &l = layout();
+    if (!s_hold.track) {
+        lv_area_t area;
+        lv_obj_get_coords(s_tiles[s_hold.index], &area);
+        const int inset = l.tile_radius / 2;
+        s_hold.track_h = std::max(4, l.pad / 3);
+        s_hold.track_w = std::max(2 * s_hold.track_h, static_cast<int>(lv_area_get_width(&area)) - 2 * inset);
+        const int y = std::min(static_cast<int>(area.y2) + 1 + (l.pad - s_hold.track_h) / 2, l.screen_h - s_hold.track_h);
+        s_hold.track = lv_obj_create(s_home);
+        lv_obj_remove_style_all(s_hold.track);
+        lv_obj_remove_flag(s_hold.track, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(s_hold.track, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_size(s_hold.track, s_hold.track_w, s_hold.track_h);
+        lv_obj_set_pos(s_hold.track, area.x1 + inset, y);
+        lv_obj_set_style_radius(s_hold.track, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(s_hold.track, lv_color_hex(kTileBorder), 0);
+        lv_obj_set_style_bg_opa(s_hold.track, LV_OPA_COVER, 0);
+        s_hold.fill = lv_obj_create(s_hold.track);
+        lv_obj_remove_style_all(s_hold.fill);
+        lv_obj_remove_flag(s_hold.fill, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_pos(s_hold.fill, 0, 0);
+        lv_obj_set_style_radius(s_hold.fill, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(s_hold.fill, lv_color_hex(kAccent), 0);
+        lv_obj_set_style_bg_opa(s_hold.fill, LV_OPA_COVER, 0);
+    }
+    const uint32_t done = std::min(elapsed, kHoldFireMs);
+    const int width = static_cast<int>(static_cast<int64_t>(s_hold.track_w) * done / kHoldFireMs);
+    lv_obj_set_size(s_hold.fill, std::max(s_hold.track_h, width), s_hold.track_h);
+}
+
+// Whether a physical keyboard is there, by the fallback keyboard's rule (input_presence, cp0_app_osk_rule: a Bluetooth
+// keyboard that went to sleep still counts). No presence watcher: assumed there (the caption names the keys).
+bool keyboard_present()
+{
+    const input_presence::KeyboardSnapshot k = input_presence::keyboards();
+    if (!k.known) return true;
+    return cp0_app_osk_rule(CP0_APP_VKB_AUTO, k.keyboards, k.now_s, k.any_gone_s, k.bt_gone_s) == 0;
+}
+
+// The caption takes the status line while a tile is carried (the strip is hidden meanwhile): the tiles fill the panel
+// below the bar on the deck, so a bottom bar would cover a row. The caption style of the layout service, wrapped to
+// two lines where it is narrow (portrait).
+void show_move_caption(bool on)
+{
+    if (s_home_strip && s_home_strip->canvas()) {
+        if (on) lv_obj_add_flag(s_home_strip->canvas(), LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(s_home_strip->canvas(), LV_OBJ_FLAG_HIDDEN);
+    }
+    if (!on) {
+        if (s_move.caption) lv_obj_add_flag(s_move.caption, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    const Layout &l = layout();
+    const cp0_ui_metrics_t &m = *cp0_ui_metrics_get();
+    const lv_font_t *font = cp0_ui_font_px(m.text_px[CP0_TEXT_CAPTION]);
+    const int width = l.screen_w - 2 * m.shell.title_x;
+    if (!s_move.caption) {
+        s_move.caption = lv_label_create(s_home);
+        lv_obj_set_width(s_move.caption, width);
+        lv_label_set_long_mode(s_move.caption, LV_LABEL_LONG_MODE_WRAP);
+        lv_obj_set_style_text_font(s_move.caption, font, 0);
+        lv_obj_set_style_text_color(s_move.caption, lv_color_white(), 0);
+    }
+    // too wide for one line (portrait): the line breaks after "tap a spot" rather than wherever the wrap falls
+    std::string text = keyboard_present() ? kMoveCaptionKeys : kMoveCaptionTouch;
+    lv_point_t size{};
+    lv_text_get_size(&size, text.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    const std::size_t dash = text.find("  -  ");
+    if (size.x > width && dash != std::string::npos) text.replace(dash, 5, "\n");
+    lv_label_set_text(s_move.caption, text.c_str());
+    lv_obj_remove_flag(s_move.caption, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(s_move.caption);
+    lv_obj_set_pos(s_move.caption, m.shell.title_x,
+                   std::max(0, (l.bar_h - static_cast<int>(lv_obj_get_height(s_move.caption))) / 2));
+}
+
+// The status strip's icon font file, found as the strip finds it (cp0_ui_status_strip_widget.cpp font_path): the
+// program's share/font, else the launcher's installed copy. The resource paths resolve only .ttf / .otf as fonts
+// (cp0_resource_path_policy.cpp), so a bare .woff name would not be found.
+std::string icon_font_path()
+{
+    const std::string rel = std::string("share/font/") + kIconFont;
+    const char *own = cp0_file_path_c(rel.c_str());
+    if (own && own[0] && ::access(own, R_OK) == 0) return own;
+    return "/usr/share/APPLaunch/" + rel;
+}
+
+// The move badge at the carried tile's top right: the resident dot's place and ring, in the accent, with the
+// four-arrow glyph of the status strip's icon font (FontAwesome 5); without that font, the builtin left / right arrows.
+lv_obj_t *make_move_badge(lv_obj_t *tile)
+{
+    const Layout &l = layout();
+    const cp0_ui_metrics_t &m = *cp0_ui_metrics_get();
+    const int size = cp0_ui_mm_px(m.ppmm_x100, 30, 22) + 2 * kResidentRing;
+    const int inset = l.tile_border + cp0_ui_mm_px(m.ppmm_x100, 11, 6) - kResidentRing;
+    lv_obj_t *badge = lv_obj_create(tile);
+    lv_obj_remove_style_all(badge);
+    lv_obj_remove_flag(badge, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(badge, size, size);
+    lv_obj_set_style_radius(badge, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(badge, lv_color_hex(kAccent), 0);
+    lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(badge, lv_color_hex(kTileBg), 0);
+    lv_obj_set_style_border_width(badge, kResidentRing, 0);
+    lv_obj_set_style_border_opa(badge, LV_OPA_COVER, 0);
+    lv_obj_align(badge, LV_ALIGN_TOP_RIGHT, -inset, inset);
+
+    const int px = (size - 2 * kResidentRing) * 3 / 5;
+    lv_obj_t *glyph = lv_label_create(badge);
+    lv_font_t *font = cp0_fonts().get(icon_font_path().c_str(), static_cast<uint16_t>(px));
+    lv_font_glyph_dsc_t dsc;
+    if (font && lv_font_get_glyph_dsc(font, &dsc, kMoveGlyph, 0) && !dsc.is_placeholder) {
+        lv_obj_set_style_text_font(glyph, font, 0);
+        lv_label_set_text(glyph, kMoveGlyphUtf8);
+    } else {
+        lv_obj_set_style_text_font(glyph, cp0_ui_font_px(px), 0);
+        lv_label_set_text(glyph, LV_SYMBOL_LEFT LV_SYMBOL_RIGHT);
+    }
+    lv_obj_set_style_text_color(glyph, lv_color_white(), 0);
+    lv_obj_center(glyph);
+    return badge;
+}
+
+void move_begin(int index)
+{
+    if (!s_launch || index < 0 || index >= static_cast<int>(s_tiles.size())) return;
+    s_move.active = true;
+    s_move.session = home_move::Session(s_tiles.size(), static_cast<std::size_t>(index));
+    lv_obj_t *tile = s_tiles[static_cast<std::size_t>(index)];
+    // the selection follows the carried app; already on it (Ctrl+O), its state is left alone: a CHECKED state set
+    // again re-aligns the tile's icon and label by the border's 2 px, and Esc would not give the same picture back
+    if (index != s_selected) select_tile(index, false);
+    lv_obj_set_style_outline_color(tile, lv_color_hex(kAccent), 0);
+    lv_obj_set_style_outline_opa(tile, LV_OPA_COVER, 0);
+    lv_obj_set_style_outline_pad(tile, 0, 0);
+    s_move.outline = false;
+    s_move.badge = make_move_badge(tile);
+    show_move_caption(true);
+    const int32_t dy = move_keep_in_view(tile, LV_ANIM_ON);
+    s_move.scroll_y = lv_obj_get_scroll_y(s_grid) - dy; // where the view settles (the scroll may still be animating)
+    move_update_outline();
+}
+
+// The carried tile's look goes; the status strip comes back. Move mode itself is left to the caller.
+void move_clear_look()
+{
+    if (s_move.badge) lv_obj_delete(s_move.badge);
+    s_move.badge = nullptr;
+    const std::size_t picked = s_move.session.picked();
+    if (picked < s_tiles.size()) lv_obj_set_style_outline_width(s_tiles[picked], 0, 0);
+    s_move.outline = false;
+    show_move_caption(false);
+}
+
+void move_step(home_move::Dir dir)
+{
+    if (!s_move.session.step(dir, static_cast<std::size_t>(std::max(1, layout().cols)))) return;
+    lv_obj_t *tile = s_tiles[s_move.session.picked()];
+    lv_obj_move_to_index(tile, static_cast<int32_t>(s_move.session.slot()));
+    move_keep_in_view(tile, LV_ANIM_ON);
+    move_update_outline();
+}
+
+// Esc and every interruption: the tiles back in the app list's order (s_tiles never changed), the selection on the
+// carried app.
+void move_cancel()
+{
+    if (!s_move.active) return;
+    move_clear_look();
+    s_move.active = false;
+    if (s_move.session.moved())
+        for (std::size_t i = 0; i < s_tiles.size(); ++i) lv_obj_move_to_index(s_tiles[i], static_cast<int32_t>(i));
+    const std::size_t picked = s_move.session.picked();
+    s_move.session = home_move::Session();
+    // the view of the pick-up back (the arrows may have scrolled the grid), the tile in it
+    lv_obj_update_layout(s_grid);
+    lv_obj_scroll_to_y(s_grid, s_move.scroll_y, LV_ANIM_OFF);
+    if (picked < s_tiles.size()) move_keep_in_view(s_tiles[picked], LV_ANIM_OFF);
+}
+
+// Enter, a tap, a reload: the tile stays where it is. A move is saved once (launcher_home_order_save); the app list
+// takes the new order only when it was saved, otherwise "cannot save" and the grid stays in the stored order.
+// rebuild: rebuild the grid now (refresh_apps(), since the tiles capture their index and the dots are placed per
+// index); a reload rebuilds it itself.
+void move_drop(bool rebuild)
+{
+    if (!s_move.active) return;
+    move_clear_look();
+    s_move.active = false;
+    const home_move::Session session = s_move.session;
+    s_move.session = home_move::Session();
+    if (!session.moved()) return;
+    bool saved = false;
+    if (s_launch && session.count() == s_launch->app_count()) {
+        std::list<app> reordered = s_launch->apps();
+        saved = home_move::apply(reordered, session.order()) && launcher_home_order_save(reordered);
+    }
+    if (saved) {
+        s_launch->reorder_apps(session.order());
+        s_selected = static_cast<int>(session.slot());
+    } else {
+        launcher_toast().show(kMoveCannotSave);
+        s_selected = static_cast<int>(session.picked());
+    }
+    if (!rebuild) return;
+    native_ui::refresh_apps();
+    if (s_selected >= 0 && s_selected < static_cast<int>(s_tiles.size()))
+        move_keep_in_view(s_tiles[static_cast<std::size_t>(s_selected)], LV_ANIM_OFF);
+}
+
+void hold_tick(lv_timer_t *)
+{
+    if (!hold_still()) {
+        hold_stop();
+        return;
+    }
+    const uint32_t elapsed = lv_tick_elaps(s_hold.t0);
+    if (elapsed >= kHoldFireMs) {
+        const int index = s_hold.index;
+        hold_stop();
+        s_swallow_click = true; // the finger is still on the tile: its release must not launch nor drop it
+        move_begin(index);
+        return;
+    }
+    if (elapsed >= kHoldShowMs) hold_show(elapsed);
+}
+
+void hold_start(int index)
+{
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev || lv_indev_get_type(indev) != LV_INDEV_TYPE_POINTER) return;
+    s_hold.indev = indev;
+    s_hold.index = index;
+    lv_indev_get_point(indev, &s_hold.start);
+    s_hold.t0 = lv_tick_get();
+    s_hold.timer = lv_timer_create(hold_tick, kHoldTickMs, nullptr);
+}
+
+void tile_event_cb(lv_event_t *event)
+{
+    const int index = static_cast<int>(reinterpret_cast<intptr_t>(lv_event_get_user_data(event)));
+    switch (lv_event_get_code(event)) {
+    case LV_EVENT_PRESSED:
+        s_swallow_click = false;
+        hold_stop();
+        if (!s_move.active) hold_start(index);
+        break;
+    case LV_EVENT_PRESSING:
+        if (s_hold.index == index && !hold_still()) hold_stop();
+        break;
+    case LV_EVENT_RELEASED:
+        // let go after the bar showed: the hold is given up, and that is not a tap either
+        if (s_hold.index == index && lv_tick_elaps(s_hold.t0) >= kHoldShowMs) s_swallow_click = true;
+        hold_stop();
+        break;
+    case LV_EVENT_PRESS_LOST:
+        // the press was taken away (the three-finger gesture's swallow ends it so; a scroll does not): a hold in
+        // progress ends, a carried tile goes back
+        hold_stop();
+        move_cancel();
+        break;
+    case LV_EVENT_CLICKED:
+        // LVGL 9.5 still sends CLICKED after a long press (only SHORT_CLICKED is skipped): swallowed here
+        if (s_swallow_click) {
+            s_swallow_click = false;
+            break;
+        }
+        if (!s_move.active) {
+            launch_tile(index);
+            break;
+        }
+        // move mode: the carried tile goes to the tapped tile's slot (the carried tile itself: where it is), dropped
+        s_move.session.place(static_cast<std::size_t>(index));
+        move_drop(true);
+        break;
+    default:
+        break;
+    }
+}
+
+bool move_key(const struct key_item &item, uint32_t code)
+{
+    if (!s_move.active) {
+        if (item.key_state != KBD_KEY_PRESSED || item.key_code != KEY_O || (item.mods & KBD_MOD_CTRL) == 0) return false;
+        hold_stop();
+        move_begin(s_selected);
+        return true;
+    }
+    if (item.key_state == KBD_KEY_RELEASED) {
+        if (code == KEY_ENTER) move_drop(true);
+        return true;
+    }
+    switch (code) { // pressed or repeated
+    case KEY_LEFT: move_step(home_move::Dir::Left); break;
+    case KEY_RIGHT: move_step(home_move::Dir::Right); break;
+    case KEY_UP: move_step(home_move::Dir::Up); break;
+    case KEY_DOWN: move_step(home_move::Dir::Down); break;
+    case KEY_ESC:
+        if (item.key_state == KBD_KEY_PRESSED) move_cancel();
+        break;
+    default: break;
+    }
+    return true;
 }
 
 // --------------------------------------------------------------- toolbar
@@ -670,6 +1099,7 @@ bool enabled()
 
 void attach(Launch *launch)
 {
+    cancel_move_mode(); // a tile carried over another app list's grid goes back first
     s_launch = launch;
 }
 
@@ -684,6 +1114,9 @@ void refresh_apps()
     ensure_home();
     DefaultDisplayScope scope(cp0_display_native());
 
+    // study 046 P2: the tiles go; a hold in progress ends, a carried tile is dropped where it is (saved if it moved)
+    hold_stop();
+    move_drop(false);
     lv_obj_clean(s_grid);
     s_tiles.clear();
     s_dots.clear();
@@ -699,6 +1132,22 @@ void set_resident_apps(const std::vector<std::string> &exec_keys)
     if (!enabled() || exec_keys == s_resident_keys) return;
     s_resident_keys = exec_keys;
     apply_resident_dots();
+    if (s_move.badge) lv_obj_move_foreground(s_move.badge); // a dot made meanwhile stays under the move badge
+}
+
+void cancel_move_mode()
+{
+    if (!enabled()) return;
+    hold_stop();
+    s_swallow_click = false;
+    move_cancel();
+}
+
+void finish_move_mode()
+{
+    if (!enabled()) return;
+    hold_stop();
+    move_drop(false);
 }
 
 std::string app_icon(const std::string &exec_key)
@@ -801,6 +1250,8 @@ void begin_page(bool, bool, bool, unsigned short) {}
 bool run_external(const std::string &, bool, std::function<void()>) { return false; }
 void refresh_apps() {}
 void set_resident_apps(const std::vector<std::string> &) {}
+void cancel_move_mode() {}
+void finish_move_mode() {}
 std::string app_icon(const std::string &) { return std::string(); }
 bool external_app_running() { return false; }
 

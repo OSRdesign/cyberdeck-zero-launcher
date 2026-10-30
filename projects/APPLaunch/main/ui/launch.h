@@ -12,6 +12,7 @@
 #include "ui_loading.h"
 #include "native_ui.hpp"
 #include "esc_ui_watchdog.h"
+#include "model/home_move.hpp"
 #include "model/icon_file_signature.hpp"
 #include "model/launcher_navigation_model.hpp"
 #include "multitask/multitask_model.hpp"
@@ -114,6 +115,10 @@ struct app
     std::string Icon;
     std::string Exec;
     std::function<void(Launch *)> launch;
+    // the tile's id: its config key ("app_Setting", "app_desktop_<name>_<fnv>"), set by the built-in appender and the
+    // desktop loader; the home grid's user order is a list of these (model/home_order.hpp). Empty: no id (the render
+    // harness's tiles, a tile of no registry)
+    std::string Id;
 
     app(std::string name, std::string icon, std::string exec, bool terminal);
     app(std::string name, std::string icon, std::string exec, bool terminal, bool sysplause);
@@ -148,6 +153,11 @@ public:
     std::size_t current_app_index() const;
     const app *carousel_slot_app(size_t slot) const;
     const app *app_at(std::size_t index) const { return app_at_index(static_cast<int>(index)); }
+    // the tiles in grid order (study 046: the home grid's user order is saved from it)
+    const std::list<app> &apps() const { return app_list; }
+    // Study 046 P2, after a move on the home grid: the tiles in their new order (order[slot] = the tile's index now).
+    // False, and nothing changes, unless `order` is a permutation of the tiles' indices.
+    bool reorder_apps(const std::vector<std::size_t> &order) { return home_move::apply(app_list, order); }
     void launch_app();
     void launch_index(std::size_t index);
 

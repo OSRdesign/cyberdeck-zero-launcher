@@ -11,6 +11,7 @@
 #include "builtin_app_registry.hpp"
 #include "desktop_app_loader.hpp"
 #include "esc_hold_hint_controller.h"
+#include "home_order_launcher.hpp"
 #include "launcher_zone.hpp"
 #include "native_ui.hpp"
 #include "multitask/display_handoff.hpp"
@@ -91,6 +92,7 @@ void Launch::launch_app()
     const app *selected = app_at_index(current_app);
     if (!selected) return;
 
+    native_ui::cancel_move_mode(); // study 046 P2: a tile being moved on the home grid goes back
     native_ui::set_launching_app(selected->Name); // touch behaviour follows Settings > Touch
     try {
         selected->launch(this);
@@ -294,6 +296,8 @@ void Launch::applications_load()
 {
     launcher_append_desktop_apps(app_list);
     launcher_sort_app_display_order(app_list);
+    // the user's order (study 046), only when one is stored: without it the grid stays exactly as above
+    launcher_home_order_apply(app_list);
 }
 
 void Launch::refresh_home_carousel()
@@ -322,6 +326,8 @@ void Launch::reload_home_icons()
 
 void Launch::applications_reload()
 {
+    // study 046 P2: a tile being moved is dropped where it is (saved if it moved) before the list is rebuilt
+    native_ui::finish_move_mode();
     rebuild_builtin_apps();
     applications_load();
     reload_home_icons();
@@ -451,6 +457,7 @@ void Launch::mt_release_input_group()
 // An app takes the panel (a launch, a resume from Alt+Tab): the launcher stops drawing and goes quiet.
 void Launch::mt_app_front()
 {
+    native_ui::cancel_move_mode();      // study 046 P2: an app came in front over the home grid
     launcher_zone::set_app_front(true); // the app's own keyboard rule while it is in front (vkb, report 041)
     ui_screensaver_set_foreground(0);
     LVGL_RUN_FLAGE = 0;

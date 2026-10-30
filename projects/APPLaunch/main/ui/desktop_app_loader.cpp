@@ -312,6 +312,7 @@ void launcher_append_desktop_apps(std::list<app> &apps)
                               candidate.entry.terminal, candidate.entry.sysplause, false,
                               candidate.entry.fullscreen,
                               multitask::parse_background(candidate.entry.background), candidate.turned);
+            apps.back().Id = config_key;
             ++appended;
         }
         launcher_app_registry_commit_dynamic_refresh();
