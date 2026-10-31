@@ -35,8 +35,8 @@ vendor) before they are relied on. "To verify" means the source or the licence o
 | `font/DejaVuSans.ttf`, `DejaVuSansMono.ttf`, `DejaVuSerif.ttf` | DejaVu fonts (<https://dejavu-fonts.github.io/>) | Bitstream Vera Fonts licence (DejaVu changes in the public domain), plus the Arev licence for some glyphs | licence text not in the repo; to add |
 | `font/LiberationMono-Regular.ttf` | Liberation Mono | SIL OFL 1.1 for Liberation 2.x; GPL-2.0 with a font exception for 1.x | version to verify; licence text not in the repo |
 | `font/Montserrat-Medium.ttf`, `Montserrat-Bold.ttf` | Montserrat (<https://github.com/JulietaUla/Montserrat>) | SIL OFL 1.1 | licence text not in the repo; to add |
-| `font/NotoSansCJK-Regular.ttc`, `NotoSerifCJK-Regular.ttc` | Noto Sans / Serif CJK (<https://github.com/notofonts/noto-cjk>) | SIL OFL 1.1 | licence text not in the repo; to add |
-| `font/AlibabaPuHuiTi-3-35-Thin.ttf`, `AlibabaPuHuiTi-3-55-Regular.ttf` | Alibaba PuHuiTi 3.0 | Alibaba's own free-use licence (not an open-source licence) | terms and redistribution to verify |
+| `font/NotoSansCJK-Regular.ttc` | Noto Sans CJK (<https://github.com/notofonts/noto-cjk>) | SIL OFL 1.1 | licence text not in the repo; to add |
+| `font/AlibabaPuHuiTi-3-55-Regular.ttf` | Alibaba PuHuiTi 3.0 | Alibaba's own free-use licence (not an open-source licence) | terms and redistribution to verify |
 | `font/FontAwesome5-Solid+Brands+Regular.woff` | Font Awesome 5 Free (<https://fontawesome.com/>) | font files SIL OFL 1.1, icons CC BY 4.0 (brand icons are trademarks of their owners) | licence text not in the repo; to add |
 | `font/svgfont.ttf` | unknown icon font | unknown | source and licence to verify |
 | `images/lockscreen.png` | lock-screen wallpaper | unknown | source and licence to verify |
