@@ -52,7 +52,7 @@ These source trees exist locally; cache presence does not establish that APPLaun
 
 | Component | Evidence / selection | License text |
 | --- | --- | --- |
-| cJSON | Optional `SDK/components/cjson/SConstruct` | [MIT](../LICENSES/cJSON-MIT.txt) |
+| cJSON | `SDK/components/cjson/SConstruct`, linked into the launcher (Settings > Updates reads GitHub's release list) | [MIT](../LICENSES/cJSON-MIT.txt) |
 | C-Thread-Pool | `SDK/github_source/C-Thread-Pool`; no direct launcher wrapper found | [MIT](../LICENSES/C-Thread-Pool-MIT.txt) |
 | cpp-httplib | `SDK/github_source/cpp-httplib`; no direct launcher wrapper found | [MIT](../LICENSES/cpp-httplib-MIT.txt) |
 | SimpleBLE | `SDK/github_source/SimpleBLE`; cp0 Bluetooth uses BlueZ/DBus | [BUSL-1.1](../LICENSES/SimpleBLE-BUSL-1.1.md): source-available with usage restrictions and version-dependent GPL v3 change date; not a permissive open-source dependency |

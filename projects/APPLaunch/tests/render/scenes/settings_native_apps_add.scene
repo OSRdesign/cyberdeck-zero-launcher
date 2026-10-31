@@ -23,6 +23,7 @@ key UP
 key UP
 key UP
 key UP
+key UP
 key ENTER
 wait 3000
 shot apps_empty

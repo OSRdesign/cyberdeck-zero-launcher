@@ -18,11 +18,11 @@ expect_same battery_none_mains
 shot battery_none_empty
 launch Settings
 wait 300
-expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
 key ESC
 wait 300
 battery mains
 launch Settings
 wait 300
-expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
 shot settings_battery_none_mains

@@ -13,6 +13,7 @@
 #include "launcher_osk.hpp"
 #include "launcher_pointer.hpp"
 #include "launcher_ssh.hpp"
+#include "launcher_update.hpp"
 #include "launcher_toast.h"
 #include "native_vkbd.hpp"
 #include "settings/settings_apps_jobs.hpp"
@@ -1180,6 +1181,13 @@ bool external_app_running()
     return external_running();
 }
 
+bool home_in_front()
+{
+    if (!enabled() || !s_home || external_running() || ui_screensaver_is_active()) return false;
+    return cp0_display_get_mode() == CP0_DISPLAY_MODE_NATIVE &&
+           lv_display_get_screen_active(cp0_display_native()) == s_home;
+}
+
 void show_home()
 {
     if (!enabled()) return;
@@ -1196,6 +1204,9 @@ void show_home()
     // Settings > System > SSH indicator, once: the status feed's thread starts sampling when it is On
     launcher_ssh::install();
     ensure_home();
+    // Settings > Updates (report 047), once the home grid exists: the start notice's bookkeeping, the daily check's
+    // timers and the watch of the root update helper's status
+    launcher_update::install();
 
     // Park an empty screen on the compat display so a finishing app's screen is
     // no longer active (it is deleted right after we return).
@@ -1209,6 +1220,9 @@ void show_home()
     lv_screen_load(s_home);
     lv_obj_invalidate(s_home);
     if (s_home_strip) s_home_strip->refresh(); // icons are current as soon as the grid is visible
+    // Settings > Updates (report 047 P1): "Updated to <version>" once after a version change, now that the home grid
+    // is on the native display (the toast goes on its top layer)
+    launcher_update::show_start_notice();
 }
 
 void begin_page(bool native_layout, bool touch_list, bool touch_swipe, unsigned short swipe_tap_key)
@@ -1271,6 +1285,7 @@ void cancel_move_mode() {}
 void finish_move_mode() {}
 std::string app_icon(const std::string &) { return std::string(); }
 bool external_app_running() { return false; }
+bool home_in_front() { return false; }
 
 } // namespace native_ui
 

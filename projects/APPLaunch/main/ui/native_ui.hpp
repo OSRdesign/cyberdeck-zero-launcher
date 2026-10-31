@@ -68,6 +68,9 @@ void set_resident_apps(const std::vector<std::string> &exec_keys);
 std::string app_icon(const std::string &exec_key);
 /* A stock (wrapped) app runs in the compat window (run_external). */
 bool external_app_running();
+/* The home grid is what the panel shows: the native display's active screen, no app in the compat window, no lock
+ * screen (Settings > Updates' background toast waits for it, report 047 D3). LVGL thread. */
+bool home_in_front();
 
 /* Run a stock (framebuffer) app inside the compat window, scaled up. The app runs on a
  * worker thread (the UI stays alive: toolbar, Esc hold); on_exit is called on the UI thread when it

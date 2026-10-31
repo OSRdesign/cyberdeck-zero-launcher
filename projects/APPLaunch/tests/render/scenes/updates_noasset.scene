@@ -1,0 +1,26 @@
+# Settings > Updates (report 047 P1): a PC (amd64) on 0.8.12 when 0.8.13 has only an arm64 bundle: nothing offered
+# ("Up to date"), the status line says why. Review only: no golden.
+title updates no bundle for this architecture
+review
+sizes 640x480 480x800
+@480x800 profile pda
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-11-05
+wifi 70
+bt on
+update net on
+update build 0.8.12 release amd64
+update answer releases-0.8.13-arm64-only.json
+home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+shot updates_noasset
+expect_text "No build for amd64 in 0.8.13"
+expect_text "Up to date"

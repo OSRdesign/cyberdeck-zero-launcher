@@ -25,6 +25,11 @@ CXX ?= g++
 ifeq ($(wildcard $(LVGL)/lvgl.h),)
 $(error LVGL 9.5 not found at $(LVGL): run the device build once (scons) so the SDK downloads it)
 endif
+# The SDK's cJSON (Settings > Updates, report 047): run.sh fetches it (projects/APPLaunch/tests/ensure_cjson.sh).
+CJSON    := $(ROOT)/SDK/github_source/cJSON
+ifeq ($(wildcard $(CJSON)/cJSON.c),)
+$(error cJSON not found at $(CJSON): sh projects/APPLaunch/tests/ensure_cjson.sh)
+endif
 
 FT_CFLAGS  := $(shell pkg-config --cflags freetype2)
 FT_LIBS    := $(shell pkg-config --libs freetype2)
@@ -43,13 +48,14 @@ APP_DEFS := -DAPPLAUNCH_HW_PIZERO2W=1 -DLAUNCHER_BUILD \
                         BLUETOOTH SETTINGS BQ27220 SAVED_SETTINGS BATTERY SOUNDCARD,-DCONFIG_CP0_LVGL_INIT_$(f)=1)
 APP_INC  := -I$(HARNESS)/src -I$(PROJECT)/main -I$(PROJECT)/main/include -I$(UI) \
             -I$(CP0)/include -I$(CP0)/src -I$(ROOT)/SDK/github_source/eventpp/include \
-            -I$(ROOT)/SDK/components/utilities/include $(LV_INC) $(PNG_CFLAGS)
+            -I$(ROOT)/SDK/components/utilities/include -I$(CJSON) $(LV_INC) $(PNG_CFLAGS)
 
 # LVGL: everything under src/, with the launcher's FreeType files instead of LVGL's.
 LV_OVERRIDE := lv_freetype.c lv_freetype_glyph.c lv_freetype_image.c
 LVGL_SRCS := $(filter-out $(addprefix $(LVGL)/src/libs/freetype/,$(LV_OVERRIDE)),\
                $(shell find $(LVGL)/src -name '*.c' -o -name '*.cpp')) \
-             $(addprefix $(PROJECT)/main/lvgl/,$(LV_OVERRIDE))
+             $(addprefix $(PROJECT)/main/lvgl/,$(LV_OVERRIDE)) \
+             $(CJSON)/cJSON.c
 LVGL_PRIV := -I$(PROJECT)/main/lvgl -I$(LVGL)/src/libs/freetype
 
 # cp0_lvgl pieces the shell and the pages draw with (real code).
@@ -116,9 +122,13 @@ APPS_JOBS_SRC := $(UI)/settings/settings_apps_jobs.cpp
 APPS_JOBS_OBJ := $(OBJ)/settings_apps_jobs_redirected.o
 APPS_BACKEND_SYMS := _ZN12apps_backend(3run|11run_program|9available)E
 
+# Settings > Updates (report 047 P1): the check's system side (curl, timedatectl, the user's state and cache folders) is
+# src/harness_update.cpp, answering from the scene's fixtures; the rest of the feature is real code.
+UPDATE_PLATFORM_SRC := $(UI)/settings/settings_update_platform.cpp
+
 # Launcher sources (real code).
 APP_SRCS := $(addprefix $(UI)/,\
-    native_ui.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
+    native_ui.cpp launcher_update.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp launcher_zone.cpp     pda_mode.cpp \
     launcher_ssh.cpp model/ssh_indicator_model.cpp \
@@ -131,7 +141,7 @@ APP_SRCS := $(addprefix $(UI)/,\
     page_app/ui_app_st_session.cpp page_app/ui_app_st_viewport.cpp \
     model/st_key_encoder.cpp model/terminal_unicode.cpp model/async_operation_lifecycle.cpp \
     multitask/display_handoff.cpp multitask/switcher_view.cpp multitask/switcher_model.cpp) \
-    $(filter-out $(APPS_JOBS_SRC),$(wildcard $(UI)/settings/*.cpp))
+    $(filter-out $(APPS_JOBS_SRC) $(UPDATE_PLATFORM_SRC),$(wildcard $(UI)/settings/*.cpp))
 
 HARNESS_SRCS := $(wildcard $(HARNESS)/src/*.c $(HARNESS)/src/*.cpp)
 

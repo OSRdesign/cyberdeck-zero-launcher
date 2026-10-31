@@ -19,7 +19,7 @@ bt on
 home
 launch Settings
 wait 300
-expect_rows Screen "Speaker: pair XWF-M18-M28-M38 in Bluetooth" Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_rows Screen "Speaker: pair XWF-M18-M28-M38 in Bluetooth" Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
 shot settings_hints_root
 key ENTER
 wait 300

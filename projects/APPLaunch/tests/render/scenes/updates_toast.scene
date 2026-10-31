@@ -1,0 +1,50 @@
+# Settings > Updates (report 047 P1, D11): the first start of 0.8.12 after 0.8.11 (the state file says 0.8.11 was the
+# last version seen; the cached answer of an earlier check is there): one toast "Updated to 0.8.12" pointing at
+# Settings > Updates; offline, What's new shows the notes of the update (0.8.12, from the cached list). Then the D3
+# toast: the background check (its first look 2 min after the start; the home grid in front) finds 0.8.13, one toast.
+# Review only: no golden.
+title updates toasts
+review
+sizes 640x480 480x800 720x720
+@480x800 profile pda
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-11-05
+wifi 70
+bt on
+update build 0.8.12 release arm64
+update state last_shown 0.8.11
+update state last_check now-200000
+update state result ok
+update cache releases-real.json
+home
+wait 300
+shot updates_toast_updated
+expect_text end "What's new: Settings > Updates"
+wait 7000
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+key ENTER
+wait 300
+shot updates_toast_launcher
+expect_text "What's new in 0.8.12"
+key ENTER
+wait 300
+shot updates_toast_whatsnew
+key ESC
+key ESC
+key ESC
+key ESC
+wait 500
+# the daily check: due (the last one 2 days ago), the network now up, the home grid in front
+update net on
+update answer releases-0.8.13.json
+wait 107500
+shot updates_toast_available
+expect_text end "Settings > Updates"

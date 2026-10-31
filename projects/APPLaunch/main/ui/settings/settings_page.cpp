@@ -20,6 +20,7 @@
 #include "settings_native_apps_page.hpp"
 #include "settings_native_info_page.hpp"
 #include "settings_native_timezone_page.hpp"
+#include "settings_native_updates_page.hpp"
 
 #include "cp0_backlight_profile.h"
 #include "cp0_lvgl_app.h"
@@ -652,6 +653,8 @@ SettingsNativePage settings_native_page(const NodeIter &node)
     if (factory_is(factory, settings_timezone_page_factory)) return SettingsNativePage::TimeZone;
     // Battery (a power_supply battery, decision X12): its read-only page
     if (factory_is(factory, settings_battery_page_factory)) return SettingsNativePage::Battery;
+    // Updates (report 047 P1): the launcher's release check and notes
+    if (factory_is(factory, settings_updates_page_factory)) return SettingsNativePage::Updates;
     // task 014 P3b: the Wi-Fi section is one native page (its Enable toggle, Networks and Join Hidden Network)
     if (factory_is(factory, roller_page_factory))
         for (auto child = node.begin(); child != node.end(); ++child)
@@ -665,6 +668,9 @@ SettingsNativeRowLook settings_native_row_look(const NodeIter &node)
     SettingsNativeRowLook look;
     if (settings_native_page(node) == SettingsNativePage::TimeZone) {
         look.value = settings_timezone_row_value();
+        look.chevron = true;
+    } else if (settings_native_page(node) == SettingsNativePage::Updates) {
+        look.value = settings_updates_row_value(look.value_rgb); /* the saved state: no network here */
         look.chevron = true;
     }
     return look;
@@ -847,6 +853,10 @@ void UISettingTreePage::create_page_detail()
 #if APPLAUNCH_SETTINGS_APPS  // install / remove apps from GitHub sources
     mode_tree.append_child(root, SettingEntry{"Apps", settings_apps_page_factory, PageType::FullCustom});
 #endif
+    // Updates (report 047 P1, D2: the row after Apps): a newer launcher release and its notes; native Settings only
+    // (its page has no legacy version)
+    if (settings_ui::native_selected())
+        mode_tree.append_child(root, SettingEntry{"Updates", settings_updates_page_factory, PageType::FullCustom});
 
     {
         mode_tree.append_child(root, SettingEntry{"User", settings_account_page_factory, PageType::FullCustom});

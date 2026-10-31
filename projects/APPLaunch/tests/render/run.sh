@@ -28,6 +28,8 @@ golden_sizes="640x480 480x320 480x640 480x800" # 480x640, 480x800: the PDA scene
 build() {
     mkdir -p "$here/build"
     echo "== build ($jobs jobs)"
+    # the SDK's cJSON (Settings > Updates, report 047): the scons build downloads it, a seeded build tree may lack it
+    sh "$root/projects/APPLaunch/tests/ensure_cjson.sh" "$root/SDK" >/dev/null
     if ! make -C "$here" -j"$jobs" >"$here/build/make.log" 2>&1; then
         grep -E "error|Error" "$here/build/make.log" | head -30
         echo "build failed: $here/build/make.log"

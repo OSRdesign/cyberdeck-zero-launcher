@@ -174,6 +174,12 @@ done
 if [ "$WITH_STORE" = 1 ] && [ -f "$REPO/projects/AppStore/LICENSE" ]; then
     cp "$REPO/projects/AppStore/LICENSE" "$DOC/components/AppStore-LICENSE"
 fi
+# This version's release notes (report 047 section 5.9): Settings > Updates > What's new reads them from
+# /usr/share/doc/cyberdeckzero-launcher/ after any install or update, offline. A version without a notes file (dev):
+# none.
+if [ -f "$REPO/docs/dev/release-notes-$VERSION.md" ]; then
+    cp "$REPO/docs/dev/release-notes-$VERSION.md" "$DOC/"
+fi
 chmod -R u=rwX,go=rX "$DOC"
 
 cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/default-sources.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"

@@ -309,6 +309,7 @@ cp0::ui::RowSpec SettingsNativeHost::row_spec(const Row &row) const
         SettingsNativeRowLook look = settings_native_row_look(row.node);
         spec.value = std::move(look.value);
         spec.chevron = look.chevron;
+        spec.value_rgb = look.value_rgb; /* Updates: amber "0.8.13 available", grey "Check failed" */
         break;
     }
     default:
