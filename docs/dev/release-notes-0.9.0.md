@@ -1,9 +1,8 @@
-**v0.9.0 is the first release you can install from Settings > Updates on a v0.8.13 board.** It also marks the split
-between this branch (screens of 640x480 and up, portrait PDA) and the new `small-screen` branch (480x320 only, no
-release for now, keeps what was removed here).
+**New since v0.8.13** (pull requests #115 to #124: the first release you can install from Settings > Updates on a
+v0.8.13 board, and the split from the `small-screen` branch)
 
-**New since v0.8.13** (pull requests #115 to #124)
-
+- **Two branches from now on.** This branch keeps screens of 640x480 and up (and the portrait PDA). The new
+  `small-screen` branch is for 480x320 only, has no release for now, and keeps what was removed here.
 - **Settings > Apps shows each app's description.** Every app's page has a Description row that opens a text page with
   the full text. Apps you have not installed yet now open their page first (Description, Install), so installing takes
   two taps instead of one. Descriptions are capped at 500 characters in the launcher; every app of ours now carries a
