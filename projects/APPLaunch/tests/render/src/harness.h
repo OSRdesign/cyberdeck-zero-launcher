@@ -47,6 +47,7 @@ int64_t harness_wall_clock(void);
 #include <functional>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace harness {
@@ -130,6 +131,20 @@ struct Fixtures {
     std::atomic<int64_t> time_set_epoch{-1}; /* the time it was last set to (LocalTime answers it from then on), -1: none */
     std::string vkb = "(none)"; /* the on-screen keyboard rule launcher_osk last published (input.state vkb=) */
     int hand = -1;              /* what launcher_osk last published as input.state hand= (report 044), -1: nothing */
+    /* Settings > Updates (report 047 P1, harness_update.cpp instead of settings_update_platform.cpp; scene command
+     * "update ..."): the running build, whether there is a default route and network time, what "curl" gets (a file of
+     * projects/APPLaunch/tests/fixtures/update, or pending / ratelimit / error / dns / notjson), and the state file and
+     * the cached answer the launcher finds at its start (written into out/<WxH>/runtime/update, emptied first). Off
+     * line by default, so no other scene ever checks. */
+    std::mutex update_mutex;
+    std::string update_version = "0.8.12";
+    std::string update_channel = "release";
+    std::string update_arch = "arm64";
+    bool update_network = false;
+    bool update_clock = true;
+    std::string update_answer = "releases-real.json";
+    std::vector<std::pair<std::string, std::string>> update_seed_state; /* key, value ("now-3600": the scene clock) */
+    std::string update_seed_cache;                                       /* a fixture file name, "" none */
 };
 
 Fixtures &fixtures();

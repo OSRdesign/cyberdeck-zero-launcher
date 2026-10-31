@@ -23,6 +23,7 @@ key UP
 key UP
 key UP
 key UP
+key UP
 # highlighted row: 480x320 y 158-201 (rows 44), 800x480 y 236-299 (rows 64); Esc button: 218,5 57x30 / 435,8 83x40 (left of
 # the SSH indicator's reserved slot, 2026-10-30)
 @480x320 tap 240 180

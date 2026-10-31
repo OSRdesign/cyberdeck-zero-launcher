@@ -1,0 +1,79 @@
+# Settings > Updates (report 047 P1), a release build 0.8.12 (arm64): the root row after Apps, then the page in its
+# states. The fake check (harness_update.cpp) answers from projects/APPLaunch/tests/fixtures/update:
+#   1. checking: the page starts a check as it opens; the answer is held back (Check now's dot blue, the status line)
+#   2. available: GitHub's list with 0.8.13 on top of the real 0.8.9-0.8.12 (a draft 0.8.15 and a pre-release
+#      0.8.14-rc.1 above it are ignored): "0.8.13 available" in amber; the Launcher level (What's new in 0.8.13, Check
+#      again, the versions in the status line); What's new (one version: its notes up to the marker)
+#   3. the Settings root: the Updates row's value in amber, a chevron
+#   4. offline: no default route; the last result stays shown
+#   5. rate-limited: GitHub's 403 with X-RateLimit-Remaining 0: the reset time (21:00 UTC)
+# Keys only here (touch: updates_dev). Review only: no golden; the headers are checked against the home grid's.
+title updates page
+review
+sizes 640x480 480x800 480x640 720x720 1280x800
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-10-31
+wifi 70
+bt on
+update net on
+update build 0.8.12 release arm64
+update answer pending
+home
+header home
+launch Settings
+wait 300
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
+# root: Up from Screen wraps to System, Date & Time, User, Updates
+key UP
+key UP
+key UP
+key UP
+shot updates_root_never
+key ENTER
+wait 300
+# 1. checking
+shot updates_checking
+header updates_checking "Settings > Updates" Updates
+expect_text "Checking for updates..."
+# 2. the answer: 0.8.13 offered
+update answer releases-0.8.13.json
+wait 1000
+shot updates_available
+expect_text "0.8.13 available"
+expect_color "0.8.13 available" F0B400
+expect_text "today 20:30"
+key ENTER
+wait 300
+shot updates_launcher
+header updates_launcher "Settings > Updates > Launcher" "Updates > Launcher" Launcher
+expect_text "What's new in 0.8.13"
+expect_text "0.8.12 -> 0.8.13, release, arm64"
+key ENTER
+wait 300
+shot updates_whatsnew_one
+header updates_whatsnew_one "Settings > Updates > Launcher > What's new" "Updates > Launcher > What's new" "Launcher > What's new" "What's new"
+# 3. back to the Settings root: the row's value
+key ESC
+key ESC
+key ESC
+wait 300
+shot updates_settings_root
+expect_text "0.8.13 available"
+expect_color "0.8.13 available" F0B400
+# 4. offline
+update net off
+key ENTER
+wait 1000
+shot updates_offline
+expect_text "No network: the last result is shown"
+expect_text "0.8.13 available"
+key ESC
+# 5. GitHub's rate limit
+update net on
+update answer ratelimit
+key ENTER
+wait 1000
+shot updates_ratelimited
+expect_text "GitHub's limit reached: try again after 21:00"

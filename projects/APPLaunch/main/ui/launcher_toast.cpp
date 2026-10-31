@@ -133,6 +133,15 @@ void LauncherToast::show(const char *text) noexcept
     }
 }
 
+void LauncherToast::show_for(const char *text, uint32_t duration_ms) noexcept
+{
+    show(text);
+    if (hide_timer_) {
+        lv_timer_set_period(hide_timer_, duration_ms);
+        lv_timer_reset(hide_timer_);
+    }
+}
+
 void LauncherToast::show_persistent(const char *text) noexcept
 {
     show(text);

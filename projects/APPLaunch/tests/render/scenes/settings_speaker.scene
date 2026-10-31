@@ -14,7 +14,7 @@ home
 header home
 launch Settings
 wait 300
-expect_rows Screen Speaker Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_rows Screen Speaker Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
 expect_text 50%
 shot settings_speaker_root
 header settings_speaker_root Settings

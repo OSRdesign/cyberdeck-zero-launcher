@@ -27,6 +27,7 @@ EXPECTED_ROOT_ORDER = [
     "Launcher",
     "Touch",
     "Apps",
+    "Updates",
     "User",
     "Date & Time",
     "System",

@@ -77,14 +77,17 @@ enum class SettingsNativePage {
     TimeZone, // Date & Time > Time zone: the zone picker (settings_native_timezone_page.hpp)
     Battery,  // Battery: a power_supply battery's read-only page (settings_native_info_page.hpp, decision X12)
     StrokesTraining, // System > Strokes training: the PDA writing zone's training (settings_strokes_page.hpp, report 042)
+    Updates,  // Updates: the launcher's release check and notes (settings_native_updates_page.hpp, report 047 P1)
 };
 SettingsNativePage settings_native_page(const NodeIter &node);
 
 // What a Native row shows at its right, decided here next to the tree: Date & Time > Time zone shows the zone in use
-// and a chevron (it opens a picker); every other Native row nothing (as before).
+// and a chevron (it opens a picker); Updates its state ("0.8.13 available" in amber, "Up to date", ...) and a chevron;
+// every other Native row nothing (as before).
 struct SettingsNativeRowLook {
     std::string value;
     bool chevron = false;
+    int value_rgb = -1; /* the value's colour (0xRRGGBB), -1: the roller's green */
 };
 SettingsNativeRowLook settings_native_row_look(const NodeIter &node);
 

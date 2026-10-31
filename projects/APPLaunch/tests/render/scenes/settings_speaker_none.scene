@@ -13,5 +13,5 @@ bt on
 home
 launch Settings
 wait 300
-expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
 shot settings_speaker_none_root

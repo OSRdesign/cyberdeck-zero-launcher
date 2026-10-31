@@ -19,7 +19,7 @@ bt on
 home
 launch Settings
 wait 300
-expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps User "Date & Time" System
+expect_rows Screen Wi-Fi Bluetooth Launcher Touch Apps Updates User "Date & Time" System
 # System: Up from Screen wraps to the last section
 key UP
 key ENTER

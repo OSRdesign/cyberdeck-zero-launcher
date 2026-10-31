@@ -12,6 +12,8 @@ class LauncherToast
 {
 public:
     void show(const char *text) noexcept;
+    /* The same toast for duration_ms instead of the usual 1.5 s (a two-line notice: Settings > Updates' toasts). */
+    void show_for(const char *text, uint32_t duration_ms) noexcept;
     void show_persistent(const char *text) noexcept;
     void hide();
     void shutdown();

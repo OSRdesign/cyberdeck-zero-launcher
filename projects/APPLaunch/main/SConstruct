@@ -21,7 +21,8 @@ rootfs_path=Path(os.environ.get("CONFIG_TOOLCHAIN_SYSROOT", ""))
 SRCS = []
 INCLUDE = []
 PRIVATE_INCLUDE = []
-REQUIREMENTS = ['cp0_lvgl', 'eventpp', 'utilities', 'lvgl_component', 'freetype', 'pthread']
+# cjson: the SDK's cJSON (Settings > Updates, report 047: GitHub's release list)
+REQUIREMENTS = ['cp0_lvgl', 'eventpp', 'utilities', 'lvgl_component', 'freetype', 'pthread', 'cjson']
 # REQUIREMENTS = []
 STATIC_LIB = []
 DYNAMIC_LIB = []

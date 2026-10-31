@@ -16,7 +16,7 @@ battery 85 discharging
 home
 launch Settings
 wait 300
-expect_rows Screen Wi-Fi Bluetooth Battery Launcher Touch Apps User "Date & Time" System
+expect_rows Screen Wi-Fi Bluetooth Battery Launcher Touch Apps Updates User "Date & Time" System
 shot settings_battery_root
 key DOWN
 key DOWN

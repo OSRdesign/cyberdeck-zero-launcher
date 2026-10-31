@@ -2110,6 +2110,28 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         fx.config_full = w[1] == "on";
         return true;
     }
+    if (cmd == "update") { /* Settings > Updates' fixtures (harness_update.cpp, report 047 P1) */
+        static const char *usage = "usage: update net on|off | clock on|off | answer FILE|pending|ratelimit|error|dns|"
+                                   "notjson | build VERSION CHANNEL [ARCH] | state KEY VALUE | cache FILE";
+        if (w.size() < 3) return fail(scene, line, usage);
+        std::lock_guard<std::mutex> lock(fx.update_mutex);
+        if ((w[1] == "net" || w[1] == "clock") && w.size() == 3 && (w[2] == "on" || w[2] == "off")) {
+            (w[1] == "net" ? fx.update_network : fx.update_clock) = w[2] == "on";
+        } else if (w[1] == "answer" && w.size() == 3) {
+            fx.update_answer = w[2];
+        } else if (w[1] == "build" && (w.size() == 4 || w.size() == 5)) {
+            fx.update_version = w[2];
+            fx.update_channel = w[3];
+            if (w.size() == 5) fx.update_arch = w[4];
+        } else if (w[1] == "state" && w.size() == 4) {
+            fx.update_seed_state.emplace_back(w[2], w[3]);
+        } else if (w[1] == "cache" && w.size() == 3) {
+            fx.update_seed_cache = w[2];
+        } else {
+            return fail(scene, line, usage);
+        }
+        return true;
+    }
 
     boot(run);
 

@@ -18,6 +18,7 @@ key UP
 key UP
 key UP
 key UP
+key UP
 key ENTER
 wait 1000
 shot apps_loading_root

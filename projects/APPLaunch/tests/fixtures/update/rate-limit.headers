@@ -1,0 +1,11 @@
+HTTP/2 403 
+date: Fri, 30 Oct 2026 21:00:00 GMT
+content-type: application/json; charset=utf-8
+x-github-media-type: github.v3; format=json
+x-ratelimit-limit: 60
+x-ratelimit-remaining: 0
+x-ratelimit-reset: 1793480400
+x-ratelimit-resource: core
+x-ratelimit-used: 60
+content-length: 279
+

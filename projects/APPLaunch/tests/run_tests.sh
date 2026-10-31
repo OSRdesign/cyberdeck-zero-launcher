@@ -266,6 +266,30 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../../../ext_components/cp0_lvgl/src/cp0_timezone.cpp" \
     -o "$build_dir/test_settings_timezone_model"
 "$build_dir/test_settings_timezone_model"
+# Report 047 P1, Settings > Updates: the model (versions, the release list through the SDK's cJSON, the choice, the
+# outcome map, the notes converter on every docs/dev/release-notes-*.md, What's new, the state file), then the real check
+# with curl against the local fake release server (APPLAUNCH_UPDATE_URL)
+cjson_root=$(sh "$test_root/ensure_cjson.sh")
+${CC:-cc} -std=c99 -O1 -w -c "$cjson_root/cJSON.c" -o "$build_dir/cJSON.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" -I"$cjson_root" \
+    "$test_root/test_settings_update_model.cpp" \
+    "$settings_ui_root/settings_update_model.cpp" \
+    "$build_dir/cJSON.o" \
+    -o "$build_dir/test_settings_update_model"
+"$build_dir/test_settings_update_model" "$test_root/fixtures/update" "$test_root/../../../docs/dev"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    -DLAUNCHER_VERSION_RAW=0.8.12 -DLAUNCHER_CHANNEL_RAW=release \
+    -I"$settings_ui_root" -I"$cjson_root" \
+    "$test_root/test_settings_update_fetch.cpp" \
+    "$settings_ui_root/settings_update_check.cpp" \
+    "$settings_ui_root/settings_update_platform.cpp" \
+    "$settings_ui_root/settings_update_model.cpp" \
+    "$settings_ui_root/apps_backend.cpp" \
+    "$settings_ui_root/apps_status_model.cpp" \
+    "$build_dir/cJSON.o" \
+    -o "$build_dir/test_settings_update_fetch"
+"$build_dir/test_settings_update_fetch" "$test_root/fixtures/update"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \

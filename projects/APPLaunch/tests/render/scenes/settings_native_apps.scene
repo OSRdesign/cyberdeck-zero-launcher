@@ -24,7 +24,8 @@ bt on
 home
 header home
 launch Settings
-# root: Screen, Wi-Fi, Bluetooth, Launcher, Touch, Apps, User, Date & Time, System
+# root: Screen, Wi-Fi, Bluetooth, Launcher, Touch, Apps, Updates, User, Date & Time, System
+key UP
 key UP
 key UP
 key UP
