@@ -132,8 +132,11 @@ cp -a "$REPO/projects/APPLaunch/dist/APPLaunch/." "$OUT/payload/share/"
 # Not in the Pi bundle (install.sh removes them from an earlier install: RETIRED_FILES there):
 #   share/images/logo_lcd.png   the upstream start-up logo (no longer in the repository since report 029)
 #   adb/                        the upstream USB ADB gadget helpers (no longer in the repository since report 029)
+#   share/font/NotoSerifCJK-Regular.ttc, AlibabaPuHuiTi-3-35-Thin.ttf   fonts nothing loads (report 048 section 3.3;
+#                               no longer in the repository: this only keeps a stale dist/ folder from carrying them)
 rm -f "$OUT/payload/share/share/images/logo_lcd.png"
 rm -rf "$OUT/payload/share/adb"
+rm -f "$OUT/payload/share/share/font/NotoSerifCJK-Regular.ttc" "$OUT/payload/share/share/font/AlibabaPuHuiTi-3-35-Thin.ttf"
 for file in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts \
             hyperpixel4-pwm-backlight.dts \
             90-backlight-unblank.rules 91-applaunch-vkbd.rules 93-applaunch-rfkill.rules \

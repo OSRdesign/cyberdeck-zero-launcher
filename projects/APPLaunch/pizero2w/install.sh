@@ -125,7 +125,8 @@ OLD_DESKTOP_ENTRY_NAME=applaunch.desktop
 # images, the upstream USB ADB gadget helpers, and since report 029 an empty placeholder library, an unused desktop
 # template and the icons of the removed upstream ZClaw app; since the Store front end went from the home grid, its tile
 # icons and the 15 images of its screens (the Store program itself stays: it is Settings > Apps' back end), and the
-# icons of the removed 320x170 built-in apps Snake, Tank and IP Panel.
+# icons of the removed 320x170 built-in apps Snake, Tank and IP Panel; and two large fonts nothing loads any more
+# (Noto Serif CJK, the thin Alibaba PuHuiTi: report 048 section 3.3).
 RETIRED_FILES="share/images/logo_lcd.png share/images/launcher_brand_logo.png share/images/carousel_zero_wordmark.png
 adb/cardputer-adb adb/cardputer-adb-gadget lib/nihao.so applications/vim.desktop.temple share/images/claw_100.png
 share/images/claw_80.png share/images/zclaw_avatar_16.png share/images/zclaw_send_button_18.png share/images/zclaw_sparkles_10.png
@@ -137,7 +138,8 @@ share/images/appstore-shortcut-detail.png share/images/store_arrow_down.png shar
 share/images/store_arrow_right.png share/images/store_arrow_left.png share/images/store_wordmark.png
 share/images/store_100.png share/images/store_80.png
 share/images/game_100.png share/images/game_80.png share/images/ip_panel_100.png share/images/ip_panel_80.png
-share/images/tank.png share/images/tank_100.png share/images/tank_80.png"
+share/images/tank.png share/images/tank_100.png share/images/tank_80.png
+share/font/NotoSerifCJK-Regular.ttc share/font/AlibabaPuHuiTi-3-35-Thin.ttf"
 RETIRED_DIRS="adb"                               # removed when empty afterwards
 
 # System paths ($SYSROOT is empty on a real board)
