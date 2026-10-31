@@ -5,8 +5,8 @@ CyberdeckZero Launcher can install apps from **any public GitHub repository** th
 under **Settings > Apps > Available**, where each one installs with Enter or a tap; installed apps are listed under
 **Settings > Apps > Installed**, where each one can be updated or removed.
 
-Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZero Hub catalogue stays in the
-**Store** app and is not shown there.
+Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZero Hub catalogue is not shown there
+(its apps are 320x170 keyboard apps; the Store screen that lists them is on the `small-screen` branch only).
 
 **The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (LAN Scan,
 Mesh Hop, Net Toolbox, Serial Console, System Monitor, viz1090, Wi-Fi Survey) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
@@ -14,8 +14,9 @@ Available lists its apps without typing anything. It is an ordinary source: swit
 the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
 shows after a sync (Sources > Sync my sources). Details: `projects/APPLaunch/pizero2w/README.md`, "Default app source".
 
-The **Store** tile itself needs a keyboard; on a touch-only board hide it in **Settings > Launcher** (Store). That does
-not change Settings > Apps, which uses the Store's backend directly.
+Since v0.8.14 main has no **Store** tile and no Store switch in Settings > Launcher: the Store program stays in the
+bundle as the back end of Settings > Apps, with no screen of its own. The Store screen and the 320x170 apps live on
+the `small-screen` branch (README, "Branches").
 
 The complete, step by step guide, the build tools and a working example live in the template repository:
 
@@ -29,7 +30,11 @@ The complete, step by step guide, the build tools and a working example live in 
    `docs/APP-GUIDELINES.md` gives the rules. Any other program that runs on the Pi works too; the older apps draw a
    320x170 picture that the launcher scales into its window.
 3. Describe it in `apps/<id>/app.json` (name, version, description) and lay its files out in
-   `apps/<id>/root/` exactly as they must be on the device:
+   `apps/<id>/root/` exactly as they must be on the device. **The descriptor rule** (every app): a `summary` of one
+   line, at most 80 characters, and a `description`; summary + newline + description at most 500 characters (counted
+   in characters, not bytes). That is all Settings > Apps shows (the Description row and the page before installing),
+   and it cuts a longer text at 500 with dots. The long documentation goes in the app's `README.md` in the repository.
+   The apps repo's `tools/check_descriptors.py` checks every `app.json` and registry entry against the rule.
    ```
    usr/share/APPLaunch/bin/<id>                            the executable (named after the app id)
    usr/share/APPLaunch/applications/<id>.desktop           the launcher entry
@@ -46,7 +51,7 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 ## Format and behaviour
 
 * The registry format is the one of M5Stack's CardputerZero Store (schema 2), so the same repository also works as a
-  registry in the Store app. The deck downloads `registry.json`, checks the MD5 of each `.deb` and installs it
+  registry in the Store app (on the `small-screen` branch). The deck downloads `registry.json`, checks the MD5 of each `.deb` and installs it
   with `dpkg`.
 * Installing needs the deck user's **sudo password** (typed with the keyboard) because the package is installed
   as root. Removing an app asks for it too.
@@ -60,10 +65,12 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 ## Using Settings > Apps on the deck
 
 **Levels.** Settings > Apps lists **Installed (N)**, **Available (M)** and **Sources**; the counts follow every
-install, removal and sync. **Installed** lists the installed apps; Enter or a tap on one opens its actions (Update
-when an update is offered, Remove, Cancel). **Available** lists the apps of your enabled sources that are not
-installed, with the version offered; Enter or a tap installs one at once. While a job runs, its app's row shows a
-spinner. Empty levels say `No apps installed` or `Nothing to install` (`Loading...` before the first list).
+install, removal and sync. **Installed** lists the installed apps; Enter or a tap on one opens its actions
+(Description when the app has one, Update when an update is offered, Remove, Cancel). **Available** lists the apps of
+your enabled sources that are not installed, with the version offered; Enter or a tap opens the app's page
+(Description, Install, Cancel), and Install installs it. The **Description** row shows the first line; Enter or a tap
+opens the whole text in a read-only page (plain, wrapped, scrollable), cut at 500 characters with dots (see the
+descriptor rule above). While a job runs, its app's row shows a spinner. Empty levels say `No apps installed` or `Nothing to install` (`Loading...` before the first list).
 
 **Versions and updates.** Installed shows each app's installed version and, when the sources offer a newer one
 (compared the Debian way, as `dpkg --compare-versions` does, not as text), both, for example `0.1.2>0.1.3`, in
@@ -105,7 +112,7 @@ Esc at the password prompt gives a red `Cancelled`.
 | Up / Down | move the selection |
 | Right | open the selected level (Apps root only) |
 | Left / Esc | back one level (Installed / Available / Sources -> Apps -> Settings), or no in a confirmation |
-| Enter | open a level; an installed app's actions (Installed); install (Available); on/off (Sources); yes in a confirmation |
+| Enter | open a level; an installed app's actions (Installed); an available app's page (Available); on/off (Sources); yes in a confirmation |
 | `U` | update all (Installed) |
 | `S` | sync (any list) |
 | `A` | add a source (Sources) |
@@ -115,7 +122,8 @@ The letters are read from the physical key, so `W`, `E`, `R` and `T` never move 
 
 ## Why a source survives opening the Store
 
-The Store keeps its own copy of the source list in the launcher's `config.json` (keys `appstore.registry.*`) and, every
+(On main the Store screen cannot be opened since v0.8.14; this matters on the `small-screen` branch, and main keeps
+the mirror.) The Store keeps its own copy of the source list in the launcher's `config.json` (keys `appstore.registry.*`) and, every
 time it starts, writes that copy over the backend's `registries.json`. A source that exists only in the backend file
 would be wiped the next time the Store opens. So Settings > Apps mirrors the backend list into those keys, in the
 Store's own format, after every add, remove, on / off and sync, once shortly after the launcher starts (local only: no
