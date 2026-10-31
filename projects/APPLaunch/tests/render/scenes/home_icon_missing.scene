@@ -1,0 +1,18 @@
+# A home tile without an icon: a .desktop entry with no Icon= line keeps its tile with an empty icon path
+# (desktop_app_loader.cpp). The tile shows no picture, whatever the bytes after the empty string's terminator are:
+# native_ui build_tile never hands "" to lv_image_set_src (LVGL would take it for an lv_image_dsc_t and decode those
+# bytes; the home_order scene crashed in the decoder so at 720x720). "none": zeros after the terminator; "stale": the
+# header of a small image, as a recycled heap chunk can leave (harness_launch.cpp plant_empty_icon). Both grids must be
+# the same. Review only: no golden.
+title home tile without an icon
+review
+sizes 640x480 720x720
+clock 20:30
+wifi 70
+apps Settings Store CLI SSH Calculator Old=none
+home
+shot home_icon_none
+apps Settings Store CLI SSH Calculator Old=stale
+home
+shot home_icon_stale
+expect_same home_icon_none

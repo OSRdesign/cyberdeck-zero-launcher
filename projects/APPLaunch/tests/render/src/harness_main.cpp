@@ -2126,7 +2126,9 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             } else {
                 icon = icon_for(spec.name);
             }
-            if (icon.compare(0, 8, "fixture:") == 0)
+            if (icon == "none" || icon == "stale") /* no icon (harness_launch.hpp AppSpec::empty) */
+                spec.empty = icon == "none" ? harness::AppSpec::Empty::Zeroed : harness::AppSpec::Empty::Stale;
+            else if (icon.compare(0, 8, "fixture:") == 0)
                 spec.icon = "A:" + fx.fixture_root + "/" + icon.substr(8);
             else
                 spec.icon = harness::resolve_resource(icon); /* launcher_platform::path(desc.icon) */
