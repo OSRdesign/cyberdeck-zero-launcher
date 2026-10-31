@@ -4,7 +4,7 @@
 title home grid
 sizes 800x480 720x720 1280x720 1024x600
 @1024x600 ppmm 660
-apps Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank Mesh 2048=fixture:2048_128.png Browser
+apps Settings CLI Python SSH "IP Panel" Calculator Snake Tank Mesh 2048=fixture:2048_128.png Browser
 clock 20:30
 wifi 70
 bt on

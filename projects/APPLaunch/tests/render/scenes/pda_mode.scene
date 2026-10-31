@@ -11,7 +11,7 @@ sizes 480x800 800x1280
 profile pda
 @800x1280 env APPLAUNCH_BOARD pc-fzm1-2
 @800x1280 env APPLAUNCH_PANEL_MM 150x93
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

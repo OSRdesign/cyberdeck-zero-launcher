@@ -6,7 +6,7 @@ title settings native time zone without timedated
 review
 sizes 480x320 640x480
 env APPLAUNCH_DEV 0
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30 2026-10-10
 wifi 70
 bt on

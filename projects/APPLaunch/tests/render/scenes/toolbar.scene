@@ -3,7 +3,7 @@
 # through the real external blit (no process runs). Then the hold-Esc ribbon over it, and a
 # toolbar key held down.
 title toolbar
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 home
 stockapp

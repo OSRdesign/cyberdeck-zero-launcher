@@ -6,7 +6,7 @@
 # the token sizes (cp0_ui_overlay.h).
 title overlays
 review
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

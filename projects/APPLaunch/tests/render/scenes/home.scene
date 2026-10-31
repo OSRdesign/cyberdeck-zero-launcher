@@ -3,10 +3,10 @@
 # size gets the list its board showed. Other sizes use the deck's list.
 title home
 wifi 70
-apps Settings Store CLI SSH Calculator 2048=fixture:2048_128.png
+apps Settings CLI SSH Calculator 2048=fixture:2048_128.png
 clock 20:30
 bt on
-@480x320 apps Settings Store CLI Python SSH "IP Panel"
+@480x320 apps Settings CLI Python SSH "IP Panel"
 @480x320 clock 18:13
 @480x320 bt off
 home

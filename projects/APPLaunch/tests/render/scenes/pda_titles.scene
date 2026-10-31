@@ -15,7 +15,7 @@ profile pda
 # without APPLAUNCH_PDA; the zone itself: the zone_* scenes (report 041)
 env APPLAUNCH_PDA 0
 env APPLAUNCH_DEV 1
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30 2026-10-10
 wifi 70
 bt on

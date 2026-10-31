@@ -1141,7 +1141,7 @@ uint32_t key_code(const std::string &name)
 std::string icon_for(const std::string &name)
 {
     static const std::map<std::string, std::string> icons = {
-        {"Settings", "setting_100.png"}, {"Store", "store_100.png"},   {"CLI", "cli_100.png"},
+        {"Settings", "setting_100.png"}, {"CLI", "cli_100.png"},
         {"Python", "python_100.png"},    {"SSH", "ssh_100.png"},       {"IP Panel", "ip_panel_100.png"},
         {"Calculator", "math_100.png"},  {"Snake", "game_100.png"},    {"Tank", "tank_100.png"},
     };

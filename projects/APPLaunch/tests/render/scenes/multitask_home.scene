@@ -6,7 +6,7 @@
 title multitask home dots
 sizes 640x480 800x480 720x720 1280x720 1024x600
 @1024x600 ppmm 660
-apps "Mesh Hop=ip_panel_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png" "RSS Reader=store_100.png" Settings CLI
+apps "Mesh Hop=ip_panel_100.png" "Serial Console=cli_100.png" "System Monitor=game_100.png" "RSS Reader=fixture:store_100.png" Settings CLI
 clock 20:30
 wifi 70
 bt on

@@ -923,6 +923,34 @@ check "fake uninstall: both console units, rules and menu entries removed" '[ -z
 check "fake uninstall: binaries, helpers (both names), retired files and licences gone" '[ ! -e "$A/bin/cyberdeckzero" ] && [ ! -e "$A/bin/$OLDBIN" ] && [ ! -e "$A/bin/cyberdeckzero-console" ] && [ ! -e "$A/bin/applaunch-console" ] && [ ! -e "$A/share/images/logo_lcd.png" ] && [ ! -e "$A/adb" ] && [ ! -e "$R/usr/share/doc/cyberdeckzero-launcher" ]'
 check "fake uninstall: the installed app and the user data stay, the profile goes" '[ -f "$A/applications/some-app.desktop" ] && [ ! -e "$R/etc/applaunch/board.conf" ]'
 
+# an upgrade from v0.8.13 (report 048): the Store front end's images (the tile icons and the 15 images of its screens)
+# are retired, the Store program (Settings > Apps' back end), an installed app and its image, the Store's state and the
+# user's settings stay
+R=$(root pi3a-luckfox35)
+A="$R/usr/share/APPLaunch"
+full "$R"
+RETIRED_STORE="appstore.png appstore-shortcut-install.png appstore-shortcut-upgrade.png appstore-shortcut-delete.png
+appstore-shortcut-back.png appstore-shortcut-sharecode.png appstore-shortcut-search.png appstore-shortcut-screenshots.png
+appstore-shortcut-settings.png appstore-shortcut-detail.png store_arrow_down.png store_arrow_up.png store_arrow_right.png
+store_arrow_left.png store_wordmark.png store_100.png store_80.png"
+for f in $RETIRED_STORE; do echo old > "$A/share/images/$f"; done
+echo app-icon > "$A/share/images/some-app-icon.png"; echo app > "$A/applications/some-app.desktop"
+printf '#!/bin/sh
+echo store
+' > "$A/bin/M5CardputerZero-AppStore"; chmod 755 "$A/bin/M5CardputerZero-AppStore"
+SD="$R$UHOME/.local/share/cardputerzero-appstore"; mkdir -p "$SD"; echo '{"apps":[]}' > "$SD/installed.json"
+mkdir -p "$R$UHOME/.config/cyberdeckzero"; echo '{"app_Store":1}' > "$R$UHOME/.config/cyberdeckzero/config.json"
+USER_SNAP=$(snapshot "$SD"; snapshot "$R$UHOME/.config/cyberdeckzero")
+full "$R"
+check "retired Store images: exit 0, all 17 removed" '[ $RC = 0 ] && [ -z "$(for f in $RETIRED_STORE; do [ -e "$A/share/images/$f" ] && echo $f; done)" ] && has "removed /usr/share/APPLaunch/share/images/store_100.png (no longer in the bundle)"'
+check "retired Store images: the Store program, an installed app and its image stay" '[ -x "$A/bin/M5CardputerZero-AppStore" ] && [ "$(cat "$A/applications/some-app.desktop")" = app ] && [ "$(cat "$A/share/images/some-app-icon.png")" = app-icon ] && [ -f "$A/share/images/setting_100.png" ]'
+check "retired Store images: the Store's state and the user's settings are untouched" '[ "$USER_SNAP" = "$(snapshot "$SD"; snapshot "$R$UHOME/.config/cyberdeckzero")" ]'
+full "$R"
+check "retired Store images, second run: nothing more to remove" '[ $RC = 0 ] && ! has "no longer in the bundle"'
+: > "$CALLS"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys"       sh "$BUN/uninstall.sh" --dry-run --no-boot-config 2>&1); RC=$?
+check "uninstall dry-run: the Store images of earlier bundles are in its retired list" 'has "store_wordmark.png" && has "appstore-shortcut-detail.png" && has "store_100.png"'
+
 # the DSI Pi 3A+ installed with v0.6.0, its owner's hand-written profile, a real boot configuration: config.txt is not
 # touched, cmdline.txt gets the two console arguments only (no fbcon=), the profile is kept
 R=$(root pi3a-wsdsi43)

@@ -5,7 +5,7 @@ title settings battery none
 review
 sizes 640x480 1280x800
 env APPLAUNCH_DEV 0
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

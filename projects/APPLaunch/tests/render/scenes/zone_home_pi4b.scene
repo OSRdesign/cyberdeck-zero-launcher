@@ -4,7 +4,7 @@ title zone home pi4b
 sizes 480x800
 profile pda
 env APPLAUNCH_PANEL_MM 108x65
-apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
+apps Settings CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=fixture:store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
 clock 20:30
 wifi 70
 bt on

@@ -23,7 +23,7 @@
 title terminal with the on-screen keyboard
 review
 env APPLAUNCH_OSK auto
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

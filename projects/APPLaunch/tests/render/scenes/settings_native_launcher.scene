@@ -1,14 +1,12 @@
-# Native Settings > Launcher (task 014 P3e): the home-tile toggles of the built-in apps. On the Pi profile the Store is
-# one of them (APPLAUNCH_LAUNCHER_STORE_TOGGLE, settings_hw_profile.hpp; shown by default, config key app_Store), so a
-# touch-only board can hide it; a read-only row under it credits the bundled Store ("CardputerZero Store by M5Stack",
-# rebranding plan 025). Shots: the section (Store on, first row), the Store switched off with Enter, and the
+# Native Settings > Launcher (task 014 P3e): the home-tile toggles of the built-in apps. Shots: the section (Python
+# on, first row), Python switched off with Enter, and the
 # section opened again (the value is read back from the config). The harness's home grid is the scene's `apps` line,
 # not the registry, so the hidden tile itself is checked on the board (keyboard tests, section I).
 # Review only: no golden; headers checked against the home grid's (run.sh header).
 title settings native launcher
 review
 env APPLAUNCH_DEV 0
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on
@@ -25,9 +23,9 @@ shot launcher_section
 header launcher_section "Settings > Launcher" Launcher
 key ENTER
 wait 300
-shot launcher_store_off
+shot launcher_python_off
 key ESC
 wait 300
 key ENTER
 wait 300
-shot launcher_store_off_again
+shot launcher_python_off_again

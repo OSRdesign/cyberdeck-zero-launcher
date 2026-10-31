@@ -12,7 +12,7 @@ env APPLAUNCH_STD_KEYBOARD 1
 ppmm 670
 backlight none
 sound bluetooth
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

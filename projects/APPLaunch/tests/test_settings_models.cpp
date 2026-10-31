@@ -32,7 +32,6 @@ int main()
         {"Python", "app_Python", true, false, LauncherAppOrigin::Builtin},
         {"Snake", "app_Game", true, false, LauncherAppOrigin::Builtin},
         {"Settings", "app_Setting", true, false, LauncherAppOrigin::Builtin},
-        {"Store", "app_Store", true, false, LauncherAppOrigin::Builtin},
         {"CLI", "app_CLI", true, false, LauncherAppOrigin::Builtin},
         {"ZClaw", "app_desktop_zclaw", true, false, LauncherAppOrigin::Preinstalled},
         {"Downloaded", "app_desktop_downloaded", true, false, LauncherAppOrigin::StoreInstalled},
@@ -41,30 +40,23 @@ int main()
     };
     const auto entries = settings_t12b::launcher::configurable_entries(
         descriptors,
-        11,
+        10,
         [](const Descriptor &descriptor) { return descriptor.always_on; });
-    // Settings and CLI are protected even when configurable; a configurable Store (the Pi profile,
-    // APPLAUNCH_LAUNCHER_STORE_TOGGLE) is listed like any built-in app.
-    assert(entries.size() == 5);
+    // Settings and CLI are protected even when configurable.
+    assert(entries.size() == 4);
     assert(entries[0].label == "Calculator");
     assert(entries[0].config_key == "calculator");
     assert(!entries[0].enabled);
     assert(entries[1].label == "Python" && entries[1].config_key == "app_Python");
     assert(entries[2].label == "Snake" && entries[2].config_key == "app_Game");
-    assert(entries[3].label == "Store" && entries[3].config_key == "app_Store");
-    assert(entries[4].label == "ZClaw" && entries[4].config_key == "app_desktop_zclaw");
-    assert(!settings_t12b::launcher::is_protected_launcher_app("app_Store"));
+    assert(entries[3].label == "ZClaw" && entries[3].config_key == "app_desktop_zclaw");
     assert(settings_t12b::launcher::is_protected_launcher_app("app_Setting"));
     assert(settings_t12b::launcher::is_protected_launcher_app("app_CLI"));
-    // The default-profile descriptor (not configurable, always on): no toggle, the tile always shows.
-    const Descriptor stock_store[] = {{"Store", "app_Store", false, true, LauncherAppOrigin::Builtin}};
+    // A descriptor that is not configurable (always on) gets no toggle.
+    const Descriptor not_configurable[] = {{"Fixed", "app_Fixed", false, true, LauncherAppOrigin::Builtin}};
     assert(settings_t12b::launcher::configurable_entries(
-               stock_store, 1, [](const Descriptor &descriptor) { return descriptor.always_on; })
+               not_configurable, 1, [](const Descriptor &descriptor) { return descriptor.always_on; })
                .empty());
-    // The Store credit row follows the Store toggle only (it exists only where the Store is listed).
-    assert(std::string(settings_t12b::launcher::kStoreCredit) == "CardputerZero Store by M5Stack");
-    assert(settings_t12b::launcher::store_credit_follows("app_Store"));
-    assert(!settings_t12b::launcher::store_credit_follows("app_Python"));
     using settings_t12b::boot_actions::Action;
     using settings_t12b::boot_actions::Operation;
     assert(settings_t12b::boot_actions::presentation(Action::Reboot).confirmation_title == "Reboot?");

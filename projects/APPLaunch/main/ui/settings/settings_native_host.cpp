@@ -300,7 +300,7 @@ cp0::ui::RowSpec SettingsNativeHost::row_spec(const Row &row) const
         spec.on = row.on;
         break;
     case RowType::Plain:
-        /* a tree entry with nothing to open (the Store credit of Settings > Launcher): a read-only Info row, the
+        /* a tree entry with nothing to open: a read-only Info row, the
          * text alone across the row (not a value page whose binding failed: that one keeps the plain Nav look) */
         if (settings_node_kind(row.node) == SettingsNodeKind::Plain) spec.kind = cp0::ui::RowKind::Info;
         break;

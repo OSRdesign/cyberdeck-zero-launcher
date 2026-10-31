@@ -46,11 +46,6 @@
 #ifndef APPLAUNCH_SETTINGS_APPS
 #define APPLAUNCH_SETTINGS_APPS 1
 #endif
-// Settings > Launcher lists the Store like the other built-in apps (shown by default, config key app_Store), so a
-// touch-only board can hide its tile: the Store needs a keyboard. Apps from sources install from Settings > Apps.
-#ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
-#define APPLAUNCH_LAUNCHER_STORE_TOGGLE 1
-#endif
 // Settings > System > Quit to desktop: shown at run time only to a launcher started by applaunch-desktop.service on a
 // desktop board (APPLAUNCH_SESSION=desktop, settings_session_model.hpp); the appliance boards never see it.
 #ifndef APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP
@@ -108,9 +103,6 @@
 #endif
 #ifndef APPLAUNCH_SETTINGS_APPS
 #define APPLAUNCH_SETTINGS_APPS 0 // default: apps are managed in the Store
-#endif
-#ifndef APPLAUNCH_LAUNCHER_STORE_TOGGLE
-#define APPLAUNCH_LAUNCHER_STORE_TOGGLE 0 // default: the Store tile is always shown, not in Settings > Launcher
 #endif
 #ifndef APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP
 #define APPLAUNCH_SETTINGS_QUIT_TO_DESKTOP 0 // default: the launcher is the device's only screen

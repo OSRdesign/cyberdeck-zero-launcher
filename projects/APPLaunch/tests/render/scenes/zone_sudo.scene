@@ -19,7 +19,7 @@ env HARNESS_APPS_PACKAGE job
 env HARNESS_SUDO prompt
 env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
 keyboards 0
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

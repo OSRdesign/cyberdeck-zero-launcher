@@ -12,7 +12,7 @@ env APPLAUNCH_HINT_SOUND bluetooth:XWF-M18-M28-M38
 @480x320 env APPLAUNCH_BACKLIGHT none
 backlight none
 sound hdmi
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

@@ -6,7 +6,7 @@ title battery status strip
 review
 sizes 320x170 480x320 640x480 800x480 1280x800
 @1280x800 ppmm 842
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

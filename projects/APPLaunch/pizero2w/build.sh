@@ -127,9 +127,8 @@ cp "$REPO/projects/APPLaunch/dist/cyberdeckzero" "$OUT/payload/bin/"
 [ "$WITH_STORE" = 1 ] && cp "$REPO/projects/AppStore/dist/M5CardputerZero-AppStore" "$OUT/payload/bin/"
 cp "$HERE/vfb/libapplaunch_vfb.so" "$OUT/payload/lib/"
 cp -a "$REPO/projects/APPLaunch/dist/APPLaunch/." "$OUT/payload/share/"
-if [ "$WITH_STORE" = 1 ] && [ -d "$REPO/projects/AppStore/dist/APPLaunch" ]; then
-    cp -a "$REPO/projects/AppStore/dist/APPLaunch/." "$OUT/payload/share/"
-fi
+# The Store's own images (its screens) are not copied: only its program ships, as the back end of Settings > Apps
+# (install.sh retires the images of earlier bundles: RETIRED_FILES there).
 # Not in the Pi bundle (install.sh removes them from an earlier install: RETIRED_FILES there):
 #   share/images/logo_lcd.png   the upstream start-up logo (no longer in the repository since report 029)
 #   adb/                        the upstream USB ADB gadget helpers (no longer in the repository since report 029)

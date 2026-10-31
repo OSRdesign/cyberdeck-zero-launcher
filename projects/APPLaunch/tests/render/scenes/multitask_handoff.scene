@@ -5,7 +5,7 @@
 # Review-only: the checks are the expect lines; the two shots are the home grid before and after.
 title multitask handoff
 review
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 home
 shot handoff_home
