@@ -1,0 +1,618 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# cyberdeckzero-update: the launcher's self-update, the part that runs as root (Settings > Updates, report 047 P2).
+# install.sh copies it to /usr/share/APPLaunch/bin/cyberdeckzero-update. Nothing starts it by itself: the launcher runs
+# it after the user confirmed and typed the password, through ONE short command in the shared sudo prompt:
+#     systemd-run --unit=cyberdeckzero-update --collect --quiet /usr/share/APPLaunch/bin/cyberdeckzero-update apply ...
+# so the work runs in a transient system unit of its own, never in the launcher's cgroup: it outlives the restart of the
+# launcher (which it causes), a crash or the hold-Esc watchdog.
+#
+#   cyberdeckzero-update apply --version X.Y.Z --from-version X.Y.Z --sha256 HEX --file PATH --user NAME
+#       installs the bundle the launcher downloaded and checked (PATH, owned by NAME):
+#        1. check    copied to /var/cache/cyberdeckzero-update (the root copy: the user's file cannot change between the
+#                    check and the install), its sha256 checked again, unpacked, the launcher's architecture checked
+#        2. plan     the new bundle's `install.sh --plan` with the options of the first install (/etc/applaunch/
+#                    install.conf, else inferred, see "Options"); stops on a variant switch, a migration, an unknown
+#                    board, a board without the session's variant, a board profile install.sh would replace or move
+#        3. backup   binaries, units, rules, board.conf, install.conf, the menu entry and the notes into
+#                    /var/lib/cyberdeckzero-update/backup (about 30 MB; kept until the next update)
+#        4. install  sh install.sh --user NAME <options> (never --force), under systemd-inhibit
+#        5. restart  appliance boards: install.sh restarted the user service itself; desktop boards: the running launcher
+#                    is asked to exit with status 76 (restart=launcher in the status file: its unit starts it again
+#                    without giving the desktop back), and if it is still there 30 s later the unit is stopped, then
+#                    started again 4 s later (a plain "systemctl restart" fails there: Conflicts= with the desktop)
+#        6. health   the new launcher must publish launcher=X.Y.Z with a live pid in board.state within 90 s and keep that
+#                    pid for 20 s
+#       a failure in 4-6: the backup is put back and the old launcher restarted (state rolled-back). Before 4 nothing
+#       has changed (state refused).
+#   cyberdeckzero-update resume --user NAME
+#       after an interruption (a power cut: the status says running and no helper runs): a new launcher that is healthy
+#       now finishes the update, anything else from step 4 on is rolled back; before step 4 nothing had changed
+#   cyberdeckzero-update plan --bundle DIR --user NAME    the options it would replay and the plan check (changes nothing)
+#   cyberdeckzero-update options --user NAME              the install options it would replay
+#   cyberdeckzero-update status                           the status file
+#
+# Options: install.sh records the options of each run in /etc/applaunch/install.conf (keyboard_name, board, boot_config,
+# pwm_backlight, default_source). A board installed before that file existed gets them inferred: the keyboard name from
+# ATTRS{name} in /etc/udev/rules.d/99-bt-keyboard.rules, --board from APPLAUNCH_BOARD= in board.conf when it is one of
+# install.sh's Pi profiles (a pc-* profile is detected, not passed), --no-boot-config when cmdline.txt lacks the two
+# console arguments install.sh adds, --pwm-backlight when config.txt loads the HyperPixel's PWM overlay,
+# --no-default-source when the user has no default-source marker. --force is never passed: a hand-edited board.conf is
+# kept, and a plan that would replace it stops the update.
+#
+# Status: /var/lib/cyberdeckzero-update/status (on disk: it survives a power cut; world-readable; key=value lines):
+#   v state (running, done, refused, rolled-back, failed) step (check, plan, backup, install, restart, health, rollback)
+#   from to variant (appliance, desktop) user pid boot (the helper and its boot) started updated launcher_pid
+#   restart (launcher: the running launcher should exit with status 76) backup (1: a complete backup exists) log reason
+# Log: /var/log/cyberdeckzero/update-<date>.log (world-readable: Settings > Updates > Show log; the last 5 are kept),
+# also in the unit's journal (journalctl -u cyberdeckzero-update).
+#
+# Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused (nothing changed) or a usage error.
+#
+# Test hooks (leave them unset on a board): UPDATE_ROOT prefixes every system path; with UPDATE_FAKE_SYSTEM=1 the helper
+# runs without root and install.sh with SYSROOT=$UPDATE_ROOT INSTALL_FAKE_SYSTEM=1 (pizero2w/tests/test-update-helper.sh
+# puts stand-ins for systemctl, runuser, systemd-inhibit and the other system commands first on PATH).
+# UPDATE_HEALTH_TIMEOUT, UPDATE_HEALTH_STABLE, UPDATE_RESTART_WAIT and UPDATE_DESKTOP_GAP replace the waits (seconds);
+# INSTALL_MACHINE replaces "uname -m" (as for install.sh).
+set -u
+
+ROOT=${UPDATE_ROOT:-}
+FAKE=${UPDATE_FAKE_SYSTEM:-0}
+if [ -n "$ROOT" ] && [ "$FAKE" != 1 ]; then
+    echo "UPDATE_ROOT is a test hook: use it only with UPDATE_FAKE_SYSTEM=1" >&2; exit 2
+fi
+if [ "$FAKE" = 1 ] && [ -z "$ROOT" ]; then
+    echo "UPDATE_FAKE_SYSTEM=1 needs UPDATE_ROOT (a fake root)" >&2; exit 2
+fi
+
+APP_ROOT="$ROOT/usr/share/APPLaunch"
+STATE_DIR="$ROOT/var/lib/cyberdeckzero-update"
+STATUS="$STATE_DIR/status"
+BACKUP="$STATE_DIR/backup"
+WORK="$ROOT/var/cache/cyberdeckzero-update"
+LOG_DIR="$ROOT/var/log/cyberdeckzero"
+RUN_DIR="$ROOT/run/cyberdeckzero-update"
+CONF="$ROOT/etc/applaunch/install.conf"
+PROFILE="$ROOT/etc/applaunch/board.conf"
+KB_RULE="$ROOT/etc/udev/rules.d/99-bt-keyboard.rules"
+USER_UNIT=cyberdeckzero.service
+DESKTOP_UNIT=cyberdeckzero-desktop.service
+HEALTH_TIMEOUT=${UPDATE_HEALTH_TIMEOUT:-90}
+HEALTH_STABLE=${UPDATE_HEALTH_STABLE:-20}
+RESTART_WAIT=${UPDATE_RESTART_WAIT:-30}
+DESKTOP_GAP=${UPDATE_DESKTOP_GAP:-4}
+PI_BOARDS="zero2w pi3a-luckfox35 pi3a-wsdsi43 pi3a-wsdsi43-portrait pi4b-dsi pi5-hyperpixel4 hackberry-cm5"
+# What a backup holds (paths without $ROOT; the user's own files are added per user): the launcher's folders whole,
+# then single files. A file that is absent before the install is removed again by a rollback.
+BACKUP_DIRS="/usr/share/APPLaunch/bin /usr/share/APPLaunch/lib /usr/share/doc/cyberdeckzero-launcher"
+BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/system/cyberdeckzero-desktop.service
+/etc/systemd/system/launcher-ntp-default.service /etc/udev/rules.d/90-backlight-unblank.rules
+/etc/udev/rules.d/91-applaunch-vkbd.rules /etc/udev/rules.d/92-applaunch-backlight-gpio.rules
+/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules /etc/udev/rules.d/93-applaunch-rfkill.rules
+/etc/udev/rules.d/99-bt-keyboard.rules /etc/polkit-1/rules.d/50-networkmanager-netdev.rules
+/etc/polkit-1/rules.d/51-launcher-time-power.rules /etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules
+/etc/applaunch/board.conf /etc/applaunch/install.conf /usr/share/applications/cyberdeckzero.desktop
+/usr/local/bin/cyberdeckzero-ctl"
+
+usage() { sed -n '3,39p' "$0" | sed 's/^# \{0,1\}//'; }
+now() { date +%s; }
+say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*"; [ -z "${LOG:-}" ] || printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
+oneline() { printf '%s' "$1" | tr '\n\r' '  ' | cut -c1-300; }
+is_version() { printf '%s\n' "$1" | grep -Eqx '[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}'; }
+is_sha256() { printf '%s\n' "$1" | grep -Eqx '[0-9a-f]{64}'; }
+is_name() { case "$1" in ""|-*|*[!A-Za-z0-9._-]*) return 1 ;; esac; return 0; }
+alive() { [ -n "${1:-}" ] && [ "$1" -gt 0 ] 2>/dev/null && [ -d "/proc/$1" ]; }
+boot_id() { cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown; }
+
+# ---------------------------------------------------------------------------------------------------------------
+# The status file
+# ---------------------------------------------------------------------------------------------------------------
+S_STATE=""; S_STEP=""; S_FROM=""; S_TO=""; S_VARIANT=""; S_USER=""; S_STARTED=""; S_LAUNCHER_PID=""; S_RESTART=""
+S_BACKUP=0; S_REASON=""; LOG=""
+write_status() {
+    mkdir -p "$STATE_DIR"
+    tmp="$STATUS.tmp.$$"
+    {
+        echo "v=1"
+        echo "state=$S_STATE"
+        echo "step=$S_STEP"
+        echo "from=$S_FROM"
+        echo "to=$S_TO"
+        echo "variant=$S_VARIANT"
+        echo "user=$S_USER"
+        echo "pid=$$"
+        echo "boot=$(boot_id)"
+        echo "started=$S_STARTED"
+        echo "updated=$(now)"
+        echo "launcher_pid=$S_LAUNCHER_PID"
+        echo "restart=$S_RESTART"
+        echo "backup=$S_BACKUP"
+        echo "log=${LOG#"$ROOT"}"
+        echo "reason=$(oneline "$S_REASON")"
+    } > "$tmp" && chmod 644 "$tmp" && mv -f "$tmp" "$STATUS"
+}
+status_get() { [ -f "$STATUS" ] && sed -n "s/^$1=//p" "$STATUS" | tail -n 1; }
+# the status file of an earlier run as the current one (resume)
+load_status() {
+    S_STATE=$(status_get state); S_STEP=$(status_get step); S_FROM=$(status_get from); S_TO=$(status_get to)
+    S_VARIANT=$(status_get variant); S_USER=$(status_get user); S_STARTED=$(status_get started)
+    S_LAUNCHER_PID=$(status_get launcher_pid); S_RESTART=""; S_BACKUP=$(status_get backup); S_REASON=$(status_get reason)
+    [ -n "$S_BACKUP" ] || S_BACKUP=0
+}
+# an earlier helper still at work: its pid alive in this boot
+helper_alive() {
+    [ "$(status_get boot)" = "$(boot_id)" ] && alive "$(status_get pid)"
+}
+
+open_log() {
+    mkdir -p "$LOG_DIR"
+    LOG="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
+    : > "$LOG"; chmod 644 "$LOG"
+    # the last 5 logs are kept
+    # shellcheck disable=SC2012
+    ls -1t "$LOG_DIR"/update-*.log 2>/dev/null | tail -n +6 | while IFS= read -r old; do rm -f "$old"; done
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# The user, the launcher's own state
+# ---------------------------------------------------------------------------------------------------------------
+U=""; U_UID=""; U_HOME=""
+set_user() {
+    U=$1
+    is_name "$U" || { echo "unusable user name \"$U\"" >&2; exit 2; }
+    U_UID=$(id -u "$U" 2>/dev/null) || { echo "no user $U" >&2; exit 2; }
+    U_HOME=$(getent passwd "$U" | cut -d: -f6)
+    [ -n "$U_HOME" ] || { echo "no home folder for $U" >&2; exit 2; }
+}
+# a command in the user's systemd (the appliance launcher is a user service), as install.sh does it
+as_user() { runuser -u "$U" -- env XDG_RUNTIME_DIR="/run/user/$U_UID" "$@"; }
+board_state() { echo "$ROOT/run/user/$U_UID/applaunch/board.state"; }
+# the launcher that board.state names: "<version> <pid>", empty when there is none or it is gone
+running_launcher() {
+    f=$(board_state)
+    [ -f "$f" ] || return 0
+    v=$(sed -n 's/^launcher=//p' "$f" | tail -n 1)
+    p=$(sed -n 's/^pid=//p' "$f" | tail -n 1)
+    alive "$p" && echo "$v $p"
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Options: recorded by install.sh, else inferred (see the head of this file)
+# ---------------------------------------------------------------------------------------------------------------
+O_KEYBOARD="M4 Keyboard"; O_BOARD=""; O_BOOT=1; O_PWM=0; O_SOURCE=1; O_FROM=""
+conf_get() { sed -n "s/^$1=//p" "$CONF" | tail -n 1; }
+read_options() {
+    if [ -f "$CONF" ]; then
+        O_FROM="recorded in /etc/applaunch/install.conf"
+        v=$(conf_get keyboard_name); [ -z "$v" ] || O_KEYBOARD=$v
+        O_BOARD=$(conf_get board)
+        [ "$(conf_get boot_config)" = 0 ] && O_BOOT=0
+        [ "$(conf_get pwm_backlight)" = 1 ] && O_PWM=1
+        [ "$(conf_get default_source)" = 0 ] && O_SOURCE=0
+    else
+        O_FROM="inferred (no /etc/applaunch/install.conf: an install before 0.8.13)"
+        if [ -f "$KB_RULE" ]; then
+            v=$(sed -n 's/.*ATTRS{name}=="\([^"]*\)".*/\1/p' "$KB_RULE" | head -n 1)
+            [ -z "$v" ] || O_KEYBOARD=$v
+        fi
+        if [ -f "$PROFILE" ]; then
+            v=$(sed -n 's/^APPLAUNCH_BOARD=//p' "$PROFILE" | tail -n 1)
+            case " $PI_BOARDS " in *" $v "*) [ -z "$v" ] || O_BOARD=$v ;; esac
+        fi
+        boot="$ROOT/boot/firmware"; [ -d "$boot" ] || boot="$ROOT/boot"
+        if [ -f "$boot/cmdline.txt" ]; then
+            grep -q 'vt.global_cursor_default=0' "$boot/cmdline.txt" && grep -q 'consoleblank=0' "$boot/cmdline.txt" || O_BOOT=0
+        fi
+        if [ -f "$boot/config.txt" ] && grep -qx 'dtoverlay=hyperpixel4-pwm-backlight' "$boot/config.txt"; then O_PWM=1; fi
+        [ -e "$ROOT$U_HOME/.local/share/cardputerzero-appstore/applaunch-default-source" ] || O_SOURCE=0
+    fi
+}
+print_options() {
+    echo "options ($O_FROM):"
+    echo "  --user $U --keyboard-name \"$O_KEYBOARD\"${O_BOARD:+ --board $O_BOARD}$( [ "$O_BOOT" = 0 ] && echo ' --no-boot-config')$( [ "$O_PWM" = 1 ] && echo ' --pwm-backlight')$( [ "$O_SOURCE" = 0 ] && echo ' --no-default-source')"
+}
+# run_installer SCRIPT EXTRA...: install.sh with the user and the options (the keyboard name stays one argument)
+run_installer() {
+    script=$1; shift
+    set -- "$@" --user "$U" --keyboard-name "$O_KEYBOARD"
+    [ -z "$O_BOARD" ] || set -- "$@" --board "$O_BOARD"
+    [ "$O_BOOT" = 1 ] || set -- "$@" --no-boot-config
+    [ "$O_PWM" = 0 ] || set -- "$@" --pwm-backlight
+    [ "$O_SOURCE" = 1 ] || set -- "$@" --no-default-source
+    if [ "$FAKE" = 1 ]; then
+        SYSROOT="$ROOT" INSTALL_FAKE_SYSTEM=1 sh "$script" "$@"
+    else
+        env -u SYSROOT -u INSTALL_FAKE_SYSTEM sh "$script" "$@"
+    fi
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# The plan check: the new install.sh's --plan (key=value lines). PLAN_WHY: why it must be run by hand ("" when not)
+# ---------------------------------------------------------------------------------------------------------------
+PLAN=""; PLAN_WHY=""
+plan_get() { printf '%s\n' "$PLAN" | sed -n "s/^$1=//p" | tail -n 1; }
+check_plan() {
+    PLAN=$(run_installer "$1" --plan 2>&1); rc=$?
+    PLAN_WHY=""
+    if [ "$rc" != 0 ] || [ "$(plan_get plan)" != 1 ]; then
+        PLAN_WHY="its install.sh gave no plan ($(printf '%s\n' "$PLAN" | grep -v '^[a-z_]*=' | head -n 1 | cut -c1-120))"
+    elif [ -z "$(plan_get board)" ]; then
+        PLAN_WHY="install.sh does not recognise this board"
+    elif [ "$(plan_get desktop_refused)" = 1 ]; then
+        PLAN_WHY="a desktop runs on the deck, which has no desktop variant"
+    elif [ "$(plan_get switch)" = to-desktop ]; then
+        PLAN_WHY="a desktop was installed: the launcher would move to the desktop variant"
+    elif [ "$(plan_get switch)" = to-appliance ]; then
+        PLAN_WHY="the desktop was removed: the launcher would move to the appliance variant"
+    elif [ "$(plan_get migration)" = 1 ]; then
+        PLAN_WHY="units of an install before 0.7.0 are still there"
+    else
+        case "$(plan_get profile_action)" in
+            replace|remove) PLAN_WHY="it would change /etc/applaunch/board.conf" ;;
+        esac
+    fi
+}
+
+# arm64, amd64, other, or "" when the file is no ELF (install.sh's rule: only a clear mismatch stops)
+elf_arch() {
+    [ "$(od -An -tx1 -N4 "$1" 2>/dev/null | tr -d ' \n')" = 7f454c46 ] || return 0
+    case "$(od -An -tu1 -j18 -N2 "$1" | tr -s ' \n' ' ')" in
+        " 183 0 ") echo arm64 ;;
+        " 62 0 ") echo amd64 ;;
+        *) echo other ;;
+    esac
+}
+machine_arch() {
+    case "${INSTALL_MACHINE:-$(uname -m)}" in aarch64) echo arm64 ;; x86_64) echo amd64 ;; *) echo other ;; esac
+}
+# free KiB on the file system of $1 (its nearest existing folder)
+free_kib() {
+    d=$1; while [ ! -d "$d" ] && [ "$d" != / ] && [ -n "$d" ]; do d=${d%/*}; [ -n "$d" ] || d=/; done
+    df -Pk "$d" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Backup and restore
+# ---------------------------------------------------------------------------------------------------------------
+user_files() {
+    echo "$U_HOME/.config/systemd/user/$USER_UNIT"
+    echo "$U_HOME/.config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf"
+}
+make_backup() {
+    new="$BACKUP.new"
+    rm -rf "$new"; mkdir -p "$new/files" || return 1
+    chmod 700 "$new"
+    : > "$new/manifest"
+    for p in $BACKUP_DIRS; do
+        if [ -d "$ROOT$p" ]; then
+            mkdir -p "$new/files${p%/*}" && cp -a "$ROOT$p" "$new/files$p" || return 1
+            echo "dir $p" >> "$new/manifest"
+        fi
+    done
+    { printf '%s\n' $BACKUP_FILES; user_files; } | while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        if [ -e "$ROOT$p" ] || [ -L "$ROOT$p" ]; then
+            mkdir -p "$new/files${p%/*}" && cp -a "$ROOT$p" "$new/files$p" || exit 1
+            echo "file $p" >> "$new/manifest"
+        else
+            echo "absent $p" >> "$new/manifest"
+        fi
+    done || return 1
+    printf 'from=%s\nmade=%s\n' "$S_FROM" "$(now)" > "$new/info"
+    sync
+    rm -rf "$BACKUP" && mv "$new" "$BACKUP"
+}
+# puts the backup back; false when a file could not be restored (the rest is still done)
+restore_backup() {
+    [ -f "$BACKUP/manifest" ] || return 1
+    ok=0
+    while IFS= read -r line; do
+        kind=${line%% *}; p=${line#* }
+        case "$kind" in
+            dir)
+                rm -rf "$ROOT$p.restore"
+                if cp -a "$BACKUP/files$p" "$ROOT$p.restore"; then
+                    rm -rf "$ROOT$p" && mv "$ROOT$p.restore" "$ROOT$p" || ok=1
+                else
+                    ok=1
+                fi ;;
+            file)
+                mkdir -p "$ROOT${p%/*}"
+                rm -f "$ROOT$p.restore"
+                if cp -a "$BACKUP/files$p" "$ROOT$p.restore"; then mv -f "$ROOT$p.restore" "$ROOT$p" || ok=1; else ok=1; fi ;;
+            absent) rm -f "$ROOT$p" ;;
+        esac
+    done < "$BACKUP/manifest"
+    sync
+    return "$ok"
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Restart and health
+# ---------------------------------------------------------------------------------------------------------------
+desktop_active() { systemctl is-active --quiet "$DESKTOP_UNIT"; }
+# the desktop unit stopped (its ExecStopPost= gives the desktop back), then started again: it takes the screen back
+restart_desktop_unit() {
+    say "restarting $DESKTOP_UNIT: stop, ${DESKTOP_GAP} s, start --no-block"
+    systemctl stop "$DESKTOP_UNIT" >> "$LOG" 2>&1 || true
+    sleep "$DESKTOP_GAP"
+    systemctl start --no-block "$DESKTOP_UNIT" >> "$LOG" 2>&1 || say "could not start $DESKTOP_UNIT: start the launcher from the menu"
+}
+restart_appliance() {
+    say "restarting the user service $USER_UNIT of $U"
+    as_user systemctl --user daemon-reload >> "$LOG" 2>&1 || true
+    as_user systemctl --user reset-failed "$USER_UNIT" >> "$LOG" 2>&1 || true
+    as_user systemctl --user restart "$USER_UNIT" >> "$LOG" 2>&1 || say "could not restart $USER_UNIT (it starts at the next boot)"
+}
+# health VERSION TIMEOUT: board.state names VERSION with a live pid within TIMEOUT s, and keeps that pid HEALTH_STABLE s
+health() {
+    want=$1; deadline=$(( $(now) + $2 ))
+    seen=""
+    while [ "$(now)" -lt "$deadline" ]; do
+        set -- $(running_launcher)
+        if [ "${1:-}" = "$want" ]; then seen=$2; break; fi
+        sleep 1
+    done
+    [ -n "$seen" ] || return 1
+    say "launcher $want runs (pid $seen): watching it for $HEALTH_STABLE s"
+    until=$(( $(now) + HEALTH_STABLE ))
+    while [ "$(now)" -lt "$until" ]; do
+        sleep 1
+        set -- $(running_launcher)
+        [ "${1:-}" = "$want" ] && [ "${2:-}" = "$seen" ] || { say "launcher $want (pid $seen) did not stay up"; return 1; }
+    done
+    return 0
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# The endings
+# ---------------------------------------------------------------------------------------------------------------
+clean_work() { rm -rf "$WORK"; }
+refuse() {
+    S_STATE=refused; S_REASON=$1; S_RESTART=""
+    say "not installed: $1"
+    write_status
+    clean_work
+    exit 2
+}
+finish_done() {
+    S_STATE=done; S_RESTART=""; S_REASON=${1:-}
+    S_STEP=health
+    write_status
+    clean_work
+    say "done: launcher $S_TO${1:+ ($1)}"
+    exit 0
+}
+# rollback REASON: the backup back, the old launcher running again
+rollback() {
+    why=$1
+    S_STEP=rollback; S_RESTART=""
+    write_status
+    say "rolling back: $why"
+    if [ "$S_BACKUP" != 1 ] || ! restore_backup; then
+        S_STATE=failed
+        S_REASON="$why; the backup could not be restored: see the log"
+        say "$S_REASON"
+        write_status
+        say "update failed, the launcher $S_FROM could not be put back: $why"
+        exit 1
+    fi
+    say "backup of $S_FROM restored"
+    systemctl daemon-reload >> "$LOG" 2>&1 || true
+    S_STATE=rolled-back; S_REASON=$why
+    write_status                                      # before the restart: the old launcher reads it as it starts
+    set -- $(running_launcher)
+    if [ "${1:-}" = "$S_FROM" ]; then
+        say "launcher $S_FROM still runs (pid $2): nothing to restart"
+    elif [ "$S_VARIANT" = desktop ]; then
+        if desktop_active; then restart_desktop_unit
+        else systemctl start --no-block "$DESKTOP_UNIT" >> "$LOG" 2>&1 || say "start the launcher from the menu"; fi
+    else
+        restart_appliance
+    fi
+    clean_work
+    # The last line of the log, and exit 1 on purpose: the unit ends "failed" for a rolled-back update (systemctl status
+    # and journalctl -u cyberdeckzero-update show it as the failure it is); the launcher reads the status file (state
+    # rolled-back), never the unit's result.
+    say "rolled back to $S_FROM: $why"
+    exit 1
+}
+
+# ---------------------------------------------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------------------------------------------
+need_root() {
+    [ "$FAKE" = 1 ] || [ "$(id -u)" -eq 0 ] || { echo "run it as root (the launcher does it through sudo and systemd-run)" >&2; exit 2; }
+}
+# run from a copy in /run: install.sh replaces this file while sh still reads it
+run_from_copy() {
+    [ "${CDZ_UPDATE_COPY:-0}" = 1 ] && return 0
+    mkdir -p "$RUN_DIR" && chmod 755 "$RUN_DIR"
+    cp "$0" "$RUN_DIR/cyberdeckzero-update.running" && chmod 700 "$RUN_DIR/cyberdeckzero-update.running" || {
+        echo "cannot copy myself to $RUN_DIR" >&2; exit 2; }
+    CDZ_UPDATE_COPY=1 exec sh "$RUN_DIR/cyberdeckzero-update.running" "$@"
+}
+take_lock() {
+    mkdir -p "$RUN_DIR"
+    exec 9> "$RUN_DIR/lock"
+    flock -n 9 || { echo "another update is running" >&2; exit 2; }
+}
+
+cmd_apply() {
+    VERSION=""; FROM=""; SHA=""; FILE=""; USER_ARG=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --version) VERSION=${2:-}; shift 2 ;;
+            --from-version) FROM=${2:-}; shift 2 ;;
+            --sha256) SHA=${2:-}; shift 2 ;;
+            --file) FILE=${2:-}; shift 2 ;;
+            --user) USER_ARG=${2:-}; shift 2 ;;
+            *) echo "unknown option $1" >&2; exit 2 ;;
+        esac
+    done
+    is_version "$VERSION" && is_version "$FROM" && is_sha256 "$SHA" && [ -n "$FILE" ] && [ -n "$USER_ARG" ] \
+        || { echo "apply needs --version X.Y.Z --from-version X.Y.Z --sha256 HEX --file PATH --user NAME" >&2; exit 2; }
+    set_user "$USER_ARG"
+    take_lock
+    case "$(status_get state)" in
+        running) if helper_alive; then echo "an update is running" >&2; exit 2; fi
+                 echo "an earlier update was interrupted: repair it first (cyberdeckzero-update resume --user $U)" >&2; exit 2 ;;
+    esac
+    open_log
+    S_STATE=running; S_STEP=check; S_FROM=$FROM; S_TO=$VERSION; S_USER=$U; S_STARTED=$(now); S_BACKUP=0; S_REASON=""
+    S_VARIANT=""; S_RESTART=""
+    set -- $(running_launcher); S_LAUNCHER_PID=${2:-}
+    write_status
+    say "update of the launcher $FROM -> $VERSION for $U (helper pid $$)"
+
+    # 1. check: the user's file, copied, its hash, unpacked, its architecture
+    case "$FILE" in *..*|"") refuse "the download's path is not usable" ;; esac
+    case "$FILE" in "$U_HOME"/*) ;; *) refuse "the download is not in the home folder of $U" ;; esac
+    real="$ROOT$FILE"
+    [ ! -L "$real" ] && [ -f "$real" ] || refuse "the download is missing or not a plain file"
+    [ "$(stat -c %U "$real" 2>/dev/null)" = "$U" ] || refuse "the download does not belong to $U"
+    size_kib=$(( $(stat -c %s "$real") / 1024 ))
+    need=$(( size_kib * 3 + 65536 ))
+    for d in "$WORK" "$STATE_DIR"; do
+        have=$(free_kib "$d")
+        [ -z "$have" ] || [ "$have" -ge "$need" ] || refuse "not enough space: need $(( need / 1024 )) MB, $(( have / 1024 )) MB free"
+    done
+    clean_work
+    mkdir -p "$WORK" && chmod 700 "$WORK" || refuse "cannot create $WORK"
+    cp "$real" "$WORK/bundle.tar.gz" || refuse "cannot copy the download"
+    got=$(sha256sum "$WORK/bundle.tar.gz" | cut -d' ' -f1)
+    [ "$got" = "$SHA" ] || refuse "the download does not match its checksum"
+    say "sha256 checked: $got"
+    mkdir -p "$WORK/unpack"
+    tar -xzf "$WORK/bundle.tar.gz" -C "$WORK/unpack" --no-same-owner >> "$LOG" 2>&1 || refuse "the bundle could not be unpacked"
+    B="$WORK/unpack/bundle"
+    [ -f "$B/install.sh" ] && [ -f "$B/payload/bin/cyberdeckzero" ] || refuse "the bundle has no install.sh or no launcher"
+    ba=$(elf_arch "$B/payload/bin/cyberdeckzero")
+    [ -z "$ba" ] || [ "$ba" = "$(machine_arch)" ] || refuse "the bundle is for $ba, this system is $(machine_arch)"
+
+    # 2. plan
+    S_STEP=plan; write_status
+    read_options
+    print_options | while IFS= read -r l; do say "$l"; done
+    check_plan "$B/install.sh"
+    printf '%s\n' "$PLAN" >> "$LOG"
+    [ -z "$PLAN_WHY" ] || refuse "needs install.sh by hand: $PLAN_WHY"
+    S_VARIANT=$(plan_get session)
+    say "plan: board $(plan_get board), $S_VARIANT variant, board.conf: $(plan_get profile_action)"
+
+    # 3. backup
+    S_STEP=backup; write_status
+    make_backup || refuse "the backup could not be made"
+    S_BACKUP=1
+    say "backup of $FROM in ${BACKUP#"$ROOT"}"
+
+    # 4. install
+    S_STEP=install; write_status
+    say "install.sh of $VERSION"
+    if command -v systemd-inhibit >/dev/null 2>&1; then
+        # no sleep, no idle blanking, no poweroff while install.sh runs: the inhibitor wraps one command, a second shell
+        # of this script (__install) that runs install.sh with the options
+        CDZ_INSTALL_SCRIPT="$B/install.sh" systemd-inhibit --what=sleep:idle:shutdown:handle-power-key:handle-lid-switch \
+            --who="CyberdeckZero update" --why="Installing launcher $VERSION" --mode=block \
+            sh "$0" __install "$U" "$O_KEYBOARD" "$O_BOARD" "$O_BOOT" "$O_PWM" "$O_SOURCE" >> "$LOG" 2>&1 < /dev/null 9>&-
+        rc=$?
+    else
+        run_installer "$B/install.sh" >> "$LOG" 2>&1 < /dev/null 9>&-
+        rc=$?
+    fi
+    [ "$rc" = 0 ] || rollback "install.sh failed (exit status $rc)"
+    say "install.sh done"
+
+    # 5. restart
+    S_STEP=restart; write_status
+    if [ "$S_VARIANT" = desktop ]; then
+        if ! desktop_active; then
+            finish_done "the launcher was not running: start it from the menu"
+        fi
+        old=$S_LAUNCHER_PID
+        if alive "$old"; then
+            S_RESTART=launcher; write_status
+            say "desktop: launcher pid $old asked to exit with status 76 (its unit starts it again)"
+            t=$(( $(now) + RESTART_WAIT ))
+            while [ "$(now)" -lt "$t" ] && alive "$old"; do sleep 1; done
+            S_RESTART=""; write_status
+        fi
+        if [ -z "$old" ] || alive "$old"; then restart_desktop_unit; fi
+    fi
+
+    # 6. health
+    S_STEP=health; write_status
+    say "waiting for launcher $VERSION (board.state, up to $HEALTH_TIMEOUT s)"
+    if health "$VERSION" "$HEALTH_TIMEOUT"; then finish_done; fi
+    rollback "$VERSION did not start"
+}
+
+# the install itself, inside systemd-inhibit (a second shell: the inhibitor wraps one command)
+cmd_install_inner() {
+    set_user "$1"; O_KEYBOARD=$2; O_BOARD=$3; O_BOOT=$4; O_PWM=$5; O_SOURCE=$6
+    run_installer "${CDZ_INSTALL_SCRIPT:?}"
+}
+
+cmd_resume() {
+    USER_ARG=""
+    while [ $# -gt 0 ]; do
+        case "$1" in --user) USER_ARG=${2:-}; shift 2 ;; *) echo "unknown option $1" >&2; exit 2 ;; esac
+    done
+    [ -n "$USER_ARG" ] || { echo "resume needs --user NAME" >&2; exit 2; }
+    set_user "$USER_ARG"
+    take_lock
+    [ "$(status_get state)" = running ] || { echo "nothing to resume (state: $(status_get state))"; exit 0; }
+    if helper_alive; then echo "the update is still running" >&2; exit 2; fi
+    load_status
+    open_log
+    say "resuming the interrupted update $S_FROM -> $S_TO (step $S_STEP)"
+    case "$S_STEP" in
+        check|plan|backup|"")
+            S_STATE=refused; S_REASON="interrupted before any change: nothing to repair"
+            write_status; clean_work; say "$S_REASON"; exit 2 ;;
+    esac
+    S_STEP=health; write_status
+    rt=30; [ "$HEALTH_TIMEOUT" -ge 30 ] || rt=$HEALTH_TIMEOUT
+    if health "$S_TO" "$rt"; then finish_done "after an interruption"; fi
+    rollback "the update was interrupted"
+}
+
+cmd_plan() {
+    BUNDLE=""; USER_ARG=""
+    while [ $# -gt 0 ]; do
+        case "$1" in --bundle) BUNDLE=${2:-}; shift 2 ;; --user) USER_ARG=${2:-}; shift 2 ;; *) echo "unknown option $1" >&2; exit 2 ;; esac
+    done
+    [ -n "$BUNDLE" ] && [ -f "$BUNDLE/install.sh" ] && [ -n "$USER_ARG" ] || { echo "plan needs --bundle DIR (with install.sh) --user NAME" >&2; exit 2; }
+    set_user "$USER_ARG"
+    read_options
+    print_options
+    check_plan "$BUNDLE/install.sh"
+    printf '%s\n' "$PLAN" | sed 's/^/  /'
+    if [ -n "$PLAN_WHY" ]; then echo "result: refused: needs install.sh by hand: $PLAN_WHY"; exit 2; fi
+    echo "result: an update would go ahead ($(plan_get session) variant, board $(plan_get board))"
+}
+
+cmd_options() {
+    USER_ARG=""
+    while [ $# -gt 0 ]; do
+        case "$1" in --user) USER_ARG=${2:-}; shift 2 ;; *) echo "unknown option $1" >&2; exit 2 ;; esac
+    done
+    [ -n "$USER_ARG" ] || { echo "options needs --user NAME" >&2; exit 2; }
+    set_user "$USER_ARG"
+    read_options
+    print_options
+}
+
+cmd=${1:-}
+[ $# -eq 0 ] || shift
+case "$cmd" in
+    apply) need_root; run_from_copy apply "$@"; cmd_apply "$@" ;;
+    resume) need_root; run_from_copy resume "$@"; cmd_resume "$@" ;;
+    __install) cmd_install_inner "$@" ;;
+    plan) cmd_plan "$@" ;;
+    options) cmd_options "$@" ;;
+    status) if [ -f "$STATUS" ]; then cat "$STATUS"; else echo "no update has run"; fi ;;
+    -h|--help|help) usage ;;
+    *) usage >&2; exit 2 ;;
+esac

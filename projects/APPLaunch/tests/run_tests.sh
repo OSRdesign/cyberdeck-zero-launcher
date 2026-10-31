@@ -280,16 +280,43 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
 "$build_dir/test_settings_update_model" "$test_root/fixtures/update" "$test_root/../../../docs/dev"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -DLAUNCHER_VERSION_RAW=0.8.12 -DLAUNCHER_CHANNEL_RAW=release \
-    -I"$settings_ui_root" -I"$cjson_root" \
+    -I"$settings_ui_root" -I"$cjson_root" -I"$cp0_root/include" \
     "$test_root/test_settings_update_fetch.cpp" \
     "$settings_ui_root/settings_update_check.cpp" \
     "$settings_ui_root/settings_update_platform.cpp" \
     "$settings_ui_root/settings_update_model.cpp" \
+    "$settings_ui_root/settings_update_install_model.cpp" \
     "$settings_ui_root/apps_backend.cpp" \
     "$settings_ui_root/apps_status_model.cpp" \
-    "$build_dir/cJSON.o" \
+    "$build_dir/cJSON.o" "$build_dir/cp0_app_contract.o" "$build_dir/cp0_ui_metrics.o" -lm \
     -o "$build_dir/test_settings_update_fetch"
 "$build_dir/test_settings_update_fetch" "$test_root/fixtures/update"
+# Report 047 P2: the download and the install's rules (the bundle, the checksums, the guards, the one root command and
+# what it refuses, the helper's status file, the exit-76 request, the progress steps, the rollback toast), then the
+# real download with curl and sha256sum against the fake release server's bundle mode (a real small tarball). The root
+# helper itself: projects/APPLaunch/pizero2w/tests/test-update-helper.sh (a fake root).
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" -I"$cjson_root" \
+    "$test_root/test_settings_update_install_model.cpp" \
+    "$settings_ui_root/settings_update_install_model.cpp" \
+    "$settings_ui_root/settings_update_model.cpp" \
+    "$build_dir/cJSON.o" \
+    -o "$build_dir/test_settings_update_install_model"
+"$build_dir/test_settings_update_install_model" "$test_root/fixtures/update"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    -DLAUNCHER_VERSION_RAW=0.8.12 -DLAUNCHER_CHANNEL_RAW=release \
+    -I"$settings_ui_root" -I"$cjson_root" -I"$cp0_root/include" \
+    "$test_root/test_settings_update_download.cpp" \
+    "$settings_ui_root/settings_update_check.cpp" \
+    "$settings_ui_root/settings_update_download.cpp" \
+    "$settings_ui_root/settings_update_platform.cpp" \
+    "$settings_ui_root/settings_update_model.cpp" \
+    "$settings_ui_root/settings_update_install_model.cpp" \
+    "$settings_ui_root/apps_backend.cpp" \
+    "$settings_ui_root/apps_status_model.cpp" \
+    "$build_dir/cJSON.o" "$build_dir/cp0_app_contract.o" "$build_dir/cp0_ui_metrics.o" -lm \
+    -o "$build_dir/test_settings_update_download"
+"$build_dir/test_settings_update_download" "$test_root/fixtures/update"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \

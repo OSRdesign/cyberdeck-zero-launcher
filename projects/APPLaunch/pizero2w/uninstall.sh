@@ -13,8 +13,9 @@
 # Options:
 #   --dry-run          print every action, change nothing
 #   --yes              do not ask for confirmation
-#   --purge-config     also remove ~/.config/cardputerzero, ~/.local/share/cardputerzero-appstore and
-#                      ~/.cache/cardputerzero-appstore (settings, app sources, records, cache)
+#   --purge-config     also remove ~/.config/cardputerzero, ~/.local/share/cardputerzero-appstore,
+#                      ~/.cache/cardputerzero-appstore (settings, app sources, records, cache), and Settings > Updates'
+#                      ~/.local/state/cyberdeckzero and ~/.cache/cyberdeckzero (its state, release list and downloads)
 #   --remove-apps      also remove the app packages installed from the launcher (listed first, taken from
 #                      ~/.local/share/cardputerzero-appstore/installed.json; skipped if there is no record).
 #                      With --purge-config the packages are purged (their config files go too)
@@ -65,11 +66,18 @@ MENU_DIR="$ROOT/usr/share/applications"
 DOC_DIR="$ROOT/usr/share/doc/cyberdeckzero-launcher"
 PROFILE_DIR="$ROOT/etc/applaunch"
 PROFILE="$PROFILE_DIR/board.conf"
+INSTALL_CONF="$PROFILE_DIR/install.conf"
+# Settings > Updates (report 047 P2): the update helper's status and last backup, its work folder, its logs, its lock
+UPDATE_STATE_DIR="$ROOT/var/lib/cyberdeckzero-update"
+UPDATE_WORK_DIR="$ROOT/var/cache/cyberdeckzero-update"
+UPDATE_RUN_DIR="$ROOT/run/cyberdeckzero-update"
+UPDATE_LOG_DIR="$ROOT/var/log/cyberdeckzero"
 
 # The names of this release, then those of v0.6.0 and before (as in install.sh, "Names")
 LAUNCHER_BIN=cyberdeckzero
 CONSOLE_HELPER=cyberdeckzero-console
 CTL_BIN=cyberdeckzero-ctl
+UPDATE_HELPER=cyberdeckzero-update
 USER_UNIT=cyberdeckzero.service
 CONSOLE_UNIT=cyberdeckzero-console.service
 DESKTOP_UNIT=cyberdeckzero-desktop.service
@@ -107,6 +115,9 @@ fi
 CONF_DIR="$TARGET_HOME/.config/cardputerzero"
 STATE_DIR=${M5APPSTORE_STATE_DIR:-$TARGET_HOME/.local/share/cardputerzero-appstore}
 CACHE_DIR=${M5APPSTORE_CACHE_DIR:-$TARGET_HOME/.cache/cardputerzero-appstore}
+# Settings > Updates' own files (update.state; the release list and the downloaded bundles)
+UPD_STATE_DIR="$TARGET_HOME/.local/state/cyberdeckzero"
+UPD_CACHE_DIR="$TARGET_HOME/.cache/cyberdeckzero"
 UNIT_DIR="$TARGET_HOME/.config/systemd/user"
 WP_DROPIN="$TARGET_HOME/.config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf"
 CONFIG="$BOOT/config.txt"
@@ -302,7 +313,9 @@ echo "    desktop comes back) and the menu entry ${MENU_DIR#"$ROOT"}/$DESKTOP_EN
 echo "  - system service launcher-ntp-default.service"
 if exists "$WP_DROPIN"; then echo "  - $WP_DROPIN (desktop boards: WirePlumber Bluetooth audio drop-in)"; fi
 echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
-echo "    $CTL_BIN (and its link $ROOT/usr/local/bin/$CTL_BIN), lib/libapplaunch_vfb.so"
+echo "    $CTL_BIN (and its link $ROOT/usr/local/bin/$CTL_BIN), $UPDATE_HELPER, lib/libapplaunch_vfb.so"
+echo "  - Settings > Updates' helper files: $UPDATE_STATE_DIR (its status and last backup), $UPDATE_WORK_DIR,"
+echo "    $UPDATE_RUN_DIR, $UPDATE_LOG_DIR/update-*.log"
 case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
@@ -310,7 +323,7 @@ esac
 echo "  - files of earlier bundles no longer shipped: $(echo $RETIRED_FILES | sed 's/ /, /g') (those there)"
 echo "  - licences and notices $DOC_DIR"
 echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 92-applaunch-backlight-sysfs, 93-applaunch-rfkill, 99-bt-keyboard"
-echo "  - board profile $PROFILE (and $PROFILE_DIR if it is then empty)"
+echo "  - board profile $PROFILE and the install options $INSTALL_CONF (and $PROFILE_DIR if it is then empty)"
 echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${DESKTOP_RULES%.rules}, ${OLD_DESKTOP_RULES%.rules}"
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
@@ -336,9 +349,10 @@ if [ "$PURGE_CONFIG" = 1 ]; then
     echo "  - $CONF_DIR"
     echo "  - $STATE_DIR (app sources and install records)"
     echo "  - $CACHE_DIR"
+    echo "  - $UPD_STATE_DIR, $UPD_CACHE_DIR (Settings > Updates: its state, release list and downloads)"
 fi
 echo "Will keep:"
-[ "$PURGE_CONFIG" = 1 ] || echo "  - $CONF_DIR, $STATE_DIR, $CACHE_DIR"
+[ "$PURGE_CONFIG" = 1 ] || echo "  - $CONF_DIR, $STATE_DIR, $CACHE_DIR, $UPD_STATE_DIR, $UPD_CACHE_DIR"
 if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then :; else echo "  - installed app packages and their data (/usr/share/APPLaunch/applications, /opt/..., apps' own files)"; fi
 echo "  - packages install.sh added with apt (libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler)"
 echo "  - group membership (input, video, netdev; audio with a sound card; i2c on the HackBerry) of $TARGET_USER"
@@ -452,13 +466,24 @@ for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules "$DESKTOP_R
     rm_sys "$POLKIT_DIR/$f"
 done
 
-say "Removing the board profile"
+say "Removing the board profile and the install options"
 rm_sys "$PROFILE"
+rm_sys "$INSTALL_CONF"
 if [ -d "$PROFILE_DIR" ] && [ -z "$(ls -A "$PROFILE_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$PROFILE_DIR"; fi
+
+say "Removing Settings > Updates' helper files"
+# fixed folders of the update helper alone (report 047 P2): its status and last backup, its work folder, its lock
+for d in "$UPDATE_STATE_DIR" "$UPDATE_WORK_DIR" "$UPDATE_RUN_DIR"; do
+    if [ -d "$d" ]; then act $SUDO rm -rf "$d"; CHANGED_SYS=1; else note "already gone: $d"; fi
+done
+for f in "$UPDATE_LOG_DIR"/update-*.log; do
+    if exists "$f"; then rm_sys "$f"; fi
+done
+if [ -d "$UPDATE_LOG_DIR" ] && [ -z "$(ls -A "$UPDATE_LOG_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$UPDATE_LOG_DIR"; fi
 
 say "Removing the launcher files in $APP_ROOT"
 for f in "bin/$LAUNCHER_BIN" "bin/$OLD_LAUNCHER_BIN" bin/M5CardputerZero-AppStore "bin/$CONSOLE_HELPER" \
-         "bin/$OLD_CONSOLE_HELPER" "bin/$CTL_BIN" lib/libapplaunch_vfb.so; do
+         "bin/$OLD_CONSOLE_HELPER" "bin/$CTL_BIN" "bin/$UPDATE_HELPER" lib/libapplaunch_vfb.so; do
     rm_sys "$APP_ROOT/$f"
 done
 # the link of the request socket's client: only when it still points at ours
@@ -579,10 +604,10 @@ if [ "$DISABLE_LINGER" = 1 ]; then act_try $SUDO loginctl disable-linger "$TARGE
 # ---------------------------------------------------------------------------------------------------------
 if [ "$PURGE_CONFIG" = 1 ]; then
     say "Removing the user's launcher data (--purge-config)"
-    for d in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR"; do
+    for d in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR" "$UPD_STATE_DIR" "$UPD_CACHE_DIR"; do
         if [ -d "$d" ]; then
             # these paths are fixed names under the user's home, never a wildcard
-            case "$d" in */.config/cardputerzero|*/cardputerzero-appstore) act rm -rf "$d" ;; *) note "not removing unexpected path $d" ;; esac
+            case "$d" in */.config/cardputerzero|*/cardputerzero-appstore|*/.local/state/cyberdeckzero|*/.cache/cyberdeckzero) act rm -rf "$d" ;; *) note "not removing unexpected path $d" ;; esac
         else
             note "already gone: $d"
         fi
@@ -592,7 +617,7 @@ fi
 # ---------------------------------------------------------------------------------------------------------
 say "Done$( [ "$DRY" = 1 ] && echo ' (dry run: nothing was changed)')"
 echo "What remains:"
-for p in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR"; do [ -d "$p" ] && echo "  kept (user data): $p"; done
+for p in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR" "$UPD_STATE_DIR" "$UPD_CACHE_DIR"; do [ -d "$p" ] && echo "  kept (user data): $p"; done
 if [ -d "$APP_ROOT" ]; then
     echo "  $APP_ROOT: $(find "$APP_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ') files left (installed apps and their entries)"
 fi

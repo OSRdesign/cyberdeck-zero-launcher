@@ -145,6 +145,22 @@ struct Fixtures {
     std::string update_answer = "releases-real.json";
     std::vector<std::pair<std::string, std::string>> update_seed_state; /* key, value ("now-3600": the scene clock) */
     std::string update_seed_cache;                                       /* a fixture file name, "" none */
+    /* P2 (report 047, the download and the root helper): what the download's curl does ("done", "fail", "pending" or a
+     * percent: the worker waits), the checksum ("ok", "bad"), the bundle's size the download reports (the arm64 0.8.13
+     * asset of releases-0.8.13.json), the helper's status file (its key=value lines in order, "now-N" values allowed;
+     * empty: no file), whether its helper runs and is installed, the battery (-1 none) and the free space, the log
+     * Show log reads (a fixture file name) */
+    std::string update_download = "done";
+    std::string update_checksum = "ok";
+    long long update_asset_size = 57332103;
+    std::string update_digest = "ffd7c4972546fe32fbd480e39054dcd772f53b5cbd30e5fd8990e6700b133202";
+    std::vector<std::pair<std::string, std::string>> update_helper;
+    bool update_helper_alive = true;
+    bool update_helper_installed = true;
+    int update_battery = -1;
+    bool update_charging = false;
+    long long update_space_mb = 4096;
+    std::string update_log;
 };
 
 Fixtures &fixtures();

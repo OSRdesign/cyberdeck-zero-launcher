@@ -2110,13 +2110,43 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         fx.config_full = w[1] == "on";
         return true;
     }
-    if (cmd == "update") { /* Settings > Updates' fixtures (harness_update.cpp, report 047 P1) */
+    if (cmd == "update") { /* Settings > Updates' fixtures (harness_update.cpp, report 047 P1, P2) */
         static const char *usage = "usage: update net on|off | clock on|off | answer FILE|pending|ratelimit|error|dns|"
-                                   "notjson | build VERSION CHANNEL [ARCH] | state KEY VALUE | cache FILE";
+                                   "notjson | build VERSION CHANNEL [ARCH] | state KEY VALUE | cache FILE | download "
+                                   "done|fail|pending|PERCENT | checksum ok|bad | helper KEY VALUE | helper clear | "
+                                   "helper-alive on|off | helper-installed on|off | battery PERCENT|none [charging] | "
+                                   "space MB | log FILE";
         if (w.size() < 3) return fail(scene, line, usage);
         std::lock_guard<std::mutex> lock(fx.update_mutex);
-        if ((w[1] == "net" || w[1] == "clock") && w.size() == 3 && (w[2] == "on" || w[2] == "off")) {
-            (w[1] == "net" ? fx.update_network : fx.update_clock) = w[2] == "on";
+        if ((w[1] == "net" || w[1] == "clock" || w[1] == "helper-alive" || w[1] == "helper-installed") &&
+            w.size() == 3 && (w[2] == "on" || w[2] == "off")) {
+            (w[1] == "net"            ? fx.update_network
+             : w[1] == "clock"        ? fx.update_clock
+             : w[1] == "helper-alive" ? fx.update_helper_alive
+                                      : fx.update_helper_installed) = w[2] == "on";
+        } else if (w[1] == "download" && w.size() == 3) {
+            fx.update_download = w[2];
+        } else if (w[1] == "checksum" && w.size() == 3 && (w[2] == "ok" || w[2] == "bad")) {
+            fx.update_checksum = w[2];
+        } else if (w[1] == "helper" && w.size() == 3 && w[2] == "clear") {
+            fx.update_helper.clear();
+        } else if (w[1] == "helper" && w.size() >= 4) {
+            std::string value = w[3];
+            for (std::size_t i = 4; i < w.size(); ++i) value += " " + w[i]; /* a reason with spaces */
+            bool replaced = false;
+            for (auto &kv : fx.update_helper)
+                if (kv.first == w[2]) {
+                    kv.second = value;
+                    replaced = true;
+                }
+            if (!replaced) fx.update_helper.emplace_back(w[2], value);
+        } else if (w[1] == "battery" && (w.size() == 3 || (w.size() == 4 && w[3] == "charging"))) {
+            fx.update_battery = w[2] == "none" ? -1 : std::atoi(w[2].c_str());
+            fx.update_charging = w.size() == 4;
+        } else if (w[1] == "space" && w.size() == 3) {
+            fx.update_space_mb = std::atoll(w[2].c_str());
+        } else if (w[1] == "log" && w.size() == 3) {
+            fx.update_log = w[2];
         } else if (w[1] == "answer" && w.size() == 3) {
             fx.update_answer = w[2];
         } else if (w[1] == "build" && (w.size() == 4 || w.size() == 5)) {

@@ -37,6 +37,7 @@ lv_timer_t *s_idle_timer = nullptr;
 lv_timer_t *s_clock_timer = nullptr;
 
 bool s_enabled = true;
+bool s_held = false; // hold(): a page keeps the screen awake (Settings > Updates while the update helper runs)
 bool s_active = false;
 uint32_t s_last_activity = 0;
 int s_saved_backlight = -1;
@@ -153,7 +154,7 @@ void activate()
 
 void idle_timer_cb(lv_timer_t *)
 {
-    if (s_active || !s_enabled) return;
+    if (s_active || !s_enabled || s_held) return;
     const int seconds = timeout_seconds();
     if (seconds > 0 && lv_tick_elaps(s_last_activity) >= static_cast<uint32_t>(seconds) * 1000u) activate();
 }
@@ -218,6 +219,13 @@ void set_enabled(bool enabled)
     s_last_activity = lv_tick_get();
 }
 
+void hold(bool held)
+{
+    if (held == s_held) return;
+    s_held = held;
+    s_last_activity = lv_tick_get(); // released: a whole idle interval before the screen dims
+}
+
 } // namespace native_screensaver
 
 #else // SDL simulator and non-Linux builds
@@ -229,6 +237,7 @@ void shutdown() {}
 bool filter_key(const struct key_item *) { return false; }
 bool active() { return false; }
 void set_enabled(bool) {}
+void hold(bool) {}
 
 } // namespace native_screensaver
 

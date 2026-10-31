@@ -1297,7 +1297,7 @@ run --dry-run
 check "install dry-run: default app source planned" 'has "default app source: OSRdesign/cyberdeck-zero-apps added for the user once"'
 run --dry-run --no-default-source
 check "install dry-run --no-default-source: skipped" '[ $RC = 0 ] && has "default app source: skipped (--no-default-source)"'
-check "install.sh runs default-sources.sh as the user" 'grep -q "runuser -u \"\$TARGET_USER\" -- env HOME=\"\$TARGET_HOME\" sh \"\$HERE/default-sources.sh\"" "$INSTALL"'
+check "install.sh runs default-sources.sh as the user" 'grep -q "runuser -u \"\$TARGET_USER\" -- env HOME=\"\$TARGET_HOME\" sh \"\$DS_DIR/default-sources.sh\"" "$INSTALL" && grep -q "cp \"\$HERE/default-sources.sh\" \"\$DS_DIR/default-sources.sh\"" "$INSTALL"'
 check "build.sh puts default-sources.sh in the bundle" 'grep -q "\$HERE/default-sources.sh" "$HERE/../build.sh"'
 
 # --- default-sources.sh against a temp state folder (M5APPSTORE_STATE_DIR) and a fake Store backend
