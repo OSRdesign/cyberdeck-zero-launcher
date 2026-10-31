@@ -297,10 +297,16 @@ void build_tile(int index, const app &item)
     lv_obj_remove_flag(icon, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(icon, l.icon, l.icon);
     lv_image_set_inner_align(icon, LV_IMAGE_ALIGN_STRETCH);
-    // lv_image keeps the file's width/height from set_src and derives the STRETCH scale from them; a replaced
-    // file must not be matched with a cached header or stale geometry, so drop LVGL's entries for the path first
-    lv_image_cache_drop(item.Icon.c_str());
-    lv_image_set_src(icon, item.Icon.c_str());
+    // An app without an icon (a .desktop entry with no Icon= line keeps its tile, desktop_app_loader.cpp) has an empty
+    // path, and "" must never reach LVGL: a source whose first byte is below 0x20 is an lv_image_dsc_t to it
+    // (lv_image_src_get_type), so it would decode whatever bytes follow the string's terminator (heap garbage) as an
+    // image header and data pointer, and crash or draw garbage. Such a tile has no picture.
+    if (!item.Icon.empty()) {
+        // lv_image keeps the file's width/height from set_src and derives the STRETCH scale from them; a replaced
+        // file must not be matched with a cached header or stale geometry, so drop LVGL's entries for the path first
+        lv_image_cache_drop(item.Icon.c_str());
+        lv_image_set_src(icon, item.Icon.c_str());
+    }
     lv_obj_align(icon, LV_ALIGN_TOP_MID, 0, l.icon_top);
 
     lv_obj_t *label = lv_label_create(tile);

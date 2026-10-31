@@ -23,6 +23,8 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 namespace {
 
@@ -84,6 +86,30 @@ std::string tile_id(const std::string &name)
     return id + suffix;
 }
 
+/* An empty icon path whose buffer holds known bytes after its terminator (libstdc++: a short string lives in the
+ * object, clear() rewrites only the first byte). Before the home grid's empty-icon fix, LVGL read those bytes as an
+ * lv_image_dsc_t (the first byte, 0, says "variable image"): the 16 bytes as header + data_size, the next 8 (the Exec
+ * string's pointer, "tile:<name>") as data. Stale: an ARGB8888 1x1 image of 4 bytes, the pixel "tile", drawn
+ * stretched over the icon (a run of the home_order scene found an A2 header there and crashed in the decoder). */
+void plant_empty_icon(std::string &icon, harness::AppSpec::Empty kind)
+{
+    static const char kZeroed[15] = {};
+    static const char kStale[15] = {
+        0x00, 0x10,             /* magic (the terminator), cf ARGB8888 */
+        0x00, 0x00,             /* flags */
+        0x01, 0x00, 0x01, 0x00, /* w 1, h 1 */
+        0x04, 0x00, 0x00, 0x00, /* stride 4, reserved */
+        0x04, 0x00, 0x00,       /* data_size 4 (the 16th byte is the buffer's own terminator, 0) */
+    };
+    const char *bytes = kind == harness::AppSpec::Empty::Stale ? kStale : kZeroed;
+    icon.assign(bytes, sizeof(kZeroed));
+    icon.clear();
+    if (icon.capacity() != sizeof(kZeroed) || std::memcmp(icon.data() + 1, bytes + 1, sizeof(kZeroed) - 1) != 0) {
+        std::fprintf(stderr, "[harness] cannot plant the empty icon's bytes (not a 15-byte short string)\n");
+        std::exit(4);
+    }
+}
+
 } // namespace
 
 Launch::Launch()
@@ -101,6 +127,7 @@ Launch::Launch()
              // "tile:NAME" names it for the multitasking scenes (dots, switcher icons); launch_Exec does nothing here
             app_list.emplace_back(spec.name, spec.icon, "tile:" + spec.name, false);
         app_list.back().Id = tile_id(spec.name);
+        if (spec.empty != harness::AppSpec::Empty::No) plant_empty_icon(app_list.back().Icon, spec.empty);
     }
     // the scene's tiles are today's order; a stored user order (study 046) applies as in Launch::applications_load()
     launcher_home_order_apply(app_list);
