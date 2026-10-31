@@ -143,7 +143,7 @@ JetBrains Mono
 https://github.com/JetBrains/JetBrainsMono
 SIL OFL-1.1
 
-Noto Sans CJK and Noto Serif CJK
+Noto Sans CJK
 https://github.com/notofonts
 SIL OFL-1.1
 
