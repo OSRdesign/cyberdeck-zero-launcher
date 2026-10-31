@@ -15,8 +15,8 @@
 #        2. plan     the new bundle's `install.sh --plan` with the options of the first install (/etc/applaunch/
 #                    install.conf, else inferred, see "Options"); stops on a variant switch, a migration, an unknown
 #                    board, a board without the session's variant, a board profile install.sh would replace or move
-#        3. backup   binaries, units, rules, board.conf, install.conf, the menu entry and the notes into
-#                    /var/lib/cyberdeckzero-update/backup (about 30 MB; kept until the next update)
+#        3. backup   binaries, the launcher's images, audio and fonts, units, rules, board.conf, install.conf, the menu
+#                    entry and the notes into /var/lib/cyberdeckzero-update/backup (about 95 MB; kept until the next update)
 #        4. install  sh install.sh --user NAME <options> (never --force), under systemd-inhibit
 #        5. restart  appliance boards: install.sh restarted the user service itself; desktop boards: the running launcher
 #                    is asked to exit with status 76 (restart=launcher in the status file: its unit starts it again
@@ -84,8 +84,12 @@ RESTART_WAIT=${UPDATE_RESTART_WAIT:-30}
 DESKTOP_GAP=${UPDATE_DESKTOP_GAP:-4}
 PI_BOARDS="zero2w pi3a-luckfox35 pi3a-wsdsi43 pi3a-wsdsi43-portrait pi4b-dsi pi5-hyperpixel4 hackberry-cm5"
 # What a backup holds (paths without $ROOT; the user's own files are added per user): the launcher's folders whole,
-# then single files. A file that is absent before the install is removed again by a rollback.
-BACKUP_DIRS="/usr/share/APPLaunch/bin /usr/share/APPLaunch/lib /usr/share/doc/cyberdeckzero-launcher"
+# then single files. A file that is absent before the install is removed again by a rollback. Everything install.sh can
+# replace or delete is in it: bin and lib, the assets it copies over the folder (share/: images, audio, fonts; strokes/;
+# the tsv), the folders of files it retires (adb/, share/images/...: RETIRED_FILES) and the licences. NOT the installed
+# apps: /usr/share/APPLaunch/applications is the user's, only the one template file install.sh retires is saved.
+BACKUP_DIRS="/usr/share/APPLaunch/bin /usr/share/APPLaunch/lib /usr/share/APPLaunch/share /usr/share/APPLaunch/strokes
+/usr/share/APPLaunch/adb /usr/share/doc/cyberdeckzero-launcher"
 BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/system/cyberdeckzero-desktop.service
 /etc/systemd/system/launcher-ntp-default.service /etc/udev/rules.d/90-backlight-unblank.rules
 /etc/udev/rules.d/91-applaunch-vkbd.rules /etc/udev/rules.d/92-applaunch-backlight-gpio.rules
@@ -93,7 +97,8 @@ BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/sys
 /etc/udev/rules.d/99-bt-keyboard.rules /etc/polkit-1/rules.d/50-networkmanager-netdev.rules
 /etc/polkit-1/rules.d/51-launcher-time-power.rules /etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules
 /etc/applaunch/board.conf /etc/applaunch/install.conf /usr/share/applications/cyberdeckzero.desktop
-/usr/local/bin/cyberdeckzero-ctl"
+/usr/local/bin/cyberdeckzero-ctl /usr/share/APPLaunch/preinstalled-desktop-apps.tsv
+/usr/share/APPLaunch/applications/vim.desktop.temple"
 
 usage() { sed -n '3,39p' "$0" | sed 's/^# \{0,1\}//'; }
 now() { date +%s; }
@@ -272,16 +277,33 @@ free_kib() {
     df -Pk "$d" 2>/dev/null | awk 'NR == 2 { print $4 }'
 }
 
+# the file system of $1 (device and mount point): two folders on one share its free space
+fs_id() {
+    d=$1; while [ ! -d "$d" ] && [ "$d" != / ] && [ -n "$d" ]; do d=${d%/*}; [ -n "$d" ] || d=/; done
+    df -Pk "$d" 2>/dev/null | awk 'NR == 2 { print $1 " " $6 }'
+}
+
 # ---------------------------------------------------------------------------------------------------------------
 # Backup and restore
 # ---------------------------------------------------------------------------------------------------------------
+# KiB the backup of what is installed now will take (du of every folder and file it holds, plus a margin)
+backup_kib() {
+    set --
+    for p in $BACKUP_DIRS $BACKUP_FILES; do
+        if [ -e "$ROOT$p" ] || [ -L "$ROOT$p" ]; then set -- "$@" "$ROOT$p"; fi
+    done
+    k=0; [ $# -eq 0 ] || k=$(du -sk "$@" 2>/dev/null | awk '{ s += $1 } END { print s + 0 }')
+    echo $(( k + 4096 ))
+}
 user_files() {
     echo "$U_HOME/.config/systemd/user/$USER_UNIT"
     echo "$U_HOME/.config/wireplumber/wireplumber.conf.d/50-cyberdeckzero-bluez-no-seat.conf"
 }
 make_backup() {
     new="$BACKUP.new"
-    rm -rf "$new"; mkdir -p "$new/files" || return 1
+    # the backup of the last update goes first: it is of no use any more (the status says backup=0 from here on) and a
+    # board with a small card has no room for two
+    rm -rf "$new" "$BACKUP"; mkdir -p "$new/files" || return 1
     chmod 700 "$new"
     : > "$new/manifest"
     for p in $BACKUP_DIRS; do
@@ -314,6 +336,13 @@ restore_backup() {
                 rm -rf "$ROOT$p.restore"
                 if cp -a "$BACKUP/files$p" "$ROOT$p.restore"; then
                     rm -rf "$ROOT$p" && mv "$ROOT$p.restore" "$ROOT$p" || ok=1
+                elif [ -d "$BACKUP/files$p" ]; then
+                    # no room for a second copy next to the installed one (share/ is ~65 MB): the installed folder goes
+                    # first, the backup stays whole for another try
+                    rm -rf "$ROOT$p.restore"
+                    say "no room for a side copy of $p: restoring it in place"
+                    rm -rf "$ROOT$p"
+                    cp -a "$BACKUP/files$p" "$ROOT$p" || ok=1
                 else
                     ok=1
                 fi ;;
@@ -473,11 +502,21 @@ cmd_apply() {
     [ ! -L "$real" ] && [ -f "$real" ] || refuse "the download is missing or not a plain file"
     [ "$(stat -c %U "$real" 2>/dev/null)" = "$U" ] || refuse "the download does not belong to $U"
     size_kib=$(( $(stat -c %s "$real") / 1024 ))
-    need=$(( size_kib * 3 + 65536 ))
-    for d in "$WORK" "$STATE_DIR"; do
-        have=$(free_kib "$d")
-        [ -z "$have" ] || [ "$have" -ge "$need" ] || refuse "not enough space: need $(( need / 1024 )) MB, $(( have / 1024 )) MB free"
-    done
+    # the work folder: the copy of the bundle and its unpacked tree. The state folder: the backup of what is installed
+    # now (the one of the last update goes before the new one is made: its size counts as free). One file system: both.
+    need_work=$(( size_kib * 3 + 65536 ))
+    need_state=$(backup_kib)
+    old_kib=0; [ ! -d "$BACKUP" ] || old_kib=$(du -sk "$BACKUP" 2>/dev/null | awk '{ s += $1 } END { print s + 0 }')
+    have_work=$(free_kib "$WORK"); have_state=$(free_kib "$STATE_DIR")
+    if [ -n "$have_work" ] && [ -n "$have_state" ] && [ "$(fs_id "$WORK")" = "$(fs_id "$STATE_DIR")" ]; then
+        need=$(( need_work + need_state )); have=$(( have_work + old_kib ))
+        [ "$have" -ge "$need" ] || refuse "not enough space: need $(( need / 1024 )) MB, $(( have / 1024 )) MB free"
+    else
+        [ -z "$have_work" ] || [ "$have_work" -ge "$need_work" ] \
+            || refuse "not enough space: need $(( need_work / 1024 )) MB, $(( have_work / 1024 )) MB free"
+        [ -z "$have_state" ] || [ $(( have_state + old_kib )) -ge "$need_state" ] \
+            || refuse "not enough space: need $(( need_state / 1024 )) MB, $(( (have_state + old_kib) / 1024 )) MB free"
+    fi
     clean_work
     mkdir -p "$WORK" && chmod 700 "$WORK" || refuse "cannot create $WORK"
     cp "$real" "$WORK/bundle.tar.gz" || refuse "cannot copy the download"

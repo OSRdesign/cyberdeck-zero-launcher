@@ -60,6 +60,14 @@ tarball() { # tarball BUNDLE_PARENT OUT.tar.gz
 bundle "$TMP/old" 0.8.12
 bundle "$TMP/new" 0.8.13
 bundle "$TMP/broken" broken
+# the old release ships Store images and an icon that the new install.sh retires (RETIRED_FILES); the broken release
+# ships a file of its own in share/ (a rollback removes it again, like a new file in bin/ or lib/)
+printf 'store image of 0.8.12\000\377 binary\n' > "$TMP/old/bundle/payload/share/share/images/store_100.png"
+printf 'tank icon of 0.8.12\n' > "$TMP/old/bundle/payload/share/share/images/tank.png"
+# (the old release's own install.sh does not retire them: only the new one does)
+sed -i -e 's#share/images/store_100.png##' -e 's#share/images/tank.png##' "$TMP/old/bundle/install.sh"
+( cd "$TMP/old/bundle/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$TMP/old/bundle/payload/share.manifest"
+echo "only in the broken release" > "$TMP/broken/bundle/payload/share/share/images/broken_only.png"
 NEWTGZ="$TMP/cyberdeckzero-launcher-0.8.13-arm64.tar.gz"; tarball "$TMP/new" "$NEWTGZ"
 BROKENTGZ="$TMP/cyberdeckzero-launcher-0.8.14-arm64.tar.gz"; tarball "$TMP/broken" "$BROKENTGZ"
 sha() { sha256sum "$1" | cut -d' ' -f1; }
@@ -131,6 +139,16 @@ cat > "$FAKEBIN/sudo" <<'EOF'
 printf 'sudo %s\n' "$*" >> "$FAKE_CALLS"
 [ "$1" = -v ] && exit 0
 exec "$@"
+EOF
+# stand-in df: FAKE_DF_KIB set = that many KiB free on one file system, else the real df
+cat > "$FAKEBIN/df" <<'EOF'
+#!/bin/sh
+if [ -n "${FAKE_DF_KIB:-}" ]; then
+    printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\nfakefs 99999999 0 %s 0%% /\n' "$FAKE_DF_KIB"
+    exit 0
+fi
+for r in /bin/df /usr/bin/df; do [ -x "$r" ] && exec "$r" "$@"; done
+exit 1
 EOF
 for c in loginctl udevadm usermod chown dtc groupadd; do
     printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
@@ -391,6 +409,63 @@ printf 'v=1\nstate=running\nstep=plan\nfrom=0.8.13\nto=0.8.14\nvariant=\nuser=%s
 SNAP=$(snapshot)
 helper resume --user "$U"
 check "resume before any change: refused, nothing changed" '[ $RC = 2 ] && [ "$(st state)" = refused ] && [ "$(st reason)" = "interrupted before any change: nothing to repair" ] && [ "$(snapshot)" = "$SNAP" ]'
+
+# ------------------------------------------------------------------------------------------------------------------
+# the backup holds every file install.sh can delete or replace under /usr/share/APPLaunch (the images, audio, fonts:
+# C2/C3 retire images): a rollback brings them back byte for byte
+R=$(root pi3a-luckfox35)
+first_install --no-boot-config --no-default-source
+AR="$R/usr/share/APPLaunch"
+SUM_STORE=$(cksum < "$AR/share/images/store_100.png"); SUM_TANK=$(cksum < "$AR/share/images/tank.png")
+MODE_STORE=$(stat -c %a "$AR/share/images/store_100.png")
+SNAP_SHARE=$(cd "$AR/share" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(cksum < "$f")"; done)
+check "old release installed: the retired images are there" '[ $RC = 0 ] && [ -f "$AR/share/images/store_100.png" ] && [ -f "$AR/share/images/tank.png" ]'
+download "$BROKENTGZ"
+HT=2
+helper apply --version 0.8.14 --from-version 0.8.12 --sha256 "$(sha "$BROKENTGZ")" --file "$FILE" --user "$U"
+HT=4
+B="$R/var/lib/cyberdeckzero-update/backup"
+check "failed health check: rolled back" '[ $RC = 1 ] && [ "$(st state)" = rolled-back ] && [ "$(bin_version)" = 0.8.12 ]'
+check "the backup held the share images, the retired ones included, and the manifest names the folder" '[ -f "$B/files/usr/share/APPLaunch/share/images/store_100.png" ] && grep -qx "dir /usr/share/APPLaunch/share" "$B/manifest" && grep -qx "dir /usr/share/APPLaunch/bin" "$B/manifest"'
+check "the new install.sh had retired them (the log says so)" 'grep -q "removed /usr/share/APPLaunch/share/images/store_100.png (no longer in the bundle)" "$R"/var/log/cyberdeckzero/update-*.log'
+check "rollback: the retired Store image and tank icon are back, byte for byte, same mode" '[ -f "$AR/share/images/store_100.png" ] && [ "$(cksum < "$AR/share/images/store_100.png")" = "$SUM_STORE" ] && [ "$(cksum < "$AR/share/images/tank.png")" = "$SUM_TANK" ] && [ "$(stat -c %a "$AR/share/images/store_100.png")" = "$MODE_STORE" ]'
+check "rollback: share/ as a whole is as before (replaced files restored, the broken release's own file gone)" '[ "$(cd "$AR/share" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(cksum < "$f")"; done)" = "$SNAP_SHARE" ] && [ ! -e "$AR/share/images/broken_only.png" ] && [ "$(cat "$AR/share/images/setting_100.png")" = "png 0.8.12" ]'
+
+# an old-style backup (bin, lib and doc only: a helper before this one) still restores what it holds; share/ is left alone
+sleep 1
+download "$NEWTGZ"
+FAKE_KILL_HELPER=1; export FAKE_KILL_HELPER
+apply "$NEWTGZ" 0.8.13
+unset FAKE_KILL_HELPER
+check "an update interrupted after install.sh: the new image set is installed, the retired images gone" '[ "$(st state)" = running ] && [ "$(bin_version)" = 0.8.13 ] && [ ! -e "$AR/share/images/store_100.png" ] && [ "$(cat "$AR/share/images/setting_100.png")" = "png 0.8.13" ]'
+# the backup as an earlier helper made it: only bin, lib and doc
+grep -v -e '^dir /usr/share/APPLaunch/share$' -e '^dir /usr/share/APPLaunch/strokes$' -e '^dir /usr/share/APPLaunch/adb$' \
+     -e 'preinstalled-desktop-apps.tsv' -e 'vim.desktop.temple' "$B/manifest" > "$B/manifest.old" && mv "$B/manifest.old" "$B/manifest"
+rm -rf "$B/files/usr/share/APPLaunch/share"
+sed -i -e 's/^boot=.*/boot=an-earlier-boot/' -e 's/^to=.*/to=0.8.99/' "$R/var/lib/cyberdeckzero-update/status"
+HT=2
+helper resume --user "$U"
+HT=4
+check "old-style backup: rolled back, bin and lib and doc restored (0.8.12), share/ not touched, no error" '[ $RC = 1 ] && [ "$(st state)" = rolled-back ] && [ "$(bin_version)" = 0.8.12 ] && [ "$(cat "$AR/share/images/setting_100.png")" = "png 0.8.13" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/release-notes-0.8.12.md" ]'
+
+# the free-space check counts the backup: a folder of images too big for the room left is refused, nothing changed
+R=$(root pi3a-luckfox35)
+first_install --no-boot-config --no-default-source
+dd if=/dev/zero of="$R/usr/share/APPLaunch/share/images/big.bin" bs=1024 count=3072 2>/dev/null
+download "$NEWTGZ"
+SNAP=$(snapshot)
+NEED_WORK=$(( $(stat -c %s "$NEWTGZ") / 1024 * 3 + 65536 ))
+FAKE_DF_KIB=$(( NEED_WORK + 1000 )); export FAKE_DF_KIB     # the bundle alone would fit (the old rule), the 3 MB backup beside it not
+apply "$NEWTGZ" 0.8.13
+unset FAKE_DF_KIB
+check "free space: the work folder fits but the backup does not: refused (exit 2), nothing changed" '[ $RC = 2 ] && [ "$(st state)" = refused ] && case "$(st reason)" in "not enough space: need "*) true ;; *) false ;; esac && [ "$(snapshot)" = "$SNAP" ] && [ ! -e "$R/var/cache/cyberdeckzero-update" ]'
+sleep 1
+FAKE_DF_KIB=$(( NEED_WORK + 20000 )); export FAKE_DF_KIB
+apply "$NEWTGZ" 0.8.13
+unset FAKE_DF_KIB
+check "free space: room for both: the update goes ahead (done)" '[ $RC = 0 ] && [ "$(st state)" = done ] && [ "$(bin_version)" = 0.8.13 ]'
+# the backup of the last update goes before the next one is made (one backup on the card)
+check "backup: one only (no .new left behind), it has the share folder" '[ -d "$R/var/lib/cyberdeckzero-update/backup/files/usr/share/APPLaunch/share" ] && [ ! -e "$R/var/lib/cyberdeckzero-update/backup.new" ]'
 
 # ------------------------------------------------------------------------------------------------------------------
 # uninstall.sh takes away what P2 adds (the helper, install.conf, its status, backup, logs, work and run folders)
