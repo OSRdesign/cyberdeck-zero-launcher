@@ -95,7 +95,14 @@ OLD_DESKTOP_ENTRY_NAME=applaunch.desktop
 # Files of earlier bundles that the current one no longer ships (install.sh: RETIRED_FILES): not in its manifest
 RETIRED_FILES="share/images/logo_lcd.png share/images/launcher_brand_logo.png share/images/carousel_zero_wordmark.png
 adb/cardputer-adb adb/cardputer-adb-gadget lib/nihao.so applications/vim.desktop.temple share/images/claw_100.png
-share/images/claw_80.png share/images/zclaw_avatar_16.png share/images/zclaw_send_button_18.png share/images/zclaw_sparkles_10.png"
+share/images/claw_80.png share/images/zclaw_avatar_16.png share/images/zclaw_send_button_18.png share/images/zclaw_sparkles_10.png
+share/images/appstore.png share/images/appstore-shortcut-install.png share/images/appstore-shortcut-upgrade.png
+share/images/appstore-shortcut-delete.png share/images/appstore-shortcut-back.png
+share/images/appstore-shortcut-sharecode.png share/images/appstore-shortcut-search.png
+share/images/appstore-shortcut-screenshots.png share/images/appstore-shortcut-settings.png
+share/images/appstore-shortcut-detail.png share/images/store_arrow_down.png share/images/store_arrow_up.png
+share/images/store_arrow_right.png share/images/store_arrow_left.png share/images/store_wordmark.png
+share/images/store_100.png share/images/store_80.png"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 

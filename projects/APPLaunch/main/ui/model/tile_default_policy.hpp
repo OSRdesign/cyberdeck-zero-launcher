@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: MIT
  *
  * Home tiles that a board profile starts hidden: APPLAUNCH_HIDE_TILES in /etc/applaunch/board.conf, a comma list of
- * tile config keys (e.g. app_Store: the PC profile hides the Store, whose hub has arm64 packages only, report 028 X13).
+ * tile config keys (e.g. app_Game; a key that names no tile is ignored).
  * Only the default changes: Settings > Launcher still lists the tile, and the user's own choice, once saved, wins.
  */
 #pragma once

@@ -9,10 +9,10 @@ review
 sizes 640x480 720x720
 clock 20:30
 wifi 70
-apps Settings Store CLI SSH Calculator Old=none
+apps Settings CLI SSH Calculator Old=none
 home
 shot home_icon_none
-apps Settings Store CLI SSH Calculator Old=stale
+apps Settings CLI SSH Calculator Old=stale
 home
 shot home_icon_stale
 expect_same home_icon_none

@@ -8,7 +8,7 @@ profile pda
 env APPLAUNCH_DEV 1
 config osk_mode 1
 keyboards 0
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

@@ -9,7 +9,7 @@ profile pda
 # the portrait launcher without the writing zone (report 040, S2): kept as the regression of a portrait canvas
 # without APPLAUNCH_PDA; the zone itself: the zone_* scenes (report 041)
 env APPLAUNCH_PDA 0
-apps "Serial Console=cli_100.png" "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "System Monitor=game_100.png" "Spectrum Analyzer for the Software Defined Radio=tank_100.png" "Net Toolbox=ssh_100.png" "An App With A Thirty Char Name=math_100.png" Settings
+apps "Serial Console=cli_100.png" "Mesh Hop=ip_panel_100.png" "RSS Reader=fixture:store_100.png" "System Monitor=game_100.png" "Spectrum Analyzer for the Software Defined Radio=tank_100.png" "Net Toolbox=ssh_100.png" "An App With A Thirty Char Name=math_100.png" Settings
 clock 20:30
 wifi 70
 bt on

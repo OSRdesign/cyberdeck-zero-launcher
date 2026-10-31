@@ -6,7 +6,7 @@ review
 sizes 800x480 720x720 640x480
 env APPLAUNCH_DEV 0
 sound hdmi
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

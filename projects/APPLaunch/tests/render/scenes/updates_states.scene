@@ -6,7 +6,7 @@ review
 sizes 640x480 480x800 480x640 720x720 1280x800
 @480x800,480x640 profile pda
 env APPLAUNCH_DEV 0
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30 2026-11-05
 wifi 70
 bt on

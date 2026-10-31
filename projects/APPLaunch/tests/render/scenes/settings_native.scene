@@ -7,7 +7,7 @@
 title settings native
 review
 env APPLAUNCH_DEV 1
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 wifi 70
 bt on

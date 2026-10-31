@@ -15,7 +15,7 @@ env APPLAUNCH_ROTATE 270
 @800x1280 env APPLAUNCH_PANEL_MM 150x93
 env APPLAUNCH_DEV 1
 keyboards 0
-apps Settings Store CLI SSH Calculator "Mesh Hop=ip_panel_100.png"
+apps Settings CLI SSH Calculator "Mesh Hop=ip_panel_100.png"
 clock 20:30
 wifi 70
 bt on

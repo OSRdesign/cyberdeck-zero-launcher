@@ -2,7 +2,7 @@
 # Root menu, then the Screen and System sections. These are the Settings goldens (640x480 and 480x320; the other
 # sizes are review only); the first baseline of the native Settings, re-shot on 2026-10-11 from the compat ones.
 title settings
-apps Settings Store CLI SSH Calculator
+apps Settings CLI SSH Calculator
 clock 20:30
 bt on
 home

@@ -14,12 +14,12 @@ clock 20:30
 wifi 70
 bt on
 # today's grid with the tiles listed in the expected order, nothing stored
-apps 2048=fixture:2048_128.png Calculator Mesh Settings Store CLI SSH Browser
+apps 2048=fixture:2048_128.png Calculator Mesh Settings CLI SSH Browser
 home
 shot home_order_expected
 # the same tiles in today's order, with the stored order
 config home_order 5db35fa9,1af49623,81ac1fe3,9b6f26cf,30c82f22,6cbae6b3,cd07a96d,3df2309d
-apps Settings Store CLI SSH Calculator 2048=fixture:2048_128.png Mesh Browser
+apps Settings CLI SSH Calculator 2048=fixture:2048_128.png Mesh Browser
 home
 shot home_order_seeded
 expect_same home_order_expected
@@ -40,6 +40,6 @@ key ENTER
 wait 300
 shot home_order_reset_done
 # the grid reloaded: today's order
-apps Settings Store CLI SSH Calculator 2048=fixture:2048_128.png Mesh Browser
+apps Settings CLI SSH Calculator 2048=fixture:2048_128.png Mesh Browser
 home
 shot home_order_after_reset

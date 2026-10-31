@@ -13,7 +13,7 @@
 int launcher_builtin_app_display_order(std::string_view label) noexcept;
 
 // Returns true for product-owned desktop applications that belong in the
-// Settings -> Launcher control list. Settings, Store, and CLI are protected
+// Settings -> Launcher control list. Settings and CLI are protected
 // launcher surfaces and are intentionally excluded.
 bool launcher_builtin_desktop_app_is_managed(std::string_view label) noexcept;
 

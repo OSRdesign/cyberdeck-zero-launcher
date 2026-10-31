@@ -193,7 +193,7 @@ new secured network accepts only `Fixtures::wifi_password`, a fake; a hidden one
 ProfileForget / ProfileExists, ProfileDisconnectActive, RadioSetEnabled; the OS info service answers
 NetworkDefaultInfoRead. A connection keeps the scene's `wifi PCT` signal so the status strip stays comparable.
 `metrics` writes `out/<WxH>/metrics.txt` at the five sizes and 1024x600 (text only, no golden).
-`settings_native_launcher` (task 014 P3e: Settings > Launcher with the Store toggle first, switched off, reopened) is
+`settings_native_launcher` (task 014 P3e: Settings > Launcher with the first toggle switched off, reopened) is
 review-only too.
 `home_order` (study 046 P1, review-only, at 640x480, 480x800 and 720x720): a stored home order (`config home_order`
 before `apps`; the harness gives each tile the board's id, `harness_launch.cpp` `tile_id`) checked with `expect_same`

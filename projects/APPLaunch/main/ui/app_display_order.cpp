@@ -13,9 +13,8 @@
 
 namespace {
 
-constexpr std::array<std::string_view, 24> kBuiltInAppOrder = {
+constexpr std::array<std::string_view, 23> kBuiltInAppOrder = {
     "settings",
-    "store",
     "cli",
     "python",
     "zclaw",
@@ -80,7 +79,7 @@ int launcher_builtin_app_display_order(std::string_view label) noexcept
         for (std::size_t index = 0; index < kBuiltInAppOrder.size(); ++index)
             if (normalized == kBuiltInAppOrder[index]) return static_cast<int>(index);
         // Releases have used both the short and hardware-prefixed SubG name.
-        if (normalized == "subgchat") return 23;
+        if (normalized == "subgchat") return 22;
     } catch (...) {
         // An allocation failure must not prevent the launcher from showing apps.
     }
@@ -89,10 +88,10 @@ int launcher_builtin_app_display_order(std::string_view label) noexcept
 
 bool launcher_builtin_desktop_app_is_managed(std::string_view label) noexcept
 {
-    // The first three entries are APPLaunch's protected pages. The remaining
-    // labels are the product-owned app set, including desktop applications.
+    // The first two entries (Settings, CLI) are APPLaunch's protected pages. The
+    // remaining labels are the product-owned app set, including desktop applications.
     const int order = launcher_builtin_app_display_order(label);
-    return order >= 3;
+    return order >= 2;
 }
 
 bool launcher_builtin_desktop_filename_is_managed(std::string_view filename) noexcept

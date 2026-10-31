@@ -12,7 +12,7 @@ clock 20:30
 wifi 70
 bt on
 keyboards 1
-apps Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048=fixture:2048_128.png "Mesh Hop=ip_panel_100.png" "RSS Reader=store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" Notes=math_100.png Maps=game_100.png Radio=tank_100.png Weather=setting_100.png Clock=python_100.png Files=cli_100.png
+apps Settings Klondike CLI Python SSH "IP Panel" Calculator Snake Tank 2048=fixture:2048_128.png "Mesh Hop=ip_panel_100.png" "RSS Reader=fixture:store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png" Notes=math_100.png Maps=game_100.png Radio=tank_100.png Weather=setting_100.png Clock=python_100.png Files=cli_100.png
 home
 # Settings (the first tile, selected) picked up with Ctrl+O
 key CTRL+O
@@ -28,7 +28,7 @@ key DOWN
 key DOWN
 shot move_rows_bottom
 expect_grid_view Settings
-expect_tiles Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Settings Files
+expect_tiles Klondike CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Settings Files
 # and back to the first row
 key UP
 key UP
@@ -38,7 +38,7 @@ key UP
 key UP
 shot move_rows_top
 expect_grid_view Settings
-expect_tiles Settings Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Files
+expect_tiles Settings Klondike CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Files
 # halfway (slot 9, the fourth row), then a tap on Mesh Hop (slot 10): placed there and dropped, the grid rebuilt with
 # the tile in view
 key DOWN
@@ -49,7 +49,7 @@ expect_grid_view Settings
 tapbutton "Mesh Hop"
 shot move_rows_tap
 expect_grid_view Settings
-expect_tiles Store CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" Settings "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Files
+expect_tiles Klondike CLI Python SSH "IP Panel" Calculator Snake Tank 2048 "Mesh Hop" Settings "RSS Reader" "Net Toolbox" "Serial Console" Notes Maps Radio Weather Clock Files
 # a press and the 3 s hold on a tile in the second row of the grid do not move the grid (LVGL's click focus used to
 # scroll the pressed tile's row to the top); the hold is then given up
 key ESC
