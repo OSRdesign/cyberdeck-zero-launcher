@@ -1,0 +1,24 @@
+20:30:02 update of the launcher 0.8.12 -> 0.8.13 for pi (helper pid 1812)
+20:30:03 sha256 checked: ffd7c4972546fe32fbd480e39054dcd772f53b5cbd30e5fd8990e6700b133202
+20:30:41 options (recorded in /etc/applaunch/install.conf):
+20:30:41   --user pi --keyboard-name "M4 Keyboard"
+20:30:44 plan: board zero2w, appliance variant, board.conf: keep
+20:30:52 backup of 0.8.12 in /var/lib/cyberdeckzero-update/backup
+20:30:52 install.sh of 0.8.13
+
+== Checking the board
+board: Raspberry Pi Zero 2 W Rev 1.0 -> profile zero2w   user: pi   glibc: 2.41
+session: appliance (no display manager enabled or running: the launcher starts at boot)
+
+== Installing packages
+all packages already present
+
+== Installing the launcher into /usr/share/APPLaunch
+cyberdeckzero and cyberdeckzero-console installed
+
+== Starting the launcher
+20:31:37 install.sh done
+20:31:37 waiting for launcher 0.8.13 (board.state, up to 90 s)
+20:33:07 rolling back: 0.8.13 did not start
+20:33:09 backup of 0.8.12 restored
+20:33:09 restarting the user service cyberdeckzero.service of pi

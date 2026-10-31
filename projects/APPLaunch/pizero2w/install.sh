@@ -24,11 +24,15 @@
 #                          hackberry-cm5)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
 #   --dry-run              print the detected board, the session and what would be done, change nothing
+#   --plan                 the dry run as key=value lines for a program (Settings > Updates' helper,
+#                          cyberdeckzero-update: board, session, variant switch, migration, board profile action)
 #   --force                continue on an unknown board (no profile is written); replace a hand-edited
 #                          /etc/applaunch/board.conf (the old one is kept as board.conf.bak)
 #   --no-default-source    do not offer the apps repo (OSRdesign/cyberdeck-zero-apps) in Settings > Apps
 #                          (default: added once for the user if they have no source yet, see default-sources.sh)
 #
+# Each install records its options (keyboard name, --board, --no-boot-config, --pwm-backlight, --no-default-source) in
+# /etc/applaunch/install.conf: Settings > Updates installs a newer release by running this script again with them.
 # To remove everything this script adds, run ./uninstall.sh (see README.md, "Uninstall").
 #
 # Prerequisites that this script does NOT do:
@@ -49,10 +53,11 @@ DRY=0
 BOARD_ONLY=0
 BOARD_ARG=""
 DEFAULT_SOURCE=1
+PLAN=0
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
-        --dry-run) DRY=1 ;;
+        -h|--help) sed -n '2,38p' "$0"; exit 0 ;;
+        --dry-run|--plan) DRY=1 ;;
     esac
 done
 # Become root first, while "$@" still holds the options (the loop below consumes them). A dry run and the
@@ -69,6 +74,7 @@ while [ $# -gt 0 ]; do
         --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
+        --plan) DRY=1; PLAN=1; shift ;;
         --force) FORCE=1; shift ;;
         --no-default-source) DEFAULT_SOURCE=0; shift ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
@@ -98,6 +104,7 @@ GPIO_BL_RULE="92-applaunch-backlight-gpio.rules"
 LAUNCHER_BIN=cyberdeckzero                       # /usr/share/APPLaunch/bin/cyberdeckzero
 CONSOLE_HELPER=cyberdeckzero-console             # /usr/share/APPLaunch/bin/cyberdeckzero-console
 CTL_BIN=cyberdeckzero-ctl                        # /usr/share/APPLaunch/bin/cyberdeckzero-ctl, linked in /usr/local/bin
+UPDATE_HELPER=cyberdeckzero-update               # /usr/share/APPLaunch/bin/cyberdeckzero-update: Settings > Updates
 USER_UNIT=cyberdeckzero.service                  # appliance boards: systemd user service
 CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the panel from the text console
 DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
@@ -893,6 +900,34 @@ print_switch() {
 }
 
 plan_profile
+# --plan: the dry run for a program (cyberdeckzero-update, Settings > Updates, report 047 P2): one key=value per line and
+# nothing else. The helper stops an update on a variant switch, a migration, an unknown board, desktop_refused=1 or a
+# profile_action of replace or remove: those need this script run by hand.
+if [ "$PLAN" = 1 ]; then
+    TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
+    PLAN_HOME=$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6 || true)
+    PLAN_HOME="$SYSROOT${PLAN_HOME:-/home/$TARGET_USER}"
+    plan_switch "$PLAN_HOME"
+    MIGRATION=0
+    if old_user_unit_present "$PLAN_HOME" || present "$SYSTEMD_DIR/$OLD_CONSOLE_UNIT" || present "$SYSTEMD_DIR/$OLD_DESKTOP_UNIT" \
+            || present "$POLKIT_DIR/$OLD_DESKTOP_RULES" || present "$MENU_DIR/$OLD_DESKTOP_ENTRY_NAME"; then
+        MIGRATION=1
+    fi
+    echo "plan=1"
+    echo "glibc=$GLIBC"
+    echo "machine=$MACHINE"
+    echo "pc=$IS_PC"
+    echo "board=$BOARD"
+    echo "board_forced=$( [ -n "$BOARD_ARG" ] && echo 1 || echo 0 )"
+    echo "session=$SESSION"
+    echo "desktop_refused=$DESKTOP_REFUSED"
+    echo "switch=$SWITCH"
+    echo "migration=$MIGRATION"
+    echo "profile_action=$PROFILE_ACTION"
+    echo "profile_state=$(profile_state)"
+    echo "user=$TARGET_USER"
+    exit 0
+fi
 if [ "$DRY" = 1 ]; then
     echo "DRY RUN: nothing will be changed."
     echo "glibc: $GLIBC (ok)"
@@ -942,6 +977,8 @@ if [ "$DRY" = 1 ]; then
         print_switch "$TARGET_USER"
         echo "launcher files: /usr/share/APPLaunch/bin/$LAUNCHER_BIN and $CONSOLE_HELPER, the libraries and assets of the"
         echo "  bundle; licences and notices in /usr/share/doc/$DOC_NAME (replaced as a whole)"
+        echo "install options: /etc/applaunch/install.conf (the keyboard name, --board, the boot configuration, the default"
+        echo "  source: Settings > Updates runs install.sh again with them)"
     fi
     if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
         if [ "$IS_PC" = 1 ]; then
@@ -1225,6 +1262,11 @@ fi
 install -m 644 "$PAYLOAD/lib/libapplaunch_vfb.so" "$APP_ROOT/lib/libapplaunch_vfb.so"
 # the text console helper of the console unit (appliance boards) and the desktop unit (desktop boards)
 install -m 755 "$PAYLOAD/bin/$CONSOLE_HELPER" "$APP_ROOT/bin/$CONSOLE_HELPER"
+# Settings > Updates' root helper (report 047 P2): only ever started by the launcher, through the sudo password and
+# systemd-run; a bundle without it installs without (Settings > Updates then offers no install)
+if [ -f "$PAYLOAD/bin/$UPDATE_HELPER" ]; then
+    install -m 755 "$PAYLOAD/bin/$UPDATE_HELPER" "$APP_ROOT/bin/$UPDATE_HELPER"
+fi
 # the command-line client of launcher.sock (report 035), on the PATH of every user; a bundle without it installs without
 if [ -f "$PAYLOAD/bin/$CTL_BIN" ]; then
     install -m 755 "$PAYLOAD/bin/$CTL_BIN" "$APP_ROOT/bin/$CTL_BIN"
@@ -1391,6 +1433,26 @@ fi
 say "Board profile"
 apply_profile
 
+# The options of this run, for Settings > Updates (report 047 P2): its helper runs a newer release's install.sh with
+# them, so the keyboard link, a forced board profile (the PDA one is never detected) and the boot configuration stay as
+# they are. Rewritten by every run, never by --dry-run or --board-only.
+say "Install options"
+INSTALL_CONF="$PROFILE_DIR/install.conf"
+mkdir -p "$PROFILE_DIR"
+{
+    echo "# The options of the last install.sh run, written by install.sh. Settings > Updates runs install.sh of a newer"
+    echo "# release again with them (cyberdeckzero-update). board= is empty when the board was detected."
+    echo "keyboard_name=$KEYBOARD_NAME"
+    echo "board=$BOARD_ARG"
+    echo "boot_config=$BOOT_CONFIG"
+    echo "pwm_backlight=$PWM_BACKLIGHT"
+    echo "default_source=$DEFAULT_SOURCE"
+    echo "user=$TARGET_USER"
+} > "$INSTALL_CONF.tmp"
+chmod 644 "$INSTALL_CONF.tmp"
+mv "$INSTALL_CONF.tmp" "$INSTALL_CONF"
+echo "${INSTALL_CONF#"$SYSROOT"}: keyboard \"$KEYBOARD_NAME\"${BOARD_ARG:+, --board $BOARD_ARG}$( [ "$BOOT_CONFIG" = 0 ] && echo ', --no-boot-config')$( [ "$PWM_BACKLIGHT" = 1 ] && echo ', --pwm-backlight')$( [ "$DEFAULT_SOURCE" = 0 ] && echo ', --no-default-source')"
+
 # The PWM backlight overlay is for the deck's Waveshare panel (DECK_BOOT, see the board detection); a board with its
 # own profile keeps its config.txt and only gets the cmdline arguments (never an fbcon= argument).
 # A desktop board keeps its boot configuration as it is (its desktop owns the console settings).
@@ -1466,8 +1528,13 @@ if [ "$DEFAULT_SOURCE" = 0 ]; then
 elif [ ! -f "$HERE/default-sources.sh" ]; then
     echo "default-sources.sh is not next to install.sh: skipped (add OSRdesign/cyberdeck-zero-apps in Settings > Apps > Sources)"
 else
-    runuser -u "$TARGET_USER" -- env HOME="$TARGET_HOME" sh "$HERE/default-sources.sh" </dev/null \
+    # The user cannot always read $HERE: the update helper unpacks the bundle in /var/cache/cyberdeckzero-update (root-only,
+    # 0700), a bundle can sit in /root. So root copies the script where the user can read it, runs it, removes it.
+    DS_DIR=$(mktemp -d) && chmod 755 "$DS_DIR" && cp "$HERE/default-sources.sh" "$DS_DIR/default-sources.sh" \
+        && chmod 644 "$DS_DIR/default-sources.sh" \
+        && runuser -u "$TARGET_USER" -- env HOME="$TARGET_HOME" sh "$DS_DIR/default-sources.sh" </dev/null \
         || echo "(the default app source could not be set up: add OSRdesign/cyberdeck-zero-apps in Settings > Apps > Sources)"
+    [ -z "${DS_DIR:-}" ] || rm -rf "$DS_DIR"
 fi
 
 if [ "$SESSION" = desktop ]; then

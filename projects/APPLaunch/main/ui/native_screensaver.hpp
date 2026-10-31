@@ -25,4 +25,8 @@ bool active();
 /* External apps own the framebuffer: the saver is paused while one runs. */
 void set_enabled(bool enabled);
 
+/* A page that must stay in view keeps the saver away while held (Settings > Updates while the root update helper
+ * runs: its progress, "do not switch off"); released, the idle interval starts again. */
+void hold(bool held);
+
 } // namespace native_screensaver

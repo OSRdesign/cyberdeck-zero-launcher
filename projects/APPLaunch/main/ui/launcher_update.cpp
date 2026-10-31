@@ -8,7 +8,10 @@
 
 #include "launcher_toast.h"
 #include "native_ui.hpp"
+#include "settings/settings_session_model.hpp"
 #include "settings/settings_update_check.hpp"
+#include "settings/settings_update_download.hpp"
+#include "settings/settings_update_install_model.hpp"
 #include "settings/settings_update_platform.hpp"
 
 #include "lvgl/lvgl.h"
@@ -29,7 +32,9 @@ bool s_installed = false;
 bool s_waiting = false;            /* a background check of ours is on its way */
 std::uint64_t s_started_done = 0;  /* Snapshot::done when it started */
 bool s_toast_pending = false;      /* it found a release: the toast waits for the home grid */
-std::string s_start_notice;        /* "Updated to ...": shown once the home grid is on screen */
+std::string s_start_notice;        /* "Updated to ..." / "Update to ... failed": shown once the home grid is on screen */
+bool s_restart_asked = false;      /* P2: the update helper asked this launcher to restart (exit status 76) */
+std::string s_version;             /* the running launcher's version */
 
 void toast(const std::string &text)
 {
@@ -72,10 +77,50 @@ void tick(lv_timer_t *timer)
     }
 }
 
+/* The root update helper's status (P2): read by every launcher. */
+HelperPhase helper(HelperStatus &status)
+{
+    status = parse_helper_status(platform::helper_status());
+    const bool alive = status.present && status.boot == platform::boot_id() && platform::process_alive(status.pid);
+    return helper_phase(status, alive);
+}
+
+/* P2, every 2 s: on a desktop board the helper asks the running launcher to exit with status 76 once the new files are
+ * in place (restart=launcher, this version, this pid); its unit starts the new launcher without giving the desktop
+ * back. A rollback that happened while this launcher kept running is announced like the start notice. */
+void watch_helper()
+{
+    HelperStatus status;
+    const HelperPhase phase = helper(status);
+    if (phase == HelperPhase::None) return;
+    const std::string &version = s_version;
+    if (!s_restart_asked && restart_requested(status, phase == HelperPhase::Running, version, platform::self_pid())) {
+        s_restart_asked = true;
+        SLOGI("[UPDATE] the update helper installed %s: restarting the launcher (exit status 76)", status.to.c_str());
+        launcher_session::request_restart();
+        return;
+    }
+    if (phase == HelperPhase::RolledBack) {
+        std::string text;
+        Checker::instance().update_state([&](State &state) {
+            text = take_rollback_notice(state, status, phase, version);
+        });
+        if (!text.empty()) {
+            SLOGI("[UPDATE] %s", text.c_str());
+            s_start_notice = text;
+        }
+    }
+    if (!s_start_notice.empty() && native_ui::home_in_front()) {
+        toast(s_start_notice);
+        s_start_notice.clear();
+    }
+}
+
 /* Every 2 s while our check runs or its toast waits: it is shown soon after the check ends, not 10 min later. */
 void poll(lv_timer_t *)
 {
     if (s_waiting || s_toast_pending) settle();
+    watch_helper();
 }
 
 } // namespace
@@ -86,8 +131,19 @@ void install()
     s_installed = true;
     Checker &checker = Checker::instance();
     const Snapshot snap = checker.snapshot();
+    s_version = snap.build.version;
     std::string text;
     checker.update_state([&](State &state) { text = take_start_notice(state, snap.state_existed, snap.build.version); });
+    // P2: the root helper's last run: a rollback to this version is announced once; an update done to this version
+    // needs its downloaded bundle no more
+    HelperStatus status;
+    const HelperPhase phase = helper(status);
+    if (phase == HelperPhase::RolledBack) {
+        std::string rollback;
+        checker.update_state([&](State &state) { rollback = take_rollback_notice(state, status, phase, snap.build.version); });
+        if (!rollback.empty()) text = rollback;
+    }
+    if (phase == HelperPhase::Done && status.to == snap.build.version) Downloader::instance().discard_files();
     if (!text.empty()) SLOGI("[UPDATE] %s", text.c_str());
     s_start_notice = text;
     lv_timer_create(tick, kFirstTickMs, nullptr);

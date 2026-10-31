@@ -1,0 +1,86 @@
+# Settings > Updates P2 (report 047): the root update, from the question to a rollback. The password is taken
+# (env HARNESS_SUDO ok: systemd-run "returns", nothing runs); the page turns to "Updating" at once (the helper's first
+# step before its status file exists; the progress bar at 25 %), then follows the status file the scene writes as the
+# helper would: installing (75 %, the step's own seconds: 45 s, no guessed percentage), Esc does not leave a step that
+# cannot be stopped, checking that 0.8.13 runs (100 %), then a rollback:
+# the Launcher level says "Update to 0.8.13 failed: 0.8.12 put back", "Last update  rolled back", and Show log shows the
+# reason and the end of the helper's log. Review only: no golden.
+title updates progress
+review
+sizes 640x480 480x800 480x640 720x720 1280x800
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+env HARNESS_SUDO ok
+apps Settings Store CLI SSH Calculator
+clock 20:30 2026-11-04
+wifi 70
+bt on
+update net on
+update build 0.8.12 release arm64
+update answer releases-0.8.13.json
+update download done
+update log helper-rolled-back.log
+home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+key ENTER
+wait 300
+key DOWN
+key ENTER
+wait 1000
+expect_text "Install 0.8.13?"
+key ENTER
+wait 600
+shot updates_progress_start
+header updates_progress_start "Settings > Updates > Launcher > Updating" "Updates > Launcher > Updating" "Launcher > Updating" Updating
+expect_text "Checking the download"
+# the helper's status file: installing
+update helper state running
+update helper step install
+update helper from 0.8.12
+update helper to 0.8.13
+update helper variant appliance
+update helper user pi
+update helper started now-50
+update helper updated now-45
+update helper backup 1
+update helper log /var/log/cyberdeckzero/update-20261104-203002.log
+wait 1500
+shot updates_progress
+expect_text "Installing 0.8.13"
+expect_text "Backup of 0.8.12"
+key ESC
+wait 400
+expect_text "Installing 0.8.13"
+# the new launcher runs: the helper watches it
+update helper step health
+update helper updated now-3
+wait 1500
+shot updates_progress_health
+expect_text "Restart and check"
+# it did not stay up: rolled back
+update helper state rolled-back
+update helper step rollback
+update helper reason 0.8.13 did not start
+wait 1500
+shot updates_rolledback
+expect_text "Last update"
+expect_text "rolled back"
+expect_text "Show log"
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 400
+shot updates_log
+header updates_log "Settings > Updates > Launcher > Log" "Updates > Launcher > Log" "Launcher > Log" Log
+key ESC
+wait 300
+expect_text "Show log"

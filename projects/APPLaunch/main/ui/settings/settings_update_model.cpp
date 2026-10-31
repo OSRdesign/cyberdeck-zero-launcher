@@ -733,7 +733,8 @@ bool State::operator==(const State &o) const
 {
     return last_check == o.last_check && last_success == o.last_success && etag == o.etag && latest == o.latest &&
            available == o.available && result == o.result && rate_reset == o.rate_reset &&
-           last_shown == o.last_shown && updated_from == o.updated_from && notified == o.notified;
+           last_shown == o.last_shown && updated_from == o.updated_from && notified == o.notified &&
+           rollback_seen == o.rollback_seen;
 }
 
 State parse_state(const std::string &text)
@@ -761,6 +762,7 @@ State parse_state(const std::string &text)
         else if (key == "last_shown") state.last_shown = value;
         else if (key == "updated_from") state.updated_from = value;
         else if (key == "notified") state.notified = value;
+        else if (key == "rollback_seen") state.rollback_seen = number();
     }
     return state;
 }
@@ -785,6 +787,7 @@ std::string format_state(const State &state)
     out << "last_shown=" << clean(state.last_shown) << "\n";
     out << "updated_from=" << clean(state.updated_from) << "\n";
     out << "notified=" << clean(state.notified) << "\n";
+    out << "rollback_seen=" << state.rollback_seen << "\n";
     return out.str();
 }
 

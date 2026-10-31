@@ -1,0 +1,32 @@
+# Settings > Updates P2 (report 047): the first start of the old launcher after a rollback (the helper put 0.8.12 back
+# when 0.8.13 did not start, then restarted it): one toast "Update to 0.8.13 failed / Rolled back to 0.8.12" on the
+# home grid, once per helper run (update.state rollback_seen). The "Updated to" toast of P1 is not shown (the version did
+# not change). Review only: no golden.
+title updates rollback toast
+review
+sizes 640x480 480x800 480x640 720x720 1280x800
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+apps Settings Store CLI SSH Calculator
+clock 20:35 2026-11-04
+wifi 70
+bt on
+update build 0.8.12 release arm64
+update state last_shown 0.8.12
+update state last_check now-300
+update state result ok
+update state available 0.8.13
+update state notified 0.8.13
+update cache releases-0.8.13.json
+update helper state rolled-back
+update helper step rollback
+update helper from 0.8.12
+update helper to 0.8.13
+update helper variant appliance
+update helper started now-240
+update helper updated now-60
+update helper reason 0.8.13 did not start
+home
+wait 300
+shot updates_rollback_toast
+expect_text end "Rolled back to 0.8.12"

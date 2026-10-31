@@ -214,6 +214,7 @@ struct State {
     std::string last_shown;     /* the launcher version whose start was last seen */
     std::string updated_from;   /* the version before the last version change seen at a start */
     std::string notified;       /* the newest release a toast announced */
+    long long rollback_seen = 0; /* P2: the start time of the root helper's run whose rollback a toast announced */
 
     bool operator==(const State &other) const;
 };
