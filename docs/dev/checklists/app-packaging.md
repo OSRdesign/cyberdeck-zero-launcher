@@ -4,7 +4,9 @@
    fresh checkout, and nothing app-specific added to the launcher repo.
 2. `apps/<id>/app.json` complete: `share_code`, `package`, `version` (raised for every release), `title`, `summary`,
    `description`, `categories`, `author`, `license`, `source_repo`, `depends` (Debian packages the app needs),
-   `permissions`.
+   `permissions`. Descriptor rule (every app): `summary` one line, at most 80 characters; summary + newline +
+   `description` at most 500 characters (characters, not bytes). Settings > Apps shows only that and cuts at 500 with
+   dots; the long documentation goes in `apps/<id>/README.md`. `python3 tools/check_descriptors.py` exits 0.
 3. `apps/<id>/root/` laid out as it must land: `usr/share/APPLaunch/bin/<id>` (the binary is named after the app id),
    `usr/share/APPLaunch/applications/<share_code>.desktop` (absolute `Exec`, `Icon=share/images/<id>.png`; add
    `X-Fullscreen=true` only for a full-screen app; a new native (LVGL) app declares `X-MinSize=640x480` by default,

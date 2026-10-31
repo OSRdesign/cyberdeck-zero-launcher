@@ -36,7 +36,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Home | Touch-friendly app grid with clock, Wi-Fi bars and Bluetooth state (`native_ui.cpp`). |
 | Terminal | CLI, Python and SSH use a full-screen terminal with touch scrolling (`ui_app_st*.cpp`). |
 | Calculator | Native touch + keyboard calculator (the only one: the external 320x170 calculator program of the inherited code is gone). |
-| Legacy apps | Fullscreen 320x170 framebuffer apps (from the Store) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
+| Legacy apps | Fullscreen 320x170 framebuffer apps (the older apps, installed from a source in Settings > Apps) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings (native, full screen) takes taps and drags directly, and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
 | Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
 | SSH indicator | While someone is connected to the board over SSH (an incoming connection to its sshd; `ssh localhost` counts), the status strip shows a terminal glyph (`>_`) in its leftmost place: blue, alternating blue and white once a second while data flows (typing, output, a copy). Nothing without a session; the place stays reserved, so the page headers do not move when one starts. On a board with a battery its percentage hides while the glyph shows. **Settings > System > SSH indicator** Off stops it (On by default); the clock screensaver covers it. Apps show it once rebuilt with a toolkit of this release (`status.state` `ssh=`, `docs/APP-CONTRACT.md` section 5b). The launcher reads `/proc/net/tcp*` and `/etc/ssh/sshd_config` (ports; `APPLAUNCH_SSH_PORTS=22,2222` in `board.conf` overrides them) as the launcher user: no root, no new permission (`cp0_ssh_watch.h`). |
@@ -152,8 +152,87 @@ as an appliance: run `install.sh` again (the FZ-M1 with Armbian's XFCE:
 use the clock long-press, the Windows button pressed twice (its button cannot be held: it reports press and release at once), or Alt+Tab (the terminal's on-screen keyboard has Alt). Its
 volume and brightness buttons are not on a keyboard device; the launcher reads them anyway (media-key devices,
 `docs/APP-CONTRACT.md` section 14). The battery (`BAT1`) shows in the
-status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The Store tile is hidden (`APPLAUNCH_HIDE_TILES=app_Store`; the Store's hub has arm64 packages only); Settings >
-Launcher shows it again if wanted.
+status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The profile still writes `APPLAUNCH_HIDE_TILES=app_Store` (from when the Store tile existed; the Store's hub has arm64
+packages only); since v0.8.14 there is no Store tile, so the key names no tile and is ignored.
+
+## Settings > Updates
+
+Since v0.8.13 (report 047; what the user sees: [README, Updating the launcher](../../../README.md#updating-the-launcher)).
+The launcher checks GitHub's release list as the user, downloads the bundle of its architecture
+(`cyberdeckzero-launcher-<version>-<arch>.tar.gz`) to `~/.cache/cyberdeckzero/update` and checks its sha256 against the
+release's `.sha256` asset and GitHub's digest. Install is offered only on a `release`-channel build with a plain X.Y.Z
+version; it needs 300 MB free for the download and, on a board with a battery, 50 % or the charger. After the
+password, the shared sudo prompt runs one command:
+
+```
+systemd-run --unit=cyberdeckzero-update --collect --quiet /usr/share/APPLaunch/bin/cyberdeckzero-update apply ...
+```
+
+so the root part runs in a transient system unit `cyberdeckzero-update` of its own, outside the launcher (it survives
+the launcher's restart, a crash or the hold-Esc watchdog).
+
+**The root helper** `/usr/share/APPLaunch/bin/cyberdeckzero-update` (installed by `install.sh`; it runs from a copy in
+`/run/cyberdeckzero-update`, since `install.sh` replaces it):
+
+| Command | What it does |
+| --- | --- |
+| `apply --version X.Y.Z --from-version X.Y.Z --sha256 HEX --file PATH --user NAME` | the update: check (copy to the work folder, sha256 again, unpack, architecture), plan (`install.sh --plan` of the new bundle), backup, install (`install.sh` with the recorded options, never `--force`, under `systemd-inhibit`), restart, health (the new launcher must publish its version with a live pid in `board.state` within 90 s and keep that pid 20 s). A failure from the install on: the backup is put back and the old launcher restarted (`rolled-back`); before it nothing has changed (`refused`) |
+| `resume --user NAME` | after an interruption (the status says `running` and no helper runs): a new launcher that is healthy now finishes the update, anything else from the install step on is rolled back |
+| `plan --bundle DIR --user NAME` | the options it would replay and the plan check; changes nothing |
+| `options --user NAME` | the install options it would replay |
+| `status` | the status file |
+
+Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused (nothing changed) or a usage error.
+
+- **Options.** Every `install.sh` run (not `--dry-run` or `--board-only`) records its options in
+  `/etc/applaunch/install.conf`: `keyboard_name`, `board` (empty when the board was detected), `boot_config`,
+  `pwm_backlight`, `default_source`, `user`. The helper replays them as `--keyboard-name`, `--board`,
+  `--no-boot-config`, `--pwm-backlight`, `--no-default-source`. Without the file (an install before 0.8.13) it infers
+  them from the keyboard udev rule, `board.conf`, `cmdline.txt`, `config.txt` and the default-source marker.
+- **The plan.** `install.sh --plan` is the dry run as `key=value` lines (`plan`, `board`, `session`,
+  `desktop_refused`, `switch`, `migration`, `profile_action`, ...). The helper refuses, and asks for `install.sh` by
+  hand, on an unknown board, a desktop on the deck, a switch between the appliance and the desktop variant, units of an
+  install before 0.7.0, or a `profile_action` of `replace` or `remove` (it would change `board.conf`).
+- **Restart.** Appliance boards: `install.sh` restarts the user service. Desktop boards: the helper asks the running
+  launcher to exit with status 76 (`restart=launcher` in the status file), so `cyberdeckzero-desktop.service` starts it
+  again without giving the desktop back (`RestartForceExitStatus=76`, [above](#desktop-boards)); if it is still there
+  30 s later the unit is stopped and started again.
+- **Status file:** `/var/lib/cyberdeckzero-update/status` (on disk, world-readable, `key=value`: `state` running, done,
+  refused, rolled-back or failed; `step`, `from`, `to`, `variant`, `user`, `pid`, `boot`, `backup`, `log`, `reason`,
+  ...). Settings > Updates reads it every 2 s.
+- **Logs:** `/var/log/cyberdeckzero/update-<date>.log` (the last 5 kept; Settings > Updates > Show log), and
+  `journalctl -u cyberdeckzero-update`.
+- **Backup:** `/var/lib/cyberdeckzero-update/backup`, kept until the next update: `/usr/share/APPLaunch/bin`, `lib`,
+  `share`, `strokes`, `adb`, `/usr/share/doc/cyberdeckzero-launcher`, the units, udev and PolicyKit rules,
+  `board.conf`, `install.conf`, the menu entry, `cyberdeckzero-ctl`, and the user's unit and WirePlumber drop-in. Not
+  the installed apps (`/usr/share/APPLaunch/applications`).
+- **Work folder:** `/var/cache/cyberdeckzero-update` (the root copy of the bundle and its unpacked tree; removed at the
+  end).
+- **Free space:** the helper refuses unless the work folder and the backup fit: about 3x the bundle + 64 MB, plus the
+  size of the backup (the previous backup is deleted first, so its space counts as free).
+- **Test hook:** `APPLAUNCH_UPDATE_URL` in the launcher's environment replaces GitHub's release list with another
+  address, for example a local fake server (`projects/APPLaunch/tests/fixtures/update/fake_release_server.py`). Leave it
+  unset on a board.
+- **Repair after a power cut** during the install: Settings > Updates offers "Repair the update"; by hand,
+  `sudo /usr/share/APPLaunch/bin/cyberdeckzero-update resume --user <user>`.
+- The first install of 0.8.13 on a board with 0.8.12 or older is by hand (`sudo ./install.sh` from the bundle): the
+  older launchers have no Settings > Updates and no helper. `uninstall.sh` removes the helper, `install.conf`, the status folder with the
+  backup, the work folder and the update logs.
+
+### Upgrading from v0.8.13 by hand
+
+`sudo ./install.sh` from the new bundle, as for any upgrade (Settings > Updates does the same). What changes on the
+board after v0.8.13:
+
+- `install.sh` removes the 24 retired images: the Store's tile and screen images and the Snake, Tank and IP Panel
+  icons. The Store program stays (`M5CardputerZero-AppStore`, the back end of Settings > Apps); the tiles are gone
+  with the new launcher binary. The config keys of the old tiles stay in `config.json`, unused.
+- **`2048`** (an old app from the Store's built-in hub, the dpkg package `2048`) can no longer be removed from the launcher's UI unless
+  Settings > Apps > Installed lists it. Check with `dpkg -s 2048`, then `sudo apt remove 2048`. Remove it: Debian has its
+  own `2048` package, which would otherwise replace it on an apt upgrade.
+- The same for the old packages `meshzero` or `meshcore`, `lanscan` and `wifi-survey` if `dpkg -l` shows them (320x170
+  apps that now belong to the `small-screen` branch): Settings > Apps > Installed if listed, else
+  `sudo apt remove <package>`.
 
 ## Multitasking
 
@@ -331,7 +410,7 @@ APPLAUNCH_TOUCH_ORIENT=buffer        # buffer = device axes follow the framebuff
 APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/off | sysfs:<dir> levels | none; unset: detected
 APPLAUNCH_GAUGE=max17048:/dev/i2c-15:0x36   # battery fuel gauge read over i2c-dev when the kernel has no battery; auto = the bus of the touch controller
 APPLAUNCH_KBD_IGNORE=bus:0011        # keyboards that do not count as connected (names, bus:XXXX; drop:... = not read either)
-APPLAUNCH_HIDE_TILES=app_Store       # home tiles hidden by default (Settings > Launcher can show them)
+APPLAUNCH_HIDE_TILES=app_Python      # home tiles hidden by default (Settings > Launcher can show them)
 APPLAUNCH_DIM_PERCENT=20             # idle dim level (screensaver, idle dim), percent of the backlight: 1..100 (default 10)
 ```
 
@@ -586,6 +665,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | File | Purpose |
 | --- | --- |
 | `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host; `--arch arm64` by default, `--arch amd64` natively for PCs) / install it (Pi or PC) / remove it again. |
+| `cyberdeckzero-update` | Settings > Updates' root helper, installed in `/usr/share/APPLaunch/bin` (`apply`, `resume`, `plan`, `options`, `status`; [Settings > Updates](#settings--updates)). |
 | `default-sources.sh` | Adds the apps repo to Settings > Apps once for a user with no source yet (run by `install.sh` as that user; see "Default app source"). |
 | `cyberdeckzero.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
 | `cyberdeckzero-console`, `cyberdeckzero-console.service` | The text console helper (installed in `/usr/share/APPLaunch/bin`: `unbind`, `bind`, `status`, `restore-desktop UNIT`) and the appliance boards' boot-time unit that frees the panel from the console ([Text console](#text-console)). |
@@ -638,7 +718,7 @@ optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20), optional `APPLA
 ([Multitasking](#multitasking); not set = on from 640x480).
 
 User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness, volume,
-per-app touch choice `touch_<app>`, app switches such as `app_Store`: 0 hides the Store tile).
+per-app touch choice `touch_<app>`, app switches such as `app_Python`: 0 hides the Python tile).
 
 Test hooks of the detection (the render harness and the unit tests use them; leave them unset on a board):
 `APPLAUNCH_BACKLIGHT_ROOT` (default `/sys/class/backlight`), `APPLAUNCH_ASOUND_ROOT` (default `/proc/asound`),

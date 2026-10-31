@@ -11,7 +11,7 @@
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
 machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
 Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
-(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)); since v0.8.9 Settings > Screen > PDA mode turns it on for any screen where portrait fits, among them the 7-inch tablet, which then runs 800x1280 (see [Large screens: the tablet](docs/PDA-PROFILE.md#large-screens-the-tablet)). It has a full-screen terminal, a Calculator, the Store, Wi-Fi / Bluetooth / time settings (Network Time, a
+(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)); since v0.8.9 Settings > Screen > PDA mode turns it on for any screen where portrait fits, among them the 7-inch tablet, which then runs 800x1280 (see [Large screens: the tablet](docs/PDA-PROFILE.md#large-screens-the-tablet)). It has a full-screen terminal, a Calculator, Wi-Fi / Bluetooth / time settings (Network Time, a
 time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
@@ -38,7 +38,9 @@ upscaled window for the legacy 320x170 apps, and has since grown into the launch
 
 Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2W, 640x480) on the left and the
 Raspberry Pi 3A+ with the Waveshare 4.3" DSI panel (800x480) on the right: one code base, two screens. Network names
-are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed.
+are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed. These
+captures are older than v0.8.14, which removed the Store tile, Snake, Tank and IP Panel from main (see
+[Branches](#branches-main-and-small-screen)).
 
 | Deck, 640x480 | Raspberry Pi 3A+, 800x480 |
 | --- | --- |
@@ -61,7 +63,8 @@ Calculator and the SSH form (deck, 640x480):
 | --- | --- |
 | ![Calculator](docs/screenshots/calculator.png) | ![SSH form](docs/screenshots/ssh.png) |
 
-The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog:
+The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog. Since v0.8.14 this screen
+is only on the `small-screen` branch; main keeps the Store program as the engine of Settings > Apps:
 
 ![Store syncing](docs/screenshots/store-sync.png)
 
@@ -161,7 +164,9 @@ example `0.1.2>0.1.3`), with **Update** for one app and **Update all** when seve
 keeps its tile where it was on the home grid (the order is stored in `~/.config/cardputerzero/config.json` as
 `app_order`); a new app goes last. A sync shows each source live (`waiting`, `syncing...`, `done` or a red
 `failed` with the reason), and installs, updates and removals show the step and the seconds taken, then a plain
-success or failure message. With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
+success or failure message. Each app shows its description: a **Description** row on an installed app's list, and a
+page with Description and **Install** before an available app is installed (the text is cut at 500 characters with
+dots; the long documentation is the app's README in its repository). With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
 plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
 ## What is in this repository
@@ -179,6 +184,19 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 - [`NAMING.md`](NAMING.md): the product names, and the technical names inherited from upstream that stay
   (`APPLaunch`, `APPLAUNCH_*`, `cp0_`, the config and Store folders) and why.
 
+## Branches: main and small-screen
+
+- **`main`** is for screens of 640x480 and more (and the portrait PDA screens). The apps that stay with it are the
+  ones that meet 640x480: the built-in Settings, CLI, Python, SSH and Calculator, and from the apps repository
+  Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, RSS Reader, Serial Console, System Monitor and
+  viz1090.
+- **`small-screen`** (created at v0.8.13, commit 5ddd2e9f) is the long-lived fork for 480x320-only screens. It keeps
+  the Store screen and the 320x170 apps that main removed after v0.8.13 (the Store tile, Snake, Tank, IP Panel). There
+  is no release from it for now. Changes flow from main to it by cherry-pick only (never a merge, which would bring
+  the removals), and a build from it carries a suffixed version (for example `0.8.13-ss.1`), so Settings > Updates
+  never offers it a main release.
+- The basic set (Settings, CLI, Python, SSH, Calculator) lives in both.
+
 ## Quick start
 
 1. Set up the Pi and the panel as described in the [Pi port README](projects/APPLaunch/pizero2w/README.md).
@@ -193,6 +211,24 @@ reference: the Panasonic FZ-M1 tablet): take `cyberdeckzero-launcher-<version>-a
 `build.sh --arch amd64`) and run the same `sudo ./install.sh`. It needs glibc 2.38 or newer (Debian 13, Ubuntu 24.04
 or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Settings > Apps lists five apps built for amd64 (v0.8.2) and shows the tablet's battery (v0.8.3); from v0.8.4 every board detects its battery, brightness and sound at run time; from v0.8.5 the launcher publishes a status feed apps can read; from v0.8.6 apps can ask the launcher for sounds, notices and volume (launcher.sock); from v0.8.7 volume and brightness buttons on devices that are not keyboards are read too, and a double tap of the Windows key opens the app switcher; from v0.8.8 a portrait PDA profile with handwriting input, and the Pi 4 B board profile; from v0.8.9 a Settings > Screen > PDA mode choice (Off / On rotate left / On rotate right) on any screen where portrait fits; the x86 port is new in v0.8.1.
 See [Install on a PC](projects/APPLaunch/pizero2w/README.md#install-on-a-pc-amd64).
+
+## Updating the launcher
+
+Since v0.8.13, **Settings > Updates** updates the launcher from the device:
+
+- It checks GitHub's releases when you open the page and once a day in the background (a toast announces a new
+  version once), and shows **What's new**: the release notes of every version you skipped.
+- **Install** downloads the bundle with a progress bar, checks its sha256, asks for the sudo password, makes a backup
+  and installs it with the options of the first install. If the new version does not start within 90 s, the old one is
+  put back by itself.
+- Only release-channel builds offer the install; a development or test build shows the notes only.
+- The first install of v0.8.13 over v0.8.12 or older is by hand (`sudo ./install.sh` from the bundle, as in Quick
+  start); after that, Settings > Updates does it.
+- On the desktop boards (the launcher started from the menu) the launcher restarts through exit status 76 and its
+  systemd unit; on the other boards `install.sh` restarts the user service.
+
+What runs as root, where the logs and the backup are, and how to repair an interrupted update:
+[Pi port README, Settings > Updates](projects/APPLaunch/pizero2w/README.md#settings--updates).
 
 ## Licence
 
