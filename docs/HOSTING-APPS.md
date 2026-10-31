@@ -14,7 +14,7 @@ Available lists its apps without typing anything. It is an ordinary source: swit
 the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
 shows after a sync (Sources > Sync my sources). Details: `projects/APPLaunch/pizero2w/README.md`, "Default app source".
 
-Since v0.8.14 main has no **Store** tile and no Store switch in Settings > Launcher: the Store program stays in the
+Since v0.9.0 main has no **Store** tile and no Store switch in Settings > Launcher: the Store program stays in the
 bundle as the back end of Settings > Apps, with no screen of its own. The Store screen and the 320x170 apps live on
 the `small-screen` branch (README, "Branches").
 
@@ -122,7 +122,7 @@ The letters are read from the physical key, so `W`, `E`, `R` and `T` never move 
 
 ## Why a source survives opening the Store
 
-(On main the Store screen cannot be opened since v0.8.14; this matters on the `small-screen` branch, and main keeps
+(On main the Store screen cannot be opened since v0.9.0; this matters on the `small-screen` branch, and main keeps
 the mirror.) The Store keeps its own copy of the source list in the launcher's `config.json` (keys `appstore.registry.*`) and, every
 time it starts, writes that copy over the backend's `registries.json`. A source that exists only in the backend file
 would be wiped the next time the Store opens. So Settings > Apps mirrors the backend list into those keys, in the
