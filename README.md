@@ -39,7 +39,7 @@ upscaled window for the legacy 320x170 apps, and has since grown into the launch
 Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2W, 640x480) on the left and the
 Raspberry Pi 3A+ with the Waveshare 4.3" DSI panel (800x480) on the right: one code base, two screens. Network names
 are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed. These
-captures are older than v0.8.14, which removed the Store tile, Snake, Tank and IP Panel from main (see
+captures are older than v0.9.0, which removed the Store tile, Snake, Tank and IP Panel from main (see
 [Branches](#branches-main-and-small-screen)).
 
 | Deck, 640x480 | Raspberry Pi 3A+, 800x480 |
@@ -63,7 +63,7 @@ Calculator and the SSH form (deck, 640x480):
 | --- | --- |
 | ![Calculator](docs/screenshots/calculator.png) | ![SSH form](docs/screenshots/ssh.png) |
 
-The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog. Since v0.8.14 this screen
+The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog. Since v0.9.0 this screen
 is only on the `small-screen` branch; main keeps the Store program as the engine of Settings > Apps:
 
 ![Store syncing](docs/screenshots/store-sync.png)

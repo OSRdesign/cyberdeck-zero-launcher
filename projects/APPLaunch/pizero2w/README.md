@@ -153,7 +153,7 @@ use the clock long-press, the Windows button pressed twice (its button cannot be
 volume and brightness buttons are not on a keyboard device; the launcher reads them anyway (media-key devices,
 `docs/APP-CONTRACT.md` section 14). The battery (`BAT1`) shows in the
 status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The profile still writes `APPLAUNCH_HIDE_TILES=app_Store` (from when the Store tile existed; the Store's hub has arm64
-packages only); since v0.8.14 there is no Store tile, so the key names no tile and is ignored.
+packages only); since v0.9.0 there is no Store tile, so the key names no tile and is ignored.
 
 ## Settings > Updates
 
