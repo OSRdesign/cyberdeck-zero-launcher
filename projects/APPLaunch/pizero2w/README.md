@@ -273,9 +273,9 @@ What works in this phase:
   then). Settings > System > Strokes training (report 042) learns the owner's own strokes;
   `APPLAUNCH_STROKES_LOG=/home/<user>/strokes.txt` added to `/etc/applaunch/board.conf` records every stroke written
   (for tuning the recogniser, report 041).
-- the portrait profile hides the fixed-pixel tiles by default (`APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store`:
-  IP Panel, Snake, Tank and the Store are 320x170 pages that would sit small at the top of a 480x800 screen); Settings >
-  Launcher turns each one on, and what is saved there wins over the profile. Desktop apps that are neither fullscreen
+- the portrait profile still lists the keys of the old fixed-pixel tiles (`APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store`):
+  IP Panel, Snake, Tank and the Store tile are gone from this branch (they live on `small-screen`), so the keys name no
+  tile and are ignored (the profile text stays as it is: it is checksummed, see install.sh). Desktop apps that are neither fullscreen
   nor a terminal (fixed-pixel apps such as LAN Scan, Wi-Fi Survey, MeshZero) are not listed on a portrait launcher at all
   (docs/APP-CONTRACT.md, section 3); responsive fullscreen apps and the terminal apps are;
 - the number pad of the on-screen keyboard is the full width of the key area on a portrait canvas (keys about 148 px,

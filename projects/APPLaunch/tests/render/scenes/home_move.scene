@@ -24,7 +24,7 @@ clock 20:30
 wifi 70
 bt on
 keyboards 1
-apps Settings Klondike CLI Python SSH Calculator Snake Tank
+apps Settings Klondike CLI Python SSH Calculator "Mine Field" Monitor
 home
 shot move_home
 # 1. given up after the bar showed: nothing launches, nothing moves
@@ -32,7 +32,7 @@ touchbutton Calculator
 wait 1200
 release
 shot move_hold_given_up
-expect_tiles Settings Klondike CLI Python SSH Calculator Snake Tank
+expect_tiles Settings Klondike CLI Python SSH Calculator "Mine Field" Monitor
 # 2. the 3 s hold: mid-fill (about 2 s when the shot is taken), then picked up
 touchbutton Calculator
 wait 1300
@@ -41,22 +41,22 @@ wait 1200
 release
 shot move_picked
 expect_text end "Enter drop  -  Esc cancel"
-expect_tiles Settings Klondike CLI Python SSH Calculator Snake Tank
+expect_tiles Settings Klondike CLI Python SSH Calculator "Mine Field" Monitor
 # 3. arrows (3 columns: 5 -> 2 -> 1; 4 columns: 5 -> 1 -> 0), Enter drops and saves
 key UP
 key LEFT
 shot move_arrows
-@640x480,480x800,720x720 expect_tiles Settings Calculator Klondike CLI Python SSH Snake Tank
-@1024x600 expect_tiles Calculator Settings Klondike CLI Python SSH Snake Tank
+@640x480,480x800,720x720 expect_tiles Settings Calculator Klondike CLI Python SSH "Mine Field" Monitor
+@1024x600 expect_tiles Calculator Settings Klondike CLI Python SSH "Mine Field" Monitor
 key ENTER
 shot move_dropped
-@640x480,480x800,720x720 expect_tiles Settings Calculator Klondike CLI Python SSH Snake Tank
-@1024x600 expect_tiles Calculator Settings Klondike CLI Python SSH Snake Tank
+@640x480,480x800,720x720 expect_tiles Settings Calculator Klondike CLI Python SSH "Mine Field" Monitor
+@1024x600 expect_tiles Calculator Settings Klondike CLI Python SSH "Mine Field" Monitor
 # the same tiles in today's order, as after a restart: the stored order applies
-apps Settings Klondike CLI Python SSH Calculator Snake Tank
+apps Settings Klondike CLI Python SSH Calculator "Mine Field" Monitor
 home
-@640x480,480x800,720x720 expect_tiles Settings Calculator Klondike CLI Python SSH Snake Tank
-@1024x600 expect_tiles Calculator Settings Klondike CLI Python SSH Snake Tank
+@640x480,480x800,720x720 expect_tiles Settings Calculator Klondike CLI Python SSH "Mine Field" Monitor
+@1024x600 expect_tiles Calculator Settings Klondike CLI Python SSH "Mine Field" Monitor
 # 4. Ctrl+O picks the selected tile; the grid still scrolls (640x480: one row up); a tap on Python places and drops
 key CTRL+O
 @640x480 drag 320 400 320 280 30
@@ -64,7 +64,7 @@ key CTRL+O
 @640x480 expect_text end "Enter drop  -  Esc cancel"
 tapbutton Python
 shot move_tap_placed
-expect_tiles Settings Klondike CLI Python Calculator SSH Snake Tank
+expect_tiles Settings Klondike CLI Python Calculator SSH "Mine Field" Monitor
 # 5. Esc puts it back exactly
 shot move_before_pick
 key CTRL+O
@@ -73,7 +73,7 @@ key DOWN
 shot move_before_esc
 key ESC
 shot move_esc
-expect_tiles Settings Klondike CLI Python Calculator SSH Snake Tank
+expect_tiles Settings Klondike CLI Python Calculator SSH "Mine Field" Monitor
 expect_same move_before_pick
 # 6. the store is full: the move is not kept
 configfull on
@@ -81,7 +81,7 @@ key CTRL+O
 key LEFT
 key ENTER
 shot move_cannot_save
-expect_tiles Settings Klondike CLI Python Calculator SSH Snake Tank
+expect_tiles Settings Klondike CLI Python Calculator SSH "Mine Field" Monitor
 configfull off
 # 7. no keyboard: the touch-only caption; a tap on the picked tile drops it where it is
 keyboards 0
@@ -92,7 +92,7 @@ shot move_picked_touch
 expect_text "Tap a spot to place the app"
 tapbutton Calculator
 shot move_touch_dropped
-expect_tiles Settings Klondike CLI Python Calculator SSH Snake Tank
+expect_tiles Settings Klondike CLI Python Calculator SSH "Mine Field" Monitor
 # 7b. a slow swipe in normal mode (640x480, 1.4 s from a tile): the grid scrolls, no bar, nothing picked up, and the
 # tap of step 8 is not swallowed
 @640x480 drag 112 150 112 300 40
@@ -108,7 +108,7 @@ wait 10600
 shot move_dimmed
 tap 10 10
 shot move_after_dim
-expect_tiles Settings Klondike CLI Python Calculator SSH Snake Tank
+expect_tiles Settings Klondike CLI Python Calculator SSH "Mine Field" Monitor
 # 8. a short tap launches, as before
 tapbutton Calculator
 shot move_tap_launches

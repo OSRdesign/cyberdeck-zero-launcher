@@ -161,31 +161,6 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_icon_file_signature"
 "$build_dir/test_icon_file_signature"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    "$test_root/test_snake_game_model.cpp" \
-    "$test_root/../main/ui/model/snake_game_model.cpp" \
-    -o "$build_dir/test_snake_game_model"
-"$build_dir/test_snake_game_model"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
-    "$test_root/test_game_input_action.cpp" \
-    -o "$build_dir/test_game_input_action"
-"$build_dir/test_game_input_action"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    "$test_root/test_snake_view_contract.cpp" \
-    -o "$build_dir/test_snake_view_contract"
-"$build_dir/test_snake_view_contract"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    "$test_root/test_ip_panel_model.cpp" \
-    "$test_root/../main/ui/model/ip_panel_model.cpp" \
-    -o "$build_dir/test_ip_panel_model"
-"$build_dir/test_ip_panel_model"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    -I"$test_root/../main/ui" \
-    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
-    "$test_root/test_ip_panel_shortcut_action.cpp" \
-    -o "$build_dir/test_ip_panel_shortcut_action"
-"$build_dir/test_ip_panel_shortcut_action"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     "$test_root/test_ssh_connection_model.cpp" \
     "$test_root/../main/ui/model/ssh_connection_model.cpp" \
@@ -216,11 +191,6 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/keyboard_text_input.cpp" \
     -o "$build_dir/test_keyboard_text_input"
 "$build_dir/test_keyboard_text_input"
-${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
-    "$test_root/test_tank_battle_model.cpp" \
-    "$test_root/../main/ui/model/tank_battle_model.cpp" \
-    -o "$build_dir/test_tank_battle_model"
-"$build_dir/test_tank_battle_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_setup_value_policy.cpp" \
     "$test_root/../main/ui/model/setup_value_policy.cpp" \

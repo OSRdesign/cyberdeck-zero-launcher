@@ -76,8 +76,8 @@ A board profile may show the launcher in portrait (the PDA profile, report 038; 
 A portrait screen shows only responsive fullscreen apps (turned, or native with `X-Portrait`) and terminal apps. A
 compat app that is not a terminal is a fixed 320x170 page, too small at the top of a tall screen, so a portrait launcher
 hides its tile (`desktop_fit()`: `Hidden`, whatever its `X-MinSize`); a landscape or square launcher is not affected.
-The built-in fixed-pixel tiles (IP Panel, Snake, Tank, Store) are hidden by default through the board profile
-(`APPLAUNCH_HIDE_TILES`), and Settings > Launcher can turn them on.
+The built-in fixed-pixel tiles of earlier releases (IP Panel, Snake, Tank, Store) are gone from main; the portrait
+board profile still lists their keys in `APPLAUNCH_HIDE_TILES`, which names no tile any more and is ignored.
 
 `screen.state` and the process-wide `APPLAUNCH_SCREEN_*` keep describing the panel as the launcher shows it (portrait,
 `rot=90`); only a turned app's own command line says otherwise, so a turned app takes the environment first (as

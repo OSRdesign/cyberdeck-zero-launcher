@@ -116,7 +116,7 @@ def test_launcher_settings_use_builtin_and_release_preinstalled_apps():
     assert "launcher::is_launcher_settings_origin(descriptor.origin)" in SETTINGS_ADAPTER
     assert "launcher::is_protected_launcher_app(descriptor.config_key)" in SETTINGS_ADAPTER
     assert '{"Python", "python_100.png", "app_Python", true, false}' in BUILTIN_REGISTRY
-    assert '{"Snake", "game_100.png", "app_Game", true, false}' in BUILTIN_REGISTRY
+    assert '{"Calculator", "math_100.png", "app_Math", true, false}' in BUILTIN_REGISTRY
     # the release ships no preinstalled desktop app (ZClaw went with the upstream projects, report 029): header only
     assert [line for line in PREINSTALLED_MANIFEST.splitlines() if line and not line.startswith("#")] == []
 
