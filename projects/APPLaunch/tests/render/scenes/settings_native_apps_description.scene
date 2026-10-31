@@ -1,0 +1,90 @@
+# Native Settings > Apps, an app's Description row and its text page (task C1, study 048 option C), by keyboard and by
+# touch, on the fake catalogue with `env HARNESS_APPS_DESC on` (src/harness_apps.cpp): Packet Radar has a one-line
+# description (an update is offered: Description, Update, Remove, Cancel), Field Notes a long text of six paragraphs with
+# a long first line, Weather Station none (no Description row: Update, Remove, Cancel). Shots: Installed (Update all,
+# Field Notes, Packet Radar, Weather Station), Packet Radar's list, Field Notes' list (the value elided with dots), its
+# text page at the top, six lines down, at the bottom (End), back on the list by Esc, the page again opened by a tap, back
+# by Esc, Weather Station's list without the row. Review only, no golden.
+# Highlighted (centre) row: 480x320 y 180, 640x480 y 267, 800x480 y 268, 720x720 y 392, 1280x720 y 391.
+title settings native apps description
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+env HARNESS_APPS catalogue
+env HARNESS_APPS_DESC on
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 1
+apps Settings Store CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+# Installed: Update all (2), Field Notes, Packet Radar, Weather Station
+key ENTER
+wait 500
+shot apps_desc_installed
+# Field Notes: Description (long first line, cut with dots), Remove, Cancel
+key DOWN
+key ENTER
+wait 500
+shot apps_desc_list_long
+expect_rows Description Remove Cancel
+expect_chevron Description yes
+# Enter opens the text page: the whole description, plain text, from the top
+key ENTER
+wait 500
+shot apps_desc_text_top
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+wait 500
+shot apps_desc_text_page
+key END
+wait 500
+shot apps_desc_text_bottom
+key ESC
+wait 500
+shot apps_desc_list_back
+expect_rows Description Remove Cancel
+# a second Esc leaves the list (to Installed), a tap on Packet Radar's row opens its list by touch
+key ESC
+wait 500
+key DOWN
+wait 300
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 500
+shot apps_desc_list_short
+expect_rows Description Update Remove Cancel
+# a tap on the highlighted Description row opens the text page, Esc goes back to the list
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 500
+shot apps_desc_text_short
+key ESC
+wait 500
+key ESC
+wait 500
+# Weather Station: no description, no row
+key DOWN
+key ENTER
+wait 500
+shot apps_desc_list_none
+expect_rows Update Remove Cancel

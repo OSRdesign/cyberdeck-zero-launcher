@@ -10,7 +10,9 @@
 #include "settings_apps_model.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <utility>
+#include <vector>
 
 namespace settings_apps {
 
@@ -18,6 +20,67 @@ std::string shorten(const std::string &text, std::size_t limit)
 {
     if (text.size() <= limit) return text;
     return text.substr(0, limit > 1 ? limit - 1 : 0) + "~";
+}
+
+std::string first_line(const std::string &text)
+{
+    std::size_t start = 0;
+    while (start <= text.size()) {
+        std::size_t end = text.find('\n', start);
+        if (end == std::string::npos) end = text.size();
+        std::size_t from = start, to = end;
+        while (from < to && std::isspace(static_cast<unsigned char>(text[from]))) ++from;
+        while (to > from && std::isspace(static_cast<unsigned char>(text[to - 1]))) --to;
+        if (to > from) return text.substr(from, to - from);
+        start = end + 1;
+    }
+    return {};
+}
+
+std::string elide(const std::string &text, std::size_t limit)
+{
+    std::size_t chars = 0, cut = text.size();
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        if ((static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) continue; /* a continuation byte */
+        if (chars++ == limit) {
+            cut = i;
+            break;
+        }
+    }
+    return cut == text.size() ? text : text.substr(0, cut) + "...";
+}
+
+std::string cap_description(const std::string &text, std::size_t limit)
+{
+    constexpr std::size_t kDots = 3;
+    constexpr std::size_t kMinSentence = 300; /* a sentence end earlier than this leaves too little: cut at a space */
+    std::vector<std::size_t> starts; /* byte offset of every character, then the end */
+    for (std::size_t i = 0; i < text.size(); ++i)
+        if ((static_cast<unsigned char>(text[i]) & 0xC0) != 0x80) starts.push_back(i);
+    const std::size_t chars = starts.size();
+    if (chars <= limit) return text;
+    starts.push_back(text.size());
+    const std::size_t room = limit > kDots ? limit - kDots : 0; /* characters of text kept before the dots */
+    auto is_space = [&](std::size_t c) {
+        const char ch = text[starts[c]];
+        return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r';
+    };
+    std::size_t keep = 0; /* characters kept; 0: not found */
+    bool sentence_cut = false;
+    // a sentence end: ". ", "! ", "? " keep the mark; a line break ends the text before it
+    for (std::size_t c = room; c > kMinSentence && !keep; --c) {
+        const char last = text[starts[c - 1]];
+        if (c < chars && (last == '.' || last == '!' || last == '?') && is_space(c)) keep = c;
+        else if (c < chars && text[starts[c]] == '\n') keep = c;
+    }
+    sentence_cut = keep != 0;
+    for (std::size_t c = room; c > 0 && !keep; --c)
+        if (c < chars && is_space(c)) keep = c; /* the cut stands on a space: the word before it is whole */
+    if (!keep) keep = room;
+    std::string out = text.substr(0, starts[keep]);
+    while (!out.empty() && std::isspace(static_cast<unsigned char>(out.back()))) out.pop_back();
+    if (sentence_cut && !out.empty() && out.back() == '.') out.pop_back(); /* "end." + "..." would make four dots */
+    return out + "...";
 }
 
 void Model::set_backend_missing(bool missing)
@@ -84,7 +147,6 @@ bool Model::open_actions(int index)
 {
     const Row target = row(index);
     if (actions_ || (target.type != RowType::App && target.type != RowType::Source)) return false;
-    if (level_ == Level::Available) return false; /* an app to install has no list: Enter or a tap installs it */
     actions_ = true;
     actions_key_ = target.key;
     return true;
@@ -99,12 +161,19 @@ void Model::close_actions()
 std::string Model::actions_title() const
 {
     if (!actions_) return {};
-    if (level_ == Level::Installed) {
+    if (level_ == Level::Installed || level_ == Level::Available) {
         const apps_backend::App *chosen = app(actions_key_);
         return chosen ? chosen->title : std::string();
     }
     const apps_backend::Source *chosen = source(actions_key_);
     return chosen ? chosen->name : std::string();
+}
+
+std::string Model::actions_description() const
+{
+    if (!actions_ || level_ == Level::Sources) return {};
+    const apps_backend::App *chosen = app(actions_key_);
+    return chosen ? cap_description(chosen->description) : std::string();
 }
 
 bool Model::actions_valid() const
@@ -113,6 +182,10 @@ bool Model::actions_valid() const
     if (level_ == Level::Installed) {
         const apps_backend::App *chosen = app(actions_key_);
         return chosen && chosen->installed; /* removed: its list has nothing left to do */
+    }
+    if (level_ == Level::Available) {
+        const apps_backend::App *chosen = app(actions_key_);
+        return chosen && !chosen->installed; /* installed meanwhile: nothing left to install */
     }
     return source(actions_key_) != nullptr;
 }
@@ -254,8 +327,16 @@ std::vector<Row> Model::action_rows() const
     auto add = [&](RowType type, const char *label) { rows.push_back({type, actions_key_, label, {}, false, Tone::Normal}); };
     if (level_ == Level::Installed) {
         if (const apps_backend::App *chosen = app(actions_key_)) {
+            const std::string line = first_line(chosen->description); /* no description: no row */
+            if (!line.empty()) rows.push_back({RowType::Description, actions_key_, "Description", line, false, Tone::Muted});
             if (chosen->upgradable()) add(RowType::Update, "Update");
             if (chosen->installed) add(RowType::Remove, "Remove");
+        }
+    } else if (level_ == Level::Available) {
+        if (const apps_backend::App *chosen = app(actions_key_)) {
+            const std::string line = first_line(chosen->description);
+            if (!line.empty()) rows.push_back({RowType::Description, actions_key_, "Description", line, false, Tone::Muted});
+            if (!chosen->installed) add(RowType::Install, "Install");
         }
     } else if (const apps_backend::Source *chosen = source(actions_key_)) {
         add(chosen->enabled ? RowType::Disable : RowType::Enable, chosen->enabled ? "Disable" : "Enable");
@@ -314,9 +395,13 @@ Action Model::activate(int index) const
     case RowType::Cancel:
         action.kind = ActionKind::CloseActions;
         return action;
+    case RowType::Description: /* reading works while a job runs or without the backend */
+        action.kind = ActionKind::ShowDescription;
+        action.id = target.key;
+        return action;
     case RowType::App:
         // an installed app: its action list (Update, Remove), never a direct update
-        if (level_ == Level::Installed && !actions_) {
+        if ((level_ == Level::Installed || level_ == Level::Available) && !actions_) {
             action.kind = ActionKind::OpenActions;
             return action;
         }
@@ -328,7 +413,7 @@ Action Model::activate(int index) const
     switch (target.type) {
     case RowType::UpdateAll:
         return update_all();
-    case RowType::App: { /* Available: install it */
+    case RowType::Install: { /* the Available app's list: the install the one-tap row ran before */
         const apps_backend::App *chosen = app(target.key);
         if (chosen && !chosen->installed) return package_action(ActionKind::Install, *chosen);
         break;
@@ -374,6 +459,8 @@ Action Model::activate(int index) const
     case RowType::Installed:
     case RowType::Available:
     case RowType::Sources:
+    case RowType::App:
+    case RowType::Description:
     case RowType::Cancel:
         break;
     }

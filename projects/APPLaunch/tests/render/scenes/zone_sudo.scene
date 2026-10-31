@@ -40,6 +40,8 @@ wait 500
 expect_zone hidden
 key DOWN
 key ENTER
+wait 300
+key ENTER
 wait 1000
 expect_zone shown
 expect_osk hidden
