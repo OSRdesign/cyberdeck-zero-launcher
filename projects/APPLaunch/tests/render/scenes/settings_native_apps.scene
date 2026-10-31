@@ -6,7 +6,7 @@
 # install": the harness has no sudo).
 # Shots: the root with Apps, the Apps root (Installed (3), Available (2), Sources), Installed (Update all (2), the
 # installed apps with their versions), the remove confirmation of Field Notes (D), back on the Apps root on Installed
-# (Left), Available (Bench Tools, Signal Meter), the failed install's message (Enter on Signal Meter), the Sources
+# (Left), Available (Bench Tools, Signal Meter), the failed install's message (Enter on Signal Meter, Enter on its Install row), the Sources
 # level, the failed source's reason in the status line, its remove confirmation (Del), the add-source entry with the
 # keyboard (A), letters typed, the address refused, a sync (S) with its result, back on the Apps root on Sources, back
 # to the Settings root.
@@ -54,8 +54,10 @@ key ENTER
 wait 500
 shot apps_available
 header apps_available "Settings > Apps > Available" "Apps > Available" Available
-# Signal Meter: install (the harness backend refuses it while preparing)
+# Signal Meter: its page (Install, Cancel), Install (the harness backend refuses it while preparing)
 key DOWN
+key ENTER
+wait 300
 key ENTER
 wait 3000
 shot apps_install_failed

@@ -1,9 +1,9 @@
 # Native Settings > Apps action lists (task 014 P3d, Controller decision; P3e: Installed / Available split), with a
 # physical keyboard (APPLAUNCH_OSK=auto, one keyboard present) on the fake catalogue (src/harness_apps.cpp). On
-# Installed, Enter or a tap opens an app's list; on Available, Enter or a tap installs at once (no list); on Sources a
+# Installed, Enter or a tap opens an app's list; on Available, Enter or a tap opens its page (Install, Cancel; Description when it has one); on Sources a
 # tap opens the source's list, Enter keeps the legacy on / off. Shots: Packet Radar's list by a tap (Update, Remove,
 # Cancel), its Remove confirmation, the list after Cancel, back on Packet Radar (Cancel row); Field Notes by Enter
-# (current: Remove, Cancel); Signal Meter on Available by a tap (the install starts and fails: the notice);
+# (current: Remove, Cancel); Signal Meter on Available by a tap (its page: Install, Cancel), a tap on Install (the install starts and fails: the notice);
 # field-kit/tools by a tap (Disable, Sync, Remove, Cancel; its failure in the status line), Sync of that source alone
 # and its result; old/archive by a tap (Enable, Remove, Cancel) and enabled.
 # Centre (highlighted) row: 480x320 y 180, 640x480 y 267, 800x480 y 268, 720x720 y 392, 1280x720 y 391.
@@ -61,7 +61,7 @@ wait 300
 shot apps_actions_current
 key ESC
 wait 300
-# Available: Bench Tools, Signal Meter; a tap on Signal Meter installs it (the harness refuses while preparing)
+# Available: Bench Tools, Signal Meter; a tap on Signal Meter opens its page, a tap on Install installs it (the harness refuses while preparing)
 key LEFT
 wait 300
 key DOWN
@@ -69,6 +69,13 @@ key ENTER
 wait 500
 key DOWN
 wait 300
+@480x320 tap 240 180
+@640x480 tap 320 267
+@800x480 tap 400 268
+@720x720 tap 360 392
+@1280x720 tap 640 391
+wait 500
+shot apps_actions_available_page
 @480x320 tap 240 180
 @640x480 tap 320 267
 @800x480 tap 400 268

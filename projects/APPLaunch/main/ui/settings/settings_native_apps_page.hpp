@@ -9,20 +9,22 @@
  *             first list or without the backend). Each opens a level ("Settings > Apps > Installed", ...).
  *   Installed "Update all (N)" when more than one update is offered, then every installed app (its version, amber
  *             "installed>offered" when an update is offered, green otherwise). Enter or a tap opens its action list.
- *   Available every app of the enabled sources that is not installed ("v<offered>", grey). Enter or a tap installs it.
+ *   Available every app of the enabled sources that is not installed ("v<offered>", grey). Enter or a tap opens its page (Description, Install, Cancel).
  *             Empty: "Loading..." (spinner), "No apps installed" / "Nothing to install", or "The Store is needed
  *             (backend missing)". The app a job runs for shows a spinner.
  *   Sources   every source ("off", "waiting", a spinner while it syncs, "done", "failed" in red, "<N> apps" in green,
  *             "not synced"), "+ Add a GitHub source", "Sync my sources".
  *   actions   an installed app's list (Enter or a tap) or the highlighted source's (a tap) is a level titled with its
- *             name, the Wi-Fi / Bluetooth pattern: Update (an update is offered), Remove, Cancel; Enable or Disable,
+ *             name, the Wi-Fi / Bluetooth pattern: Description (when the app has one: its first line, a chevron;
+ *             Enter or a tap opens the whole text in a read-only page, plain text, wrapped, scrollable; Esc goes
+ *             back to the list), Update (an update is offered), Remove, Cancel; Enable or Disable,
  *             Sync (that source alone), Remove, Cancel. Remove asks first; the other rows start at once and go back to
  *             the list, where the row shows the job.
  *   status    the page's status line: the running step and its seconds ("Downloading Packet Radar (1/2) 5s"), the
  *             result ("Installed ...", amber "Synced 2 of 3 sources", red "Wrong password"), or, while nothing runs,
  *             the reason of the highlighted (or listed) failed source ("owner/repo: HTTP 404 (cached list)") in red. It
  *             wraps onto up to three lines instead of being cut.
- *   Enter     opens a level, an installed app's action list; installs an available app (the shared sudo password
+ *   Enter     opens a level, an installed app's action list; opens an available app's page, whose Install row installs it (the shared sudo password
  *             prompt asks once per app); keeps the legacy page's direct action on Sources (a source on / off, the
  *             add-source entry, sync); runs Update all. On an action list Enter (or a tap) runs the highlighted row.
  *   dialogs   remove an app / a source: "Remove this app?" / "Remove this source?" with its name, Cancel and Remove;

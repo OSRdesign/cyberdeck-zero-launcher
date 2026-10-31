@@ -2,7 +2,7 @@
 # (src/harness_apps.cpp, HARNESS_APPS catalogue, HARNESS_APPS_PACKAGE hold) never answers --prepare-package, so the job
 # keeps running. Shots: Installed with Packet Radar updating (Update from its action list: the row spins, the status
 # line shows the step), the Apps root meanwhile (counts unchanged), Available with nothing started (a job runs: Enter
-# on Signal Meter does nothing).
+# on Signal Meter opens its page, Enter on Install does nothing).
 # Review only: no golden.
 title settings native apps updating
 review
@@ -46,3 +46,6 @@ key DOWN
 key ENTER
 wait 500
 shot apps_updating_available
+key ENTER
+wait 500
+shot apps_updating_available_install

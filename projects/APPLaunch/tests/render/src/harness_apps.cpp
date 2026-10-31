@@ -13,6 +13,10 @@
  *   none       no source yet: the empty catalogue; a source added through the page brings deck-lab/apps' apps
  *   hold       the first list never comes ("Loading...")
  *   missing    the backend is not installed
+ * `env HARNESS_APPS_DESC on` gives three apps a description (task C1): Packet Radar one line, Field Notes a long text of
+ * several paragraphs with a long first line, Weather Station none (the Description row is hidden); default: none at all
+ * (the Description row never shows, so the older scenes keep their rows). The record carries it as the real backend
+ * writes it (escape_tsv: a line break is the two characters \\n).
  * Installs: --prepare-package answers that an earlier install is unfinished (no sudo in the harness); with
  * `env HARNESS_APPS_PACKAGE hold` it never answers (the app's row keeps its spinner: updating / installing); with
  * `env HARNESS_APPS_PACKAGE job` it answers a package job, so the page asks for the sudo password (with
@@ -54,6 +58,9 @@ const FakeApp kApps[] = {
     {"hubapp", "Hub Game", "1.0.0", nullptr, "CardputerZero Hub"},
     {"tools1", "Bench Tools", "2.0.0", nullptr, "field-kit/tools"},
 };
+
+/* with HARNESS_APPS_DESC on, one more app to install, without a description (the Available page without the row) */
+const FakeApp kRuler = {"ruler", "Pocket Ruler", "1.0.0", nullptr, "deck-lab/apps"};
 
 std::mutex g_mutex;
 bool g_ready = false;
@@ -97,6 +104,38 @@ std::string arg(const std::vector<std::string> &args, std::size_t index)
     return index < args.size() ? args[index] : std::string();
 }
 
+/* The description field (8) of an app, as the backend escapes it. */
+std::string description_of(const FakeApp &app)
+{
+    const char *flag = std::getenv("HARNESS_APPS_DESC");
+    if (!flag || std::string(flag) != "on") return {};
+    const std::string id = app.id;
+    if (id == "radar") return "Decodes and plots nearby radio packets";
+    if (id == "meter") return "Shows the signal strength of nearby radios";
+    if (id == "tools1")
+        return "Bench Tools is a set of small instruments for the workbench: a logic probe, a frequency counter, a serial monitor and a voltage logger that all share one screen and one set of keys.\\n"
+           "The logic probe samples up to eight lines at once and draws them as a scrolling timeline, with markers that can be moved by touch or by the arrow keys. It can trigger on an edge, a level or a pattern, and keeps the last thirty seconds in memory.\\n"
+           "The frequency counter reads a signal from any input and shows its frequency, period and duty cycle. Gate times of one, ten and one hundred milliseconds are offered, and a running average smooths the display when the signal is noisy.\\n"
+           "The serial monitor opens any port at any common speed, shows incoming bytes as text and as hexadecimal side by side, and can send a line or a file. Everything it receives can be saved to a log file in the home folder for later review.\\n"
+           "The voltage logger measures a battery or a supply once a second and plots the curve over hours. A threshold line and an alarm tone warn when the voltage falls below a chosen value, which is handy for discharge tests.\\n"
+           "Every instrument keeps its settings between runs, so the bench is ready the moment the app starts. Settings live in one plain text file that can be copied to a second deck, edited by hand, or kept under version control with the rest of a project.\\n"
+           "Tips: connect the ground first, check the range before probing an unknown signal, and keep leads short at high frequencies. The help page of each instrument lists its limits, its accuracy and the keys it uses, in the order they appear on the screen.\\n"
+           "Known limits: the logic probe is not a real analyser and misses glitches shorter than a few microseconds. The counter is not calibrated against a reference, and the voltage logger is only as accurate as the input it is wired to.\\n"
+           "The last sentence of this very long description, which the launcher never shows because it keeps only the first five hundred characters of the text.";
+    if (id != "notes") return {};
+    return "Records field observations with timestamps, tags and photos for later review on the deck\\n"
+           "Every note is stored as a plain text file next to its photos, so nothing is locked inside the app. A "
+           "note can carry a position from a GPS receiver, a free tag list and up to four pictures taken with a "
+           "USB camera.\\n"
+           "Search finds a word in any note, an export writes the whole folder as one archive that opens on any "
+           "computer, and a sync copies new notes to a second deck over the local network.\\n"
+           "Tips: keep tags short, one word each. Use the date filter to find the notes of one trip. Delete a note "
+           "from its page; the files go to a trash folder that is emptied after thirty days.\\n"
+           "Keys: Up and Down move, Enter opens, Esc goes back, Page Up and Page Down jump a screen, Home and End "
+           "go to the first and the last line of a long text such as this one.\\n"
+           "The last line of the description, at the bottom of the page.";
+}
+
 /* The --summary APP record: id title version category installed ? size description author ... source(14) ...
  * installed_version(18) ... package(20). */
 std::string app_record(const FakeApp &app)
@@ -110,7 +149,7 @@ std::string app_record(const FakeApp &app)
     fields[5] = app.installed ? "1" : "0";
     fields[6] = "0";
     fields[7] = "1454518";
-    fields[8] = "A fake app of the render harness";
+    fields[8] = description_of(app);
     fields[9] = "harness";
     fields[14] = app.source;
     fields[18] = app.installed ? app.installed : "";
@@ -161,10 +200,13 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
     ensure_sources();
     if (command == "--summary") {
         std::string out = "META\t1\tharness\t3G\t/harness\n";
+        const char *flag = std::getenv("HARNESS_APPS_DESC");
+        const bool described = flag && std::string(flag) == "on";
         for (const FakeApp &app : kApps) {
             const FakeSource *source = source_named(app.source);
             if (source && source->enabled) out += app_record(app);
         }
+        if (described && source_named(kRuler.source) && source_named(kRuler.source)->enabled) out += app_record(kRuler);
         return answer(0, out);
     }
     if (command == "--registries") {

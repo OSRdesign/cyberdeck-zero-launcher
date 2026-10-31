@@ -1,6 +1,6 @@
 # Native Settings > Apps (task 014 P3e: Installed / Available split) while an install runs: the fake Store backend
 # (src/harness_apps.cpp, HARNESS_APPS catalogue, HARNESS_APPS_PACKAGE hold) never answers --prepare-package. Shots:
-# Available (Bench Tools, Signal Meter), then Signal Meter installing after Enter (no action list: the row spins, the
+# Available (Bench Tools, Signal Meter), then Signal Meter installing after Enter, Enter (its page, then its Install row: the row spins, the
 # status line shows the step).
 # Review only: no golden.
 title settings native apps installing
@@ -30,6 +30,8 @@ wait 500
 shot apps_available_list
 header apps_available_list "Settings > Apps > Available" "Apps > Available" Available
 key DOWN
+key ENTER
+wait 300
 key ENTER
 wait 1000
 shot apps_installing

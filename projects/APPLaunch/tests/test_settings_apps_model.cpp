@@ -658,17 +658,32 @@ static void model_actions()
     assert(!model.ask_remove(2));
     model.set_busy(false);
 
-    // Available: Enter or a tap installs at once, no list
+    // Available: Enter or a tap opens the app's page (Install, Cancel), never an install; Install installs
     model.set_level(Level::Available);
-    action = model.activate(0);
-    assert(action.kind == ActionKind::Install && action.id == "meter" && action.name == "Signal Meter");
-    assert(action.size == "1454518");
-    assert(model.tap(0).kind == ActionKind::Install);
-    assert(!model.open_actions(0) && !model.in_actions());
+    assert(model.activate(0).kind == ActionKind::OpenActions && model.tap(0).kind == ActionKind::OpenActions);
     assert(!model.ask_remove(0));                                 // nothing to remove there
-    model.set_busy(true, "radar");
-    assert(model.activate(0).kind == ActionKind::None && model.tap(0).kind == ActionKind::None);
-    model.set_busy(false);
+    assert(model.open_actions(0) && model.in_actions() && model.actions_title() == "Signal Meter");
+    assert(model.actions_valid() && model.actions_row() == 0);
+    {
+        const auto page = model.rows();
+        assert(page.size() == 2 && page[0].type == settings_apps::RowType::Install && page[0].label == "Install");
+        assert(page[1].type == settings_apps::RowType::Cancel);
+        action = model.activate(0);
+        assert(action.kind == ActionKind::Install && action.id == "meter" && action.name == "Signal Meter");
+        assert(action.size == "1454518");
+        assert(model.tap(0).kind == ActionKind::Install);
+        assert(model.activate(1).kind == ActionKind::CloseActions);
+        assert(!model.ask_remove(0) && model.pending() == settings_apps::Confirm::None);
+        model.set_busy(true, "radar");                           // a job runs: the page opens, Install does nothing
+        assert(model.activate(0).kind == ActionKind::None && model.tap(0).kind == ActionKind::None);
+        assert(model.activate(1).kind == ActionKind::CloseActions);
+        model.set_busy(false);
+        model.close_actions();
+        assert(!model.in_actions() && model.activate(0).kind == ActionKind::OpenActions);
+        model.set_busy(true, "radar");
+        assert(model.activate(0).kind == ActionKind::OpenActions); // browsing works while a job runs
+        model.set_busy(false);
+    }
     // the placeholder does nothing
     settings_apps::Model empty;
     empty.set_lists({}, {});
@@ -686,7 +701,9 @@ static void model_actions()
     missing.set_backend_missing(true);
     assert(missing.activate(0).kind == ActionKind::ShowLevel);
     missing.set_level(Level::Available);
-    assert(missing.activate(0).kind == ActionKind::None && missing.update_all().kind == ActionKind::None);
+    assert(missing.activate(0).kind == ActionKind::OpenActions && missing.update_all().kind == ActionKind::None);
+    assert(missing.open_actions(0) && missing.activate(0).kind == ActionKind::None); // Install does nothing
+    assert(missing.activate(1).kind == ActionKind::CloseActions);
     assert(missing.sync().kind == ActionKind::None);
 
     // Sources: Enter toggles a source, Add, Sync
@@ -896,9 +913,217 @@ static void model_caption()
     assert(model.caption(1, severity) == "Syncing 1/2 deck-lab/apps");
 }
 
+static void app_descriptions()
+{
+    using settings_apps::ActionKind;
+    using settings_apps::Level;
+    using settings_apps::RowType;
+
+    // the backend escapes a field (escape_tsv): a line break arrives as backslash-n, a backslash doubled
+    const auto apps = apps_backend::parse_apps(
+        "APP\tid1\tNotes\t1.0\tOther\t1\t0\t1\tFirst line\\nSecond\\tline\\\\end\\r\\nThird\tauthor\tsrc\timg\tdeps\tcode\tmine/repo\tupd\trev\t1\t1.0\tcat\tnotes\n");
+    assert(apps.size() == 1 && apps[0].description == "First line\nSecond\tline\\end\r\nThird");
+
+    assert(settings_apps::first_line("One line") == "One line");
+    assert(settings_apps::first_line("  Summary  \nBody\nmore") == "Summary");
+    assert(settings_apps::first_line("\n\r\n  \nSecond try\nx") == "Second try");
+    assert(settings_apps::first_line("Windows\r\nlines") == "Windows");
+    assert(settings_apps::elide("short", 20) == "short" && settings_apps::elide("exactly ten", 11) == "exactly ten");
+    assert(settings_apps::elide("Records field observations", 20) == "Records field observ...");
+    assert(settings_apps::elide(std::string("café café"), 4) == std::string("café...")); // not inside a UTF-8 char
+    assert(settings_apps::first_line("").empty() && settings_apps::first_line(" \n \t\n").empty());
+
+    settings_apps::Model model;
+    apps_backend::App described = apps[0];
+    described.id = "described";
+    described.title = "Described";
+    apps_backend::App plain = described;
+    plain.id = "plain";
+    plain.title = "Plain";
+    plain.description.clear();
+    apps_backend::App blank = described;
+    blank.id = "blank";
+    blank.title = "Blank";
+    blank.description = " \n";
+    model.set_lists({described, plain, blank}, {});
+    model.set_level(Level::Installed);
+
+    // a description: the first row of the app's list, its first line as the value, before Remove
+    assert(model.open_actions(model.find_row(RowType::App, "described")));
+    auto rows = model.rows();
+    assert(rows.size() == 3 && rows[0].type == RowType::Description && rows[0].label == "Description");
+    assert(rows[0].value == "First line" && rows[0].key == "described" && !rows[0].busy);
+    assert(rows[1].type == RowType::Remove && rows[2].type == RowType::Cancel);
+    assert(model.actions_description() == described.description);
+    auto action = model.activate(0);
+    assert(action.kind == ActionKind::ShowDescription && action.id == "described");
+    assert(model.tap(0).kind == ActionKind::ShowDescription);
+    model.set_busy(true, "plain");                       // reading works while a job runs
+    assert(model.activate(0).kind == ActionKind::ShowDescription);
+    model.set_busy(false);
+    model.close_actions();
+    assert(model.actions_description().empty());
+
+    // no description (empty, or only white space): no row
+    for (const char *id : {"plain", "blank"}) {
+        assert(model.open_actions(model.find_row(RowType::App, id)));
+        rows = model.rows();
+        assert(rows.size() == 2 && rows[0].type == RowType::Remove && rows[1].type == RowType::Cancel);
+        model.close_actions();
+    }
+
+    // an app to install (Available): Description, Install, Cancel; without a description Install, Cancel
+    settings_apps::Model avail;
+    apps_backend::App fresh = described;
+    fresh.installed = false;
+    fresh.installed_version.clear();
+    apps_backend::App bare = fresh;
+    bare.id = "bare";
+    bare.title = "Bare";
+    bare.description.clear();
+    avail.set_lists({fresh, bare}, {});
+    avail.set_level(Level::Available);
+    assert(avail.open_actions(avail.find_row(RowType::App, "described")));
+    rows = avail.rows();
+    assert(rows.size() == 3 && rows[0].type == RowType::Description && rows[0].value == "First line");
+    assert(rows[1].type == RowType::Install && rows[2].type == RowType::Cancel);
+    assert(avail.actions_description() == described.description);
+    action = avail.activate(0);
+    assert(action.kind == ActionKind::ShowDescription && action.id == "described");
+    action = avail.activate(1);
+    assert(action.kind == ActionKind::Install && action.id == "described");
+    avail.close_actions();
+    assert(avail.open_actions(avail.find_row(RowType::App, "bare")));
+    rows = avail.rows();
+    assert(rows.size() == 2 && rows[0].type == RowType::Install && rows[1].type == RowType::Cancel);
+    // installed meanwhile: the page has nothing left to do
+    fresh.installed = true;
+    fresh.installed_version = fresh.version;
+    avail.set_lists({fresh, bare}, {});
+    avail.close_actions();
+    assert(avail.open_actions(avail.find_row(RowType::App, "bare")) && avail.actions_valid());
+    avail.set_lists({fresh}, {});
+    assert(!avail.actions_valid());
+
+    // an update is offered: Description, Update, Remove, Cancel
+    apps_backend::App newer = described;
+    newer.version = "2.0";
+    model.set_lists({newer}, {});
+    assert(model.open_actions(model.find_row(RowType::App, "described")));
+    rows = model.rows();
+    assert(rows.size() == 4 && rows[0].type == RowType::Description && rows[1].type == RowType::Update);
+}
+
+static std::string repeat(const std::string &unit, std::size_t times)
+{
+    std::string out;
+    for (std::size_t i = 0; i < times; ++i) out += unit;
+    return out;
+}
+
+// UTF-8 characters of a text
+static std::size_t chars_of(const std::string &text)
+{
+    std::size_t n = 0;
+    for (unsigned char c : text)
+        if ((c & 0xC0) != 0x80) ++n;
+    return n;
+}
+
+// the text is valid UTF-8 (no cut inside a character)
+static bool whole_utf8(const std::string &text)
+{
+    for (std::size_t i = 0; i < text.size();) {
+        const unsigned char c = static_cast<unsigned char>(text[i]);
+        const std::size_t n = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+        if (n == 0 || i + n > text.size()) return false;
+        for (std::size_t k = 1; k < n; ++k)
+            if ((static_cast<unsigned char>(text[i + k]) & 0xC0) != 0x80) return false;
+        i += n;
+    }
+    return true;
+}
+
+static void description_cap()
+{
+    using settings_apps::cap_description;
+    const std::string nl(1, '\n');
+
+    // under and exactly the limit: unchanged
+    assert(cap_description("") == "" && cap_description("Short text.") == "Short text.");
+    const std::string exact = repeat("abcd ", 100);                      // 500 characters
+    assert(exact.size() == 500 && cap_description(exact) == exact);
+    assert(cap_description(repeat("e", 500)) == repeat("e", 500));
+
+    // one over, with sentence ends: the last one that fits (the mark kept), then the dots; at most 500 with them
+    const std::string sentence = "This is a sentence of exactly fifty characters now. "; // 52 characters with the space
+    assert(sentence.size() == 52);
+    std::string text = repeat(sentence, 12);                               // 624 characters
+    std::string capped = cap_description(text);
+    assert(capped == repeat(sentence, 9).substr(0, 9 * 52 - 2) + "...");    // nine sentences, the full stop dropped: ends "now..."
+    assert(chars_of(capped) <= 500 && capped.size() == 9 * 52 - 2 + 3 && capped.compare(capped.size() - 6, 6, "now...") == 0);
+    assert(capped.find("....") == std::string::npos);
+    // the sentence end may also be '!' or '?' or a line break
+    text = repeat("lorem ipsum dolor sit amet ", 14) + "Is this the end? " + repeat("more words to fill the line ", 30);
+    capped = cap_description(text);
+    assert(capped.size() > 300 && capped.compare(capped.size() - 4, 4, "?...") == 0 && chars_of(capped) <= 500);
+    capped = cap_description(repeat("lorem ipsum dolor sit amet ", 14) + "What a day! " + repeat("more words to fill the line ", 30));
+    assert(capped.compare(capped.size() - 4, 4, "!...") == 0 && chars_of(capped) <= 500);   // '!' and '?' keep the mark
+    text = repeat("Words go here and there, so on and so forth " , 8) + nl + repeat("more words to fill the line, ", 30);
+    capped = cap_description(text);
+    assert(capped == repeat("Words go here and there, so on and so forth ", 8).substr(0, 8 * 44 - 1) + "...");
+
+    // no sentence end after character 300: the last space, never inside a word
+    text = repeat("word ", 130);                                           // 650 characters, no sentence end
+    capped = cap_description(text);
+    assert(capped == repeat("word ", 98) + "word...");
+    assert(chars_of(capped) <= 500 && capped.find("wor...") == std::string::npos);
+    text = "Short sentence early on. " + repeat("word ", 130);              // the only sentence end is before 300
+    capped = cap_description(text);
+    assert(capped.compare(capped.size() - 7, 7, "word...") == 0 && chars_of(capped) <= 500 && chars_of(capped) >= 490);
+
+    // no space at all: cut at the last character that fits, dots included in the 500
+    capped = cap_description(repeat("x", 700));
+    assert(capped == repeat("x", 497) + "..." && chars_of(capped) == 500);
+
+    // multi-byte: accents (2 bytes), CJK (3), emoji (4): characters are counted, never cut in the middle
+    const std::string accents = repeat("café crème. ", 60);       // 12 characters each, 720 in all
+    capped = cap_description(accents);
+    assert(whole_utf8(capped) && chars_of(capped) <= 500 && capped.compare(capped.size() - 3, 3, "...") == 0);
+    assert(cap_description(repeat("é", 500)) == repeat("é", 500));     // 500 characters, 1000 bytes: kept
+    const std::string cjk = repeat("漢", 700);                          // no spaces
+    capped = cap_description(cjk);
+    assert(capped == repeat("漢", 497) + "..." && whole_utf8(capped) && chars_of(capped) == 500);
+    const std::string emoji = repeat("😀", 600);                   // 4 bytes each
+    capped = cap_description(emoji);
+    assert(capped == repeat("😀", 497) + "..." && whole_utf8(capped));
+    assert(cap_description(repeat("😀", 500)) == repeat("😀", 500));
+    // mixed text with a space near the end of the budget
+    const std::string mixed = repeat("漢字 😀 café ", 80);
+    capped = cap_description(mixed);
+    assert(whole_utf8(capped) && chars_of(capped) <= 500 && capped.compare(capped.size() - 3, 3, "...") == 0);
+
+    // the model's text page uses it; the row's value is the first line of the whole text
+    apps_backend::App app;
+    app.id = "long";
+    app.title = "Long";
+    app.installed = true;
+    app.version = app.installed_version = "1.0";
+    app.description = "Summary line" + nl + repeat("Filler sentence for the page. ", 40);
+    settings_apps::Model model;
+    model.set_lists({app}, {});
+    model.set_level(settings_apps::Level::Installed);
+    assert(model.open_actions(0));
+    const std::string page = model.actions_description();
+    assert(chars_of(page) <= 500 && page.compare(page.size() - 3, 3, "...") == 0 && page.compare(0, 12, "Summary line") == 0);
+    assert(model.rows()[0].value == "Summary line");
+}
+
 int main()
 {
     versions();
+    app_descriptions();
+    description_cap();
     upgrades();
     parsing();
     sync_progress();

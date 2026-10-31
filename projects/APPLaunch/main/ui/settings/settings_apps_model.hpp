@@ -17,7 +17,7 @@
  *             legacy page's colours as tones (update amber, installed / synced green, failed red, the rest muted).
  *   actions   an installed app's or a source's action list (a level of its own): Update (an update is offered) /
  *             Remove, Cancel; Enable or Disable, Sync (enabled), Remove, Cancel. Installed: Enter or a tap opens the
- *             app's list. Available: Enter or a tap installs at once (no list). Sources: a tap opens the list, Enter
+ *             app's list. Available: Enter or a tap opens the app's list too (Description when it has one, Install, Cancel; Install is the one-tap install of before). Sources: a tap opens the list, Enter
  *             keeps the legacy page's direct action (a source on / off). Root: Enter or a tap opens the level.
  *             Nothing starts while a job runs or without the Store backend; moving between levels, opening and leaving
  *             a list always work.
@@ -54,6 +54,8 @@ enum class RowType {
     Sync,        /* "Sync my sources" */
     /* an action list's rows (key: the app's id / the source's URL) */
     Update,
+    Install,     /* an Available app's list: the install */
+    Description, /* an app's list: its description (informational, a chevron: the read-only text page) */
     Remove,
     Enable,
     Disable,
@@ -90,6 +92,7 @@ enum class ActionKind {
     AddSource,    /* open the add-source entry */
     ShowLevel,    /* level: Installed, Available or Sources */
     OpenActions,  /* the row's action list (open_actions) */
+    ShowDescription, /* id: the app whose description page opens */
     CloseActions, /* back from the action list (Cancel) */
     AskRemove,    /* the confirmation of a removal (ask_remove on the same row) */
 };
@@ -106,6 +109,21 @@ struct Action {
 };
 
 enum class Confirm { None, RemoveApp, RemoveSource };
+
+/* A description's first line (the Description row's value): the first line with text, trimmed; empty when none. */
+std::string first_line(const std::string &text);
+
+/* The most characters of an app's description the launcher shows (the Description text page). */
+constexpr std::size_t kDescriptionLimit = 500;
+
+/* The Description text page's text: `text` itself when it has at most `limit` characters (UTF-8 characters, never a
+ * cut inside one). Longer: cut at the last sentence end ('.', '!' or '?' before a space or a line break) or line break
+ * that leaves more than 300 characters, else at the last space, else (no space, e.g. CJK) at the last character that
+ * fits; trailing white space dropped, then "..." appended: the result is at most `limit` characters with the dots. */
+std::string cap_description(const std::string &text, std::size_t limit = kDescriptionLimit);
+
+/* `text` cut to `limit` characters (UTF-8 aware) with "..." at the end; shorter text is returned as it is. */
+std::string elide(const std::string &text, std::size_t limit);
 
 /* The legacy page's cut for narrow texts: "Weather Sta~". */
 std::string shorten(const std::string &text, std::size_t limit);
@@ -146,6 +164,8 @@ public:
     bool in_actions() const { return actions_; }
     /* The app's title / the source's name the list is for. */
     std::string actions_title() const;
+    /* The full description of the app the open action list is for (the text page's body); empty when none. */
+    std::string actions_description() const;
     /* The list's app or source is still there (a refreshed list may have lost it). */
     bool actions_valid() const;
     /* The row of the list's app or source on its level (where the highlight goes back to), -1 when it is gone. */

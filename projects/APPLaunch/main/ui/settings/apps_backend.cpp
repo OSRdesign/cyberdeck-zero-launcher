@@ -46,6 +46,25 @@ std::vector<std::string> split_tab(const std::string &line)
     return fields;
 }
 
+// The backend escapes backslash, tab, newline and return in a field (escape_tsv): the description's lines.
+std::string unescape_tsv(const std::string &text)
+{
+    std::string out;
+    out.reserve(text.size());
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == '\\' && i + 1 < text.size()) {
+            const char next = text[i + 1];
+            if (next == 'n' || next == 't' || next == 'r' || next == '\\') {
+                out.push_back(next == 'n' ? '\n' : (next == 't' ? '\t' : (next == 'r' ? '\r' : '\\')));
+                ++i;
+                continue;
+            }
+        }
+        out.push_back(text[i]);
+    }
+    return out;
+}
+
 std::string field(const std::vector<std::string> &values, size_t index)
 {
     return index < values.size() ? values[index] : std::string();
@@ -247,7 +266,7 @@ std::vector<App> parse_apps(const std::string &summary_output)
         app.category = field(v, 4);
         app.installed = field(v, 5) == "1";
         app.size = field(v, 7);
-        app.description = field(v, 8);
+        app.description = unescape_tsv(field(v, 8));
         app.author = field(v, 9);
         app.source = field(v, 14);
         app.installed_version = field(v, 18);

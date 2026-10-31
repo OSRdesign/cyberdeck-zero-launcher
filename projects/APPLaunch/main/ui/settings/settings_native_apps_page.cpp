@@ -15,9 +15,13 @@
 #include "settings_apps_jobs.hpp"
 #include "settings_apps_model.hpp"
 
+#include "cp0_font_service.hpp"
+#include "cp0_ui_list.h"
+#include "cp0_ui_metrics_lvgl.h"
 #include "cp0_ui_widgets.hpp"
 #include "input_keys.h"
 #include "keyboard_input.h"
+#include "settings_fonts.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -83,13 +87,15 @@ cp0::ui::RowSpec spec_of(const Row &row)
     } else {
         spec.value = row.value;
         spec.value_rgb = rgb_of(row.tone);
+        spec.chevron = row.type == RowType::Description; /* informational: opens the read-only text page */
     }
     return spec;
 }
 
 bool same_spec(const cp0::ui::RowSpec &a, const cp0::ui::RowSpec &b)
 {
-    return a.kind == b.kind && a.label == b.label && a.value == b.value && a.value_rgb == b.value_rgb;
+    return a.kind == b.kind && a.label == b.label && a.value == b.value && a.value_rgb == b.value_rgb &&
+           a.chevron == b.chevron;
 }
 
 cp0::ui::CaptionTone tone_of(settings_apps::Severity severity)
@@ -141,6 +147,7 @@ public:
         posted_.clear();
         field_.reset(); /* it stops editing: input context, intercept and the keyboard restored */
         dialog_.reset();
+        text_.reset();
         roller_.reset();
         jobs_.reset(); /* a job still running finishes on its own: nothing of it reaches the page any more */
         page_.set_caption("", false);
@@ -151,6 +158,10 @@ public:
     {
         if (dialog_) {
             close_dialog();
+            return true;
+        }
+        if (text_) {
+            close_description();
             return true;
         }
         if (model_.in_actions()) {
@@ -195,7 +206,10 @@ private:
         std::vector<Row> rows = model_.rows();
         std::vector<cp0::ui::RowSpec> specs;
         specs.reserve(rows.size());
-        for (const Row &row : rows) specs.push_back(spec_of(row));
+        for (const Row &row : rows) {
+            specs.push_back(spec_of(row));
+            if (row.type == RowType::Description) specs.back().value = fit_description(row.label, row.value);
+        }
 
         bool same = selected < 0 && rows.size() == rows_.size();
         for (std::size_t i = 0; same && i < rows.size(); ++i)
@@ -217,6 +231,34 @@ private:
         }
         rows_ = std::move(rows);
         specs_ = std::move(specs);
+    }
+
+    /* The Description row's value: the first line cut with dots so that the highlighted row's bold label stays whole
+     * (the roller gives a long value what the label leaves over, and cuts the label to a third when it does not
+     * fit); nothing when not even a few characters fit. */
+    std::string fit_description(const std::string &label, const std::string &line) const
+    {
+        const cp0_ui_roller_page_t &layout = page_.layout();
+        const lv_font_t *bold = cp0_fonts().get("Montserrat-Bold.ttf", static_cast<uint16_t>(layout.text_px));
+        const lv_font_t *plain = cp0_fonts().get("Montserrat-Medium.ttf", static_cast<uint16_t>(layout.value_px));
+        if (!bold || !plain) return line;
+        auto width = [](const std::string &text, const lv_font_t *font) {
+            lv_point_t size;
+            lv_text_get_size(&size, text.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            return static_cast<int>(size.x);
+        };
+        cp0_ui_list_layout_t chevron{};
+        chevron.text_px = layout.text_px;
+        const int room = layout.roller_w - 2 * layout.inset - cp0_ui_list_chevron_w(&chevron) - 2 * layout.gap -
+                         width(label, bold) - 4;
+        std::size_t chars = 0;
+        for (std::size_t i = 0; i < line.size(); ++i)
+            if ((static_cast<unsigned char>(line[i]) & 0xC0) != 0x80) ++chars;
+        for (; chars >= 4; --chars) {
+            const std::string text = settings_apps::elide(line, chars);
+            if (width(text, plain) <= room) return text;
+        }
+        return std::string();
     }
 
     void show_caption()
@@ -283,6 +325,7 @@ private:
     void close_actions()
     {
         if (!model_.in_actions()) return;
+        close_description();
         const int row = model_.actions_row();
         model_.close_actions();
         show_title();
@@ -344,6 +387,9 @@ private:
         case ActionKind::CloseActions:
             close_actions();
             return;
+        case ActionKind::ShowDescription:
+            open_description();
+            return;
         case ActionKind::AskRemove:
             if (model_.ask_remove(index)) open_remove();
             return;
@@ -372,6 +418,31 @@ private:
         }
         close_actions(); /* a job started from an action list: back to the list, where its row shows it */
         poll();          /* the job's first state at once: its row, its first message */
+    }
+
+    /* The app's description as plain text in the read-only TextBlock (the Updates page's What's new), over the list;
+     * the title stays the app's (the action list's). Esc / Left go back to the action list. */
+    void open_description()
+    {
+        const std::string body = model_.actions_description();
+        if (text_ || body.empty() || !roller_) return;
+        const int px = cp0_ui_metrics_get()->text_px[CP0_TEXT_BODY];
+        const lv_font_t *font = settings_fonts::cjk_sans(static_cast<uint16_t>(px));
+        if (!font) font = cp0_ui_font(CP0_TEXT_BODY);
+        unfocus(roller_->focus_object());
+        roller_->set_hidden(true);
+        text_ = std::make_unique<cp0::ui::TextBlock>(page_.root(), page_.layout(), body, font, host_back_);
+        focus_in(group_, text_->focus_object());
+    }
+
+    void close_description()
+    {
+        if (!text_) return;
+        unfocus(text_->focus_object());
+        text_.reset();
+        if (!roller_) return;
+        roller_->set_hidden(false);
+        if (!dialog_) focus_in(group_, roller_->focus_object());
     }
 
     /* The roller's activation. On the lists Enter never gets here (key_cb): this is a tap on the highlighted row. */
@@ -475,7 +546,7 @@ private:
     void close_dialog()
     {
         if (!dialog_) return;
-        focus_in(group_, roller_->focus_object());
+        focus_in(group_, text_ ? text_->focus_object() : roller_->focus_object());
         field_.reset(); /* it stops editing: input context, intercept and the keyboard restored */
         dialog_.reset();
         dialog_kind_ = DialogKind::None;
@@ -560,6 +631,7 @@ private:
     std::unique_ptr<cp0::ui::Roller> roller_;
     std::unique_ptr<cp0::ui::Dialog> dialog_;
     std::unique_ptr<cp0::ui::TextField> field_;
+    std::unique_ptr<cp0::ui::TextBlock> text_; /* an app's description page */
     DialogKind dialog_kind_ = DialogKind::None;
     std::vector<Row> rows_;
     std::vector<cp0::ui::RowSpec> specs_;
