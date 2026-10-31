@@ -30,7 +30,7 @@ int main()
         {"Hidden", "hidden", false, true, LauncherAppOrigin::Builtin},
         {"Calculator", "calculator", true, false, LauncherAppOrigin::Builtin},
         {"Python", "app_Python", true, false, LauncherAppOrigin::Builtin},
-        {"Snake", "app_Game", true, false, LauncherAppOrigin::Builtin},
+        {"Sample", "app_Sample", true, false, LauncherAppOrigin::Builtin},
         {"Settings", "app_Setting", true, false, LauncherAppOrigin::Builtin},
         {"CLI", "app_CLI", true, false, LauncherAppOrigin::Builtin},
         {"ZClaw", "app_desktop_zclaw", true, false, LauncherAppOrigin::Preinstalled},
@@ -48,7 +48,7 @@ int main()
     assert(entries[0].config_key == "calculator");
     assert(!entries[0].enabled);
     assert(entries[1].label == "Python" && entries[1].config_key == "app_Python");
-    assert(entries[2].label == "Snake" && entries[2].config_key == "app_Game");
+    assert(entries[2].label == "Sample" && entries[2].config_key == "app_Sample");
     assert(entries[3].label == "ZClaw" && entries[3].config_key == "app_desktop_zclaw");
     assert(settings_t12b::launcher::is_protected_launcher_app("app_Setting"));
     assert(settings_t12b::launcher::is_protected_launcher_app("app_CLI"));

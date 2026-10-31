@@ -35,7 +35,7 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_touch_choice_page_factor
 namespace settings_t12b {
 
 // Rebuilds the children of the "Touch" entry: every registered app except the ones that never use touch
-// gestures (terminals, SSH, Calculator, IP Panel, Settings), sorted alphabetically.
+// gestures (terminals, SSH, Calculator, Settings), sorted alphabetically.
 bool populate_touch_children(Tree &tree, const NodeIter &parent);
 
 } // namespace settings_t12b

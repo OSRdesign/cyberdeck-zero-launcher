@@ -80,15 +80,9 @@ constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
     {{"SSH", "ssh_100.png", "app_SSH", true, false},
      nullptr, false, true, false, append_page_app<UISSHPage>},
-    {{"IP Panel", "ip_panel_100.png", "app_IP_Panel", true, false},
-     nullptr, false, true, false, append_page_app<UIIpPanelPage>},
 #endif
     {{"Calculator", "math_100.png", "app_Math", true, false},
      nullptr, false, true, false, append_page_app<UICalculatorPage>},
-    {{"Snake", "game_100.png", "app_Game", true, false},
-     nullptr, false, true, false, append_page_app<UIGamePage>},
-    {{"Tank", "tank_100.png", "app_Tank", true, false},
-     nullptr, false, true, false, append_page_app<UITankBattlePage>},
 };
 
 DynamicAppRegistry &dynamic_app_registry()

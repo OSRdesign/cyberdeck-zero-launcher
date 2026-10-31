@@ -6,7 +6,7 @@ wifi 70
 apps Settings CLI SSH Calculator 2048=fixture:2048_128.png
 clock 20:30
 bt on
-@480x320 apps Settings CLI Python SSH "IP Panel"
+@480x320 apps Settings CLI Python SSH
 @480x320 clock 18:13
 @480x320 bt off
 home

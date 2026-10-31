@@ -124,7 +124,8 @@ OLD_DESKTOP_ENTRY_NAME=applaunch.desktop
 # over the folder and never deletes by wildcard: installed apps live there too): the upstream start-up logo, two unused
 # images, the upstream USB ADB gadget helpers, and since report 029 an empty placeholder library, an unused desktop
 # template and the icons of the removed upstream ZClaw app; since the Store front end went from the home grid, its tile
-# icons and the 15 images of its screens (the Store program itself stays: it is Settings > Apps' back end).
+# icons and the 15 images of its screens (the Store program itself stays: it is Settings > Apps' back end), and the
+# icons of the removed 320x170 built-in apps Snake, Tank and IP Panel.
 RETIRED_FILES="share/images/logo_lcd.png share/images/launcher_brand_logo.png share/images/carousel_zero_wordmark.png
 adb/cardputer-adb adb/cardputer-adb-gadget lib/nihao.so applications/vim.desktop.temple share/images/claw_100.png
 share/images/claw_80.png share/images/zclaw_avatar_16.png share/images/zclaw_send_button_18.png share/images/zclaw_sparkles_10.png
@@ -134,7 +135,9 @@ share/images/appstore-shortcut-sharecode.png share/images/appstore-shortcut-sear
 share/images/appstore-shortcut-screenshots.png share/images/appstore-shortcut-settings.png
 share/images/appstore-shortcut-detail.png share/images/store_arrow_down.png share/images/store_arrow_up.png
 share/images/store_arrow_right.png share/images/store_arrow_left.png share/images/store_wordmark.png
-share/images/store_100.png share/images/store_80.png"
+share/images/store_100.png share/images/store_80.png
+share/images/game_100.png share/images/game_80.png share/images/ip_panel_100.png share/images/ip_panel_80.png
+share/images/tank.png share/images/tank_100.png share/images/tank_80.png"
 RETIRED_DIRS="adb"                               # removed when empty afterwards
 
 # System paths ($SYSROOT is empty on a real board)

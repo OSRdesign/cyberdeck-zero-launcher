@@ -41,8 +41,7 @@ bool call_config(std::list<std::string> arguments, std::string *data = nullptr)
 
 int default_choice(const std::string &app_name)
 {
-    if (app_name == "Tank") return kSwipeFire;
-    if (app_name == "Snake" || app_name == "2048") return kSwipe;
+    if (app_name == "2048") return kSwipe;
     return kOff;
 }
 

@@ -102,7 +102,9 @@ share/images/appstore-shortcut-sharecode.png share/images/appstore-shortcut-sear
 share/images/appstore-shortcut-screenshots.png share/images/appstore-shortcut-settings.png
 share/images/appstore-shortcut-detail.png share/images/store_arrow_down.png share/images/store_arrow_up.png
 share/images/store_arrow_right.png share/images/store_arrow_left.png share/images/store_wordmark.png
-share/images/store_100.png share/images/store_80.png"
+share/images/store_100.png share/images/store_80.png
+share/images/game_100.png share/images/game_80.png share/images/ip_panel_100.png share/images/ip_panel_80.png
+share/images/tank.png share/images/tank_100.png share/images/tank_80.png"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 

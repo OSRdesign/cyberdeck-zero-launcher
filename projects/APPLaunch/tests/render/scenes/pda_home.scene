@@ -11,7 +11,7 @@ profile pda
 env APPLAUNCH_PDA 0
 env APPLAUNCH_OSK auto
 keyboards 0
-apps Settings CLI SSH Calculator "Mesh Hop=ip_panel_100.png" "RSS Reader=fixture:store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
+apps Settings CLI SSH Calculator "Mesh Hop=fixture:ip_panel_100.png" "RSS Reader=fixture:store_100.png" "Net Toolbox=ssh_100.png" "Serial Console=cli_100.png"
 clock 20:30
 wifi 70
 bt on

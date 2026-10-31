@@ -221,10 +221,7 @@ const AppDescriptor *launcher_app_registry_entries(std::size_t *count)
         {"CLI", "cli_100.png", "app_CLI", false, true},
         {"Python", "python_100.png", "app_Python", true, false},
         {"SSH", "ssh_100.png", "app_SSH", true, false},
-        {"IP Panel", "ip_panel_100.png", "app_IP_Panel", true, false},
         {"Calculator", "math_100.png", "app_Math", true, false},
-        {"Snake", "game_100.png", "app_Game", true, false},
-        {"Tank", "tank_100.png", "app_Tank", true, false},
     };
     if (count) *count = sizeof(entries) / sizeof(entries[0]);
     return entries;

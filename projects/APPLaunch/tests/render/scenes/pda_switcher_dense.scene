@@ -10,7 +10,7 @@ profile pda
 # without APPLAUNCH_PDA; the zone itself: the zone_* scenes (report 041)
 env APPLAUNCH_PDA 0
 env APPLAUNCH_PANEL_MM 56.6x42.5
-apps "Serial Console=cli_100.png" "Mesh Hop=ip_panel_100.png" "RSS Reader=fixture:store_100.png" "System Monitor=game_100.png" "Net Toolbox=ssh_100.png" "An App With A Thirty Char Name=math_100.png" Settings
+apps "Serial Console=cli_100.png" "Mesh Hop=fixture:ip_panel_100.png" "RSS Reader=fixture:store_100.png" "System Monitor=fixture:game_100.png" "Net Toolbox=ssh_100.png" "An App With A Thirty Char Name=math_100.png" Settings
 clock 20:30
 wifi 70
 bt on

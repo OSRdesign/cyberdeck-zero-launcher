@@ -64,8 +64,8 @@ bool populate_touch_children(Tree &tree, const NodeIter &parent)
 {
     tree.erase_children(parent);
 
-    // apps that never use touch gestures: terminals, SSH, the Calculator, IP Panel and Settings itself
-    static const std::set<std::string> excluded = {"Settings", "CLI", "Python", "SSH", "Calculator", "IP Panel"};
+    // apps that never use touch gestures: terminals, SSH, the Calculator and Settings itself
+    static const std::set<std::string> excluded = {"Settings", "CLI", "Python", "SSH", "Calculator"};
 
     std::size_t count = 0;
     const AppDescriptor *entries = launcher_app_registry_entries(&count);
