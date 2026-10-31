@@ -64,8 +64,14 @@ bundle "$TMP/broken" broken
 # ships a file of its own in share/ (a rollback removes it again, like a new file in bin/ or lib/)
 printf 'store image of 0.8.12\000\377 binary\n' > "$TMP/old/bundle/payload/share/share/images/store_100.png"
 printf 'tank icon of 0.8.12\n' > "$TMP/old/bundle/payload/share/share/images/tank.png"
+# ... and the two large fonts the new bundle drops (report 048 section 3.3), next to a font that stays
+mkdir -p "$TMP/old/bundle/payload/share/share/font"
+printf 'serif font of 0.8.12\000\377 binary\n' > "$TMP/old/bundle/payload/share/share/font/NotoSerifCJK-Regular.ttc"
+printf 'thin font of 0.8.12\000\376 binary\n' > "$TMP/old/bundle/payload/share/share/font/AlibabaPuHuiTi-3-35-Thin.ttf"
+printf 'sans font of 0.8.12\n' > "$TMP/old/bundle/payload/share/share/font/NotoSansCJK-Regular.ttc"
 # (the old release's own install.sh does not retire them: only the new one does)
-sed -i -e 's#share/images/store_100.png##' -e 's#share/images/tank.png##' "$TMP/old/bundle/install.sh"
+sed -i -e 's#share/images/store_100.png##' -e 's#share/images/tank.png##' -e 's#share/font/NotoSerifCJK-Regular.ttc##' \
+    -e 's#share/font/AlibabaPuHuiTi-3-35-Thin.ttf##' "$TMP/old/bundle/install.sh"
 ( cd "$TMP/old/bundle/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$TMP/old/bundle/payload/share.manifest"
 echo "only in the broken release" > "$TMP/broken/bundle/payload/share/share/images/broken_only.png"
 NEWTGZ="$TMP/cyberdeckzero-launcher-0.8.13-arm64.tar.gz"; tarball "$TMP/new" "$NEWTGZ"
@@ -418,7 +424,10 @@ first_install --no-boot-config --no-default-source
 AR="$R/usr/share/APPLaunch"
 SUM_STORE=$(cksum < "$AR/share/images/store_100.png"); SUM_TANK=$(cksum < "$AR/share/images/tank.png")
 MODE_STORE=$(stat -c %a "$AR/share/images/store_100.png")
+SUM_SERIF=$(cksum < "$AR/share/font/NotoSerifCJK-Regular.ttc"); SUM_THIN=$(cksum < "$AR/share/font/AlibabaPuHuiTi-3-35-Thin.ttf")
+MODE_SERIF=$(stat -c %a "$AR/share/font/NotoSerifCJK-Regular.ttc")
 SNAP_SHARE=$(cd "$AR/share" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(cksum < "$f")"; done)
+check "old release installed: the two large fonts are there" '[ -f "$AR/share/font/NotoSerifCJK-Regular.ttc" ] && [ -f "$AR/share/font/AlibabaPuHuiTi-3-35-Thin.ttf" ] && [ -f "$AR/share/font/NotoSansCJK-Regular.ttc" ]'
 check "old release installed: the retired images are there" '[ $RC = 0 ] && [ -f "$AR/share/images/store_100.png" ] && [ -f "$AR/share/images/tank.png" ]'
 download "$BROKENTGZ"
 HT=2
@@ -429,6 +438,8 @@ check "failed health check: rolled back" '[ $RC = 1 ] && [ "$(st state)" = rolle
 check "the backup held the share images, the retired ones included, and the manifest names the folder" '[ -f "$B/files/usr/share/APPLaunch/share/images/store_100.png" ] && grep -qx "dir /usr/share/APPLaunch/share" "$B/manifest" && grep -qx "dir /usr/share/APPLaunch/bin" "$B/manifest"'
 check "the new install.sh had retired them (the log says so)" 'grep -q "removed /usr/share/APPLaunch/share/images/store_100.png (no longer in the bundle)" "$R"/var/log/cyberdeckzero/update-*.log'
 check "rollback: the retired Store image and tank icon are back, byte for byte, same mode" '[ -f "$AR/share/images/store_100.png" ] && [ "$(cksum < "$AR/share/images/store_100.png")" = "$SUM_STORE" ] && [ "$(cksum < "$AR/share/images/tank.png")" = "$SUM_TANK" ] && [ "$(stat -c %a "$AR/share/images/store_100.png")" = "$MODE_STORE" ]'
+check "the new install.sh had retired the two large fonts (the log says so)" 'grep -q "removed /usr/share/APPLaunch/share/font/NotoSerifCJK-Regular.ttc (no longer in the bundle)" "$R"/var/log/cyberdeckzero/update-*.log && grep -q "removed /usr/share/APPLaunch/share/font/AlibabaPuHuiTi-3-35-Thin.ttf (no longer in the bundle)" "$R"/var/log/cyberdeckzero/update-*.log'
+check "rollback: the retired fonts are back, byte for byte, same mode; NotoSansCJK untouched" '[ "$(cksum < "$AR/share/font/NotoSerifCJK-Regular.ttc")" = "$SUM_SERIF" ] && [ "$(cksum < "$AR/share/font/AlibabaPuHuiTi-3-35-Thin.ttf")" = "$SUM_THIN" ] && [ "$(stat -c %a "$AR/share/font/NotoSerifCJK-Regular.ttc")" = "$MODE_SERIF" ] && [ "$(cat "$AR/share/font/NotoSansCJK-Regular.ttc")" = "sans font of 0.8.12" ]'
 check "rollback: share/ as a whole is as before (replaced files restored, the broken release's own file gone)" '[ "$(cd "$AR/share" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do echo "$f $(cksum < "$f")"; done)" = "$SNAP_SHARE" ] && [ ! -e "$AR/share/images/broken_only.png" ] && [ "$(cat "$AR/share/images/setting_100.png")" = "png 0.8.12" ]'
 
 # an old-style backup (bin, lib and doc only: a helper before this one) still restores what it holds; share/ is left alone
@@ -437,7 +448,7 @@ download "$NEWTGZ"
 FAKE_KILL_HELPER=1; export FAKE_KILL_HELPER
 apply "$NEWTGZ" 0.8.13
 unset FAKE_KILL_HELPER
-check "an update interrupted after install.sh: the new image set is installed, the retired images gone" '[ "$(st state)" = running ] && [ "$(bin_version)" = 0.8.13 ] && [ ! -e "$AR/share/images/store_100.png" ] && [ "$(cat "$AR/share/images/setting_100.png")" = "png 0.8.13" ]'
+check "an update interrupted after install.sh: the new image set is installed, the retired images gone" '[ "$(st state)" = running ] && [ "$(bin_version)" = 0.8.13 ] && [ ! -e "$AR/share/images/store_100.png" ] && [ ! -e "$AR/share/font/NotoSerifCJK-Regular.ttc" ] && [ ! -e "$AR/share/font/AlibabaPuHuiTi-3-35-Thin.ttf" ] && [ "$(cat "$AR/share/images/setting_100.png")" = "png 0.8.13" ]'
 # the backup as an earlier helper made it: only bin, lib and doc
 grep -v -e '^dir /usr/share/APPLaunch/share$' -e '^dir /usr/share/APPLaunch/strokes$' -e '^dir /usr/share/APPLaunch/adb$' \
      -e 'preinstalled-desktop-apps.tsv' -e 'vim.desktop.temple' "$B/manifest" > "$B/manifest.old" && mv "$B/manifest.old" "$B/manifest"
