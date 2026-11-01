@@ -139,18 +139,26 @@ Simulation parse_simulation(const std::string &text)
 {
     Simulation sim;
     bool kept_section = false;
+    bool phased_section = false;
     bool any = false;
     for (const std::string &line : split_lines(text)) {
-        if (kept_section) {
+        if (kept_section || phased_section) {
             if (!line.empty() && line[0] == ' ') {
-                for (const std::string &name : words(line)) sim.kept_back.push_back(base_name(name));
+                for (const std::string &name : words(line))
+                    (kept_section ? sim.kept_back : sim.phased).push_back(base_name(name));
                 continue;
             }
-            kept_section = false;
+            kept_section = phased_section = false;
         }
         if (starts_with(line, "The following packages have been kept back:") ||
             starts_with(line, "The following package has been kept back:")) {
             kept_section = true;
+            continue;
+        }
+        // apt 2.7+ (Ubuntu 26.04): phased updates are deferred, not kept back; they come by themselves later
+        if (starts_with(line, "The following upgrades have been deferred due to phasing:") ||
+            starts_with(line, "The following upgrade has been deferred due to phasing:")) {
+            phased_section = true;
             continue;
         }
         Change change;
@@ -310,6 +318,7 @@ Report classify(const Simulation &upgrade, const Simulation &dist, const Board &
     auto place = [&](const Change &c) {
         if (is_app(c.name)) {
             add_store(c.name);
+            if (!c.from.empty()) report.store_versions.push_back({base_name(c.name), c.from, c.to, ""});
             return;
         }
         Package p;
@@ -322,6 +331,8 @@ Report classify(const Simulation &upgrade, const Simulation &dist, const Board &
     };
     for (const Change &c : upgrade.upgrades) place(c);
     for (const Change &c : upgrade.installs) place(c);
+    for (const std::string &name : upgrade.phased)
+        if (!is_app(name)) report.phased.push_back(base_name(name));
 
     // what `upgrade` keeps back (a new package is needed, or one would go): the terminal's job. `dist-upgrade` tells the
     // versions and the removals; it is only read when something was kept back.
@@ -543,8 +554,9 @@ const char *info_line()
 
 std::string terminal_text(const Report &r)
 {
-    std::string text = "These updates are not installed from the launcher yet. Run them in a terminal and read what apt "
-                       "says before you answer yes:\n\n  sudo apt-get upgrade\n";
+    // (P4: Upgrade on the Packages page installs the safe set; these stay the terminal's)
+    std::string text = "The launcher never installs these updates. Run them in a terminal and read what apt says before "
+                       "you answer yes:\n\n  sudo apt-get upgrade\n";
     if (r.needs_dist_upgrade)
         text += "\nSome packages are kept back (apt needs a new package for them, or one is removed). Only this installs "
                 "them:\n\n  sudo apt-get dist-upgrade\n";

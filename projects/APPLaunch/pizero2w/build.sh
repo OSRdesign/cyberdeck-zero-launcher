@@ -189,6 +189,8 @@ chmod -R u=rwX,go=rX "$DOC"
 
 cp "$HERE/install.sh" "$HERE/uninstall.sh" "$HERE/default-sources.sh" "$HERE/config.txt.snippet" "$HERE/README.md" "$OUT/"
 chmod +x "$OUT/install.sh" "$OUT/uninstall.sh" "$OUT/default-sources.sh"
+# the bundle's version: install.sh gives it to the anchor package cyberdeckzero-runtime (report 047 P4)
+printf '%s\n' "$VERSION" > "$OUT/VERSION"
 
 # one tarball per build and arch: no stale file of another version (or of the earlier name) next to it
 rm -f "$HERE"/cyberdeckzero-launcher-*-"$ARCH".tar.gz

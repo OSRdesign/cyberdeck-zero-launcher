@@ -1,0 +1,128 @@
+Package: cifs-utils
+Version: 2:7.4-1+deb13u2
+Installed-Size: 1270
+
+Package: libcamera-ipa
+Version: 0.7.2+rpt20261009-1
+Installed-Size: 1381
+
+Package: libcamera0.7
+Version: 0.7.2+rpt20261009-1
+Installed-Size: 1344
+
+Package: libcurl3t64-gnutls
+Version: 8.14.1-2+deb13u7
+Source: curl (8.14.1-2+deb13u7)
+Depends: libbrotli1 (>= 0.6.0), libc6 (>= 2.38), libgnutls30t64 (>= 3.8.6)
+Installed-Size: 1566
+
+Package: libexpat1
+Version: 2.9.0-1~deb13u1
+Installed-Size: 1233
+
+Package: libnss3
+Version: 2:3.110-1+deb13u1
+Installed-Size: 1159
+
+Package: libntfs-3g89t64
+Version: 1:2022.10.3-5+deb13u3
+Installed-Size: 1455
+
+Package: libpipewire-0.3-common
+Version: 1.4.2-1+rpt3
+Installed-Size: 1714
+
+Package: librpicam-app1
+Version: 1.14.0-1
+Installed-Size: 1418
+
+Package: librsvg2-2
+Version: 2.60.0+dfsg-1+deb13u1
+Installed-Size: 1270
+
+Package: librsvg2-common
+Version: 2.60.0+dfsg-1+deb13u1
+Installed-Size: 1455
+
+Package: ntfs-3g
+Version: 1:2022.10.3-5+deb13u3
+Installed-Size: 1159
+
+Package: pipewire
+Version: 1.4.2-1+rpt3
+Installed-Size: 1196
+
+Package: pipewire-bin
+Version: 1.4.2-1+rpt3
+Installed-Size: 1344
+
+Package: raspi-config
+Version: 20261026+2
+Installed-Size: 1344
+
+Package: rpi-connect-lite
+Version: 2.14.0
+Installed-Size: 1492
+
+Package: rpicam-apps-lite
+Version: 1.14.0-1
+Installed-Size: 1492
+
+Package: tzdata
+Version: 2026e-0+deb13u1
+Installed-Size: 1122
+
+Package: vim
+Version: 2:9.1.1230-2+deb13u1
+Source: vim
+Depends: vim-common (= 2:9.1.1230-2+deb13u1), vim-runtime (= 2:9.1.1230-2+deb13u1), libc6 (>= 2.38)
+Installed-Size: 1011
+
+Package: vim-common
+Version: 2:9.1.1230-2+deb13u1
+Installed-Size: 1270
+
+Package: vim-runtime
+Version: 2:9.1.1230-2+deb13u1
+Installed-Size: 1307
+
+Package: xxd
+Version: 2:9.1.1230-2+deb13u1
+Source: vim
+Installed-Size: 1011
+
+Package: curl
+Version: 8.14.1-2+deb13u7
+Depends: libc6 (>= 2.38), libcurl4t64 (= 8.14.1-2+deb13u7), zlib1g (>= 1:1.1.4)
+Installed-Size: 1048
+
+Package: libcurl4t64
+Version: 8.14.1-2+deb13u7
+Source: curl (8.14.1-2+deb13u7)
+Depends: libc6 (>= 2.38), libssl3t64 (>= 3.0.0)
+Installed-Size: 1307
+
+Package: libssl3t64
+Version: 3.5.1-1+deb13u1
+Installed-Size: 1270
+
+Package: chain-tool
+Version: 2.0-1
+Depends: libc6 (>= 2.38), libchain1 (= 2.0-1)
+Installed-Size: 1270
+
+Package: libchain1
+Version: 2.0-1
+Pre-Depends: libc6 (>= 2.38)
+Depends: libssl3t64 (>= 3.5.1)
+Installed-Size: 1233
+
+Package: raspberrypi-sys-mods
+Version: 20261020
+Depends: raspi-firmware (>= 1:1.20261020)
+Installed-Size: 1640
+
+Package: raspi-firmware
+Version: 1:1.20261020-1
+Installed-Size: 1418
+

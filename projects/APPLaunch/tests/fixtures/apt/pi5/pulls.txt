@@ -1,0 +1,3 @@
+libcurl3t64-gnutls: curl libcurl4t64
+curl: libcurl4t64 libcurl3t64-gnutls
+libcurl4t64: curl libcurl3t64-gnutls

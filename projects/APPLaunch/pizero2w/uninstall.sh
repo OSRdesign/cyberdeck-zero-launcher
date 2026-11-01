@@ -72,6 +72,8 @@ UPDATE_STATE_DIR="$ROOT/var/lib/cyberdeckzero-update"
 UPDATE_WORK_DIR="$ROOT/var/cache/cyberdeckzero-update"
 UPDATE_RUN_DIR="$ROOT/run/cyberdeckzero-update"
 UPDATE_LOG_DIR="$ROOT/var/log/cyberdeckzero"
+# the anchor package install.sh builds (report 047 P4): it only names the packages the launcher needs
+ANCHOR_PKG=cyberdeckzero-runtime
 
 # The names of this release, then those of v0.6.0 and before (as in install.sh, "Names")
 LAUNCHER_BIN=cyberdeckzero
@@ -299,6 +301,9 @@ if [ "$RESTORE_CONFIG" = 1 ]; then
     fi
 fi
 
+# the anchor package (install.sh, report 047 P4): its dpkg state ("ii ", "" when dpkg does not know it)
+ANCHOR_STATE=$(dpkg-query -W -f='${db:Status-Abbrev}' "$ANCHOR_PKG" 2>/dev/null || true)
+
 # getty@tty1: restore only if it is masked now (install.sh masked it)
 GETTY_STATE=$(systemctl is-enabled getty@tty1.service 2>/dev/null || true)
 
@@ -325,7 +330,10 @@ if exists "$WP_DROPIN"; then echo "  - $WP_DROPIN (desktop boards: WirePlumber B
 echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
 echo "    $CTL_BIN (and its link $ROOT/usr/local/bin/$CTL_BIN), $UPDATE_HELPER, lib/libapplaunch_vfb.so"
 echo "  - Settings > Updates' helper files: $UPDATE_STATE_DIR (its status and last backup), $UPDATE_WORK_DIR,"
-echo "    $UPDATE_RUN_DIR, $UPDATE_LOG_DIR/update-*.log and apt-refresh.log"
+echo "    $UPDATE_RUN_DIR, $UPDATE_LOG_DIR/update-*.log, apt-refresh.log and apt-upgrade-*.log"
+if [ -n "$ANCHOR_STATE" ] && [ "$ANCHOR_STATE" != "un " ]; then
+    echo "  - the anchor package $ANCHOR_PKG (dpkg --purge; it installs no file, the packages it names stay)"
+fi
 case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
@@ -486,10 +494,19 @@ say "Removing Settings > Updates' helper files"
 for d in "$UPDATE_STATE_DIR" "$UPDATE_WORK_DIR" "$UPDATE_RUN_DIR"; do
     if [ -d "$d" ]; then act $SUDO rm -rf "$d"; CHANGED_SYS=1; else note "already gone: $d"; fi
 done
-for f in "$UPDATE_LOG_DIR"/update-*.log "$UPDATE_LOG_DIR/apt-refresh.log"; do
+for f in "$UPDATE_LOG_DIR"/update-*.log "$UPDATE_LOG_DIR/apt-refresh.log" "$UPDATE_LOG_DIR"/apt-upgrade-*.log; do
     if exists "$f"; then rm_sys "$f"; fi
 done
 if [ -d "$UPDATE_LOG_DIR" ] && [ -z "$(ls -A "$UPDATE_LOG_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$UPDATE_LOG_DIR"; fi
+
+say "Removing the anchor package $ANCHOR_PKG"
+# it holds no file: purging it only tells apt the launcher no longer needs those packages (they stay installed)
+if [ -n "$ANCHOR_STATE" ] && [ "$ANCHOR_STATE" != "un " ]; then
+    act_try $SUDO dpkg --purge "$ANCHOR_PKG"
+    CHANGED_SYS=1
+else
+    note "$ANCHOR_PKG is not installed"
+fi
 
 say "Removing the launcher files in $APP_ROOT"
 for f in "bin/$LAUNCHER_BIN" "bin/$OLD_LAUNCHER_BIN" bin/M5CardputerZero-AppStore "bin/$CONSOLE_HELPER" \

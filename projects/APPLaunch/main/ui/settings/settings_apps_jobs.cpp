@@ -11,6 +11,7 @@
 
 #include "settings_apps_model.hpp"
 #include "settings_apps_registry_mirror.hpp"
+#include "settings_apt_upgrade.hpp"
 
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -30,6 +31,11 @@
 #include <sys/statvfs.h>
 
 namespace settings_apps {
+
+namespace {
+// Report 047 P4: the package jobs running now, in every Jobs (the shared busy flag, package_job_running())
+std::atomic<int> g_package_jobs{0};
+} // namespace
 
 // State shared with the worker threads (which can outlive the page).
 struct Jobs::Shared {
@@ -64,6 +70,24 @@ struct Jobs::Shared {
     std::string job_transaction;
     std::string job_name;
     std::string job_version;
+    bool package_job = false;          // a package job counts in g_package_jobs (P4's busy flag) until busy ends
+
+    // busy ends: the package job leaves the shared busy flag (call with the mutex held)
+    void end_busy_locked()
+    {
+        busy = false;
+        if (package_job) {
+            package_job = false;
+            --g_package_jobs;
+        }
+    }
+    void begin_package_locked()
+    {
+        if (!package_job) {
+            package_job = true;
+            ++g_package_jobs;
+        }
+    }
 
     void say(const std::string &text)
     {
@@ -91,7 +115,7 @@ struct Jobs::Shared {
         status_warn = warn;
         status_dirty = true;
         stage.clear();
-        busy = false;
+        end_busy_locked();
         if (error) queue.abort();
     }
     void succeed(const std::string &text)
@@ -102,7 +126,7 @@ struct Jobs::Shared {
         status_warn = false;
         status_dirty = true;
         stage.clear();
-        busy = false;
+        end_busy_locked();
     }
     void fail(const apps_status::Failure &failure)
     {
@@ -115,7 +139,7 @@ struct Jobs::Shared {
         message_detail = failure.detail;
         message_pending = true;
         stage.clear();
-        busy = false;
+        end_busy_locked();
         queue.abort();
     }
     void publish_sync_locked()
@@ -427,6 +451,13 @@ void task_package(std::shared_ptr<Shared> s, std::string action, std::string id,
         std::lock_guard<std::mutex> lock(s->mutex);
         s->package_id = id;
     }
+    // report 047 P4: Settings > Updates runs a package job (an upgrade, a repair, a launcher update, a password asked):
+    // one dpkg at a time
+    const std::string busy = launcher_apt::system_job_busy();
+    if (!busy.empty()) {
+        s->fail({"Another installation is running", busy + ": try again when it is done"});
+        return;
+    }
     if (action != "uninstall") {
         const std::string problem = apps_status::space_problem(apps_status::parse_size_bytes(size), free_bytes());
         if (!problem.empty()) {
@@ -532,6 +563,7 @@ bool Jobs::package(const std::string &action, const std::string &id, const std::
     {
         std::lock_guard<std::mutex> lock(shared->mutex);
         shared->package_id = id;
+        shared->begin_package_locked();
     }
     spawn([shared, action, id, name, size] { task_package(shared, action, id, name, size); });
     return true;
@@ -546,6 +578,7 @@ bool Jobs::update_all(const std::vector<std::pair<std::string, std::string>> &it
         std::lock_guard<std::mutex> lock(shared->mutex);
         if (shared->busy) return false;
         shared->busy = true;
+        shared->begin_package_locked();
         shared->queue.reset(items);
         first = shared->queue.take();
         shared->package_id = first.first;
@@ -680,6 +713,11 @@ void Jobs::start_sudo()
         delete raw;
         shared->finish("Could not ask for the password");
     }
+}
+
+bool package_job_running()
+{
+    return g_package_jobs.load() > 0;
 }
 
 AppUpdates app_updates()

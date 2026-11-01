@@ -1,0 +1,104 @@
+# Settings > Updates > Packages (report 047 P4, the owner's "is it frozen?" requirement): every long wait shows it is alive.
+# A slow board (apt slow on: the reassurance line at once), the deck case (tests/fixtures/apt/deck-p4). The first scan:
+# the working box (title, the step in plain words, the bar at stage n of 4, the elapsed counter mm:ss, "This board is
+# slow..."); held at stage 1 (reading the package lists), then at stage 2 (finding the packages that can be upgraded) at
+# 00:23; 20 s after the last step change the second line ("Still working..."); the list then shows while the plan's
+# closure runs (stage 4: a small inline status with its elapsed counter, the Upgrade row "checking"); Upgrade pressed
+# before the plan is ready: the box "Preparing the upgrade" until it is, then the confirmation (21 packages). Upgrade now:
+# "Starting the helper..." with its elapsed counter and the moving bar until the helper's first status; the helper's
+# check phase: "Checking the plan  00:17" and the reassurance row. Every label whole (expect_unclipped). Keys only.
+# Review only: no golden.
+title updates wait
+review
+sizes 640x480 480x800 480x640 720x720 1280x800 480x320
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+env HARNESS_APPS missing
+env HARNESS_SUDO ok
+apps Settings CLI SSH Calculator
+clock 20:30 2026-11-01
+wifi 70
+bt on
+update net on
+update build 0.9.2 release arm64
+update answer releases-real.json
+apt slow on
+apt board pending
+apt lists-age 1
+home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+key DOWN
+key ENTER
+wait 8000
+# 1. stage 1 of 4: reading the package lists (the board's apt-get -s takes long)
+shot wait_scan_reading
+expect_text "Preparing the updates"
+expect_text "Esc cancels"
+expect_unclipped "Preparing the updates" "Reading the package lists" "This board is slow: it can take a minute. Nothing is frozen."
+# 2. stage 2 of 4 at 00:23: finding the packages that can be upgraded
+apt hold listing
+apt board deck-p4
+wait 10700
+shot wait_scan_stage2
+expect_unclipped "Preparing the updates" "Finding the packages that can be upgraded" "00:23" "Esc cancels"
+# 3. 20 s with no step change: the second line
+wait 11000
+shot wait_scan_still
+expect_unclipped "Still working... the packages list is long" "This board is slow: it can take a minute. Nothing is frozen."
+# 4. the list is out, the plan's closure runs (held): an inline status, the Upgrade row "checking"
+apt hold checking
+wait 1500
+shot wait_plan_inline
+expect_text "checking"
+expect_text "Refresh lists"
+# the highlight on the first row (the list replaced the box: not the last row)
+expect_unclipped "Refresh lists" "Upgrade packages"
+# 5. Upgrade pressed before the plan is ready: the box until it is
+key DOWN
+key ENTER
+wait 600
+shot wait_plan_box
+expect_text "Preparing the upgrade"
+expect_unclipped "Preparing the upgrade" "Checking that the upgrade is safe"
+# 6. the plan is ready: on to the confirmation (the closure: 21 packages)
+apt hold none
+wait 2000
+shot wait_plan_done
+expect_text "Upgrade now"
+expect_text "Launcher libraries (6)"
+# 7. Upgrade now: the helper's unit started, no status yet: "Starting the helper..." and the moving bar
+key END
+key UP
+key ENTER
+wait 3000
+shot wait_helper_start
+expect_text start "Starting the helper..."
+expect_text "Check the plan"
+expect_unclipped "Check the plan" "Download" "Install" "Clean up" "Slow board: nothing is frozen"
+# 8. the helper's check phase at 17 s: its elapsed counter, the reassurance row, Cancel
+apt upgrade job upgrade
+apt upgrade state running
+apt upgrade phase check
+apt upgrade total 21
+apt upgrade started now-17
+apt upgrade log /var/log/cyberdeckzero/apt-upgrade-20261101-203000.log
+wait 1500
+expect_text "Checking the plan  00:17"
+shot wait_check_phase
+expect_text "Cancel"
+expect_text "Slow board: nothing is frozen"
+expect_unclipped "Check the plan" "Download" "Install" "Clean up" "Cancel" "Slow board: nothing is frozen"
+apt upgrade state cancelled
+apt upgrade reason cancelled while checking: nothing was installed
+wait 1500
+key ESC
+key ESC
+key ESC
+wait 300

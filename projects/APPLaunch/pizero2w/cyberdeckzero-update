@@ -37,6 +37,40 @@
 #       (key=value lines: v state (running, done, failed) percent text reason pid boot started updated; world-readable),
 #       written when the figure changes; apt's own output in /var/log/cyberdeckzero/apt-refresh.log (the last run). Refuses
 #       to start while another refresh runs. It never touches the update status file, the backup or the launcher.
+#   cyberdeckzero-update apt-upgrade --user NAME [--libraries] PACKAGE...
+#       Settings > Updates > Packages > Upgrade now (report 047 P4): upgrades exactly the listed installed packages, the
+#       plan the launcher showed, run the same way (systemd-run --unit=cyberdeckzero-apt ... apt-upgrade ...; one unit name
+#       for every apt job: systemd itself refuses a second one). Never apt-get upgrade or dist-upgrade, never a removal,
+#       never a new package, never the boot chain (kernel, firmware, EEPROM, initramfs, boot loader: the terminal's), never
+#       a package the anchor cyberdeckzero-runtime depends on (the launcher's libraries) unless --libraries is given.
+#        1. check    the user's battery (status.state: under 50 % and not charging refuses), under-voltage now (hwmon
+#                    rpi_volt, the firmware's get_throttled, vcgencmd), dpkg --audit empty, then the SECOND simulation
+#                    `apt-get -s install --only-upgrade --no-remove --no-install-recommends PACKAGE...`: it must upgrade
+#                    exactly the listed packages, install nothing new and remove nothing. The launcher made the list as
+#                    the closure of that very command (settings_apt_upgrade_model.hpp, close_plan: the same rule), so a
+#                    difference means the packages changed since: "refresh the lists and try again". Then the space:
+#                    the download (--print-uris) plus what the packages grow by (Installed-Size, apt-cache against dpkg)
+#                    plus a margin (64 MB, or the largest package). Cancellable too (the same flag as the download).
+#        2. download `apt-get -d install --only-upgrade ...` with Status-Fd progress (done/total); cancellable: the
+#                    launcher creates /run/user/UID/applaunch/apt-cancel (read in this phase only); stopped on under-voltage
+#        3. install  the battery and the power checked again, then `apt-get install --only-upgrade --no-remove
+#                    --no-install-recommends -y PACKAGE...` with DEBIAN_FRONTEND=noninteractive, NEEDRESTART_MODE=l (never a
+#                    service restart from needrestart), Dpkg::Options --force-confdef --force-confold (local configuration
+#                    files kept, never a question), DPkg::Lock::Timeout=120 (another apt or dpkg: waited for, then a clear
+#                    reason), under systemd-inhibit; NOT cancellable (a cancel request is logged and ignored); dpkg --audit
+#                    must be empty afterwards
+#        4. clean    apt-get clean (the downloads go: small cards); also after a failure or a cancel
+#       Never a reboot: reboot=1 in the status advises one (/run/reboot-required, or libc6, systemd, udev, dbus upgraded).
+#       Status /var/lib/cyberdeckzero-update/apt-upgrade-status (world-readable key=value lines: v job state (running,
+#       done, failed, refused, cancelled) phase (check, download, install, clean, repair) done total percent text package
+#       reason reboot reboot_why libraries download need user pid boot started updated log); log
+#       /var/log/cyberdeckzero/apt-upgrade-<date>.log (world-readable, the last 5 kept), apt's own logs, the unit's journal.
+#       An interrupted run (a power cut: running, no helper alive) is refused until apt-repair has run.
+#   cyberdeckzero-update apt-repair --user NAME
+#       after an interrupted upgrade (or whenever dpkg --audit is not empty): `dpkg --configure -a` (the same environment
+#       and options, under systemd-inhibit), then dpkg --audit must be empty and `apt-get -s -f install --no-remove` must
+#       plan nothing; when apt still sees broken dependencies it says so (sudo apt-get -f install in a terminal) and does
+#       not run it. The same status file (job=repair) and log.
 #   cyberdeckzero-update plan --bundle DIR --user NAME    the options it would replay and the plan check (changes nothing)
 #   cyberdeckzero-update options --user NAME              the install options it would replay
 #   cyberdeckzero-update status                           the status file
@@ -56,13 +90,15 @@
 # Log: /var/log/cyberdeckzero/update-<date>.log (world-readable: Settings > Updates > Show log; the last 5 are kept),
 # also in the unit's journal (journalctl -u cyberdeckzero-update).
 #
-# Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused (nothing changed) or a usage error.
+# Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused or cancelled (nothing changed) or a
+# usage error.
 #
 # Test hooks (leave them unset on a board): UPDATE_ROOT prefixes every system path; with UPDATE_FAKE_SYSTEM=1 the helper
 # runs without root and install.sh with SYSROOT=$UPDATE_ROOT INSTALL_FAKE_SYSTEM=1 (pizero2w/tests/test-update-helper.sh
 # puts stand-ins for systemctl, runuser, systemd-inhibit and the other system commands first on PATH).
 # UPDATE_HEALTH_TIMEOUT, UPDATE_HEALTH_STABLE, UPDATE_RESTART_WAIT and UPDATE_DESKTOP_GAP replace the waits (seconds);
-# INSTALL_MACHINE replaces "uname -m" (as for install.sh).
+# INSTALL_MACHINE replaces "uname -m" (as for install.sh); UPDATE_APT_LOCK_TIMEOUT replaces the 120 s dpkg lock wait.
+# In a fake root the sysfs files of the power checks are read under UPDATE_ROOT too.
 set -u
 
 ROOT=${UPDATE_ROOT:-}
@@ -108,7 +144,7 @@ BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/sys
 /usr/local/bin/cyberdeckzero-ctl /usr/share/APPLaunch/preinstalled-desktop-apps.tsv
 /usr/share/APPLaunch/applications/vim.desktop.temple"
 
-usage() { sed -n '3,49p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,82p' "$0" | sed 's/^# \{0,1\}//'; }
 now() { date +%s; }
 say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*"; [ -z "${LOG:-}" ] || printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
 oneline() { printf '%s' "$1" | tr '\n\r' '  ' | cut -c1-300; }
@@ -696,6 +732,427 @@ cmd_apt_refresh() {
     [ "$rc" = 0 ]
 }
 
+# ---------------------------------------------------------------------------------------------------------------
+# The upgrade of the listed packages (P4) and the repair after an interruption
+# ---------------------------------------------------------------------------------------------------------------
+UP_STATUS="$STATE_DIR/apt-upgrade-status"
+ANCHOR_PKG=cyberdeckzero-runtime
+LOCK_WAIT=${UPDATE_APT_LOCK_TIMEOUT:-120}
+BATTERY_FLOOR=50
+MARGIN_KIB=65536
+U_JOB=upgrade; U_STATE=""; U_PHASE=""; U_DONE=""; U_TOTAL=""; U_PERCENT=""; U_TEXT=""; U_PACKAGE=""; U_REASON=""
+U_REBOOT=0; U_REBOOT_WHY=""; U_LIBS=0; U_DOWNLOAD=""; U_NEED=""; U_STARTED=""
+write_upgrade_status() {
+    mkdir -p "$STATE_DIR"
+    tmp="$UP_STATUS.tmp.$$"
+    {
+        echo "v=1"
+        echo "job=$U_JOB"
+        echo "state=$U_STATE"
+        echo "phase=$U_PHASE"
+        echo "done=$U_DONE"
+        echo "total=$U_TOTAL"
+        echo "percent=$U_PERCENT"
+        echo "text=$(oneline "$U_TEXT")"
+        echo "package=$U_PACKAGE"
+        echo "reason=$(oneline "$U_REASON")"
+        echo "reboot=$U_REBOOT"
+        echo "reboot_why=$U_REBOOT_WHY"
+        echo "libraries=$U_LIBS"
+        echo "download=$U_DOWNLOAD"
+        echo "need=$U_NEED"
+        echo "user=$U"
+        echo "pid=$$"
+        echo "boot=$(boot_id)"
+        echo "started=$U_STARTED"
+        echo "updated=$(now)"
+        echo "log=${LOG#"$ROOT"}"
+    } > "$tmp" && chmod 644 "$tmp" && mv -f "$tmp" "$UP_STATUS"
+}
+upgrade_get() { [ -f "$UP_STATUS" ] && sed -n "s/^$1=//p" "$UP_STATUS" | tail -n 1; }
+open_upgrade_log() {
+    mkdir -p "$LOG_DIR"
+    LOG="$LOG_DIR/apt-upgrade-$(date +%Y%m%d-%H%M%S).log"
+    : > "$LOG"; chmod 644 "$LOG"
+    # shellcheck disable=SC2012
+    ls -1t "$LOG_DIR"/apt-upgrade-*.log 2>/dev/null | tail -n +6 | while IFS= read -r old; do rm -f "$old"; done
+}
+# a Debian package name, optionally with its architecture ("libc6:armhf")
+is_pkg() { printf '%s\n' "$1" | grep -Eqx '[a-z0-9][a-z0-9+.-]{0,99}(:[a-z0-9]{1,20})?'; }
+base_pkg() { printf '%s\n' "${1%%:*}"; }
+# kernel, firmware, EEPROM, initramfs, boot loader, microcode: the terminal's (D15; the launcher's classifier, the same list)
+is_boot_pkg() {
+    n=${1%%:*}
+    [ "$n" = u-boot-tools ] && return 1
+    case "$n" in
+        linux-image-*|linux-modules-*|linux-headers-*|linux-kbuild-*|linux-base*|linux-firmware*|firmware-*|armbian-firmware*|\
+        armbian-bsp*|grub-*|shim*|raspi-firmware*|raspberrypi-bootloader*|raspberrypi-kernel*|rpi-eeprom*|rpi-update*|\
+        initramfs-tools*|dracut*|u-boot-*|flash-kernel*|intel-microcode*|amd64-microcode*|bluez-firmware*) return 0 ;;
+    esac
+    return 1
+}
+# the packages the anchor names (install.sh: the launcher's libraries and the programs it runs), one per line
+anchor_depends() {
+    dpkg-query -W -f='${Depends}' "$ANCHOR_PKG" 2>/dev/null | tr ',|' '\n\n' | sed -e 's/(.*//' -e 's/^ *//' -e 's/ *$//' \
+        | sed 's/:.*//' | grep -v '^$' | LC_ALL=C sort -u
+}
+# the user's battery from the launcher's status feed (status.state): BAT_PCT (-1 none) and BAT_STATE
+read_battery() {
+    f="$ROOT/run/user/$U_UID/applaunch/status.state"
+    BAT_PCT=-1; BAT_STATE=""
+    [ -f "$f" ] || return 0
+    v=$(sed -n 's/^battery=//p' "$f" | tail -n 1)
+    case "$v" in ""|*[!0-9-]*) ;; *) BAT_PCT=$v ;; esac
+    BAT_STATE=$(sed -n 's/^battery_state=//p' "$f" | tail -n 1)
+}
+battery_low() {
+    read_battery
+    [ "$BAT_PCT" -ge 0 ] && [ "$BAT_PCT" -lt "$BATTERY_FLOOR" ] && [ "$BAT_STATE" != Charging ] && [ "$BAT_STATE" != Full ]
+}
+# under-voltage NOW: the rpi_volt hwmon's alarm, else the firmware's get_throttled (bit 0), else vcgencmd; no source: no
+under_voltage() {
+    for d in "$ROOT"/sys/class/hwmon/hwmon*; do
+        [ -f "$d/name" ] && [ "$(cat "$d/name" 2>/dev/null)" = rpi_volt ] || continue
+        [ "$(cat "$d/in0_lcrit_alarm" 2>/dev/null)" = 1 ]
+        return
+    done
+    t=""
+    f="$ROOT/sys/devices/platform/soc/soc:firmware/get_throttled"
+    if [ -r "$f" ]; then t=$(cat "$f" 2>/dev/null)
+    elif command -v vcgencmd >/dev/null 2>&1; then t=$(vcgencmd get_throttled 2>/dev/null | sed -n 's/^throttled=//p')
+    fi
+    t=${t#0x}
+    case "$t" in ""|*[!0-9a-fA-F]*) return 1 ;; esac
+    [ $(( 0x$t & 1 )) -ne 0 ]
+}
+# apt's reason for a failure, from its output (FILE): the dpkg lock held by someone else in words, else its last E: line
+apt_reason() {
+    holder=$(grep -o 'It is held by process [0-9]* ([^)]*)' "$1" 2>/dev/null | tail -n 1 | sed 's/It is held by //')
+    if grep -q 'Could not get lock' "$1" 2>/dev/null; then
+        echo "another program is installing packages${holder:+ ($holder holds the lock)}"
+        return
+    fi
+    r=$(grep '^E:' "$1" 2>/dev/null | tail -n 1)
+    [ -n "$r" ] && echo "$r" || echo "$2"
+}
+# a command of the check phase, cancellable: in the background, the cancel flag read every second (the program stopped:
+# exit status 130). Output to FILE.
+run_checked() { # FILE COMMAND...
+    out=$1; shift
+    "$@" > "$out" 2>&1 < /dev/null 8>&- 9>&- &
+    cpid=$!
+    while kill -0 "$cpid" 2>/dev/null; do
+        if [ -e "$CANCEL" ]; then stop_apt "$cpid"; return 130; fi
+        sleep 1
+    done
+    wait "$cpid"
+}
+check_cancel() {
+    if [ -e "$CANCEL" ]; then rm -f "$CANCEL"; upgrade_end cancelled "cancelled while checking: nothing was installed" 2; fi
+}
+# the end of a run: the status, apt-get clean, the exit status
+upgrade_end() { # STATE REASON EXIT
+    U_STATE=$1; U_REASON=$2
+    if [ "$U_JOB" = upgrade ] && [ "$U_PHASE" != check ]; then
+        U_PHASE=clean; write_upgrade_status
+        LC_ALL=C apt-get clean -o DPkg::Lock::Timeout="$LOCK_WAIT" >> "$LOG" 2>&1 < /dev/null 8>&- 9>&- || say "apt-get clean failed"
+    fi
+    write_upgrade_status
+    say "$U_JOB: $U_STATE${U_REASON:+: $U_REASON}"
+    exit "$3"
+}
+refuse_upgrade() { upgrade_end refused "$1" 2; }
+# both locks: an apt job (refresh, upgrade, repair) and a launcher update never run together
+take_package_locks() {
+    mkdir -p "$RUN_DIR" && chmod 755 "$RUN_DIR"
+    exec 8> "$RUN_DIR/apt-lock"
+    flock -n 8 || { echo "a package job is running" >&2; exit 2; }
+    exec 9> "$RUN_DIR/lock"
+    flock -n 9 || { echo "a launcher update is running" >&2; exit 2; }
+}
+# the power and dpkg checks before anything changes
+upgrade_guards() {
+    if battery_low; then refuse_upgrade "battery $BAT_PCT %: charge it or plug it in"; fi
+    if under_voltage; then refuse_upgrade "under-voltage: the power supply is too weak"; fi
+}
+# tail -f of a Status-Fd file while PID runs: FDF PID KIND (download|install|repair); sets STOPPED (a reason) when the
+# download is cancelled or the power fails during it
+STOPPED=""
+follow_progress() {
+    fdf=$1; pid=$2; kind=$3; tick=0; ignored=0; lowpower=0
+    last=""
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ "$kind" = download ]; then
+            if [ -e "$CANCEL" ]; then STOPPED="cancelled"; return; fi
+            tick=$((tick + 1))
+            if [ $((tick % 5)) = 0 ] && under_voltage; then STOPPED="under-voltage: the power supply is too weak"; return; fi
+            line=$(grep '^dlstatus:' "$fdf" 2>/dev/null | tail -n 1)
+        else
+            if [ -e "$CANCEL" ] && [ "$ignored" = 0 ]; then
+                ignored=1; rm -f "$CANCEL"; say "a cancel request came while installing: ignored (stopping dpkg half way breaks systems)"
+            fi
+            tick=$((tick + 1))
+            if [ "$lowpower" = 0 ] && [ $((tick % 5)) = 0 ] && under_voltage; then
+                lowpower=1; say "WARNING: under-voltage while installing (not stopped: stopping dpkg half way is worse)"
+            fi
+            if [ "$kind" = repair ]; then line=$(grep '^processing: ' "$fdf" 2>/dev/null | tail -n 1)
+            else line=$(grep '^pmstatus:' "$fdf" 2>/dev/null | tail -n 1); fi
+        fi
+        if [ -n "$line" ] && [ "$line" != "$last" ]; then
+            last=$line
+            case "$kind" in
+                download)
+                    # dlstatus:<item>:<percent>:Retrieving file 3 of 40 (...)
+                    rest=${line#dlstatus:}; rest=${rest#*:}; pct=${rest%%:*}; txt=${rest#*:}; pct=${pct%%.*}
+                    n=$(printf '%s\n' "$txt" | sed -n 's/.*file \([0-9][0-9]*\) of \([0-9][0-9]*\).*/\1 \2/p')
+                    if [ -n "$n" ]; then U_DONE=${n% *}; U_TOTAL=${n#* }; fi
+                    case "$pct" in ""|*[!0-9]*) ;; *) U_PERCENT=$pct ;; esac
+                    U_TEXT=$txt ;;
+                install)
+                    # pmstatus:<package>:<percent>:<what dpkg does>
+                    rest=${line#pmstatus:}; pkg=${rest%%:*}; rest=${rest#*:}; pct=${rest%%:*}; txt=${rest#*:}; pct=${pct%%.*}
+                    case "$pct" in ""|*[!0-9]*) ;; *) U_PERCENT=$pct; U_DONE=$(( pct * U_TOTAL / 100 )) ;; esac
+                    case "$pkg" in dpkg-exec|"") ;; *) U_PACKAGE=$pkg ;; esac
+                    U_TEXT=$txt ;;
+                repair)
+                    # dpkg --status-fd: "processing: configure: <package>"
+                    U_PACKAGE=${line##*: }; U_TEXT="Configuring $U_PACKAGE"
+                    U_DONE=$(grep -c '^status: .*: installed' "$fdf" 2>/dev/null) ;;
+            esac
+            write_upgrade_status
+        fi
+        sleep 1
+    done
+}
+# stop a running apt-get (the download phase only): TERM, 10 s, KILL
+stop_apt() {
+    kill -TERM "$1" 2>/dev/null
+    i=0; while kill -0 "$1" 2>/dev/null && [ $i -lt 10 ]; do sleep 1; i=$((i + 1)); done
+    kill -KILL "$1" 2>/dev/null
+    wait "$1" 2>/dev/null
+}
+# the command under systemd-inhibit when there is one (no sleep, no poweroff, no power key while dpkg works)
+inhibited() { # WHY COMMAND...
+    why=$1; shift
+    if command -v systemd-inhibit >/dev/null 2>&1; then
+        systemd-inhibit --what=sleep:idle:shutdown:handle-power-key:handle-lid-switch --who="CyberdeckZero packages" \
+            --why="$why" --mode=block "$@"
+    else
+        "$@"
+    fi
+}
+# reboot advice: the package asked for it, or a package every program uses (the C library, systemd, udev, D-Bus)
+reboot_advice() {
+    if [ -e "$ROOT/run/reboot-required" ]; then U_REBOOT=1; U_REBOOT_WHY="a package asked for it"; fi
+    for p in "$@"; do
+        case "$(base_pkg "$p")" in
+            libc6|systemd|systemd-sysv|libsystemd0|udev|dbus|dbus-daemon|dbus-broker)
+                U_REBOOT=1; U_REBOOT_WHY=$(base_pkg "$p"); return ;;
+        esac
+    done
+}
+
+cmd_apt_upgrade() {
+    USER_ARG=""; U_LIBS=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --user) USER_ARG=${2:-}; shift 2 ;;
+            --libraries) U_LIBS=1; shift ;;
+            --) shift; break ;;
+            -*) echo "unknown option $1" >&2; exit 2 ;;
+            *) break ;;
+        esac
+    done
+    [ -n "$USER_ARG" ] && [ $# -gt 0 ] || { echo "apt-upgrade needs --user NAME [--libraries] PACKAGE..." >&2; exit 2; }
+    [ $# -le 3000 ] || { echo "too many packages ($#)" >&2; exit 2; }
+    for p in "$@"; do is_pkg "$p" || { echo "not a package name: \"$p\"" >&2; exit 2; }; done
+    set_user "$USER_ARG"
+    take_package_locks
+    # the cancel flag the launcher writes (Cancel, Esc): an old one is not this run's
+    CANCEL="$ROOT/run/user/$U_UID/applaunch/apt-cancel"
+    rm -f "$CANCEL"
+    # an earlier run that stopped while dpkg worked (its helper is gone: we hold the locks): repair first. One that
+    # stopped while checking or downloading changed nothing.
+    if [ "$(upgrade_get state)" = running ]; then
+        case "$(upgrade_get phase)" in
+            install|repair)
+                echo "an earlier package job was interrupted: repair it first (cyberdeckzero-update apt-repair --user $U)" >&2
+                exit 2 ;;
+        esac
+    fi
+    open_upgrade_log
+    U_JOB=upgrade; U_STATE=running; U_PHASE=check; U_STARTED=$(now); U_REASON=""; U_REBOOT=0; U_REBOOT_WHY=""
+    U_DONE=0; U_TOTAL=$#; U_PERCENT=""; U_TEXT=""; U_PACKAGE=""; U_DOWNLOAD=""; U_NEED=""
+    write_upgrade_status
+    say "upgrade of $# packages for $U (helper pid $$, launcher libraries: $([ "$U_LIBS" = 1 ] && echo included || echo left out))"
+    say "packages: $*"
+    LIST=$(for p in "$@"; do base_pkg "$p"; done | LC_ALL=C sort -u)
+
+    # 1. check: the power, dpkg, the second simulation, the space
+    upgrade_guards
+    audit=$(dpkg --audit 2>/dev/null)
+    [ -z "$audit" ] || refuse_upgrade "an earlier installation is unfinished: repair it first"
+    held=$(apt-mark showhold 2>/dev/null | LC_ALL=C sort -u)
+    for p in $LIST; do
+        if is_boot_pkg "$p"; then refuse_upgrade "$p is part of the boot chain: upgrade it in a terminal"; fi
+        if printf '%s\n' "$held" | grep -qx "$p"; then refuse_upgrade "$p is held (apt-mark): not upgraded here"; fi
+    done
+    if [ "$U_LIBS" = 0 ]; then
+        anchor=$(anchor_depends)
+        for p in $LIST; do
+            if printf '%s\n' "$anchor" | grep -qx "$p"; then
+                refuse_upgrade "$p is a launcher library: include the launcher libraries to upgrade it"
+            fi
+        done
+    fi
+    SIM="$RUN_DIR/apt-upgrade-sim"
+    check_cancel
+    run_checked "$SIM" env LC_ALL=C apt-get -s -o DPkg::Lock::Timeout="$LOCK_WAIT" install --only-upgrade --no-remove \
+        --no-install-recommends "$@"
+    rc=$?
+    cat "$SIM" >> "$LOG"
+    check_cancel
+    [ "$rc" = 0 ] || refuse_upgrade "$(apt_reason "$SIM" "apt cannot plan it (exit status $rc)")"
+    remv=$(sed -n 's/^Remv \([^ ]*\).*/\1/p' "$SIM" | head -n 1)
+    [ -z "$remv" ] || refuse_upgrade "apt would remove $remv: use a terminal"
+    new=$(sed -n 's/^Inst \([^ ]*\) (.*/\1/p' "$SIM" | head -n 1)
+    [ -z "$new" ] || refuse_upgrade "apt would install the new package $new: use a terminal"
+    PLANNED=$(sed -n 's/^Inst \([^ ]*\) \[.*/\1/p' "$SIM" | sed 's/:.*//' | LC_ALL=C sort -u)
+    # extra: planned and not listed; missing: listed and not planned (both lists sorted the same way)
+    printf '%s\n' "$LIST" > "$RUN_DIR/apt-upgrade-list"
+    printf '%s\n' "$PLANNED" > "$RUN_DIR/apt-upgrade-planned"
+    extra=$(LC_ALL=C comm -23 "$RUN_DIR/apt-upgrade-planned" "$RUN_DIR/apt-upgrade-list" | grep -v '^$' | head -n 1)
+    missing=$(LC_ALL=C comm -23 "$RUN_DIR/apt-upgrade-list" "$RUN_DIR/apt-upgrade-planned" | grep -v '^$' | head -n 1)
+    rm -f "$RUN_DIR/apt-upgrade-list" "$RUN_DIR/apt-upgrade-planned"
+    # the launcher's plan is the closure of this command: a difference is the packages changing in between (a refresh, a
+    # terminal), never a loop: a refresh makes the launcher plan again
+    if [ -n "$extra" ] && is_boot_pkg "$extra"; then
+        refuse_upgrade "apt would also upgrade $extra (kernel, firmware or boot): upgrade in a terminal"
+    fi
+    [ -z "$extra" ] || refuse_upgrade "apt would also upgrade $extra: the packages changed since the list was made, refresh the lists and try again"
+    [ -z "$missing" ] || refuse_upgrade "$missing is no longer offered: the packages changed since the list was made, refresh the lists and try again"
+    say "second simulation: the same $(printf '%s\n' "$PLANNED" | grep -c .) packages, nothing removed, nothing new"
+    # the space: the download, what the installed packages grow by, a margin (64 MB, or the largest package: dpkg keeps
+    # its two copies for a moment)
+    check_cancel
+    run_checked "$RUN_DIR/apt-upgrade-uris" env LC_ALL=C apt-get --print-uris -qq install --only-upgrade --no-remove \
+        --no-install-recommends "$@"
+    check_cancel
+    dl=$(awk "/^'/ { s += \$3 } END { printf \"%d\\n\", s }" "$RUN_DIR/apt-upgrade-uris")
+    rm -f "$RUN_DIR/apt-upgrade-uris"
+    sizes=$(apt-cache show --no-all-versions "$@" 2>/dev/null | awk '/^Installed-Size:/ { s += $2; if ($2 > m) m = $2 }
+             END { printf "%d %d\n", s, m }')
+    new_kib=${sizes% *}; big_kib=${sizes#* }
+    case "$new_kib$big_kib" in ""|*[!0-9]*) new_kib=0; big_kib=0 ;; esac
+    old_kib=$(dpkg-query -W -f='${Installed-Size}\n' $LIST 2>/dev/null | awk '{ s += $1 } END { printf "%d\n", s }')
+    grow_kib=$(( new_kib - old_kib )); [ "$grow_kib" -gt 0 ] || grow_kib=0
+    margin=$MARGIN_KIB; [ "$big_kib" -le "$margin" ] || margin=$big_kib
+    dl_kib=$(( (dl + 1023) / 1024 ))
+    U_DOWNLOAD=$dl; U_NEED=$(( (dl_kib + grow_kib + margin) * 1024 ))
+    have_cache=$(free_kib "$ROOT/var/cache/apt/archives"); have_usr=$(free_kib "$ROOT/usr")
+    say "space: download $(( dl_kib / 1024 )) MB, growth $(( grow_kib / 1024 )) MB, margin $(( margin / 1024 )) MB"
+    if [ -n "$have_cache" ] && [ -n "$have_usr" ] && [ "$(fs_id "$ROOT/var/cache/apt/archives")" = "$(fs_id "$ROOT/usr")" ]; then
+        need=$(( dl_kib + grow_kib + margin ))
+        [ "$have_cache" -ge "$need" ] || refuse_upgrade "not enough space: need $(( need / 1024 )) MB, $(( have_cache / 1024 )) MB free"
+    else
+        [ -z "$have_cache" ] || [ "$have_cache" -ge $(( dl_kib + margin )) ] \
+            || refuse_upgrade "not enough space for the download: need $(( (dl_kib + margin) / 1024 )) MB, $(( have_cache / 1024 )) MB free"
+        [ -z "$have_usr" ] || [ "$have_usr" -ge $(( grow_kib + margin )) ] \
+            || refuse_upgrade "not enough space: need $(( (grow_kib + margin) / 1024 )) MB, $(( have_usr / 1024 )) MB free"
+    fi
+
+    # 2. download, cancellable (a cancel asked while checking is read at once)
+    FDF="$RUN_DIR/apt-upgrade-fd"; : > "$FDF"
+    U_PHASE=download; U_DONE=0; U_PERCENT=0; U_TEXT=""; write_upgrade_status
+    LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get -d -y -q -o DPkg::Lock::Timeout="$LOCK_WAIT" -o APT::Status-Fd=3 \
+        install --only-upgrade --no-remove --no-install-recommends "$@" 3> "$FDF" >> "$LOG" 2>&1 < /dev/null 8>&- 9>&- &
+    apid=$!
+    STOPPED=""
+    follow_progress "$FDF" "$apid" download
+    if [ -n "$STOPPED" ]; then
+        stop_apt "$apid"
+        rm -f "$CANCEL"
+        if [ "$STOPPED" = cancelled ]; then upgrade_end cancelled "the download was cancelled: nothing was installed" 2; fi
+        upgrade_end cancelled "$STOPPED: nothing was installed" 2
+    fi
+    wait "$apid"; rc=$?
+    [ "$rc" = 0 ] || upgrade_end failed "$(apt_reason "$LOG" "the download failed (exit status $rc)"): nothing was installed" 1
+    say "downloaded"
+
+    # 3. install, not cancellable
+    if battery_low; then upgrade_end refused "battery $BAT_PCT %: charge it or plug it in (downloaded, nothing installed)" 2; fi
+    if under_voltage; then upgrade_end refused "under-voltage: the power supply is too weak (nothing installed)" 2; fi
+    rm -f "$CANCEL"
+    : > "$FDF"
+    U_PHASE=install; U_DONE=0; U_PERCENT=0; U_TEXT=""; U_TOTAL=$(printf '%s\n' "$PLANNED" | grep -c .); write_upgrade_status
+    inhibited "Upgrading $U_TOTAL packages" env LC_ALL=C DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l \
+        apt-get install -y -q --only-upgrade --no-remove --no-install-recommends -o DPkg::Lock::Timeout="$LOCK_WAIT" \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Dpkg::Use-Pty=0 -o APT::Status-Fd=3 \
+        "$@" 3> "$FDF" >> "$LOG" 2>&1 < /dev/null 8>&- 9>&- &
+    apid=$!
+    follow_progress "$FDF" "$apid" install
+    wait "$apid"; rc=$?
+    audit=$(dpkg --audit 2>/dev/null)
+    if [ "$rc" != 0 ]; then
+        r=$(apt_reason "$LOG" "apt-get install exited with status $rc")
+        [ -z "$audit" ] || r="$r; dpkg has unfinished packages: Repair finishes them"
+        upgrade_end failed "$r" 1
+    fi
+    [ -z "$audit" ] || upgrade_end failed "dpkg reports unfinished packages: Repair finishes them" 1
+    U_DONE=$U_TOTAL; U_PERCENT=100; U_TEXT=""; U_PACKAGE=""
+    reboot_advice "$@"
+    upgrade_end done "" 0
+}
+
+cmd_apt_repair() {
+    USER_ARG=""
+    while [ $# -gt 0 ]; do
+        case "$1" in --user) USER_ARG=${2:-}; shift 2 ;; *) echo "unknown option $1" >&2; exit 2 ;; esac
+    done
+    [ -n "$USER_ARG" ] || { echo "apt-repair needs --user NAME" >&2; exit 2; }
+    set_user "$USER_ARG"
+    take_package_locks
+    open_upgrade_log
+    U_JOB=repair; U_STATE=running; U_PHASE=repair; U_STARTED=$(now); U_REASON=""; U_REBOOT=0; U_REBOOT_WHY=""
+    U_DONE=0; U_PERCENT=""; U_TEXT=""; U_PACKAGE=""; U_DOWNLOAD=""; U_NEED=""; U_LIBS=0
+    U_TOTAL=$(dpkg-query -W -f='${db:Status-Abbrev}\n' 2>/dev/null | grep -c -v -e '^ii' -e '^rc' -e '^un' -e '^pn' -e '^hi')
+    write_upgrade_status
+    say "repair for $U: dpkg --configure -a ($U_TOTAL packages not configured)"
+    upgrade_guards
+    CANCEL="$ROOT/run/user/$U_UID/applaunch/apt-cancel"
+    FDF="$RUN_DIR/apt-upgrade-fd"
+    tries=0
+    while :; do
+        : > "$FDF"
+        inhibited "Finishing an interrupted installation" env LC_ALL=C DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l \
+            dpkg --configure -a --force-confdef --force-confold --status-fd 3 3> "$FDF" >> "$LOG" 2>&1 < /dev/null 8>&- 9>&- &
+        apid=$!
+        follow_progress "$FDF" "$apid" repair
+        wait "$apid"; rc=$?
+        # dpkg has no lock timeout of its own: another dpkg or apt runs, wait for it (LOCK_WAIT in all)
+        if [ "$rc" != 0 ] && tail -n 3 "$LOG" | grep -q 'lock' && [ $(( tries * 10 )) -lt "$LOCK_WAIT" ]; then
+            tries=$((tries + 1)); say "dpkg is locked by another program: waiting"; sleep 10; continue
+        fi
+        break
+    done
+    if [ "$rc" != 0 ]; then
+        if tail -n 3 "$LOG" | grep -q 'lock'; then upgrade_end failed "another program is installing packages: try again later" 1; fi
+        r=$(grep -E '^(dpkg: error|E:)' "$LOG" | tail -n 1 | cut -c1-200)
+        upgrade_end failed "${r:-dpkg --configure -a exited with status $rc}" 1
+    fi
+    audit=$(dpkg --audit 2>/dev/null)
+    [ -z "$audit" ] || upgrade_end failed "dpkg still reports unfinished packages: see the log" 1
+    LC_ALL=C apt-get -s -f install --no-remove -o Debug::NoLocking=1 > "$RUN_DIR/apt-repair-sim" 2>&1 < /dev/null 8>&- 9>&-
+    rc=$?
+    cat "$RUN_DIR/apt-repair-sim" >> "$LOG"
+    if [ "$rc" != 0 ] || grep -q -e '^Inst ' -e '^Remv ' "$RUN_DIR/apt-repair-sim"; then
+        upgrade_end failed "dpkg finished; apt still sees broken dependencies: run sudo apt-get -f install in a terminal" 1
+    fi
+    U_DONE=$U_TOTAL; U_PERCENT=100; U_TEXT=""; U_PACKAGE=""
+    reboot_advice
+    upgrade_end done "" 0
+}
+
 cmd_plan() {
     BUNDLE=""; USER_ARG=""
     while [ $# -gt 0 ]; do
@@ -729,6 +1186,8 @@ case "$cmd" in
     resume) need_root; run_from_copy resume "$@"; cmd_resume "$@" ;;
     __install) cmd_install_inner "$@" ;;
     apt-refresh) need_root; cmd_apt_refresh "$@" ;;
+    apt-upgrade) need_root; cmd_apt_upgrade "$@" ;;
+    apt-repair) need_root; cmd_apt_repair "$@" ;;
     plan) cmd_plan "$@" ;;
     options) cmd_options "$@" ;;
     status) if [ -f "$STATUS" ]; then cat "$STATUS"; else echo "no update has run"; fi ;;

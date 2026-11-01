@@ -134,10 +134,66 @@ printf '#!/bin/sh\necho "${FAKE_UNAME_M:-aarch64}"\n' > "$FAKEBIN/uname"
 printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit "${FAKE_APT_RC:-1}"\n' > "$FAKEBIN/apt-get"
 cat > "$FAKEBIN/dpkg" <<'EOF'
 #!/bin/sh
+# stand-in dpkg: -s from FAKE_DPKG_MISSING; -i of the anchor package into FAKE_ANCHOR ("ii |version|depends"), --purge
+# forgets it; --audit prints FAKE_AUDIT (dpkg's unfinished packages); --configure -a (the repair) finishes them: Status-Fd
+# lines on fd 3, FAKE_AUDIT emptied (FAKE_UP "repairfail": it fails, "repairlock": the lock is held)
 printf 'dpkg %s\n' "$*" >> "$FAKE_CALLS"
-if [ "$1" = -s ]; then case " ${FAKE_DPKG_MISSING:-} " in *" $2 "*) exit 1 ;; esac; fi
+case "$1" in
+    -s) case " ${FAKE_DPKG_MISSING:-} " in *" $2 "*) exit 1 ;; esac ;;
+    -i) printf 'ii |%s|%s' "$(sed -n 's/^Version: //p' "$2")" "$(sed -n 's/^Depends: //p' "$2")" > "$FAKE_ANCHOR" ;;
+    --purge|--remove) rm -f "$FAKE_ANCHOR" ;;
+    --audit) [ -s "${FAKE_AUDIT:-/nonexistent}" ] && cat "$FAKE_AUDIT" ;;
+    --configure)
+        printf 'env LC_ALL=%s DEBIAN_FRONTEND=%s NEEDRESTART_MODE=%s\n' "${LC_ALL:-}" "${DEBIAN_FRONTEND:-}" "${NEEDRESTART_MODE:-}" >> "$FAKE_CALLS"
+        case " ${FAKE_UP:-} " in
+            *" repairlock "*) echo "dpkg: error: dpkg frontend lock was locked by another process with pid 4321"; exit 2 ;;
+            *" repairfail "*) echo "dpkg: error processing package halfpkg (--configure):"; exit 1 ;;
+        esac
+        printf 'processing: configure: halfpkg:arm64\n' >&3 2>/dev/null; sleep 1
+        printf 'status: halfpkg:arm64: installed\n' >&3 2>/dev/null
+        rm -f "${FAKE_AUDIT:-/nonexistent}" ;;
+esac
 exit 0
 EOF
+# stand-in dpkg-query: -S from FAKE_OWNERS; -W of the anchor from FAKE_ANCHOR; Installed-Size 1000 KiB a package; the
+# list of every package's state (with "iU" ones while FAKE_AUDIT is not empty); other packages installed
+cat > "$FAKEBIN/dpkg-query" <<'EOF'
+#!/bin/sh
+if [ "$1" = -S ]; then printf 'dpkg-query -S (%s paths)\n' "$(($# - 1))" >> "$FAKE_CALLS"
+else printf 'dpkg-query %s\n' "$*" >> "$FAKE_CALLS"; fi
+case "$1" in
+    -S) shift; rc=0
+        for p in "$@"; do
+            if [ -f "${FAKE_OWNERS:-}" ] && grep -q ": $p\$" "$FAKE_OWNERS"; then grep ": $p\$" "$FAKE_OWNERS"; else rc=1; fi
+        done
+        exit $rc ;;
+    -W)
+        f=${2#-f=}; shift 2
+        if [ "${1:-}" = cyberdeckzero-runtime ]; then
+            [ -f "${FAKE_ANCHOR:-}" ] || exit 1
+            case "$f" in
+                *'|'*) cat "$FAKE_ANCHOR" ;;
+                '${Depends}') cut -d'|' -f3 "$FAKE_ANCHOR" | tr -d '\n' ;;
+                *) cut -d'|' -f1 "$FAKE_ANCHOR" | tr -d '\n' ;;
+            esac
+            exit 0
+        fi
+        case "$f" in
+            *Installed-Size*) for n in "$@"; do echo 1000; done ;;
+            *Package*) for n in "$@"; do case " ${FAKE_DPKG_MISSING:-} " in *" $n "*) ;; *) printf '%s ii \n' "$n" ;; esac; done ;;
+            *) printf 'ii \nii \n'; [ -s "${FAKE_AUDIT:-/nonexistent}" ] && printf 'iU \n' ;;
+        esac ;;
+esac
+exit 0
+EOF
+cat > "$FAKEBIN/dpkg-deb" <<'EOF'
+#!/bin/sh
+printf 'dpkg-deb %s\n' "$*" >> "$FAKE_CALLS"
+for last in "$@"; do :; done
+for a in "$@"; do case "$a" in --*|"$last") ;; *) dir=$a ;; esac; done
+cp "$dir/DEBIAN/control" "$last"
+EOF
+printf '#!/bin/sh\nprintf "ldd %%s\\n" "$*" >> "$FAKE_CALLS"\necho "	not a dynamic executable"; exit 1\n' > "$FAKEBIN/ldd"
 printf '#!/bin/sh\nprintf "pkaction %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' > "$FAKEBIN/pkaction"
 cat > "$FAKEBIN/sudo" <<'EOF'
 #!/bin/sh
@@ -160,7 +216,8 @@ for c in loginctl udevadm usermod chown dtc groupadd; do
     printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
 done
 chmod 755 "$FAKEBIN"/*
-export FAKE_CALLS="$CALLS"
+export FAKE_CALLS="$CALLS" FAKE_ANCHOR="$TMP/anchor.state" FAKE_AUDIT="$TMP/audit.txt" FAKE_OWNERS="$TMP/owners.txt"
+: > "$FAKE_OWNERS"
 called() { grep -q -F -- "$1" "$CALLS"; }
 at() { n=$(grep -n -F -- "$1" "$CALLS" | head -n 1 | cut -d: -f1); echo "${n:-0}"; }
 
@@ -543,6 +600,331 @@ OUT=$(sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" help 2>&1); RC=$?
 check "help: names apt-refresh" '[ $RC = 0 ] && has "apt-refresh --user NAME"'
 rm -f "$R/var/lib/cyberdeckzero-update/apt-status.tmp."*
 # left in place for the uninstall below: apt-status goes with /var/lib/cyberdeckzero-update
+
+# ------------------------------------------------------------------------------------------------------------------
+# apt-upgrade and apt-repair (report 047 P4): the listed packages only, a second simulation that must equal the list,
+# a cancellable download, an install that is not, the guards (battery, under-voltage, space, dpkg), the repair after an
+# interruption. Stand-ins: apt-get (FAKE_UP: modes), apt-cache, apt-mark; dpkg and dpkg-query above.
+R_KEEP=$R
+UPBIN="$TMP/upbin"; mkdir -p "$UPBIN"
+cat > "$UPBIN/apt-get" <<'EOF'
+#!/bin/sh
+# stand-in apt-get: -s (the second simulation, or the repair's -f check), --print-uris, -d (the download, dlstatus on fd
+# 3), install (pmstatus on fd 3), clean. FAKE_UP words: lock remv extra new missing dlfail slow instfail kill broken
+printf 'apt-get %s\n' "$*" >> "$FAKE_CALLS"
+printf 'env LC_ALL=%s DEBIAN_FRONTEND=%s NEEDRESTART_MODE=%s\n' "${LC_ALL:-}" "${DEBIAN_FRONTEND:-}" "${NEEDRESTART_MODE:-}" >> "$FAKE_CALLS"
+mode() { case " ${FAKE_UP:-} " in *" $1 "*) return 0 ;; esac; return 1; }
+sim=0; dl=0; uris=0; fix=0; inst=0; prev=""; pk=""
+for a in "$@"; do
+    case "$a" in
+        -s) sim=1 ;; -d) dl=1 ;; --print-uris) uris=1 ;; -f) fix=1 ;; clean) exit 0 ;; install) inst=1 ;;
+        -*) ;;
+        *) [ "$prev" = -o ] || [ "$inst" = 0 ] || pk="$pk $a" ;;
+    esac
+    prev=$a
+done
+# FAKE_PULLS ("a: b c" lines, tests/fixtures/apt/<board>/pulls.txt): installing a also upgrades b and c (a dependency,
+# or since apt 2.7 the other installed packages of the same source): the closure, as real apt does it
+if [ -n "${FAKE_PULLS:-}" ]; then
+    all=" $pk "; grew=1
+    while [ $grew = 1 ]; do
+        grew=0
+        for p in $all; do
+            line=$(grep "^$p:" "$FAKE_PULLS" | head -n 1)
+            for q in ${line#*:}; do case "$all" in *" $q "*) ;; *) all="$all$q "; grew=1 ;; esac; done
+        done
+    done
+    pk=$all
+fi
+set -- $pk; n=$#
+if [ "$sim" = 1 ] && [ "$fix" = 1 ]; then
+    if mode broken; then echo "Inst libbroken1 [1.0] (1.1 Debian:13/stable [arm64])"; fi
+    echo "0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded."; exit 0
+fi
+if [ "$sim" = 1 ]; then
+    if mode lock; then echo "E: Could not get lock /var/lib/dpkg/lock-frontend. It is held by process 4321 (apt-get)"; exit 100; fi
+    if mode slowsim; then i=0; while [ $i -lt 60 ]; do sleep 0.5; i=$((i + 1)); done; fi
+    echo "NOTE: This is only a simulation!"
+    i=0
+    for p in "$@"; do
+        i=$((i + 1)); if mode missing && [ $i = $n ]; then continue; fi
+        echo "Inst $p [1.0-1] (1.0-1+deb13u1 Debian:13.7/stable [arm64])"
+    done
+    if mode extra; then echo "Inst libextra1 [2.0] (2.1 Debian:13.7/stable [arm64])"; fi
+    if mode new; then echo "Inst newdep (3.0 Debian:13.7/stable [arm64])"; fi
+    if mode remv; then echo "Remv oldpkg [0.9]"; fi
+    for p in "$@"; do echo "Conf $p (1.0-1+deb13u1 Debian:13.7/stable [arm64])"; done
+    echo "$n upgraded, 0 newly installed, 0 to remove and 0 not upgraded."
+    exit 0
+fi
+if [ "$uris" = 1 ]; then
+    for p in "$@"; do echo "'http://deb.example/pool/main/${p}_1.0-1+deb13u1_arm64.deb' ${p}_1.0-1+deb13u1_arm64.deb 1048576 SHA256:00"; done
+    exit 0
+fi
+if [ "$dl" = 1 ]; then
+    if mode dlfail; then echo "E: Failed to fetch http://deb.example/pool/main/x.deb  404  Not Found"; exit 100; fi
+    steps=$n; nap=0.3; if mode slow; then steps=30; nap=1; fi
+    i=0
+    while [ $i -lt $steps ]; do
+        i=$((i + 1)); f=$i; [ $f -le $n ] || f=$n
+        printf 'dlstatus:%d:%d.0000:Retrieving file %d of %d\n' "$f" $((i * 100 / steps)) "$f" "$n" >&3
+        sleep $nap
+    done
+    exit 0
+fi
+# the install
+i=0
+for p in "$@"; do
+    i=$((i + 1))
+    printf 'pmstatus:%s:%d.0000:Installing %s (arm64)\n' "$p" $(( (i - 1) * 100 / n )) "$p" >&3
+    if mode slowinstall; then sleep 2; else sleep 0.3; fi
+    if [ $i = 1 ] && mode instfail; then
+        echo "E: Sub-process /usr/bin/dpkg returned an error code (1)"; echo "halfpkg not fully installed" > "$FAKE_AUDIT"; exit 100
+    fi
+    if [ $i = 1 ] && mode kill; then
+        echo "halfpkg not fully installed" > "$FAKE_AUDIT"
+        kill -9 "$(sed -n 's/^pid=//p' "$UP_STATUS_FILE")"; sleep 1; exit 0
+    fi
+    echo "$p" >> "$FAKE_CALLS.installed"
+done
+exit 0
+EOF
+cat > "$UPBIN/apt-cache" <<'EOF'
+#!/bin/sh
+printf 'apt-cache %s\n' "$*" >> "$FAKE_CALLS"
+for p in "$@"; do case "$p" in -*|show) ;; *) printf 'Package: %s\nInstalled-Size: %s\n\n' "$p" "${FAKE_ISIZE:-1100}" ;; esac; done
+EOF
+printf '#!/bin/sh\nprintf "apt-mark %%s\\n" "$*" >> "$FAKE_CALLS"\nfor h in ${FAKE_HOLDS:-}; do echo "$h"; done\n' > "$UPBIN/apt-mark"
+chmod 755 "$UPBIN"/*
+# (a fixture of its own: root() empties the folder of a fixture name, and the uninstall below needs R_KEEP)
+R=$(root pi4b-dsi)
+first_install --no-boot-config --no-default-source
+UPS="$R/var/lib/cyberdeckzero-update/apt-upgrade-status"
+export UP_STATUS_FILE="$UPS"
+ust() { sed -n "s/^$1=//p" "$UPS" 2>/dev/null | tail -n 1; }
+upgrade() { # upgrade ARGS... (the helper the install put in the fake root; FAKE_UP etc. exported by the caller)
+    : > "$CALLS"; rm -f "$CALLS.installed"
+    OUT=$(PATH="$UPBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 UPDATE_APT_LOCK_TIMEOUT=7 \
+          sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" "$@" 2>&1); RC=$?
+}
+up_log() { cat "$(ls -t "$R"/var/log/cyberdeckzero/apt-upgrade-*.log 2>/dev/null | head -n 1)" 2>/dev/null; }
+check_up() { if eval "$2"; then ok "$1"; else ko "$1" "$OUT
+--- apt-upgrade-status:
+$(cat "$UPS" 2>/dev/null)
+--- calls:
+$(tail -n 30 "$CALLS")
+--- log tail:
+$(up_log | tail -n 20)"; fi; }
+printf 'ii |0.9.2|ca-certificates, curl, libc6, libinput10' > "$FAKE_ANCHOR"
+PKGS3="tzdata libexpat1 rpicam-apps-lite"
+
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "apt-upgrade: exit 0, state done, all 3 installed, the download size and the space need recorded" '[ $RC = 0 ] && [ "$(ust state)" = done ] && [ "$(ust job)" = upgrade ] && [ "$(ust done)" = 3 ] && [ "$(ust total)" = 3 ] && [ "$(ust percent)" = 100 ] && [ "$(ust download)" = 3145728 ] && [ -n "$(ust need)" ] && [ "$(sort "$CALLS.installed" | tr "\n" " ")" = "libexpat1 rpicam-apps-lite tzdata " ]'
+check_up "apt-upgrade: the second simulation is the exact install command, simulated (--only-upgrade --no-remove, no recommends)" 'grep -q "^apt-get -s -o DPkg::Lock::Timeout=7 install --only-upgrade --no-remove --no-install-recommends tzdata libexpat1 rpicam-apps-lite$" "$CALLS"'
+check_up "apt-upgrade: the download is apt-get -d of the same list with Status-Fd progress" 'grep -q "^apt-get -d -y -q -o DPkg::Lock::Timeout=7 -o APT::Status-Fd=3 install --only-upgrade --no-remove --no-install-recommends tzdata libexpat1 rpicam-apps-lite$" "$CALLS"'
+check_up "apt-upgrade: the install keeps local config files, never asks, waits for the dpkg lock, never restarts a service (needrestart)" 'grep -q "^apt-get install -y -q --only-upgrade --no-remove --no-install-recommends -o DPkg::Lock::Timeout=7 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold -o Dpkg::Use-Pty=0 -o APT::Status-Fd=3 tzdata libexpat1 rpicam-apps-lite$" "$CALLS" && [ "$(grep -A1 "^apt-get install -y" "$CALLS" | tail -n 1)" = "env LC_ALL=C DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l" ]'
+check_up "apt-upgrade: the install runs under systemd-inhibit (sleep, shutdown, power key, lid)" 'called "systemd-inhibit --what=sleep:idle:shutdown:handle-power-key:handle-lid-switch --who=CyberdeckZero packages --why=Upgrading 3 packages"'
+check_up "apt-upgrade: apt-get clean afterwards; never apt-get upgrade, dist-upgrade, full-upgrade, remove, purge or autoremove" 'called "apt-get clean" && ! grep -E "^apt-get .* (upgrade|dist-upgrade|full-upgrade|remove|purge|autoremove)( |$)" "$CALLS" >/dev/null'
+check_up "apt-upgrade: the status and the log are world-readable, the log tells the plan" '[ "$(stat -c %a "$UPS")" = 644 ] && [ "$(stat -c %a "$(ls -t "$R"/var/log/cyberdeckzero/apt-upgrade-*.log | head -n 1)")" = 644 ] && up_log | grep -q "second simulation: the same 3 packages, nothing removed, nothing new" && [ "$(ust log)" = "$(ls -t "$R"/var/log/cyberdeckzero/apt-upgrade-*.log | head -n 1 | sed "s|^$R||")" ]'
+check_up "apt-upgrade: no reboot advised for these packages; the launcher update's status untouched" '[ "$(ust reboot)" = 0 ] && [ ! -e "$R/var/lib/cyberdeckzero-update/status" ]'
+
+# the download's progress while it runs (a slow download)
+FAKE_UP=slow; export FAKE_UP
+: > "$CALLS"
+PATH="$UPBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 UPDATE_APT_LOCK_TIMEOUT=7 \
+    sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" apt-upgrade --user "$U" $PKGS3 > "$TMP/up.out" 2>&1 &
+HP=$!
+SEEN=""; i=0
+while [ $i -lt 40 ] && kill -0 "$HP" 2>/dev/null; do
+    if [ "$(ust phase)" = download ] && [ "$(ust done)" = 2 ]; then SEEN="$(ust state) $(ust done) of $(ust total) $(ust text)"; break; fi
+    sleep 0.5; i=$((i + 1))
+done
+# a cancel request: the launcher creates apt-cancel in the user's runtime folder
+mkdir -p "$R/run/user/$UID_/applaunch"; : > "$R/run/user/$UID_/applaunch/apt-cancel"
+wait "$HP"; RC=$?; OUT=$(cat "$TMP/up.out")
+unset FAKE_UP
+check_up "apt-upgrade: the download's progress in the status (done of total, apt's text)" '[ "$SEEN" = "running 2 of 3 Retrieving file 2 of 3" ]'
+check_up "apt-upgrade: Cancel during the download: stopped, state cancelled, nothing installed, apt-get clean, exit 2" '[ $RC = 2 ] && [ "$(ust state)" = cancelled ] && [ "$(ust reason)" = "the download was cancelled: nothing was installed" ] && ! grep -q "^apt-get install -y" "$CALLS" && called "apt-get clean" && [ ! -e "$R/run/user/$UID_/applaunch/apt-cancel" ]'
+
+# a cancel request during the install is ignored (logged)
+FAKE_UP=slowinstall; export FAKE_UP
+: > "$CALLS"; rm -f "$CALLS.installed"
+PATH="$UPBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 UPDATE_APT_LOCK_TIMEOUT=7 \
+    sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" apt-upgrade --user "$U" $PKGS3 > "$TMP/up.out" 2>&1 &
+HP=$!
+i=0; INST_SEEN=""
+while [ $i -lt 40 ] && kill -0 "$HP" 2>/dev/null; do
+    if [ "$(ust phase)" = install ]; then INST_SEEN="$(ust done) of $(ust total)"; : > "$R/run/user/$UID_/applaunch/apt-cancel"; break; fi
+    sleep 0.3; i=$((i + 1))
+done
+wait "$HP"; RC=$?; OUT=$(cat "$TMP/up.out")
+unset FAKE_UP
+check_up "apt-upgrade: a cancel request while installing is ignored and logged; the install finishes" '[ $RC = 0 ] && [ "$(ust state)" = done ] && [ -n "$INST_SEEN" ] && up_log | grep -q "a cancel request came while installing: ignored" && [ "$(wc -l < "$CALLS.installed")" = 3 ]'
+
+# the second simulation differs from the list: refused before anything is downloaded
+for m in remv extra new missing; do
+    FAKE_UP=$m; export FAKE_UP
+    upgrade apt-upgrade --user "$U" $PKGS3
+    unset FAKE_UP
+    case $m in
+        remv) want="apt would remove oldpkg: use a terminal" ;;
+        extra) want="apt would also upgrade libextra1: the packages changed since the list was made, refresh the lists and try again" ;;
+        new) want="apt would install the new package newdep: use a terminal" ;;
+        missing) want="rpicam-apps-lite is no longer offered: the packages changed since the list was made, refresh the lists and try again" ;;
+    esac
+    check_up "apt-upgrade: second simulation ($m): refused, exit 2, nothing downloaded or installed" '[ $RC = 2 ] && [ "$(ust state)" = refused ] && [ "$(ust reason)" = "$want" ] && ! grep -q "^apt-get -d" "$CALLS" && ! grep -q "^apt-get install -y" "$CALLS"'
+done
+# the deck case of P4's first board test (tests/fixtures/apt/deck-p4): installing libcurl3t64-gnutls also upgrades curl and
+# libcurl4t64 (one source). The list the launcher used to send (the 22, libcurl3t64-gnutls in it) was refused for ever; the
+# list it sends now is the closure of the same command (settings_apt_upgrade_model.hpp, close_plan: 21 packages): accepted,
+# and the same state accepted again
+APTFIX="$HERE/../../tests/fixtures/apt/deck-p4"
+DECK_SAFE=$(sed -n 's/^Inst \([^ ]*\) .*/\1/p' "$APTFIX/upgrade.txt" | grep -v -x -e libcurl3t64-gnutls -e chain-tool -e libchain1 \
+    -e raspberrypi-sys-mods -e curl -e libcurl4t64 -e libssl3t64 -e raspi-firmware | tr '\n' ' ')
+FAKE_PULLS="$APTFIX/pulls.txt"; export FAKE_PULLS
+upgrade apt-upgrade --user "$U" $DECK_SAFE libcurl3t64-gnutls
+check_up "deck case: the old list (libcurl3t64-gnutls in it) refused, in plain words: the packages changed, refresh the lists" '[ $RC = 2 ] && [ "$(ust state)" = refused ] && [ "$(ust reason)" = "apt would also upgrade curl: the packages changed since the list was made, refresh the lists and try again" ] && ! grep -q "^apt-get -d" "$CALLS"'
+upgrade apt-upgrade --user "$U" $DECK_SAFE
+check_up "deck case: the closed plan (21 packages, the launcher's) accepted and installed" '[ $RC = 0 ] && [ "$(ust state)" = done ] && [ "$(ust total)" = 21 ] && [ "$(wc -l < "$CALLS.installed")" = 21 ] && up_log | grep -q "second simulation: the same 21 packages"'
+upgrade apt-upgrade --user "$U" $DECK_SAFE
+check_up "deck case: the same state does not refuse the second time" '[ $RC = 0 ] && [ "$(ust state)" = done ]'
+upgrade apt-upgrade --user "$U" --libraries $DECK_SAFE libcurl3t64-gnutls curl libcurl4t64 chain-tool libchain1 libssl3t64
+check_up "deck case, the libraries included: the whole group (27) accepted" '[ $RC = 0 ] && [ "$(ust state)" = done ] && [ "$(ust total)" = 27 ]'
+upgrade apt-upgrade --user "$U" tzdata raspberrypi-sys-mods
+check_up "deck case: a package pulling new boot firmware: refused, the terminal named (never a refresh loop)" '[ $RC = 2 ] && [ "$(ust reason)" = "apt would also upgrade raspi-firmware (kernel, firmware or boot): upgrade in a terminal" ]'
+unset FAKE_PULLS
+# a cancel while the plan is checked (the second simulation runs): the simulation stopped, nothing downloaded
+FAKE_UP=slowsim; export FAKE_UP
+: > "$CALLS"
+PATH="$UPBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 UPDATE_APT_LOCK_TIMEOUT=7 \
+    sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" apt-upgrade --user "$U" $PKGS3 > "$TMP/up.out" 2>&1 &
+HP=$!
+i=0
+while [ $i -lt 40 ] && ! grep -q "^apt-get -s" "$CALLS"; do sleep 0.25; i=$((i + 1)); done
+sleep 1
+: > "$R/run/user/$UID_/applaunch/apt-cancel"
+wait "$HP"; RC=$?; OUT=$(cat "$TMP/up.out")
+unset FAKE_UP
+check_up "cancel while checking: the simulation stopped, state cancelled, nothing downloaded, exit 2" '[ $RC = 2 ] && [ "$(ust state)" = cancelled ] && [ "$(ust phase)" = check ] && [ "$(ust reason)" = "cancelled while checking: nothing was installed" ] && ! grep -q "^apt-get -d" "$CALLS" && [ ! -e "$R/run/user/$UID_/applaunch/apt-cancel" ]'
+
+# the dpkg lock held by another program (the Store, a terminal, unattended-upgrades): waited for, then a clear reason
+FAKE_UP=lock; export FAKE_UP
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_UP
+check_up "apt-upgrade: the dpkg lock busy: refused with the holder named, nothing downloaded" '[ $RC = 2 ] && [ "$(ust state)" = refused ] && [ "$(ust reason)" = "another program is installing packages (process 4321 (apt-get) holds the lock)" ] && ! grep -q "^apt-get -d" "$CALLS"'
+# protected packages
+upgrade apt-upgrade --user "$U" tzdata linux-image-rpi-v8
+check_up "apt-upgrade: a boot-chain package in the list: refused (terminal only), not even simulated" '[ $RC = 2 ] && [ "$(ust reason)" = "linux-image-rpi-v8 is part of the boot chain: upgrade it in a terminal" ] && ! grep -q "^apt-get -s" "$CALLS"'
+upgrade apt-upgrade --user "$U" tzdata rpi-eeprom
+check_up "apt-upgrade: the EEPROM too" '[ $RC = 2 ] && [ "$(ust reason)" = "rpi-eeprom is part of the boot chain: upgrade it in a terminal" ]'
+upgrade apt-upgrade --user "$U" tzdata libc6
+check_up "apt-upgrade: a package the anchor names (a launcher library) without --libraries: refused" '[ $RC = 2 ] && [ "$(ust reason)" = "libc6 is a launcher library: include the launcher libraries to upgrade it" ] && ! grep -q "^apt-get -s" "$CALLS"'
+FAKE_HOLDS=tzdata; export FAKE_HOLDS
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_HOLDS
+check_up "apt-upgrade: a package held by the user: refused" '[ $RC = 2 ] && [ "$(ust reason)" = "tzdata is held (apt-mark): not upgraded here" ]'
+upgrade apt-upgrade --user "$U" --libraries tzdata libc6
+check_up "apt-upgrade --libraries: the launcher library upgraded, a reboot advised (libc6), libraries=1" '[ $RC = 0 ] && [ "$(ust state)" = done ] && [ "$(ust libraries)" = 1 ] && [ "$(ust reboot)" = 1 ] && [ "$(ust reboot_why)" = libc6 ]'
+mkdir -p "$R/run"; : > "$R/run/reboot-required"
+upgrade apt-upgrade --user "$U" tzdata
+rm -f "$R/run/reboot-required"
+check_up "apt-upgrade: /run/reboot-required: a reboot advised (never done)" '[ $RC = 0 ] && [ "$(ust reboot)" = 1 ] && [ "$(ust reboot_why)" = "a package asked for it" ] && ! called "reboot" && ! called "systemctl reboot"'
+
+# failures
+FAKE_UP=dlfail; export FAKE_UP
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_UP
+check_up "apt-upgrade: the download fails: state failed with apt's E: line, nothing installed, clean, exit 1" '[ $RC = 1 ] && [ "$(ust state)" = failed ] && [ "$(ust reason)" = "E: Failed to fetch http://deb.example/pool/main/x.deb  404  Not Found: nothing was installed" ] && ! grep -q "^apt-get install -y" "$CALLS" && called "apt-get clean"'
+FAKE_UP=instfail; export FAKE_UP
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_UP
+check_up "apt-upgrade: the install fails: state failed, apt's reason, Repair named (dpkg unfinished), clean, exit 1" '[ $RC = 1 ] && [ "$(ust state)" = failed ] && [ "$(ust reason)" = "E: Sub-process /usr/bin/dpkg returned an error code (1); dpkg has unfinished packages: Repair finishes them" ] && called "apt-get clean"'
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "apt-upgrade: dpkg unfinished before the start: refused (repair first), nothing simulated" '[ $RC = 2 ] && [ "$(ust reason)" = "an earlier installation is unfinished: repair it first" ] && ! grep -q "^apt-get -s" "$CALLS"'
+upgrade apt-repair --user "$U"
+check_up "apt-repair: dpkg --configure -a (local config kept, noninteractive, NEEDRESTART_MODE=l) under systemd-inhibit, then done" '[ $RC = 0 ] && [ "$(ust job)" = repair ] && [ "$(ust state)" = done ] && called "dpkg --configure -a --force-confdef --force-confold --status-fd 3" && grep -q "^env LC_ALL=C DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l" "$CALLS" && called "systemd-inhibit --what=sleep:idle:shutdown:handle-power-key:handle-lid-switch" && called "apt-get -s -f install --no-remove" && [ ! -s "$FAKE_AUDIT" ]'
+check_up "apt-repair: never apt-get -f install for real, never a removal" '! grep -q "^apt-get -f install" "$CALLS" && ! grep -qE "^apt-get (.* )?(remove|purge|autoremove)( |$)" "$CALLS" && ! grep -q "^apt-get install" "$CALLS"'
+
+# an interruption (a power cut while dpkg works): the status stays running; a new upgrade is refused; apt-repair finishes
+FAKE_UP=kill; export FAKE_UP
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_UP
+check_up "interrupted while installing: the status says running, phase install" '[ "$(ust state)" = running ] && [ "$(ust phase)" = install ]'
+STATUS_SUM=$(cksum < "$UPS")
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "interrupted: a new upgrade is refused (repair it first), the status kept for the launcher" '[ $RC = 2 ] && has "interrupted: repair it first" && [ "$(cksum < "$UPS")" = "$STATUS_SUM" ] && ! grep -q "^apt-get" "$CALLS"'
+upgrade apt-repair --user "$U"
+check_up "interrupted: apt-repair finishes dpkg's work: done" '[ $RC = 0 ] && [ "$(ust job)" = repair ] && [ "$(ust state)" = done ]'
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "after the repair: an upgrade runs again" '[ $RC = 0 ] && [ "$(ust state)" = done ]'
+echo "halfpkg not fully installed" > "$FAKE_AUDIT"
+FAKE_UP=broken; export FAKE_UP
+upgrade apt-repair --user "$U"
+unset FAKE_UP
+check_up "apt-repair: dpkg done but apt sees broken dependencies: failed, the terminal command named, nothing run" '[ $RC = 1 ] && [ "$(ust state)" = failed ] && [ "$(ust reason)" = "dpkg finished; apt still sees broken dependencies: run sudo apt-get -f install in a terminal" ]'
+echo "halfpkg not fully installed" > "$FAKE_AUDIT"
+FAKE_UP=repairfail; export FAKE_UP
+upgrade apt-repair --user "$U"
+unset FAKE_UP
+check_up "apt-repair: dpkg --configure -a fails: failed with dpkg's error line" '[ $RC = 1 ] && [ "$(ust state)" = failed ] && [ "$(ust reason)" = "dpkg: error processing package halfpkg (--configure):" ]'
+FAKE_UP=repairlock; export FAKE_UP
+upgrade apt-repair --user "$U"
+unset FAKE_UP
+check_up "apt-repair: dpkg locked by another program: waited, then failed in words" '[ $RC = 1 ] && [ "$(ust reason)" = "another program is installing packages: try again later" ] && [ "$(grep -c "^dpkg --configure" "$CALLS")" -ge 1 ]'
+rm -f "$FAKE_AUDIT"
+
+# the power: a battery under 50 % and not charging, under-voltage now
+mkdir -p "$R/run/user/$UID_/applaunch"
+printf 'v=1\nbattery=30\nbattery_state=Discharging\n' > "$R/run/user/$UID_/applaunch/status.state"
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "power: battery 30 % discharging: refused before anything, exit 2" '[ $RC = 2 ] && [ "$(ust state)" = refused ] && [ "$(ust reason)" = "battery 30 %: charge it or plug it in" ] && ! grep -q "^apt-get" "$CALLS"'
+upgrade apt-repair --user "$U"
+check_up "power: the repair too" '[ $RC = 2 ] && [ "$(ust reason)" = "battery 30 %: charge it or plug it in" ] && ! called "dpkg --configure"'
+printf 'v=1\nbattery=30\nbattery_state=Charging\n' > "$R/run/user/$UID_/applaunch/status.state"
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "power: battery 30 % but charging: goes ahead" '[ $RC = 0 ] && [ "$(ust state)" = done ]'
+printf 'v=1\nbattery=-1\nbattery_state=\n' > "$R/run/user/$UID_/applaunch/status.state"
+mkdir -p "$R/sys/class/hwmon/hwmon3"; echo rpi_volt > "$R/sys/class/hwmon/hwmon3/name"; echo 1 > "$R/sys/class/hwmon/hwmon3/in0_lcrit_alarm"
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "power: under-voltage now (hwmon rpi_volt alarm): refused" '[ $RC = 2 ] && [ "$(ust reason)" = "under-voltage: the power supply is too weak" ] && ! grep -q "^apt-get" "$CALLS"'
+echo 0 > "$R/sys/class/hwmon/hwmon3/in0_lcrit_alarm"
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "power: the alarm off: goes ahead" '[ $RC = 0 ] && [ "$(ust state)" = done ]'
+rm -rf "$R/sys/class/hwmon/hwmon3"
+mkdir -p "$R/sys/devices/platform/soc/soc:firmware"; echo 50005 > "$R/sys/devices/platform/soc/soc:firmware/get_throttled"
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "power: the firmware's get_throttled 0x50005 (under-voltage now): refused" '[ $RC = 2 ] && [ "$(ust reason)" = "under-voltage: the power supply is too weak" ]'
+echo 50000 > "$R/sys/devices/platform/soc/soc:firmware/get_throttled"
+upgrade apt-upgrade --user "$U" $PKGS3
+check_up "power: 0x50000 (under-voltage earlier, not now): goes ahead" '[ $RC = 0 ] && [ "$(ust state)" = done ]'
+rm -rf "$R/sys/devices"
+
+# the space: download + growth + margin against the free space
+FAKE_DF_KIB=20000; export FAKE_DF_KIB
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_DF_KIB
+check_up "space: 20 MB free for 3 MB + growth + 64 MB margin: refused before the download" '[ $RC = 2 ] && [ "$(ust state)" = refused ] && case "$(ust reason)" in "not enough space: need 67 MB, 19 MB free") true ;; *) false ;; esac && ! grep -q "^apt-get -d" "$CALLS"'
+FAKE_ISIZE=200000; FAKE_DF_KIB=300000; export FAKE_ISIZE FAKE_DF_KIB
+upgrade apt-upgrade --user "$U" $PKGS3
+unset FAKE_ISIZE FAKE_DF_KIB
+check_up "space: the margin is the largest package when it is bigger than 64 MB (and the growth counts)" '[ $RC = 2 ] && [ "$(ust reason)" = "not enough space: need 781 MB, 292 MB free" ]'
+
+# arguments
+upgrade apt-upgrade --user "$U"
+check_up "apt-upgrade: no package: usage error, nothing run" '[ $RC = 2 ] && has "apt-upgrade needs" && ! grep -q "^apt-get" "$CALLS"'
+upgrade apt-upgrade --user "$U" 'tzdata;reboot'
+check_up "apt-upgrade: a name that is not a package name: refused, nothing run" '[ $RC = 2 ] && has "not a package name" && ! grep -q "^apt-get" "$CALLS"'
+upgrade apt-upgrade --user "$U" --dist-upgrade tzdata
+check_up "apt-upgrade: an unknown option: refused" '[ $RC = 2 ] && has "unknown option --dist-upgrade"'
+upgrade apt-upgrade tzdata
+check_up "apt-upgrade: no --user: refused" '[ $RC = 2 ] && has "apt-upgrade needs"'
+OUT=$(PATH="$UPBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" apt-upgrade --user "$U" tzdata 2>&1); RC=$?
+check_up "apt-upgrade: UPDATE_ROOT without UPDATE_FAKE_SYSTEM is refused" '[ $RC = 2 ]'
+OUT=$(sh "$D/cyberdeckzero-update" apt-upgrade --user "$U" tzdata 2>&1); RC=$?
+check_up "apt-upgrade without root and without a fake root: refused" '[ $RC = 2 ] && has "run it as root"'
+OUT=$(sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" help 2>&1)
+check_up "help: names apt-upgrade and apt-repair" 'has "apt-upgrade --user NAME [--libraries] PACKAGE..." && has "apt-repair --user NAME"'
+R=$R_KEEP
 
 # ------------------------------------------------------------------------------------------------------------------
 # uninstall.sh takes away what P2 adds (the helper, install.conf, its status, backup, logs, work and run folders)

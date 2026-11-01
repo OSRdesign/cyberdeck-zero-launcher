@@ -1,0 +1,17 @@
+20:31:02 upgrade of 16 packages for pi (helper pid 4002, launcher libraries: left out)
+20:31:02 packages: cifs-utils libcamera-ipa libcamera0.7 libcurl3t64-gnutls libexpat1 liblzma5 ntfs-3g tzdata
+20:31:05 second simulation: the same 16 packages, nothing removed, nothing new
+20:31:06 space: download 21 MB, growth 2 MB, margin 64 MB
+Get:1 http://deb.debian.org/debian trixie/main arm64 tzdata all 2026e-0+deb13u1 [256 kB]
+Fetched 21.4 MB in 9s (2,380 kB/s)
+20:31:16 downloaded
+Preparing to unpack .../tzdata_2026e-0+deb13u1_all.deb ...
+Unpacking tzdata (2026e-0+deb13u1) over (2026a-0+deb13u1) ...
+Setting up libexpat1:arm64 (2.7.1-2+deb13u1) ...
+Setting up cifs-utils (2:7.4-1+deb13u2) ...
+dpkg: error processing package cifs-utils (--configure):
+ installed cifs-utils package post-installation script subprocess returned error exit status 1
+Errors were encountered while processing:
+ cifs-utils
+E: Sub-process /usr/bin/dpkg returned an error code (1)
+20:31:40 upgrade: failed: E: Sub-process /usr/bin/dpkg returned an error code (1); dpkg has unfinished packages: Repair finishes them
