@@ -40,7 +40,7 @@ wait 300
 # 1. checking
 shot updates_checking
 header updates_checking "Settings > Updates" Updates
-expect_text "Checking for updates..."
+expect_text start "Checking for updates..."
 # 2. the answer: 0.8.13 offered
 update answer releases-0.8.13.json
 wait 1000

@@ -30,7 +30,12 @@ struct RootSnapshot {
     std::string error;         /* the last attempt's failure in words ("Wrong password", ...), "" none */
     std::uint64_t started = 0; /* increases each time the helper's unit was started */
     std::uint64_t apt_started = 0; /* the same for a package-list refresh (P3: systemd-run ... apt-refresh) */
+    std::uint64_t upgrade_started = 0; /* the same for a package upgrade or repair (P4: ... apt-upgrade / apt-repair) */
 };
+
+/* A root step is asking for its password or starting its unit (any kind): Settings > Apps waits (report 047 P4, the
+ * shared busy flag). Any thread. */
+bool root_job_asking();
 
 class RootJob {
 public:
@@ -45,20 +50,27 @@ public:
     /* P3: the same prompt, then systemd-run ... cyberdeckzero-update apt-refresh --user USER (apt-get update in a
      * transient unit: apt_started counts the starts). */
     bool refresh_lists(const std::string &user);
+    /* P4: the same prompt, then systemd-run --unit=cyberdeckzero-apt ... cyberdeckzero-update apt-upgrade --user USER
+     * [--libraries] -- PACKAGE... (the plan the confirmation page showed), or ... apt-repair --user USER; upgrade_started
+     * counts the starts of both. */
+    bool upgrade_packages(const std::string &user, const std::vector<std::string> &packages, bool libraries);
+    bool repair_packages(const std::string &user);
     void clear_error() { snap_.error.clear(); }
 
 private:
+    enum class Kind { Update, Refresh, Upgrade };
     RootJob() = default;
-    bool run(const std::vector<std::string> &argv, bool apt = false);
+    bool run(const std::vector<std::string> &argv, Kind kind = Kind::Update);
     static void output_cb(const char *data, std::size_t size, void *user);
     static void complete_cb(int result, int exit_code, void *user);
 
     RootSnapshot snap_;
     std::string output_;
-    bool apt_request_ = false; /* the request asked is a list refresh */
+    Kind kind_ = Kind::Update; /* what the request asked is for */
 };
 
-/* The sudo service's result (cp0_sudo_result_t) and systemd-run's output in words. */
-std::string root_failure_text(int sudo_result, int exit_code, const std::string &output);
+/* The sudo service's result (cp0_sudo_result_t) and systemd-run's output in words; apt: a package job (the unit
+ * cyberdeckzero-apt) rather than the launcher's update. */
+std::string root_failure_text(int sudo_result, int exit_code, const std::string &output, bool apt = false);
 
 } // namespace launcher_update

@@ -281,6 +281,19 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$settings_ui_root/settings_apt_model.cpp" \
     -o "$build_dir/test_settings_apt_model"
 "$build_dir/test_settings_apt_model" "$test_root/fixtures/apt"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    "$test_root/test_settings_apt_upgrade_model.cpp" \
+    "$settings_ui_root/settings_apt_upgrade_model.cpp" \
+    "$settings_ui_root/settings_apt_model.cpp" \
+    -o "$build_dir/test_settings_apt_upgrade_model"
+"$build_dir/test_settings_apt_upgrade_model" "$test_root/fixtures/apt"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    "$test_root/test_settings_wait_model.cpp" \
+    "$settings_ui_root/settings_wait_model.cpp" \
+    -o "$build_dir/test_settings_wait_model"
+"$build_dir/test_settings_wait_model"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -DLAUNCHER_VERSION_RAW=0.8.12 -DLAUNCHER_CHANNEL_RAW=release \
     -I"$settings_ui_root" -I"$cjson_root" -I"$cp0_root/include" \

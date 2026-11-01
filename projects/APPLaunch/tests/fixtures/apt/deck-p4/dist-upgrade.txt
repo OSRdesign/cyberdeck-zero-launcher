@@ -1,0 +1,73 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages will be upgraded:
+  cifs-utils libcamera-ipa libcamera0.7 libcurl3t64-gnutls libexpat1 libnss3
+  libntfs-3g89t64 libpipewire-0.3-common librpicam-app1 librsvg2-2
+  librsvg2-common ntfs-3g pipewire pipewire-bin raspi-config rpi-connect-lite
+  rpicam-apps-lite tzdata vim vim-common vim-runtime xxd curl libcurl4t64
+  libssl3t64 chain-tool libchain1 raspberrypi-sys-mods raspi-firmware
+29 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst cifs-utils [2:7.4-1] (2:7.4-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst libcamera-ipa [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Inst libcamera0.7 [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Inst libcurl3t64-gnutls [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst libexpat1 [2.7.1-2] (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst libnss3 [2:3.110-1] (2:3.110-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst libntfs-3g89t64 [1:2022.10.3-5] (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Inst libpipewire-0.3-common [1.4.2-1] (1.4.2-1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst librpicam-app1 [1.13.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst librsvg2-2 [2.60.0+dfsg-1] (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst librsvg2-common [2.60.0+dfsg-1] (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst ntfs-3g [1:2022.10.3-5] (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Inst pipewire [1.4.2-1] (1.4.2-1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst pipewire-bin [1.4.2-1] (1.4.2-1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst raspi-config [20261026] (20261026+2 Raspberry Pi Foundation:stable [arm64])
+Inst rpi-connect-lite [2.13.0] (2.14.0 Raspberry Pi Foundation:stable [arm64])
+Inst rpicam-apps-lite [1.13.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst tzdata [2026a-0+deb13u1] (2026e-0+deb13u1 Debian:13.7/stable [arm64])
+Inst vim [2:9.1.1230-2] (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst vim-common [2:9.1.1230-2] (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst vim-runtime [2:9.1.1230-2] (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst xxd [2:9.1.1230-2] (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst curl [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst libcurl4t64 [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst libssl3t64 [3.5.1-1] (3.5.1-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst chain-tool [1.0-1] (2.0-1 Debian:13.7/stable [arm64])
+Inst libchain1 [1.0-1] (2.0-1 Debian:13.7/stable [arm64])
+Inst raspberrypi-sys-mods [20261001] (20261020 Raspberry Pi Foundation:stable [arm64])
+Inst raspi-firmware [1:1.20261001-1] (1:1.20261020-1 Raspberry Pi Foundation:stable [arm64])
+Conf cifs-utils (2:7.4-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf libcamera-ipa (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcamera0.7 (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcurl3t64-gnutls (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libexpat1 (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libnss3 (2:3.110-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libntfs-3g89t64 (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf libpipewire-0.3-common (1.4.2-1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf librpicam-app1 (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf librsvg2-2 (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf librsvg2-common (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf ntfs-3g (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf pipewire (1.4.2-1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf pipewire-bin (1.4.2-1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf raspi-config (20261026+2 Raspberry Pi Foundation:stable [arm64])
+Conf rpi-connect-lite (2.14.0 Raspberry Pi Foundation:stable [arm64])
+Conf rpicam-apps-lite (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf tzdata (2026e-0+deb13u1 Debian:13.7/stable [arm64])
+Conf vim (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf vim-common (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf vim-runtime (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf xxd (2:9.1.1230-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf curl (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libcurl4t64 (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libssl3t64 (3.5.1-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf chain-tool (2.0-1 Debian:13.7/stable [arm64])
+Conf libchain1 (2.0-1 Debian:13.7/stable [arm64])
+Conf raspberrypi-sys-mods (20261020 Raspberry Pi Foundation:stable [arm64])
+Conf raspi-firmware (1:1.20261020-1 Raspberry Pi Foundation:stable [arm64])

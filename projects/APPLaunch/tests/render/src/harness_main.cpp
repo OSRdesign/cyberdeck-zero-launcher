@@ -1646,15 +1646,36 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         /* expect_text [end] TEXT: a visible label of the native screen (or of its top layer: the sudo prompt) shows TEXT
          * whole (with `end`: a label whose text ENDS with TEXT), and its box is wide enough for its text: not cut with
          * dots, not past the screen. A scene fails otherwise. */
+        /* (report 047 P4) expect_text start TEXT: a label whose text STARTS with TEXT (a status line with an elapsed
+         * counter "TEXT  mm:ss", whose seconds depend on the settling) */
         const bool suffix = w.size() == 3 && w[1] == "end";
-        if (w.size() != 2 && !suffix) return fail(scene, line, "usage: expect_text [end] TEXT");
+        const bool prefix = w.size() == 3 && w[1] == "start";
+        if (w.size() != 2 && !suffix && !prefix) return fail(scene, line, "usage: expect_text [end|start] TEXT");
         const std::string &text = w.back();
         settle(500);
         lv_refr_now(nullptr);
-        lv_obj_t *label = find_label_text(lv_display_get_screen_active(cp0_display_native()), text, suffix);
-        if (!label) label = find_label_text(lv_display_get_layer_top(cp0_display_native()), text, suffix);
+        lv_obj_t *label = nullptr;
+        if (prefix) {
+            std::function<lv_obj_t *(lv_obj_t *)> find_start = [&](lv_obj_t *obj) -> lv_obj_t * {
+                if (!obj || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return nullptr;
+                if (lv_obj_check_type(obj, &lv_label_class)) {
+                    const char *t = lv_label_get_text(obj);
+                    if (t && std::string(t).compare(0, text.size(), text) == 0) return obj;
+                }
+                const uint32_t n = lv_obj_get_child_count(obj);
+                for (uint32_t k = 0; k < n; ++k)
+                    if (lv_obj_t *found = find_start(lv_obj_get_child(obj, static_cast<int32_t>(k)))) return found;
+                return nullptr;
+            };
+            label = find_start(lv_display_get_screen_active(cp0_display_native()));
+            if (!label) label = find_start(lv_display_get_layer_top(cp0_display_native()));
+        } else {
+            label = find_label_text(lv_display_get_screen_active(cp0_display_native()), text, suffix);
+            if (!label) label = find_label_text(lv_display_get_layer_top(cp0_display_native()), text, suffix);
+        }
         if (!label)
-            return fail(scene, line, "expect_text: no visible label " + std::string(suffix ? "ending with " : "") + text);
+            return fail(scene, line, "expect_text: no visible label " +
+                                         std::string(suffix ? "ending with " : prefix ? "starting with " : "") + text);
         lv_area_t area;
         lv_obj_get_coords(label, &area);
         const lv_font_t *font = lv_obj_get_style_text_font(label, LV_PART_MAIN);
@@ -1667,6 +1688,53 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             return fail(scene, line, "expect_text: the label is cut (box " + std::to_string(box) + " px, text " +
                                          std::to_string(size.x + pad) + " px): " + lv_label_get_text(label));
         std::printf("expect_text ok: %s\n", lv_label_get_text(label));
+        return true;
+    }
+    if (cmd == "expect_unclipped") {
+        /* expect_unclipped LABEL...: each label LABEL is whole on the screen: inside its parent (a list row, the waiting
+         * box), its parent inside the grandparent (the row inside its list: not scrolled partly out; the box on the page),
+         * all inside the display, and the label overlaps no visible progress bar (lv_bar). Report 047 P4: the progress pages
+         * under their bar, the waiting box. */
+        if (w.size() < 2) return fail(scene, line, "usage: expect_unclipped LABEL...");
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *screen = lv_display_get_screen_active(cp0_display_native());
+        std::vector<lv_area_t> bars;
+        std::function<void(lv_obj_t *)> collect = [&](lv_obj_t *obj) {
+            if (!obj || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return;
+            if (lv_obj_check_type(obj, &lv_bar_class)) {
+                lv_area_t a;
+                lv_obj_get_coords(obj, &a);
+                bars.push_back(a);
+            }
+            const uint32_t n = lv_obj_get_child_count(obj);
+            for (uint32_t i = 0; i < n; ++i) collect(lv_obj_get_child(obj, static_cast<int32_t>(i)));
+        };
+        collect(screen);
+        auto box = [](const lv_area_t &a) {
+            return "(" + std::to_string(a.x1) + "," + std::to_string(a.y1) + ")-(" + std::to_string(a.x2) + "," +
+                   std::to_string(a.y2) + ")";
+        };
+        for (std::size_t i = 1; i < w.size(); ++i) {
+            lv_obj_t *label = find_label_text(screen, w[i], false);
+            lv_obj_t *row = label ? lv_obj_get_parent(label) : nullptr;
+            lv_obj_t *list = row ? lv_obj_get_parent(row) : nullptr;
+            if (!list) return fail(scene, line, "expect_unclipped: no visible row " + w[i]);
+            lv_area_t t, r, l;
+            lv_obj_get_coords(label, &t);
+            lv_obj_get_coords(row, &r);
+            lv_obj_get_coords(list, &l);
+            if (t.y1 < r.y1 || t.y2 > r.y2 || t.x1 < r.x1 || t.x2 > r.x2)
+                return fail(scene, line, "expect_unclipped: label " + w[i] + " " + box(t) + " outside its row " + box(r));
+            if (r.y1 < l.y1 || r.y2 > l.y2 || r.x1 < l.x1 || r.x2 > l.x2)
+                return fail(scene, line, "expect_unclipped: row " + w[i] + " " + box(r) + " outside its list " + box(l));
+            if (r.y1 < 0 || r.x1 < 0 || r.y2 >= run.size.h || r.x2 >= run.size.w)
+                return fail(scene, line, "expect_unclipped: row " + w[i] + " " + box(r) + " past the display");
+            for (const lv_area_t &b : bars)
+                if (t.x1 <= b.x2 && b.x1 <= t.x2 && t.y1 <= b.y2 && b.y1 <= t.y2)
+                    return fail(scene, line, "expect_unclipped: label " + w[i] + " " + box(t) + " under the bar " + box(b));
+            std::printf("expect_unclipped ok: %s %s\n", w[i].c_str(), box(r).c_str());
+        }
         return true;
     }
     if (cmd == "expect_rows") {
@@ -1686,13 +1754,23 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         const uint32_t count = lv_obj_get_child_count(list);
         for (uint32_t i = 0; i < count; ++i) {
             lv_obj_t *child = lv_obj_get_child(list, static_cast<int32_t>(i));
+            if (child && lv_obj_has_flag(child, LV_OBJ_FLAG_HIDDEN)) continue; /* the CompactList's empty state (P4) */
             lv_obj_t *first = child ? lv_obj_get_child(child, 0) : nullptr;
             const char *text = first && lv_obj_check_type(first, &lv_label_class) ? lv_label_get_text(first) : nullptr;
             have.push_back(text ? text : "?");
         }
         std::string joined;
         for (const std::string &s : have) joined += (joined.empty() ? "" : " | ") + s;
-        if (have != want) return fail(scene, line, "expect_rows: the list shows " + joined);
+        /* (report 047 P4) a LABEL ending with '*' matches a row whose label starts with the rest: a package name the
+         * dense list cuts with dots, at a width that depends on the screen */
+        bool same = have.size() == want.size();
+        std::string differs = same ? "" : " (" + std::to_string(have.size()) + " rows, " + std::to_string(want.size()) + " expected)";
+        for (std::size_t i = 0; same && i < want.size(); ++i) {
+            const std::string &x = want[i];
+            same = !x.empty() && x.back() == '*' ? have[i].compare(0, x.size() - 1, x, 0, x.size() - 1) == 0 : have[i] == x;
+            if (!same) differs = " (row " + std::to_string(i + 1) + ": \"" + have[i] + "\", expected \"" + x + "\")";
+        }
+        if (!same) return fail(scene, line, "expect_rows: the list shows " + joined + differs);
         std::printf("expect_rows ok: %s\n", joined.c_str());
         return true;
     }
@@ -2177,10 +2255,36 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
 
     if (cmd == "apt") { /* Settings > Updates > System packages' fixtures (harness_apt.cpp, report 047 P3) */
         static const char *usage = "usage: apt board NAME|empty|error|none|pending | lists-age DAYS|never | holds N | "
-                                   "auto on|off|board | refresh KEY VALUE | refresh clear";
+                                   "auto on|off|board | refresh KEY VALUE | refresh clear | upgrade KEY VALUE | upgrade "
+                                   "clear | undervoltage on|off | audit on|off | space MB | expect-cancel yes|no | slow "
+                                   "on|off | hold reading|listing|checking|none";
         if (w.size() < 3) return fail(scene, line, usage);
         std::lock_guard<std::mutex> lock(fx.apt_mutex);
-        if (w[1] == "board" && w.size() == 3) {
+        if (w[1] == "slow" && w.size() == 3 && (w[2] == "on" || w[2] == "off")) {
+            fx.apt_slow = w[2] == "on";
+        } else if (w[1] == "hold" && w.size() == 3 &&
+                   (w[2] == "reading" || w[2] == "listing" || w[2] == "checking" || w[2] == "none")) {
+            fx.apt_hold = w[2] == "none" ? std::string() : w[2];
+        } else if (w[1] == "upgrade" && w.size() == 3 && w[2] == "clear") {
+            fx.apt_upgrade.clear();
+        } else if (w[1] == "upgrade" && w.size() >= 4) {
+            std::string value = w[3];
+            for (std::size_t i = 4; i < w.size(); ++i) value += " " + w[i];
+            bool replaced = false;
+            for (auto &kv : fx.apt_upgrade)
+                if (kv.first == w[2]) {
+                    kv.second = value;
+                    replaced = true;
+                }
+            if (!replaced) fx.apt_upgrade.emplace_back(w[2], value);
+        } else if ((w[1] == "undervoltage" || w[1] == "audit") && w.size() == 3 && (w[2] == "on" || w[2] == "off")) {
+            (w[1] == "undervoltage" ? fx.apt_undervoltage : fx.apt_audit) = w[2] == "on";
+        } else if (w[1] == "space" && w.size() == 3) {
+            fx.apt_space_mb = std::atoll(w[2].c_str());
+        } else if (w[1] == "expect-cancel" && w.size() == 3 && (w[2] == "yes" || w[2] == "no")) {
+            if (fx.apt_cancelled != (w[2] == "yes"))
+                return fail(scene, line, std::string("the cancel flag was ") + (fx.apt_cancelled ? "" : "not ") + "written");
+        } else if (w[1] == "board" && w.size() == 3) {
             fx.apt_board = w[2];
         } else if (w[1] == "lists-age" && w.size() == 3) {
             fx.apt_lists_days = w[2] == "never" ? -1 : std::atoll(w[2].c_str());

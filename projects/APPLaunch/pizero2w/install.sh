@@ -105,6 +105,7 @@ LAUNCHER_BIN=cyberdeckzero                       # /usr/share/APPLaunch/bin/cybe
 CONSOLE_HELPER=cyberdeckzero-console             # /usr/share/APPLaunch/bin/cyberdeckzero-console
 CTL_BIN=cyberdeckzero-ctl                        # /usr/share/APPLaunch/bin/cyberdeckzero-ctl, linked in /usr/local/bin
 UPDATE_HELPER=cyberdeckzero-update               # /usr/share/APPLaunch/bin/cyberdeckzero-update: Settings > Updates
+ANCHOR_PKG=cyberdeckzero-runtime                 # the anchor package (report 047 D13): "Runtime anchor package" below
 USER_UNIT=cyberdeckzero.service                  # appliance boards: systemd user service
 CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the panel from the text console
 DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
@@ -992,6 +993,8 @@ if [ "$DRY" = 1 ]; then
         echo "  bundle; licences and notices in /usr/share/doc/$DOC_NAME (replaced as a whole)"
         echo "install options: /etc/applaunch/install.conf (the keyboard name, --board, the boot configuration, the default"
         echo "  source: Settings > Updates runs install.sh again with them)"
+        echo "anchor package: $ANCHOR_PKG (built here with dpkg-deb, no files; Depends: the packages of the launcher's"
+        echo "  libraries and of the programs it runs on this board, so apt autoremove never takes them away)"
     fi
     if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
         if [ "$IS_PC" = 1 ]; then
@@ -1183,6 +1186,106 @@ remove_retired() {
     done
 }
 
+# The anchor package (report 047 P4, decision D13): cyberdeckzero-runtime, a package with no files (Architecture: all)
+# built here with dpkg-deb and installed with dpkg. Its Depends are the packages the launcher needs on THIS board, found
+# at install time: the packages this script installs (PKGS), ca-certificates (curl's https), the dpkg owners of the
+# libraries the launcher's binaries load (ldd) and of the programs it runs. apt then never removes them (autoremove, from
+# Settings > Updates or from a terminal), and a plan that would remove one also removes the anchor: "Remv
+# cyberdeckzero-runtime" is the red flag (Settings > Updates refuses any removal). Never a version in Depends: no hold, no
+# pin, security updates keep coming (report 047 section 7.4.2). Rebuilt only when its version or its Depends change
+# (a second run is a no-op); uninstall.sh purges it. A board without dpkg-deb, or a failure here, only loses the
+# protection: the launcher works as before.
+ANCHOR_TOOLS="curl sudo systemctl systemd-run systemd-inhibit timedatectl nmcli bluetoothctl rfkill amixer pactl chvt dtc"
+# the version of this bundle (build.sh writes VERSION next to install.sh) as a Debian version; 0 when unknown
+anchor_version() {
+    v=$(head -n 1 "$HERE/VERSION" 2>/dev/null | tr -d '\r') || v=""
+    case "$v" in
+        ""|*[!A-Za-z0-9.+~-]*) echo 0 ;;
+        [0-9]*) echo "$v" ;;
+        *) echo "0~$v" ;;
+    esac
+}
+# paths on stdin -> the names of the packages that own them ("libc6:arm64: /usr/lib/..." and "a, b: /path" lines)
+anchor_owners() {
+    xargs -r dpkg-query -S 2>/dev/null | awk -F': /' 'NF > 1 && $1 !~ /^diversion/ {
+        n = split($1, names, ", "); for (i = 1; i <= n; i++) { sub(/:.*/, "", names[i]); print names[i] } }'
+}
+# a path as given, as resolved, and with /lib/ as /usr/lib/ (dpkg records the merged-/usr paths on Debian 13)
+anchor_paths() {
+    while IFS= read -r p; do
+        [ -n "$p" ] || continue
+        r=$(readlink -f "$p" 2>/dev/null) || r=""
+        for q in "$p" $r; do
+            echo "$q"
+            case "$q" in /lib/*|/bin/*|/sbin/*) echo "/usr$q" ;; esac
+        done
+    done
+}
+# the Depends of the anchor: sorted, unique, installed now ("ii"), joined with ", "
+anchor_depends() {
+    {
+        for p in $PKGS ca-certificates; do echo "$p"; done
+        for b in "$APP_ROOT/bin/$LAUNCHER_BIN" "$APP_ROOT/bin/M5CardputerZero-AppStore" "$APP_ROOT/bin/$CTL_BIN" \
+                 "$APP_ROOT/lib/libapplaunch_vfb.so"; do
+            [ -f "$b" ] || continue
+            ldd "$b" 2>/dev/null | sed -n 's/^.*=> \(\/[^ ]*\).*$/\1/p'
+        done | anchor_paths | sort -u | anchor_owners
+        for t in $ANCHOR_TOOLS; do command -v "$t" 2>/dev/null || true; done | anchor_paths | sort -u | anchor_owners
+    } | grep -E '^[a-z0-9][a-z0-9+.-]+$' | grep -vx "$ANCHOR_PKG" | LC_ALL=C sort -u \
+      | xargs -r dpkg-query -W -f='${Package} ${db:Status-Abbrev}\n' 2>/dev/null | awk '$2 == "ii" { print $1 }' \
+      | LC_ALL=C sort -u | awk 'BEGIN { ORS = "" } { print (NR > 1 ? ", " : "") $0 } END { if (NR) print "\n" }'
+}
+runtime_anchor() {
+    if ! command -v dpkg-deb >/dev/null 2>&1 || ! command -v dpkg-query >/dev/null 2>&1; then
+        echo "no dpkg-deb or dpkg-query: no anchor package (apt does not know which packages the launcher needs)"
+        return 0
+    fi
+    deps=$(anchor_depends)
+    if [ -z "$deps" ]; then
+        echo "none of the launcher's packages was found installed: no anchor package"
+        return 0
+    fi
+    ver=$(anchor_version)
+    count=$(printf '%s\n' "$deps" | tr ',' '\n' | grep -c .)
+    current=$(dpkg-query -W -f='${db:Status-Abbrev}|${Version}|${Depends}' "$ANCHOR_PKG" 2>/dev/null || true)
+    if [ "$current" = "ii |$ver|$deps" ]; then
+        echo "$ANCHOR_PKG $ver already up to date ($count packages kept for the launcher)"
+        return 0
+    fi
+    work=$(mktemp -d) || return 1
+    mkdir -p "$work/root/DEBIAN"
+    {
+        echo "Package: $ANCHOR_PKG"
+        echo "Version: $ver"
+        echo "Architecture: all"
+        echo "Maintainer: CyberdeckZero Launcher install.sh <root@localhost>"
+        echo "Section: misc"
+        echo "Priority: optional"
+        echo "Depends: $deps"
+        echo "Description: packages the CyberdeckZero Launcher needs on this board"
+        echo " Built on this board by the launcher's install.sh; it installs no file. Its Depends are"
+        echo " the packages of the libraries the launcher loads and of the programs it runs, so apt"
+        echo " never removes them. uninstall.sh removes it (the packages themselves stay)."
+    } > "$work/root/DEBIAN/control"
+    chmod 755 "$work/root" "$work/root/DEBIAN"
+    chmod 644 "$work/root/DEBIAN/control"
+    if dpkg-deb --root-owner-group --build "$work/root" "$work/$ANCHOR_PKG.deb" > "$work/log" 2>&1 \
+            && dpkg -i "$work/$ANCHOR_PKG.deb" >> "$work/log" 2>&1; then
+        echo "$ANCHOR_PKG $ver installed: $count packages kept for the launcher ($deps)"
+    else
+        echo "WARNING: the anchor package $ANCHOR_PKG could not be installed (apt does not know which packages the" >&2
+        echo "         launcher needs; everything else works):" >&2
+        tail -n 5 "$work/log" | sed 's/^/         /' >&2
+        # never leave it half installed: apt would refuse every later operation until it is fixed
+        case "$(dpkg-query -W -f='${db:Status-Abbrev}' "$ANCHOR_PKG" 2>/dev/null || true)" in
+            ""|"un "|"ii ") ;;
+            *) dpkg --remove "$ANCHOR_PKG" > /dev/null 2>&1 || true ;;
+        esac
+    fi
+    rm -rf "$work"
+    return 0
+}
+
 say "Checking the board"
 echo "board: ${MODEL:-unknown} -> profile ${BOARD:-none (unknown board)}   user: $TARGET_USER   glibc: $GLIBC"
 if [ -z "$BOARD" ]; then
@@ -1315,6 +1418,9 @@ if [ -d "$PAYLOAD/doc" ]; then
 else
     echo "this bundle has no payload/doc: skipped"
 fi
+
+say "Runtime anchor package (apt keeps what the launcher needs)"
+runtime_anchor || echo "WARNING: the anchor package step failed (everything else works)" >&2
 
 say "Installing udev rules (keyboard: \"$KEYBOARD_NAME\")"
 mkdir -p "$UDEV_DIR"

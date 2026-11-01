@@ -50,7 +50,7 @@ wait 1500
 shot refresh_progress
 header refresh_progress "Settings > Updates > Packages" "Updates > Packages" "Packages"
 expect_text "37 %"
-expect_text "Retrieving file 2 of 4"
+expect_text start "Retrieving file 2 of 4"
 # done: the lists are from now, the plan is read again
 apt lists-age 0
 apt refresh state done
@@ -59,7 +59,8 @@ apt refresh text Done
 wait 4000
 shot refresh_done
 expect_text "today 17:30"
-expect_text "From a terminal: sudo apt-get upgrade"
+# (P4: the safe set upgrades from here: the status line says what stays the terminal's)
+expect_text "Kernel and kept-back ones: in a terminal"
 # a second refresh fails
 apt refresh clear
 key ENTER
