@@ -41,7 +41,7 @@ shot updates_dev_touch_selected
 tapbutton "Check now"
 wait 300
 shot updates_dev_touch_checking
-expect_text "Checking for updates..."
+expect_text start "Checking for updates..."
 update answer releases-0.8.13.json
 wait 1000
 # Check now, up past App updates and Packages (P3: the two rows between) to Launcher

@@ -171,6 +171,17 @@ struct Fixtures {
     int apt_holds = 0;
     std::string apt_auto;
     std::vector<std::pair<std::string, std::string>> apt_refresh;
+    /* P4 (the upgrade): the helper's apt-upgrade-status lines ("apt upgrade KEY VALUE"; its helper alive: "update
+     * helper-alive"), under-voltage now, dpkg --audit not empty, the free space for the run (MB), whether the launcher wrote
+     * the cancel flag, a slow board (the waiting box's reassurance), and the scan stage the fake holds ("apt hold reading|
+     * listing|checking|none": the scan blocks there until the scene moves on or the launcher cancels it). */
+    bool apt_slow = false;
+    std::string apt_hold;
+    std::vector<std::pair<std::string, std::string>> apt_upgrade;
+    bool apt_undervoltage = false;
+    bool apt_audit = false;
+    long long apt_space_mb = 4096;
+    bool apt_cancelled = false;
 };
 
 Fixtures &fixtures();

@@ -19,15 +19,32 @@
  *                    simulation waits (the page shows "Reading the package lists...") until the scene gives another board
  *   apt lists-age DAYS|never       apt holds N       apt auto on|off
  *   apt refresh KEY VALUE | apt refresh clear
+ *
+ * P4 (the upgrade): `apt-get -s install --only-upgrade NAMES` is the closure of NAMES through the board's pulls.txt ("a: b
+ * c": installing a also upgrades b and c, as apt 2.7 does for one source), each upgradable name printed with its versions
+ * from the capture; apt-cache records from the board's records.txt (Source, Depends) or made up; --print-uris and
+ * dpkg-query sizes fixed per package name; the anchor names nothing more than the closure. The cancel flag of the scanner
+ * stops a held stage at once, as the real platform kills its program.
+ *   apt hold reading|listing|checking|none   (the scan blocks at that stage: the waiting box's scenes)
+ *   apt slow on|off                (a 512 MB board)
+ *   apt upgrade KEY VALUE | apt upgrade clear (the helper's apt-upgrade-status: v=1, boot=,
+ *                                  pid=4002 added; "now-N" values; its helper alive: "update helper-alive on|off")
+ *   apt undervoltage on|off        apt audit on|off (dpkg --audit not empty)      apt space MB (free for the run)
+ *   apt expect-cancel yes|no       (fails the scene unless the launcher wrote the cancel flag, or did not)
  */
 
 #include "harness.h"
 
 #include "settings/settings_apt_platform.hpp"
+#include "settings/settings_apt_scan.hpp"
+#include "settings/settings_apt_upgrade_model.hpp"
 #include "settings/settings_update_model.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <ctime>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -74,13 +91,29 @@ std::vector<std::string> lines_of(const std::string &text)
 
 } // namespace
 
+/* the scan blocks at a held stage until the scene moves on, or the launcher cancels the scan; false: cancelled */
+bool hold_at(const char *stage)
+{
+    for (;;) {
+        if (apt_cancel_flag().load()) return false;
+        {
+            harness::Fixtures &fx = harness::fixtures();
+            std::lock_guard<std::mutex> lock(fx.apt_mutex);
+            if (fx.apt_hold != stage) return true;
+        }
+        ::usleep(2000);
+    }
+}
+
 bool simulate(bool dist_upgrade, std::string &output)
 {
     std::string board = board_name();
     while (board == "pending") { /* the scene gives the board later: "Reading the package lists..." */
+        if (apt_cancel_flag().load()) return false;
         ::usleep(2000);
         board = board_name();
     }
+    if (!dist_upgrade && !hold_at("reading")) return false;
     if (board == "none") return false; /* no apt-get */
     if (board == "error") {
         output = "E: Could not open lock file /var/lib/dpkg/lock-frontend - open (13: Permission denied)\n";
@@ -97,6 +130,7 @@ bool simulate(bool dist_upgrade, std::string &output)
 
 std::vector<std::string> library_owners()
 {
+    if (!hold_at("listing")) return {};
     return lines_of(board_file(board_name(), "closure.txt"));
 }
 
@@ -169,6 +203,153 @@ std::string refresh_status()
 long long now()
 {
     return static_cast<long long>(std::time(nullptr)); /* the scene's clock */
+}
+
+// ------------------------------------------------------------------ P4: the upgrade
+
+namespace {
+
+/* a fixed size per package name: the scenes' figures never move */
+long long name_hash(const std::string &name)
+{
+    long long h = 7;
+    for (unsigned char c : name) h = (h * 31 + c) % 1000003;
+    return h;
+}
+
+} // namespace
+
+/* `apt-get -s install --only-upgrade NAMES`: the closure through the board's pulls.txt */
+std::string simulate_install(const std::vector<std::string> &names)
+{
+    if (!hold_at("checking")) return std::string();
+    const std::string board = board_name();
+    std::map<std::string, std::pair<std::string, std::string>> versions;
+    for (const Change &c : parse_simulation(board_file(board, "upgrade.txt")).upgrades)
+        versions[base_name(c.name)] = {c.from, c.to};
+    std::map<std::string, std::vector<std::string>> pulls;
+    std::string pulls_text;
+    launcher_update::read_file(fixture_dir() + "/" + board + "/pulls.txt", pulls_text);
+    for (const std::string &line : lines_of(pulls_text)) {
+        if (line[0] == '#' || line.find(':') == std::string::npos) continue;
+        std::istringstream rest(line.substr(line.find(':') + 1));
+        std::string n;
+        while (rest >> n) pulls[line.substr(0, line.find(':'))].push_back(n);
+    }
+    std::vector<std::string> todo(names.begin(), names.end());
+    std::set<std::string> all;
+    while (!todo.empty()) {
+        const std::string n = todo.back();
+        todo.pop_back();
+        if (!all.insert(n).second) continue;
+        const auto it = pulls.find(n);
+        if (it != pulls.end()) todo.insert(todo.end(), it->second.begin(), it->second.end());
+    }
+    std::string out = "NOTE: This is only a simulation!\n";
+    for (const std::string &n : all) {
+        const auto v = versions.find(n);
+        if (v != versions.end())
+            out += "Inst " + n + " [" + v->second.first + "] (" + v->second.second + " Debian:13/stable [arm64])\n";
+        else if (std::find(names.begin(), names.end(), n) == names.end())
+            out += "Inst " + n + " (1.0-1 Debian:13/stable [arm64])\n";
+    }
+    out += "0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.\n";
+    return out;
+}
+
+bool slow_board()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apt_mutex);
+    return fx.apt_slow;
+}
+
+std::string print_uris(const std::vector<std::string> &names)
+{
+    std::string out;
+    for (const std::string &n : names)
+        out += "'http://deb.example/pool/" + n + "_1_arm64.deb' " + n + "_1_arm64.deb " +
+               std::to_string(200000 + name_hash(n) % 1800000) + " SHA256:00\n";
+    return out;
+}
+
+std::string candidate_records(const std::vector<std::string> &names)
+{
+    // the board's records.txt (Source, Depends) when it has one, the sizes made up per name
+    std::string text;
+    launcher_update::read_file(fixture_dir() + "/" + board_name() + "/records.txt", text);
+    const std::map<std::string, Record> records = parse_records(text);
+    std::string out;
+    for (const std::string &n : names) {
+        out += "Package: " + n + "\n";
+        const auto it = records.find(n);
+        if (it != records.end()) {
+            if (!it->second.source.empty()) out += "Source: " + it->second.source + "\n";
+            if (!it->second.depends.empty()) {
+                out += "Depends: ";
+                for (std::size_t i = 0; i < it->second.depends.size(); ++i) out += (i ? ", " : "") + it->second.depends[i];
+                out += "\n";
+            }
+        }
+        out += "Installed-Size: " + std::to_string(1000 + name_hash(n) % 3000) + "\n\n";
+    }
+    return out;
+}
+
+std::string installed_sizes(const std::vector<std::string> &names)
+{
+    std::string out;
+    for (const std::string &n : names) out += std::to_string(950 + name_hash(n) % 3000) + "\n";
+    return out;
+}
+
+std::vector<std::string> anchor_depends()
+{
+    return {}; /* the board's closure is its library set already */
+}
+
+bool dpkg_unfinished()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apt_mutex);
+    return fx.apt_audit;
+}
+
+bool under_voltage()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apt_mutex);
+    return fx.apt_undervoltage;
+}
+
+long long upgrade_free()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apt_mutex);
+    return fx.apt_space_mb * 1024LL * 1024LL;
+}
+
+std::string upgrade_status()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apt_mutex);
+    if (fx.apt_upgrade.empty()) return std::string();
+    std::string text = "v=1\nboot=harness-boot\npid=4002\n";
+    for (const auto &kv : fx.apt_upgrade) {
+        std::string value = kv.second;
+        if (value.compare(0, 3, "now") == 0)
+            value = std::to_string(static_cast<long long>(std::time(nullptr)) + std::atoll(value.c_str() + 3));
+        text += kv.first + "=" + value + "\n";
+    }
+    return text;
+}
+
+bool request_cancel()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apt_mutex);
+    fx.apt_cancelled = true;
+    return true;
 }
 
 } // namespace platform

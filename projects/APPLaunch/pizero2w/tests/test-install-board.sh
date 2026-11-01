@@ -768,10 +768,63 @@ printf '#!/bin/sh\necho "${FAKE_UNAME_M:-aarch64}"\n' > "$FAKEBIN/uname"
 printf '#!/bin/sh\nprintf "apt-get %%s\\n" "$*" >> "$FAKE_CALLS"\nexit "${FAKE_APT_RC:-1}"\n' > "$FAKEBIN/apt-get"
 cat > "$FAKEBIN/dpkg" <<'EOF'
 #!/bin/sh
-# stand-in dpkg: logs the call; "-s PKG" answers "not installed" for the packages in FAKE_DPKG_MISSING
+# stand-in dpkg: logs the call; "-s PKG" answers "not installed" for the packages in FAKE_DPKG_MISSING; "-i DEB" of the
+# anchor package records it in FAKE_ANCHOR ("ii |version|depends"; with FAKE_DPKG_I_RC it fails, left "iF "); --purge and
+# --remove forget it
 printf 'dpkg %s\n' "$*" >> "$FAKE_CALLS"
 if [ "$1" = -s ]; then case " ${FAKE_DPKG_MISSING:-} " in *" $2 "*) exit 1 ;; esac; fi
+if [ "$1" = -i ]; then
+    v=$(sed -n 's/^Version: //p' "$2"); d=$(sed -n 's/^Depends: //p' "$2")
+    if [ "${FAKE_DPKG_I_RC:-0}" != 0 ]; then
+        printf 'iF |%s|%s' "$v" "$d" > "$FAKE_ANCHOR"; echo "dpkg: error processing package cyberdeckzero-runtime" >&2
+        exit "$FAKE_DPKG_I_RC"
+    fi
+    printf 'ii |%s|%s' "$v" "$d" > "$FAKE_ANCHOR"
+fi
+case "$1" in --purge|--remove) rm -f "$FAKE_ANCHOR" ;; esac
 exit 0
+EOF
+# stand-in dpkg-query: -S from FAKE_OWNERS ("pkg:arch: /path" lines); -W of the anchor from FAKE_ANCHOR; -W of other
+# packages: installed ("ii") unless in FAKE_DPKG_MISSING
+cat > "$FAKEBIN/dpkg-query" <<'EOF'
+#!/bin/sh
+# (the paths of -S are not logged: they would match other checks' patterns, "dtc " for one)
+if [ "$1" = -S ]; then printf 'dpkg-query -S (%s paths)\n' "$(($# - 1))" >> "$FAKE_CALLS"
+else printf 'dpkg-query %s\n' "$*" >> "$FAKE_CALLS"; fi
+case "$1" in
+    -S) shift; rc=0
+        for p in "$@"; do
+            if [ -f "${FAKE_OWNERS:-}" ] && grep -q ": $p\$" "$FAKE_OWNERS"; then grep ": $p\$" "$FAKE_OWNERS"
+            else echo "dpkg-query: no path found matching pattern $p" >&2; rc=1; fi
+        done
+        exit $rc ;;
+    -W)
+        f=${2#-f=}; shift 2
+        if [ "${1:-}" = cyberdeckzero-runtime ]; then
+            [ -f "${FAKE_ANCHOR:-}" ] || { echo "dpkg-query: no packages found matching $1" >&2; exit 1; }
+            case "$f" in
+                *'|'*) cat "$FAKE_ANCHOR" ;;
+                *) cut -d'|' -f1 "$FAKE_ANCHOR" | tr -d '\n' ;;
+            esac
+            exit 0
+        fi
+        for n in "$@"; do case " ${FAKE_DPKG_MISSING:-} " in *" $n "*) ;; *) printf '%s ii \n' "$n" ;; esac; done ;;
+esac
+exit 0
+EOF
+# stand-in dpkg-deb: --build DIR OUT keeps the control file as the "package" (the dpkg stand-in reads it back)
+cat > "$FAKEBIN/dpkg-deb" <<'EOF'
+#!/bin/sh
+printf 'dpkg-deb %s\n' "$*" >> "$FAKE_CALLS"
+for last in "$@"; do :; done
+for a in "$@"; do case "$a" in --*|"$last") ;; *) dir=$a ;; esac; done
+cp "$dir/DEBIAN/control" "$last"
+EOF
+# stand-in ldd: the lines of FAKE_LDD for any file
+cat > "$FAKEBIN/ldd" <<'EOF'
+#!/bin/sh
+printf 'ldd %s\n' "$*" >> "$FAKE_CALLS"
+if [ -f "${FAKE_LDD:-}" ]; then cat "$FAKE_LDD"; else echo "	not a dynamic executable"; exit 1; fi
 EOF
 cat > "$FAKEBIN/pkaction" <<'EOF'
 #!/bin/sh
@@ -779,10 +832,14 @@ cat > "$FAKEBIN/pkaction" <<'EOF'
 printf 'pkaction %s\n' "$*" >> "$FAKE_CALLS"
 [ "${FAKE_POLKIT:-ok}" = ok ]
 EOF
-for c in loginctl udevadm usermod chown dtc groupadd; do
+for c in loginctl udevadm usermod chown dtc groupadd amixer; do
     printf '#!/bin/sh\nprintf "%s %%s\\n" "$*" >> "$FAKE_CALLS"\nexit 0\n' "$c" > "$FAKEBIN/$c"
 done
 chmod 755 "$FAKEBIN"/*
+# the anchor package's facts for the stand-ins: the launcher's libraries (ldd) and their owners (dpkg-query -S)
+export FAKE_ANCHOR="$TMP/anchor.state" FAKE_LDD="$TMP/ldd.txt" FAKE_OWNERS="$TMP/owners.txt"
+printf '\tlinux-vdso.so.1 (0x0000ffff9a5e0000)\n\tlibinput.so.10 => /lib/aarch64-linux-gnu/libinput.so.10 (0x0000ffff9a400000)\n\tlibc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x0000ffff9a200000)\n\tlibstdc++.so.6 => /lib/aarch64-linux-gnu/libstdc++.so.6 (0x0000ffff9a000000)\n\t/lib/ld-linux-aarch64.so.1 (0x0000ffff9a5a0000)\n' > "$FAKE_LDD"
+printf 'libinput10:arm64: /usr/lib/aarch64-linux-gnu/libinput.so.10\nlibc6:arm64: /usr/lib/aarch64-linux-gnu/libc.so.6\nlibstdc++6:arm64: /usr/lib/aarch64-linux-gnu/libstdc++.so.6\nalsa-utils: %s/amixer\n' "$FAKEBIN" > "$FAKE_OWNERS"
 # full ROOT [options]: install.sh of the fake bundle into ROOT for the user U; output $OUT, exit code $RC, calls in $CALLS
 full() {
     r=$1; shift
@@ -815,6 +872,48 @@ check "fake install, fresh: no apt-get, nothing written outside the fake root" '
 check "fake install, fresh: the user unit is 644 (systemd: not marked executable), no unit, rule or profile executable" '[ "$(stat -c %a "$H/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$H" -type f -perm /111)" ]'
 check "fake install, fresh: a Pi's packages (dtc, no polkitd or bluez), bluetooth.service left alone, polkit checked" 'called "dpkg -s device-tree-compiler" && ! called "dpkg -s polkitd" && ! called "dpkg -s bluez" && ! called "enable --now bluetooth.service" && called "pkaction --action-id org.freedesktop.login1.reboot" && has "polkit: running"'
 check "fake install, fresh: no sound card of its own (no /proc/asound here): no audio group" '! called "usermod -aG audio" && ! has "audio group"'
+
+# the anchor package (report 047 P4, D13): cyberdeckzero-runtime built with dpkg-deb and installed with dpkg; its Depends
+# from this board (install.sh's packages, ca-certificates, the owners of the libraries ldd names and of the programs the
+# launcher runs), sorted, installed ones only, never a version; a second run changes nothing; uninstall.sh purges it
+rm -f "$FAKE_ANCHOR"
+R=$(root pi3a-luckfox35)
+full "$R"
+ANCHOR_DEPS="alsa-utils, ca-certificates, curl, device-tree-compiler, libc6, libfreetype6, libinput10, libstdc++6, libxkbcommon0"
+check "anchor: built with dpkg-deb (root-owned), installed with dpkg, no apt" '[ $RC = 0 ] && called "dpkg-deb --root-owner-group --build" && called "dpkg -i " && ! called "apt-get" && has "== Runtime anchor package" && has "cyberdeckzero-runtime 0 installed: 9 packages kept for the launcher"'
+check "anchor: Depends = the packages, ca-certificates, the libraries' owners (/lib -> /usr/lib) and a program's owner, sorted, no version" '[ "$(cut -d"|" -f3 "$FAKE_ANCHOR")" = "$ANCHOR_DEPS" ] && [ "$(cut -d"|" -f1 "$FAKE_ANCHOR")" = "ii " ]'
+check "anchor: nothing of it in the fake root (built in a temp folder, removed)" '[ -z "$(find "$R" -name "cyberdeckzero-runtime*")" ]'
+full "$R"
+check "anchor, second run: already up to date, not built or installed again" '[ $RC = 0 ] && has "cyberdeckzero-runtime 0 already up to date (9 packages kept for the launcher)" && ! called "dpkg-deb" && ! called "dpkg -i "'
+echo "0.9.2-p4" > "$BUN/VERSION"
+full "$R"
+check "anchor: the bundle's VERSION is its version (a new bundle: rebuilt)" '[ $RC = 0 ] && called "dpkg -i " && [ "$(cut -d"|" -f2 "$FAKE_ANCHOR")" = "0.9.2-p4" ]'
+echo "dev" > "$BUN/VERSION"
+full "$R"
+check "anchor: a version that is not a Debian one gets a 0~ in front" '[ "$(cut -d"|" -f2 "$FAKE_ANCHOR")" = "0~dev" ]'
+rm -f "$BUN/VERSION"
+FAKE_DPKG_MISSING=libstdc++6; export FAKE_DPKG_MISSING
+full "$R"
+unset FAKE_DPKG_MISSING
+check "anchor: a library whose package is not installed is left out of Depends (dpkg would refuse the anchor)" '[ $RC = 0 ] && [ "$(cut -d"|" -f3 "$FAKE_ANCHOR")" = "alsa-utils, ca-certificates, curl, device-tree-compiler, libc6, libfreetype6, libinput10, libxkbcommon0" ]'
+FAKE_DPKG_I_RC=1; export FAKE_DPKG_I_RC
+full "$R"
+unset FAKE_DPKG_I_RC
+check "anchor: dpkg fails: a warning, the install goes on (exit 0), the half-installed anchor removed again" '[ $RC = 0 ] && has "WARNING: the anchor package cyberdeckzero-runtime could not be installed" && called "dpkg --remove cyberdeckzero-runtime" && [ ! -f "$FAKE_ANCHOR" ] && has "== Done"'
+full "$R"
+check "anchor: installed again by the next run" '[ $RC = 0 ] && [ "$(cut -d"|" -f1,3 "$FAKE_ANCHOR")" = "ii |$ANCHOR_DEPS" ]'
+run --dry-run
+check "anchor: the dry run names it" 'has "anchor package: cyberdeckzero-runtime (built here with dpkg-deb"'
+: > "$CALLS"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --dry-run --no-boot-config 2>&1); RC=$?
+check "anchor: uninstall dry-run plans the purge, changes nothing" '[ $RC = 0 ] && has "the anchor package cyberdeckzero-runtime (dpkg --purge" && has "dpkg --purge cyberdeckzero-runtime" && [ -f "$FAKE_ANCHOR" ]'
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --yes --no-boot-config 2>&1); RC=$?
+check "anchor: uninstall purges it (the packages it named are not touched)" '[ $RC = 0 ] && called "dpkg --purge cyberdeckzero-runtime" && [ ! -f "$FAKE_ANCHOR" ] && ! called "apt-get"'
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --yes --no-boot-config 2>&1); RC=$?
+check "anchor: uninstall again: not installed, nothing to do" '[ $RC = 0 ] && has "cyberdeckzero-runtime is not installed"'
 # HDMI only (the Pi 5, the HackBerry: vc4-hdmi): no sound card of the board's own, no audio group (report 030)
 R=$(root pi5-hyperpixel4)
 mkdir -p "$R/proc/asound"

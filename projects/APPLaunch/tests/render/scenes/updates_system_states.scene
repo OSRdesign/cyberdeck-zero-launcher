@@ -44,7 +44,7 @@ key DOWN
 key ENTER
 wait 600
 shot states_pending
-expect_text "Reading the package lists..."
+expect_text "Reading the package lists"
 apt lists-age 0
 apt board empty
 wait 4000

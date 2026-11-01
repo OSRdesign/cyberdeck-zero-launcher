@@ -55,6 +55,12 @@ AppUpdates app_updates();
 /* A detached worker re-reads the catalogue (local: no network); a second call while one runs does nothing. */
 void refresh_app_updates();
 
+/* Report 047 P4, the busy flag shared with Settings > Updates: a package job (install, update, remove, update all) of any
+ * Jobs runs, from its start to its end (the password, dpkg, the finalize step). An upgrade of the system packages does not
+ * start meanwhile; and a package job asked while Settings > Updates runs one (launcher_apt::system_job_busy()) fails at once
+ * with that reason. Any thread. */
+bool package_job_running();
+
 class Jobs {
 public:
     struct Shared;

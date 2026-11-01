@@ -53,6 +53,7 @@ struct Simulation {
     std::vector<Change> installs;     /* Inst of a package that is not installed (new) */
     std::vector<Change> removals;     /* Remv */
     std::vector<std::string> kept_back;
+    std::vector<std::string> phased;  /* (P4) "deferred due to phasing" (Ubuntu's phased updates): not now, never an error */
     int summary_upgraded = -1;        /* the summary line's counts, -1 when it is absent */
     int summary_new = -1;
     int summary_remove = -1;
@@ -102,6 +103,8 @@ struct Report {
     std::vector<Package> boot;
     std::vector<Package> terminal;    /* kept back by apt (not boot chain) and removals */
     std::vector<std::string> store;   /* package names left out: the Store's own apps */
+    std::vector<Package> store_versions; /* (P4) the Store apps `upgrade` would upgrade, with their versions */
+    std::vector<std::string> phased;  /* (P4) upgrades apt defers by phasing: offered later by apt itself, never in a plan */
     bool needs_dist_upgrade = false;  /* something in boot / terminal is only in `dist-upgrade` */
     int shown() const;                /* the packages the page lists */
 };
@@ -141,6 +144,7 @@ struct Overview {
     long long lists_time = 0; /* the newest list / success stamp (epoch seconds), 0: none (never refreshed) */
     Report report;
     Detection detection;
+    bool dpkg_unfinished = false; /* (P4) dpkg --audit printed something: Repair */
 };
 
 /* The "System packages" row of the Updates page: amber "N updates" (what the page lists in its three package

@@ -47,6 +47,25 @@
  *             snapd, holds, Store apps left out: D18, shown and never changed). Package rows: name, "old > new" in grey, the
  *             grey information dot. The Store's own apps never appear as system updates. The status line says why the list
  *             may mislead (never refreshed, N days old) or: upgrading from here comes later, the terminal now.
+ *   P4 (apt UPGRADE of the safe set, settings_apt_upgrade_model.hpp; never automatic, never the boot chain, never a
+ *             removal). Packages gains a first action row below Refresh lists: "Upgrade N packages" with "XX MB" (its download)
+ *             in amber (the plan of the pinned simulation; "checking" while it is made), or "Repair the installation"
+ *             after an interrupted run (dpkg --audit, or a status that stopped while dpkg worked), or "Upgrading" while one
+ *             runs. Its guards refuse in the status line before the password (another package job, lists that say little,
+ *             under-voltage, a battery under 50 % not charging, the space, the network).
+ *   Upgrade   (the confirmation page) a read-only TextBlock at the top: the count, the download, the disk needed, "keep
+ *             the board plugged in" (or the battery's rule), apps keep running until the next restart, no undo; under it
+ *             the dense list: "Launcher libraries (N)" (Off / On, the Edit affordance; D14, off each time the page opens;
+ *             the status line: "Launcher libraries are not included", on: the warning "Included: the launcher runs on
+ *             these", and the text says why), "Upgrade now"
+ *             (the shared sudo prompt, then systemd-run ... cyberdeckzero-update apt-upgrade), "Cancel". The text keeps
+ *             its height while the rows fit under it, else it scrolls: a drag, or Up / Down on the first row.
+ *   Upgrading (the progress page, as Updating, with the dense rows: all of them fit under the bar at every size) the
+ *             bar (the download's and the install's percent; none for a repair), the status line "Downloading 12 of 40" / "Installing 12 of 40", the steps (Check the plan, Download, Install,
+ *             Clean up), "Cancel the download" while it downloads (Esc does the same), "Do not switch off" while it
+ *             installs (Esc ignored); the lock screen held away. When the helper ends: the result page (Upgrade or
+ *             Repair, a TextBlock): done, a restart advised (never done by the launcher), cancelled, not started and why,
+ *             failed with the end of the log. Back on Packages the plan is read again.
  *   keys      Up / Down, Enter / Right open or run the highlighted row, Esc / Left go back a level (the root:
  *             Settings); touch: a tap highlights a row, a tap on the highlighted row runs it, the header's Esc
  *
