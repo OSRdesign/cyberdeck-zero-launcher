@@ -2162,6 +2162,37 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         return true;
     }
 
+    if (cmd == "apt") { /* Settings > Updates > System packages' fixtures (harness_apt.cpp, report 047 P3) */
+        static const char *usage = "usage: apt board NAME|empty|error|none|pending | lists-age DAYS|never | holds N | "
+                                   "auto on|off|board | refresh KEY VALUE | refresh clear";
+        if (w.size() < 3) return fail(scene, line, usage);
+        std::lock_guard<std::mutex> lock(fx.apt_mutex);
+        if (w[1] == "board" && w.size() == 3) {
+            fx.apt_board = w[2];
+        } else if (w[1] == "lists-age" && w.size() == 3) {
+            fx.apt_lists_days = w[2] == "never" ? -1 : std::atoll(w[2].c_str());
+        } else if (w[1] == "holds" && w.size() == 3) {
+            fx.apt_holds = std::atoi(w[2].c_str());
+        } else if (w[1] == "auto" && w.size() == 3 && (w[2] == "on" || w[2] == "off" || w[2] == "board")) {
+            fx.apt_auto = w[2] == "board" ? std::string() : w[2];
+        } else if (w[1] == "refresh" && w.size() == 3 && w[2] == "clear") {
+            fx.apt_refresh.clear();
+        } else if (w[1] == "refresh" && w.size() >= 4) {
+            std::string value = w[3];
+            for (std::size_t i = 4; i < w.size(); ++i) value += " " + w[i];
+            bool replaced = false;
+            for (auto &kv : fx.apt_refresh)
+                if (kv.first == w[2]) {
+                    kv.second = value;
+                    replaced = true;
+                }
+            if (!replaced) fx.apt_refresh.emplace_back(w[2], value);
+        } else {
+            return fail(scene, line, usage);
+        }
+        return true;
+    }
+
     boot(run);
 
     if (cmd == "apps") {

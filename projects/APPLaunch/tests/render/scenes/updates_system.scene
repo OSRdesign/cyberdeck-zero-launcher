@@ -1,0 +1,64 @@
+# Settings > Updates > System packages (report 047 P3, apt LIST ONLY), the Pi 4 B's capture of the P0 checks (21 updates): the
+# Updates page with its two new rows (System packages "21 updates" in amber, App updates "2 updates"), then the System
+# packages page: "Refresh lists" (the lists' age, the action dot), the sections "Safe to upgrade (16)", "Launcher
+# libraries (4)" (libbrotli1, curl, libcurl4t64, ca-certificates: the launcher's own library and the tool it runs), "Kernel,
+# firmware and boot (1)" (rpi-eeprom: a row that opens the page with the command to run in a terminal) and "On this board"
+# (grey information: automatic updates). A package row: its name, "old > new" in grey, the grey information dot, no
+# action. The status line: upgrading from here comes later, the terminal now. Keys only.
+# Review only: no golden; the headers are checked against the home grid's.
+title updates system packages
+review
+sizes 640x480 480x800 480x640 720x720 1280x800 480x320
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+env HARNESS_APPS catalogue
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+apps Settings CLI SSH Calculator
+clock 20:30 2026-11-01
+wifi 70
+bt on
+update net on
+update build 0.9.1 release arm64
+update answer releases-real.json
+apt board pi4b
+apt lists-age 1
+home
+header home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+shot updates_system_root
+expect_text "21 updates"
+expect_color "21 updates" F0B400
+expect_chevron "Packages" yes
+expect_chevron "App updates" yes
+key DOWN
+key ENTER
+wait 600
+shot updates_system_list
+header updates_system_list "Settings > Updates > Packages" "Updates > Packages" "Packages"
+expect_text "Refresh lists"
+# a package row: grey value, the grey information dot, no chevron and no action
+key DOWN
+shot updates_system_package
+expect_chevron "cifs-utils" no
+# the end of the list: the boot chain row (rpi-eeprom) opens the terminal command page
+key END
+key UP
+shot updates_system_end
+expect_chevron "rpi-eeprom" yes
+key ENTER
+wait 300
+shot updates_system_terminal
+header updates_system_terminal "Settings > Updates > Packages > Terminal" "Updates > Packages > Terminal" "Packages > Terminal" Terminal
+key ESC
+wait 300
+shot updates_system_back
+key ESC
+key ESC
+wait 300

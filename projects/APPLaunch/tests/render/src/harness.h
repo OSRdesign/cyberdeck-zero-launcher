@@ -161,6 +161,16 @@ struct Fixtures {
     bool update_charging = false;
     long long update_space_mb = 4096;
     std::string update_log;
+    /* Settings > Updates > System packages (report 047 P3, harness_apt.cpp instead of settings_apt_platform.cpp; scene
+     * command "apt ..."): the board whose P0 captures the fake apt-get answers with (tests/fixtures/apt/<board>; "empty",
+     * "error", "none", "pending"), the lists' age in days (-1 never), the holds, the automatic-update setting ("" the
+     * board's own, "on", "off") and the helper's apt-status lines. */
+    std::mutex apt_mutex;
+    std::string apt_board = "pending"; /* the scan waits: a scene that does not look at the packages never races it */
+    long long apt_lists_days = 1;
+    int apt_holds = 0;
+    std::string apt_auto;
+    std::vector<std::pair<std::string, std::string>> apt_refresh;
 };
 
 Fixtures &fixtures();

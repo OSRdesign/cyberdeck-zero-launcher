@@ -1,0 +1,153 @@
+/*
+ * SPDX-License-Identifier: MIT
+ *
+ * Settings > Updates > System packages: the system side of the scan (see settings_apt_platform.hpp).
+ */
+
+#include "settings_apt_platform.hpp"
+
+#include "apps_backend.hpp"
+#include "settings_update_model.hpp"
+#include "settings_update_platform.hpp"
+
+#include <algorithm>
+#include <climits>
+#include <cstdlib>
+#include <ctime>
+#include <sstream>
+
+#include <dirent.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+namespace launcher_apt {
+namespace platform {
+
+namespace {
+
+constexpr int kSimulateTimeoutS = 180; /* the Zero 2 W reads a Pi 5-sized plan in some seconds; never wait longer */
+constexpr int kQuickTimeoutS = 30;
+constexpr std::size_t kPathsPerQuery = 50;
+
+long long mtime_of(const std::string &path)
+{
+    struct stat info {};
+    return ::stat(path.c_str(), &info) == 0 ? static_cast<long long>(info.st_mtime) : 0;
+}
+
+bool ends_with(const std::string &text, const char *suffix)
+{
+    const std::string s = suffix;
+    return text.size() >= s.size() && text.compare(text.size() - s.size(), s.size(), s) == 0;
+}
+
+} // namespace
+
+bool simulate(bool dist_upgrade, std::string &output)
+{
+    // -s: a simulation, as the user and without a lock; no network. Not -y (nothing to ask), no progress meter in a pipe.
+    const apps_backend::Result result =
+        apps_backend::run_program("apt-get", {"-s", dist_upgrade ? "dist-upgrade" : "upgrade"}, kSimulateTimeoutS);
+    output = result.out;
+    return result.rc >= 0 && result.rc != 127;
+}
+
+std::vector<std::string> library_owners()
+{
+    std::vector<std::string> paths;
+    const std::string app = kAppFolder;
+    for (const std::string &binary : {app + "/bin/cyberdeckzero", app + "/bin/M5CardputerZero-AppStore",
+                                      app + "/bin/cyberdeckzero-ctl", app + "/lib/libapplaunch_vfb.so"}) {
+        if (::access(binary.c_str(), R_OK) != 0) continue;
+        const apps_backend::Result ldd = apps_backend::run_program("ldd", {binary}, kQuickTimeoutS);
+        for (const std::string &path : ldd_paths(ldd.out)) {
+            char resolved[PATH_MAX];
+            const std::string real = ::realpath(path.c_str(), resolved) ? std::string(resolved) : path;
+            const std::string known = dpkg_path(real);
+            if (std::find(paths.begin(), paths.end(), known) == paths.end()) paths.push_back(known);
+        }
+    }
+    std::vector<std::string> owners;
+    for (std::size_t at = 0; at < paths.size(); at += kPathsPerQuery) {
+        std::vector<std::string> args = {"-S"};
+        for (std::size_t i = at; i < paths.size() && i < at + kPathsPerQuery; ++i) args.push_back(paths[i]);
+        const apps_backend::Result found = apps_backend::run_program("dpkg-query", args, kQuickTimeoutS);
+        for (const std::string &name : parse_owners(found.out))
+            if (std::find(owners.begin(), owners.end(), name) == owners.end()) owners.push_back(name);
+    }
+    return owners;
+}
+
+std::string installed_record()
+{
+    std::string text;
+    launcher_update::read_file(apps_backend::state_dir() + "/installed.json", text);
+    return text;
+}
+
+std::vector<std::string> app_owners()
+{
+    return parse_owners(apps_backend::run_program("dpkg-query", {"-S", kAppFolder}, kQuickTimeoutS).out);
+}
+
+std::vector<std::string> holds()
+{
+    std::vector<std::string> names;
+    std::istringstream in(apps_backend::run_program("apt-mark", {"showhold"}, kQuickTimeoutS).out);
+    std::string line;
+    while (std::getline(in, line)) {
+        while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+        if (!line.empty() && line.find(' ') == std::string::npos && line.compare(0, 2, "E:") != 0) names.push_back(line);
+    }
+    return names;
+}
+
+Detection detection()
+{
+    Detection d;
+    const std::string status = apps_backend::run_program(
+        "dpkg-query", {"-W", "-f=${Package} ${db:Status-Abbrev}\\n", "unattended-upgrades", "packagekit", "snapd"},
+        kQuickTimeoutS).out;
+    d.unattended_installed = package_installed(status, "unattended-upgrades");
+    d.packagekit = package_installed(status, "packagekit");
+    d.snapd = package_installed(status, "snapd");
+    if (d.unattended_installed) {
+        d.unattended_periodic =
+            periodic_value(apps_backend::run_program("apt-config", {"dump"}, kQuickTimeoutS).out, "APT::Periodic::Unattended-Upgrade");
+        const std::string enabled =
+            apps_backend::run_program("systemctl", {"is-enabled", "unattended-upgrades.service"}, kQuickTimeoutS).out;
+        d.unattended_enabled = enabled.compare(0, 7, "enabled") == 0;
+    }
+    return d;
+}
+
+long long lists_time()
+{
+    // apt-get update leaves an InRelease file that did not change as it was (its mtime is the archive's): the success
+    // stamp Debian's apt writes after every update is the better figure; the files are the fallback and a floor
+    long long newest = mtime_of("/var/lib/apt/periodic/update-success-stamp");
+    if (DIR *dir = ::opendir("/var/lib/apt/lists")) {
+        while (const dirent *entry = ::readdir(dir)) {
+            const std::string name = entry->d_name;
+            if (ends_with(name, "_InRelease") || ends_with(name, "_Release"))
+                newest = std::max(newest, mtime_of("/var/lib/apt/lists/" + name));
+        }
+        ::closedir(dir);
+    }
+    return newest;
+}
+
+std::string refresh_status()
+{
+    std::string text;
+    launcher_update::read_file(kRefreshStatusPath, text);
+    return text;
+}
+
+long long now()
+{
+    return launcher_update::platform::now();
+}
+
+} // namespace platform
+} // namespace launcher_apt

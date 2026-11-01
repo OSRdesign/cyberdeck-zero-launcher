@@ -16,6 +16,7 @@
 #include "hal_lvgl_bsp.h"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <list>
@@ -264,12 +265,16 @@ void push_backend_to_mirror()
 
 // Settings > Apps is for sideloading: only the sources the user added themselves are shown. The built-in
 // CardputerZero Hub stays in the Store app.
-void task_refresh(const std::shared_ptr<Shared> &s)
+// The catalogue the page shows, and (P3) the count the Updates page's "App updates" row shows: one place for the filter.
+std::atomic<int> g_app_update_count{-1}; // -1: no catalogue read yet
+std::atomic<bool> g_app_update_reading{false};
+
+void load_catalogue(std::vector<apps_backend::App> &apps, std::vector<apps_backend::Source> &sources)
 {
     const auto summary = apps_backend::run({"--summary"}, 60);
     const auto registries = apps_backend::run({"--registries"}, 30);
-    auto apps = apps_backend::parse_apps(summary.out);
-    auto sources = apps_backend::parse_sources(registries.out);
+    apps = apps_backend::parse_apps(summary.out);
+    sources = apps_backend::parse_sources(registries.out);
     sources.erase(std::remove_if(sources.begin(), sources.end(),
                                  [](const apps_backend::Source &x) { return x.builtin; }),
                   sources.end());
@@ -277,6 +282,15 @@ void task_refresh(const std::shared_ptr<Shared> &s)
         return std::none_of(sources.begin(), sources.end(),
                             [&](const apps_backend::Source &x) { return x.name == app.source; });
     }), apps.end());
+    g_app_update_count = static_cast<int>(
+        std::count_if(apps.begin(), apps.end(), [](const apps_backend::App &app) { return app.upgradable(); }));
+}
+
+void task_refresh(const std::shared_ptr<Shared> &s)
+{
+    std::vector<apps_backend::App> apps;
+    std::vector<apps_backend::Source> sources;
+    load_catalogue(apps, sources);
     std::unique_lock<std::mutex> lock(s->mutex);
     s->apps = std::move(apps);
     s->sources = std::move(sources);
@@ -666,6 +680,26 @@ void Jobs::start_sudo()
         delete raw;
         shared->finish("Could not ask for the password");
     }
+}
+
+AppUpdates app_updates()
+{
+    AppUpdates updates;
+    const int count = g_app_update_count.load();
+    updates.known = count >= 0;
+    updates.count = count < 0 ? 0 : count;
+    return updates;
+}
+
+void refresh_app_updates()
+{
+    if (!Jobs::available() || g_app_update_reading.exchange(true)) return;
+    std::thread([] {
+        std::vector<apps_backend::App> apps;
+        std::vector<apps_backend::Source> sources;
+        load_catalogue(apps, sources);
+        g_app_update_reading = false;
+    }).detach();
 }
 
 } // namespace settings_apps

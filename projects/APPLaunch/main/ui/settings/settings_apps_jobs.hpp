@@ -44,6 +44,17 @@ struct JobsUpdate {
     std::string package_id;                    /* the app the running package job is for ("" none) */
 };
 
+/* Report 047 P3 (D19): the Updates page's "App updates" row. The installed apps with an update on offer, from the same
+ * catalogue and source list as this page (the backend's --summary and --registries, the same filter): the last list any
+ * worker read (the Apps page's own, or refresh_app_updates()). Read-only: no sync, no source added, nothing installed. */
+struct AppUpdates {
+    bool known = false; /* a catalogue was read */
+    int count = 0;      /* installed apps for which the catalogue offers a newer version */
+};
+AppUpdates app_updates();
+/* A detached worker re-reads the catalogue (local: no network); a second call while one runs does nothing. */
+void refresh_app_updates();
+
 class Jobs {
 public:
     struct Shared;

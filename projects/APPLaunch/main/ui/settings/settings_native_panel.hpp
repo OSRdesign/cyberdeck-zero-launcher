@@ -50,6 +50,9 @@ struct SettingsNativePanelContext {
     lv_group_t *group;              /* the page's input group (NULL: none) */
     std::vector<std::string> title; /* the host's title path to this page: "Settings", "System", "About" */
     std::function<void()> back;     /* the host's back action (posted) */
+    /* Updates (report 047 P3, D19): close this page and open Settings > Apps on its Installed level. False when this
+     * Settings has no Apps row. */
+    std::function<bool()> open_apps_installed;
 };
 
 std::unique_ptr<SettingsNativePanel> settings_native_panel_create(const NodeIter &node,

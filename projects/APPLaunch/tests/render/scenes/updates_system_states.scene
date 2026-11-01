@@ -1,0 +1,123 @@
+# Settings > Updates > System packages (report 047 P3): the states of the page and of its row on the Updates page.
+#   1. the scan has not ended: "checking", "Reading the package lists..."; then it ends
+#   2. nothing to upgrade: the lists are from today, "Up to date" in green, the page says "Nothing to upgrade"; the
+#      detection rows (D18, shown and never changed): automatic updates on, 2 held packages
+#   3. the deck's capture: apt offers Debian's own 2048 [0.1.0 -> 1.0.3-1], and 2048 is a Store app: not an update, left
+#      out ("Store apps left out 1"), still "Up to date"
+#   4. the lists were never refreshed: "not checked", the page says to refresh first
+#   5. the lists are 9 days old: "Lists are 9 days old"
+#   6. apt gives no plan (a lock, a broken dpkg): "Check failed"
+#   7. no apt-get at all
+# Keys only. Review only: no golden; the headers are checked against the home grid's.
+title updates system states
+review
+sizes 640x480 480x800 480x640 720x720 1280x800 480x320
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+env HARNESS_APPS catalogue
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+apps Settings CLI SSH Calculator
+clock 20:30 2026-11-01
+wifi 70
+bt on
+update net on
+update build 0.9.1 release arm64
+update answer releases-real.json
+apt board pending
+apt lists-age 0
+apt holds 2
+apt auto on
+home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+# 1. the scan does not end (the first scan of the run: no earlier result to show meanwhile)
+apt board pending
+key ENTER
+wait 1000
+shot states_pending_root
+expect_text "checking"
+key DOWN
+key ENTER
+wait 600
+shot states_pending
+expect_text "Reading the package lists..."
+apt lists-age 0
+apt board empty
+wait 4000
+shot states_pending_done
+key ESC
+key ESC
+# 2. nothing to upgrade
+key ENTER
+wait 4000
+shot states_empty_root
+expect_text "Up to date"
+key DOWN
+key ENTER
+wait 600
+shot states_empty
+expect_text "Nothing to upgrade"
+expect_text "Held packages"
+key ESC
+key ESC
+# 3. the deck
+apt board deck
+apt holds 0
+apt auto board
+key ENTER
+wait 4000
+key DOWN
+key ENTER
+wait 600
+shot states_store
+expect_text "Store apps left out"
+key ESC
+key ESC
+# 4. never refreshed
+apt board pi3a-dsi
+apt lists-age never
+key ENTER
+wait 4000
+shot states_never_root
+expect_text "not checked"
+key DOWN
+key ENTER
+wait 600
+shot states_never
+expect_text "never"
+key ESC
+key ESC
+# 5. old lists
+apt lists-age 9
+key ENTER
+wait 4000
+shot states_old_root
+expect_text "Lists are 9 days old"
+key DOWN
+key ENTER
+wait 600
+shot states_old
+key ESC
+key ESC
+# 6. no plan
+apt board error
+key ENTER
+wait 4000
+shot states_error_root
+expect_text "Check failed"
+key DOWN
+key ENTER
+wait 600
+shot states_error
+key ESC
+key ESC
+# 7. no apt-get
+apt board none
+key ENTER
+wait 4000
+expect_text "Check failed"
+key ESC

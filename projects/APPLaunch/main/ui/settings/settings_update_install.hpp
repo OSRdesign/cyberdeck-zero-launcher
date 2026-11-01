@@ -16,6 +16,7 @@
  */
 #pragma once
 
+#include "settings_apt_model.hpp"
 #include "settings_update_install_model.hpp"
 
 #include <cstdint>
@@ -28,6 +29,7 @@ struct RootSnapshot {
     bool asking = false;       /* the password prompt is up, or systemd-run runs */
     std::string error;         /* the last attempt's failure in words ("Wrong password", ...), "" none */
     std::uint64_t started = 0; /* increases each time the helper's unit was started */
+    std::uint64_t apt_started = 0; /* the same for a package-list refresh (P3: systemd-run ... apt-refresh) */
 };
 
 class RootJob {
@@ -40,16 +42,20 @@ public:
     bool apply(const ApplyRequest &request);
     /* The same for ... resume --user USER. */
     bool resume(const std::string &user);
+    /* P3: the same prompt, then systemd-run ... cyberdeckzero-update apt-refresh --user USER (apt-get update in a
+     * transient unit: apt_started counts the starts). */
+    bool refresh_lists(const std::string &user);
     void clear_error() { snap_.error.clear(); }
 
 private:
     RootJob() = default;
-    bool run(const std::vector<std::string> &argv);
+    bool run(const std::vector<std::string> &argv, bool apt = false);
     static void output_cb(const char *data, std::size_t size, void *user);
     static void complete_cb(int result, int exit_code, void *user);
 
     RootSnapshot snap_;
     std::string output_;
+    bool apt_request_ = false; /* the request asked is a list refresh */
 };
 
 /* The sudo service's result (cp0_sudo_result_t) and systemd-run's output in words. */

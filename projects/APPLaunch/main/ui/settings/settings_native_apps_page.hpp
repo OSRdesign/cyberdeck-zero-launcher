@@ -56,3 +56,7 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_apps_page_factory(
     lv_obj_t *parent, const NodeIter &page_node, std::function<void()> back_callback);
 
 std::unique_ptr<SettingsNativePanel> settings_apps_panel_create(const SettingsNativePanelContext &context);
+
+/* Report 047 P3 (D19): the next Apps page that opens starts on its Installed level (the Updates page's "App updates" row
+ * opens it there). Taken once: the page after that opens on the root as always. */
+void settings_apps_open_at_installed();

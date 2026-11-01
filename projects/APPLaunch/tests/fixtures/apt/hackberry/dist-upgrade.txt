@@ -1,0 +1,116 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages were automatically installed and are no longer required:
+  alacarte chromium-sandbox gir1.2-gmenu-3.0 gnome-menus gtk-nop libaml0t64
+  libfuse2t64 libgnome-menu-3-0 libmicrohttpd12t64 libneatvnc0 liborcania2.3
+  libqt5x11extras5 libulfius2.7t64 libwlroots-0.19 libyaml-cpp0.8
+  libyder2.0t64 linux-headers-6.12.47+rpt-common-rpi
+  linux-headers-6.12.47+rpt-rpi-2712 linux-headers-6.12.47+rpt-rpi-v8
+  linux-headers-6.12.62+rpt-common-rpi linux-headers-6.12.62+rpt-rpi-2712
+  linux-headers-6.12.62+rpt-rpi-v8 linux-headers-6.12.75+rpt-common-rpi
+  linux-headers-6.12.75+rpt-rpi-2712 linux-headers-6.12.75+rpt-rpi-v8
+  linux-image-6.12.47+rpt-rpi-2712 linux-image-6.12.47+rpt-rpi-v8
+  linux-image-6.12.62+rpt-rpi-2712 linux-image-6.12.62+rpt-rpi-v8
+  linux-image-6.12.75+rpt-rpi-2712 linux-image-6.12.75+rpt-rpi-v8
+  linux-kbuild-6.12.47+rpt linux-kbuild-6.12.62+rpt linux-kbuild-6.12.75+rpt
+  python3-asgiref python3-click python3-dotenv python3-flask python3-gi-cairo
+  python3-itsdangerous python3-pyasyncore python3-pyinotify python3-werkzeug
+  retry
+Use 'apt autoremove' to remove them.
+The following packages will be upgraded:
+  chromium chromium-common chromium-l10n chromium-sandbox firefox imagemagick
+  imagemagick-7-common imagemagick-7.q16 libbrotli1 libheif-plugin-dav1d
+  libheif-plugin-libde265 libheif1 libmagickcore-7.q16-10
+  libmagickcore-7.q16-10-extra libmagickwand-7.q16-10 libvlc-bin libvlc5
+  libvlccore9 openjdk-25-jre openjdk-25-jre-headless pipanel raspi-config
+  raspi-config-core rpi-eeprom temurin-17-jre tzdata vlc vlc-bin vlc-data
+  vlc-l10n vlc-plugin-access-extra vlc-plugin-base vlc-plugin-notify
+  vlc-plugin-qt vlc-plugin-samba vlc-plugin-skins2 vlc-plugin-video-output
+  vlc-plugin-video-splitter vlc-plugin-visualization wf-panel-pi
+40 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst libheif-plugin-libde265 [1.23.4-1~deb13u1] (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64]) [libheif1:arm64 ]
+Inst libheif1 [1.23.4-1~deb13u1] (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64]) [libheif-plugin-dav1d:arm64 ]
+Inst libheif-plugin-dav1d [1.23.4-1~deb13u1] (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst libbrotli1 [1.1.0-2+b7] (1.1.0-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst imagemagick-7-common [8:7.1.1.43+dfsg1-1+deb13u12] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [all])
+Inst libmagickcore-7.q16-10 [8:7.1.1.43+dfsg1-1+deb13u12] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst libmagickwand-7.q16-10 [8:7.1.1.43+dfsg1-1+deb13u12] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst tzdata [2026c-0+deb13u1] (2026f-0+deb13u1 Debian:13-updates/stable-updates [all])
+Inst chromium-l10n [1:155.0.8059.79-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [all]) []
+Inst chromium [1:155.0.8059.79-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64]) []
+Inst chromium-common [1:155.0.8059.79-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst chromium-sandbox [1:155.0.8059.79-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst firefox [157.0.1-1+rpt1] (158.0.1-1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst imagemagick-7.q16 [8:7.1.1.43+dfsg1-1+deb13u12] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst imagemagick [8:7.1.1.43+dfsg1-1+deb13u12] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst libmagickcore-7.q16-10-extra [8:7.1.1.43+dfsg1-1+deb13u12] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst vlc [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst vlc-plugin-base [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst vlc-data [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [all]) []
+Inst libvlccore9 [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst vlc-plugin-skins2 [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst vlc-plugin-qt [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst vlc-plugin-video-output [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst libvlc5 [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst vlc-bin [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64]) []
+Inst libvlc-bin [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst openjdk-25-jre [25.0.4.1+1-1~deb13u1] (25.0.5+8-1~deb13u1 Debian-Security:13/stable-security [arm64]) []
+Inst openjdk-25-jre-headless [25.0.4.1+1-1~deb13u1] (25.0.5+8-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst pipanel [1:2.25] (1:2.26 Raspberry Pi Foundation:stable [arm64])
+Inst raspi-config-core [20261026] (20261026+2 Raspberry Pi Foundation:stable [all])
+Inst raspi-config [20261026] (20261026+2 Raspberry Pi Foundation:stable [all])
+Inst rpi-eeprom [28.33-1] (28.34-1 Raspberry Pi Foundation:stable [all])
+Inst temurin-17-jre [17.0.20.1.0+1-0] (17.0.21.0.0+9-0 Artifactory:trixie [arm64])
+Inst vlc-l10n [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [all])
+Inst vlc-plugin-access-extra [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-notify [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-samba [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-video-splitter [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-visualization [1:3.0.24-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst wf-panel-pi [1.42] (1.43 Raspberry Pi Foundation:stable [arm64])
+Conf libheif-plugin-libde265 (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libheif1 (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libheif-plugin-dav1d (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libbrotli1 (1.1.0-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf imagemagick-7-common (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [all])
+Conf libmagickcore-7.q16-10 (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf libmagickwand-7.q16-10 (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf tzdata (2026f-0+deb13u1 Debian:13-updates/stable-updates [all])
+Conf chromium-l10n (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [all])
+Conf chromium (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf chromium-common (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf chromium-sandbox (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf firefox (158.0.1-1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf imagemagick-7.q16 (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf imagemagick (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf libmagickcore-7.q16-10-extra (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf vlc (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-base (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-data (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [all])
+Conf libvlccore9 (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-skins2 (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-qt (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-video-output (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf libvlc5 (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-bin (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf libvlc-bin (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf openjdk-25-jre (25.0.5+8-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf openjdk-25-jre-headless (25.0.5+8-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf pipanel (1:2.26 Raspberry Pi Foundation:stable [arm64])
+Conf raspi-config-core (20261026+2 Raspberry Pi Foundation:stable [all])
+Conf raspi-config (20261026+2 Raspberry Pi Foundation:stable [all])
+Conf rpi-eeprom (28.34-1 Raspberry Pi Foundation:stable [all])
+Conf temurin-17-jre (17.0.21.0.0+9-0 Artifactory:trixie [arm64])
+Conf vlc-l10n (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [all])
+Conf vlc-plugin-access-extra (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-notify (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-samba (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-video-splitter (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-visualization (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf wf-panel-pi (1.43 Raspberry Pi Foundation:stable [arm64])

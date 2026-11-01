@@ -1,0 +1,8 @@
+serial-console
+rss-reader
+system-monitor
+mesh-hop
+net-toolbox
+viz1090
+markdown-notes
+klondike-solitaire
