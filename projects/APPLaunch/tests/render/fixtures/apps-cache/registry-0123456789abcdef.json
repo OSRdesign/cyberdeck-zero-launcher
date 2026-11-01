@@ -1,0 +1,7 @@
+{"url":"https://example.invalid/deck-lab/registry.json","status":"ok","index":{"apps":[
+ {"uuid":"tools1","title":"Bench Tools","min_size":"640x480","portrait_min_size":"480x640"},
+ {"uuid":"meter","title":"Signal Meter","min_size":"480x320"},
+ {"uuid":"radar","title":"Packet Radar","min_size":"320x170","app":{"applaunch":{"desktop_entry":"applications/radar.desktop"}}},
+ {"uuid":"weather","title":"Weather Station with a long name","min_size":"800x480"},
+ {"uuid":"ruler","title":"Pocket Ruler"}
+]}}

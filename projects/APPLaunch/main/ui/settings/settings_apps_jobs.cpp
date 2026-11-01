@@ -11,6 +11,7 @@
 
 #include "settings_apps_model.hpp"
 #include "settings_apps_registry_mirror.hpp"
+#include "settings_apps_registry_needs.hpp"
 
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -274,6 +275,20 @@ void load_catalogue(std::vector<apps_backend::App> &apps, std::vector<apps_backe
     const auto summary = apps_backend::run({"--summary"}, 60);
     const auto registries = apps_backend::run({"--registries"}, 30);
     apps = apps_backend::parse_apps(summary.out);
+    // the screen fields are not in --summary: they come from the registries the backend caches (read only)
+    const auto needs = settings_apps::read_cache_needs();
+    for (apps_backend::App &app : apps) {
+        const auto found = needs.find(app.id);
+        if (found == needs.end()) continue;
+        app.min_size = found->second.min_size;
+        app.portrait_min_size = found->second.portrait_min_size;
+        // an installed app: the facts of its own .desktop (what the launcher itself applies), the registry's otherwise
+        settings_apps::ScreenNeeds own;
+        if (app.installed && settings_apps::read_desktop_needs(found->second.desktop, own)) {
+            app.min_size = own.min_size;
+            app.portrait_min_size = own.portrait_min_size;
+        }
+    }
     sources = apps_backend::parse_sources(registries.out);
     sources.erase(std::remove_if(sources.begin(), sources.end(),
                                  [](const apps_backend::Source &x) { return x.builtin; }),

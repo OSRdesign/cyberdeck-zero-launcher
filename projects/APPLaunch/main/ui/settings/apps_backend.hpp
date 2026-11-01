@@ -24,6 +24,8 @@ struct App {
     std::string package;
     std::string size;          // download size as the catalogue states it (bytes, "1.4 MB" or "online")
     bool installed = false;
+    std::string min_size;          // registry min_size "WxH" (X-MinSize, landscape); empty: none
+    std::string portrait_min_size; // registry portrait_min_size "WxH" (X-Portrait); empty: none
 
     /* True when the catalogue offers a newer version than the installed one (Debian version order). */
     bool upgradable() const;
