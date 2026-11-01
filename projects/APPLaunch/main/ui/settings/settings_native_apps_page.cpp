@@ -12,6 +12,8 @@
 
 #include "settings_native_apps_page.hpp"
 
+#include <atomic>
+
 #include "settings_apps_jobs.hpp"
 #include "settings_apps_model.hpp"
 
@@ -108,6 +110,8 @@ cp0::ui::CaptionTone tone_of(settings_apps::Severity severity)
     return cp0::ui::CaptionTone::Normal;
 }
 
+std::atomic<bool> g_open_at_installed{false};
+
 class AppsPanel : public SettingsNativePanel {
 public:
     explicit AppsPanel(const SettingsNativePanelContext &context)
@@ -134,6 +138,7 @@ public:
 
         if (!model_.backend_missing()) jobs_->load();
         rebuild(0);
+        if (g_open_at_installed.exchange(false)) set_level(Level::Installed);
         poll();
     }
 
@@ -658,4 +663,9 @@ std::unique_ptr<DComponens::LvglComponensBase> settings_apps_page_factory(lv_obj
                                                                          std::function<void()>)
 {
     return nullptr;
+}
+
+void settings_apps_open_at_installed()
+{
+    g_open_at_installed = true;
 }

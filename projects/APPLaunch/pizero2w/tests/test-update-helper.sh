@@ -479,6 +479,72 @@ check "free space: room for both: the update goes ahead (done)" '[ $RC = 0 ] && 
 check "backup: one only (no .new left behind), it has the share folder" '[ -d "$R/var/lib/cyberdeckzero-update/backup/files/usr/share/APPLaunch/share" ] && [ ! -e "$R/var/lib/cyberdeckzero-update/backup.new" ]'
 
 # ------------------------------------------------------------------------------------------------------------------
+# apt-refresh (report 047 P3): `apt-get update` and nothing else, in the same transient-unit way. A stand-in apt-get that
+# writes Status-Fd lines on fd 3 (a slow one: the status is read while it runs) or fails like a network error.
+APTBIN="$TMP/aptbin"; mkdir -p "$APTBIN"
+cat > "$APTBIN/apt-get" <<'EOF'
+#!/bin/sh
+printf 'apt-get %s\n' "$*" >> "$FAKE_CALLS"
+printf 'env LC_ALL=%s DEBIAN_FRONTEND=%s uid=%s\n' "${LC_ALL:-}" "${DEBIAN_FRONTEND:-}" "$(id -u)" >> "$FAKE_CALLS"
+case "${FAKE_APT_MODE:-ok}" in
+    ok)
+        printf 'dlstatus:1:0.0000:Working\n' >&3; sleep 2
+        printf 'dlstatus:2:50.5000:Retrieving file 2 of 4\n' >&3; sleep 3
+        printf 'dlstatus:4:100.0000:Retrieving file 4 of 4\n' >&3
+        echo "Get:1 http://deb.example/ trixie InRelease"; exit 0 ;;
+    fail)
+        echo "Err:1 http://deb.example/ trixie InRelease"
+        echo "E: Failed to fetch http://deb.example/dists/trixie/InRelease  Temporary failure resolving 'deb.example'"
+        exit 100 ;;
+esac
+EOF
+chmod 755 "$APTBIN/apt-get"
+aptrefresh() { # aptrefresh ARGS... (foreground; KEEP_CALLS=1: the calls log is not emptied first)
+    [ "${KEEP_CALLS:-0}" = 1 ] || : > "$CALLS"
+    OUT=$(PATH="$APTBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 \
+          sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" "$@" 2>&1); RC=$?
+}
+ast() { sed -n "s/^$1=//p" "$R/var/lib/cyberdeckzero-update/apt-status" 2>/dev/null | tail -n 1; }
+rm -f "$R/var/lib/cyberdeckzero-update/apt-status"
+STATUS_BEFORE=$(cat "$R/var/lib/cyberdeckzero-update/status" 2>/dev/null | cksum)
+: > "$CALLS"
+PATH="$APTBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 \
+    sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" apt-refresh --user "$U" > "$TMP/apt.out" 2>&1 &
+HP=$!
+SEEN=""; SEEN_TEXT=""; i=0
+while [ $i -lt 12 ] && kill -0 "$HP" 2>/dev/null; do
+    if [ "$(ast percent)" = 50 ]; then SEEN=50; SEEN_TEXT=$(ast text); [ "$(ast state)" = running ] && SEEN_STATE=running; break; fi
+    sleep 1; i=$((i + 1))
+done
+# a second refresh while the first runs is refused (its lock), the first goes on
+KEEP_CALLS=1; aptrefresh apt-refresh --user "$U"; KEEP_CALLS=0
+SECOND_RC=$RC; SECOND_OUT=$OUT
+wait "$HP"; RC=$?; OUT=$(cat "$TMP/apt.out")
+check "apt-refresh: apt-get update ran, the status followed its progress (50 %, the text) and ended done at 100 %" '[ $RC = 0 ] && [ "$SEEN" = 50 ] && [ "$SEEN_TEXT" = "Retrieving file 2 of 4" ] && [ "${SEEN_STATE:-}" = running ] && [ "$(ast state)" = done ] && [ "$(ast percent)" = 100 ] && [ -z "$(ast reason)" ] && [ -n "$(ast pid)" ] && [ -n "$(ast boot)" ] && [ -n "$(ast started)" ]'
+check "apt-refresh: a second refresh while one runs is refused (exit 2) and says why" '[ "$SECOND_RC" = 2 ] && case "$SECOND_OUT" in *"refresh is running"*) true ;; *) false ;; esac'
+check "apt-refresh: only ever apt-get update with Status-Fd, in the C locale, noninteractive, as root (no upgrade, install, remove, dist-upgrade)" '[ "$(grep "^apt-get " "$CALLS" | head -n 1)" = "apt-get update -o APT::Status-Fd=3" ] && ! grep -E "^apt-get .*(upgrade|install|remove|purge|autoremove|full-upgrade|dist-upgrade)" "$CALLS" >/dev/null && grep -q "^env LC_ALL=C DEBIAN_FRONTEND=noninteractive" "$CALLS"'
+check "apt-refresh: the status file is world-readable, apt's output is in its log, the update status is untouched" '[ "$(stat -c %a "$R/var/lib/cyberdeckzero-update/apt-status")" = 644 ] && [ -s "$R/var/log/cyberdeckzero/apt-refresh.log" ] && grep -q "^Get:1" "$R/var/log/cyberdeckzero/apt-refresh.log" && [ "$(cat "$R/var/lib/cyberdeckzero-update/status" 2>/dev/null | cksum)" = "$STATUS_BEFORE" ]'
+check "apt-refresh: no file in /tmp, nothing left in the run folder but its own files" '[ ! -e "$R/tmp" ] && [ ! -e "$R/run/cyberdeckzero-update/apt.fifo" ]'
+
+FAKE_APT_MODE=fail; export FAKE_APT_MODE
+aptrefresh apt-refresh --user "$U"
+unset FAKE_APT_MODE
+check "apt-refresh: apt fails (a network error): exit 1, state failed with apt's last E: line as the reason" '[ $RC = 1 ] && [ "$(ast state)" = failed ] && case "$(ast reason)" in "E: Failed to fetch http://deb.example/dists/trixie/InRelease"*) true ;; *) false ;; esac'
+
+aptrefresh apt-refresh
+check "apt-refresh: no --user: usage error (exit 2), apt-get not run" '[ $RC = 2 ] && ! grep -q "^apt-get " "$CALLS"'
+aptrefresh apt-refresh --user "bad name"
+check "apt-refresh: a user name that is not one: refused (exit 2), apt-get not run" '[ $RC = 2 ] && ! grep -q "^apt-get " "$CALLS"'
+aptrefresh apt-refresh --user "$U" --upgrade
+check "apt-refresh: an unknown option: refused (exit 2), apt-get not run" '[ $RC = 2 ] && ! grep -q "^apt-get " "$CALLS"'
+OUT=$(PATH="$APTBIN:$FAKEBIN:$PATH" UPDATE_ROOT="$R" sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" apt-refresh --user "$U" 2>&1); RC=$?
+check "apt-refresh: UPDATE_ROOT without UPDATE_FAKE_SYSTEM is refused (a test hook only)" '[ $RC = 2 ]'
+OUT=$(sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" help 2>&1); RC=$?
+check "help: names apt-refresh" '[ $RC = 0 ] && has "apt-refresh --user NAME"'
+rm -f "$R/var/lib/cyberdeckzero-update/apt-status.tmp."*
+# left in place for the uninstall below: apt-status goes with /var/lib/cyberdeckzero-update
+
+# ------------------------------------------------------------------------------------------------------------------
 # uninstall.sh takes away what P2 adds (the helper, install.conf, its status, backup, logs, work and run folders)
 : > "$CALLS"
 mkdir -p "$R/var/cache/cyberdeckzero-update" "$R$UHOME/.cache/cyberdeckzero/update" "$R$UHOME/.local/state/cyberdeckzero"

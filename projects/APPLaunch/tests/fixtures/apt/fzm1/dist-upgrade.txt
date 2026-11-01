@@ -1,0 +1,33 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages were automatically installed and are no longer required:
+  python3-certifi python3-chardet python3-requests python3-serial
+Use 'apt autoremove' to remove them.
+The following packages will be upgraded:
+  armbian-config fastfetch google-chrome-stable libadwaita-1-0 libbrotli1
+  qemu-utils ubuntu-helper-virt-hwe ubuntu-virt zlib1g
+9 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst google-chrome-stable [155.0.8059.84-1] (156.0.8078.47-1 Armbian:resolute [amd64])
+Inst zlib1g [1:1.3.dfsg+really1.3.1-1ubuntu3.1] (1:1.3.dfsg+really1.3.1-1ubuntu3.2 Ubuntu:26.04/resolute-security, Ubuntu:26.04/resolute-updates [amd64])
+Conf zlib1g (1:1.3.dfsg+really1.3.1-1ubuntu3.2 Ubuntu:26.04/resolute-security, Ubuntu:26.04/resolute-updates [amd64])
+Inst armbian-config [26.8.0-trunk.426.1021.065113] (26.8.0-trunk.426.1030.032129 armbian.github.io/configurator:github.armbian.com [all])
+Inst fastfetch [2.69.0] (2.70.0 Armbian:resolute [amd64])
+Inst libadwaita-1-0 [1.9.1-0ubuntu0.1] (1.9.1-0ubuntu0.2 Ubuntu:26.04/resolute-updates [amd64])
+Inst libbrotli1 [1.2.0-3build1] (1.2.0-3ubuntu0.1 Ubuntu:26.04/resolute-security, Ubuntu:26.04/resolute-updates [amd64])
+Inst ubuntu-helper-virt-hwe [1:10.2.1+ds-1ubuntu4.3] (1:10.2.1+ds-1ubuntu4.4 Ubuntu:26.04/resolute-updates [all])
+Inst ubuntu-virt [1:10.2.1+ds-1ubuntu3.2] (1:10.2.1+ds-1ubuntu3.3 Ubuntu:26.04/resolute-updates [amd64])
+Inst qemu-utils [1:10.2.1+ds-1ubuntu3.2] (1:10.2.1+ds-1ubuntu3.3 Ubuntu:26.04/resolute-updates [amd64])
+Conf google-chrome-stable (156.0.8078.47-1 Armbian:resolute [amd64])
+Conf armbian-config (26.8.0-trunk.426.1030.032129 armbian.github.io/configurator:github.armbian.com [all])
+Conf fastfetch (2.70.0 Armbian:resolute [amd64])
+Conf libadwaita-1-0 (1.9.1-0ubuntu0.2 Ubuntu:26.04/resolute-updates [amd64])
+Conf libbrotli1 (1.2.0-3ubuntu0.1 Ubuntu:26.04/resolute-security, Ubuntu:26.04/resolute-updates [amd64])
+Conf ubuntu-helper-virt-hwe (1:10.2.1+ds-1ubuntu4.4 Ubuntu:26.04/resolute-updates [all])
+Conf ubuntu-virt (1:10.2.1+ds-1ubuntu3.3 Ubuntu:26.04/resolute-updates [amd64])
+Conf qemu-utils (1:10.2.1+ds-1ubuntu3.3 Ubuntu:26.04/resolute-updates [amd64])

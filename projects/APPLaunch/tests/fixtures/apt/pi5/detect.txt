@@ -1,0 +1,5 @@
+unattended_installed=0
+unattended_enabled=0
+unattended_periodic=
+packagekit=1
+snapd=0

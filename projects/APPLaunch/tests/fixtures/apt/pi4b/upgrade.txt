@@ -1,0 +1,56 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages will be upgraded:
+  ca-certificates cifs-utils curl libbrotli1 libcamera-ipa libcamera0.7
+  libcurl3t64-gnutls libcurl4t64 libexpat1 liblzma5 libntfs-3g89t64
+  librpicam-app1 ntfs-3g raspi-config raspi-config-core rpi-connect-lite
+  rpi-eeprom rpicam-apps-core rpicam-apps-lite tzdata xz-utils
+21 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+Inst libexpat1 [2.8.3-1~deb13u1] (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst liblzma5 [5.8.1-1+deb13u1] (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf liblzma5 (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst tzdata [2026c-0+deb13u1] (2026e-0+deb13u1 Debian:13-updates/stable-updates [all])
+Inst ca-certificates [20250419] (20250419+deb13u1 Debian-Security:13/stable-security [all])
+Inst xz-utils [5.8.1-1+deb13u1] (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst cifs-utils [2:7.4-1] (2:7.4-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst libbrotli1 [1.1.0-2+b7] (1.1.0-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst curl [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64]) []
+Inst libcurl4t64 [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst libcamera0.7 [0.7.2+rpt20260817-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64]) []
+Inst libcamera-ipa [0.7.2+rpt20260817-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Inst libcurl3t64-gnutls [8.14.1-2+deb13u5] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst ntfs-3g [1:2022.10.3-5+deb13u2] (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64]) []
+Inst libntfs-3g89t64 [1:2022.10.3-5+deb13u2] (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Inst librpicam-app1 [1.13.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst raspi-config-core [20261026] (20261026+2 Raspberry Pi Foundation:stable [all])
+Inst raspi-config [20261026] (20261026+2 Raspberry Pi Foundation:stable [all])
+Inst rpi-connect-lite [2.13.0] (2.14.0 Raspberry Pi Foundation:stable [arm64])
+Inst rpi-eeprom [28.33-1] (28.34-1 Raspberry Pi Foundation:stable [all])
+Inst rpicam-apps-core [1.13.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst rpicam-apps-lite [1.13.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [all])
+Conf libexpat1 (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf tzdata (2026e-0+deb13u1 Debian:13-updates/stable-updates [all])
+Conf ca-certificates (20250419+deb13u1 Debian-Security:13/stable-security [all])
+Conf xz-utils (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf cifs-utils (2:7.4-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf libbrotli1 (1.1.0-2+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf curl (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libcurl4t64 (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libcamera0.7 (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcamera-ipa (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcurl3t64-gnutls (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf ntfs-3g (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf libntfs-3g89t64 (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf librpicam-app1 (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf raspi-config-core (20261026+2 Raspberry Pi Foundation:stable [all])
+Conf raspi-config (20261026+2 Raspberry Pi Foundation:stable [all])
+Conf rpi-connect-lite (2.14.0 Raspberry Pi Foundation:stable [arm64])
+Conf rpi-eeprom (28.34-1 Raspberry Pi Foundation:stable [all])
+Conf rpicam-apps-core (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf rpicam-apps-lite (1.14.0-1 Raspberry Pi Foundation:stable [all])

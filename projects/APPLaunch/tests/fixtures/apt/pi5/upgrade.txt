@@ -1,0 +1,570 @@
+NOTE: This is only a simulation!
+      apt-get needs root privileges for real execution.
+      Keep also in mind that locking is deactivated,
+      so don't depend on the relevance to the real current situation!
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Calculating upgrade...
+The following packages were automatically installed and are no longer required:
+  alacarte chromium-sandbox gir1.2-gmenu-3.0 gnome-menus gtk-nop libfuse2t64
+  libgnome-menu-3-0 libvncclient1 linux-base-6.18.33+rpt-rpi-2712
+  linux-base-6.18.33+rpt-rpi-v8 linux-headers-6.12.47+rpt-common-rpi
+  linux-headers-6.12.47+rpt-rpi-2712 linux-headers-6.12.47+rpt-rpi-v8
+  linux-headers-6.12.75+rpt-common-rpi linux-headers-6.12.75+rpt-rpi-2712
+  linux-headers-6.12.75+rpt-rpi-v8 linux-headers-6.18.33+rpt-common-rpi
+  linux-headers-6.18.33+rpt-rpi-2712 linux-headers-6.18.33+rpt-rpi-v8
+  linux-image-6.12.47+rpt-rpi-2712 linux-image-6.12.47+rpt-rpi-v8
+  linux-image-6.12.75+rpt-rpi-2712 linux-image-6.12.75+rpt-rpi-v8
+  linux-image-6.18.33+rpt-rpi-2712 linux-image-6.18.33+rpt-rpi-v8
+  linux-kbuild-6.12.47+rpt linux-kbuild-6.12.75+rpt linux-kbuild-6.18.33+rpt
+  python3-asgiref python3-click python3-dotenv python3-flask python3-gi-cairo
+  python3-itsdangerous python3-pyasyncore python3-pyinotify python3-werkzeug
+  retry vlc-l10n vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization
+Use 'apt autoremove' to remove them.
+The following packages have been kept back:
+  labwc libvlc-bin libvlc5 linux-base-rpi-2712 linux-base-rpi-v8
+  linux-headers-rpi-2712 linux-headers-rpi-v8 linux-image-rpi-2712
+  linux-image-rpi-v8 rpd-common rpd-preferences rpd-utilities rpd-wayland-core
+  rpd-wayland-extras rpi-swap vlc vlc-bin vlc-data vlc-plugin-base
+  vlc-plugin-qt vlc-plugin-skins2 vlc-plugin-video-output wayvnc
+The following packages will be upgraded:
+  agnostics at-spi2-common base-files bash binwalk bubblewrap busybox
+  ca-certificates chromium chromium-common chromium-l10n chromium-sandbox
+  cifs-utils curl dhcpcd-base dirmngr dnsmasq-base e2fsprogs ffmpeg firefox
+  ghostscript gir1.2-atk-1.0 gir1.2-gtk-3.0 gnupg-utils gpg gpg-agent
+  gpg-wks-client gpgconf gpgsm gpgv gstreamer1.0-alsa gstreamer1.0-gl
+  gstreamer1.0-plugins-bad gstreamer1.0-plugins-base gstreamer1.0-x gui-pkinst
+  gui-runcmd gui-updater gzip imagemagick imagemagick-7-common
+  imagemagick-7.q16 jq libatk-bridge2.0-0t64 libatk1.0-0t64 libatspi2.0-0t64
+  libaudit-common libaudit1 libavcodec61 libavdevice61 libavfilter10
+  libavformat61 libavutil59 libc-bin libc-dev-bin libc-l10n libc6 libc6-dev
+  libcamera-ipa libcamera-tools libcamera-v4l2 libcamera0.7 libcom-err2
+  libcurl3t64-gnutls libcurl4t64 libde265-0 libevent-2.1-7t64
+  libevent-core-2.1-7t64 libexpat1 libexpat1-dev libext2fs2t64 libfluidsynth3
+  libgs-common libgs10 libgs10-common libgstreamer-gl1.0-0
+  libgstreamer-plugins-bad1.0-0 libgstreamer-plugins-base1.0-0 libgtk-3-0t64
+  libgtk-3-common libgtk-layer-shell0 libheif-plugin-dav1d
+  libheif-plugin-libde265 libheif1 libjbig2dec0 libjq1 libjxl0.11 libldb2
+  liblzma5 libmagickcore-7.q16-10 libmagickcore-7.q16-10-extra
+  libmagickwand-7.q16-10 libmbedcrypto16 libnfs14 libntfs-3g89t64 libperl5.40
+  libpipewire-0.3-0t64 libpipewire-0.3-modules libpisp-common libpisp1
+  libpostproc58 libpython3.13 libpython3.13-dev libpython3.13-minimal
+  libpython3.13-stdlib librabbitmq4 libraw23t64 librpicam-app1 librsvg2-2
+  librsvg2-common libsdl2-image-2.0-0 libsmbclient0 libspa-0.2-bluetooth
+  libspa-0.2-libcamera libspa-0.2-modules libsqlite3-0 libsrt1.5-gnutls libss2
+  libssh2-1t64 libssl-dev libssl3t64 libswresample5 libswscale8 libtalloc2
+  libtdb1 libtevent0t64 libunbound8 libvlccore9 libwbclient0 linux-libc-dev
+  locales logsave lpplug-batt lpplug-bluetooth lpplug-clock lpplug-cpu
+  lpplug-cputemp lpplug-ejecter lpplug-gpu lpplug-magnifier lpplug-menu
+  lpplug-netman lpplug-power lpplug-updater lpplug-volumepulse lxpanel-pi merp
+  mkvtoolnix ntfs-3g openssl openssl-provider-legacy perl perl-base
+  perl-modules-5.40 pi-greeter pi-package pi-package-data pi-package-session
+  piclone pipanel pipewire pipewire-bin pipewire-libcamera pipewire-pulse
+  pishutdown piwiz pixtrix-icons pixtrix-theme pplug-ejecter-data
+  pplug-netman-schema pplug-power-data pplug-updater-data python3-binwalk
+  python3-flask python3-libcamera python3-picamera2 python3.13 python3.13-dev
+  python3.13-minimal python3.13-tk python3.13-venv qemu-user qemu-user-binfmt
+  qemu-user-static qt6ct raindrop raspberrypi-sys-mods raspi-config
+  raspi-config-core raspi-firmware rasputin rc-gui rp-prefapps rpcc
+  rpd-applications rpd-developer rpd-graphics rpd-plym-splash rpd-theme
+  rpd-wallpaper rpd-x-core rpd-x-extras rpi-connect rpi-eeprom rpi-gui-nop
+  rpi-imager rpi-loop-utils rpicam-apps rpicam-apps-core rpicam-apps-encoder
+  rpicam-apps-lite rpicam-apps-opencv-postprocess rpicam-apps-preview rpinters
+  rsync samba-libs sudopwd tzdata u-boot-tools vlc-l10n
+  vlc-plugin-access-extra vlc-plugin-notify vlc-plugin-samba
+  vlc-plugin-video-splitter vlc-plugin-visualization wf-panel-pi wfplug-batt
+  wfplug-bluetooth wfplug-clock wfplug-connect wfplug-cpu wfplug-cputemp
+  wfplug-ejecter wfplug-gpu wfplug-menu wfplug-netman wfplug-power
+  wfplug-squeek wfplug-updater wfplug-volumepulse wpasupplicant xserver-common
+  xserver-xorg-core xz-utils
+244 upgraded, 0 newly installed, 0 to remove and 23 not upgraded.
+Inst libc6-dev [2.41-12+rpt1+deb13u3] (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64]) []
+Inst libc-dev-bin [2.41-12+rpt1+deb13u3] (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64]) []
+Inst linux-libc-dev [1:6.18.39-1+rpt1] (1:6.18.50-1+rpt1 Raspberry Pi Foundation:stable [all]) []
+Inst libc6 [2.41-12+rpt1+deb13u3] (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Conf libc6 (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Inst base-files [13.8+deb13u6] (13.8+deb13u7 Debian:13.7/stable [arm64])
+Conf base-files (13.8+deb13u7 Debian:13.7/stable [arm64])
+Inst bash [5.2.37-2+b9] (5.2.37-2+b10 Debian:13.7/stable [arm64])
+Conf bash (5.2.37-2+b10 Debian:13.7/stable [arm64])
+Inst gzip [1.13-1] (1.13-1+deb13u1 Debian:13.7/stable [arm64])
+Conf gzip (1.13-1+deb13u1 Debian:13.7/stable [arm64])
+Inst libperl5.40 [5.40.1-6] (5.40.1-6+deb13u1 Debian:13.7/stable [arm64]) [perl:arm64 ]
+Inst perl [5.40.1-6] (5.40.1-6+deb13u1 Debian:13.7/stable [arm64]) []
+Inst perl-base [5.40.1-6] (5.40.1-6+deb13u1 Debian:13.7/stable [arm64]) []
+Conf perl-base (5.40.1-6+deb13u1 Debian:13.7/stable [arm64]) []
+Inst perl-modules-5.40 [5.40.1-6] (5.40.1-6+deb13u1 Debian:13.7/stable [all])
+Inst libc-bin [2.41-12+rpt1+deb13u3] (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Conf libc-bin (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Inst logsave [1.47.2-3+b11] (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Inst libext2fs2t64 [1.47.2-3+b11] (1.47.2-3+b12 Debian:13.7/stable [arm64]) [e2fsprogs:arm64 on libext2fs2t64:arm64] [e2fsprogs:arm64 ]
+Conf libext2fs2t64 (1.47.2-3+b12 Debian:13.7/stable [arm64]) [e2fsprogs:arm64 ]
+Inst e2fsprogs [1.47.2-3+b11] (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Inst libexpat1-dev [2.8.2-1~deb13u1] (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64]) []
+Inst libexpat1 [2.8.2-1~deb13u1] (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst libde265-0 [1.0.15-1+deb13u1] (1.0.15-1+deb13u2 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Inst libheif-plugin-dav1d [1.19.8-1+deb13u1] (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64]) [libheif1:arm64 ]
+Inst libheif1 [1.19.8-1+deb13u1] (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64]) [libheif-plugin-libde265:arm64 ]
+Inst libheif-plugin-libde265 [1.19.8-1+deb13u1] (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst liblzma5 [5.8.1-1+deb13u1] (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf liblzma5 (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst libraw23t64 [0.21.4-2] (0.21.4-2+deb13u1 Debian:13.7/stable [arm64])
+Inst imagemagick-7-common [8:7.1.1.43+dfsg1-1+deb13u11] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [all])
+Inst libmagickcore-7.q16-10 [8:7.1.1.43+dfsg1-1+deb13u11] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst libmagickwand-7.q16-10 [8:7.1.1.43+dfsg1-1+deb13u11] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst openssl-provider-legacy [3.5.6-1~deb13u2+rpt1] (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf openssl-provider-legacy (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst libssl-dev [3.5.6-1~deb13u2+rpt1] (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64]) []
+Inst libssl3t64 [3.5.6-1~deb13u2+rpt1] (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf libssl3t64 (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst python3.13-dev [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst python3.13-venv [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst python3.13 [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst libpython3.13-dev [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst libpython3.13 [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst libpython3.13-stdlib [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst python3.13-minimal [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64]) []
+Inst libpython3.13-minimal [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Inst tzdata [2026b-0+deb13u1] (2026f-0+deb13u1 Debian:13-updates/stable-updates [all])
+Inst libsqlite3-0 [3.46.1-7+deb13u1] (3.46.1-7+deb13u2 Debian:13.7/stable [arm64])
+Conf libsqlite3-0 (3.46.1-7+deb13u2 Debian:13.7/stable [arm64])
+Inst rsync [3.4.1+ds1-5+deb13u4] (3.5.0+ds1-0+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst raspi-firmware [1:1.20260521-3] (1:1.20260915-1 Raspberry Pi Foundation:stable [all])
+Inst libaudit-common [1:4.0.2-2] (1:4.0.2-2+deb13u1 Debian:13.7/stable [all])
+Conf libaudit-common (1:4.0.2-2+deb13u1 Debian:13.7/stable [all])
+Inst libaudit1 [1:4.0.2-2+b2] (1:4.0.2-2+deb13u1 Debian:13.7/stable [arm64])
+Conf libaudit1 (1:4.0.2-2+deb13u1 Debian:13.7/stable [arm64])
+Inst dhcpcd-base [1:10.1.0-11+deb13u3] (1:10.1.0-11+deb13u4 Debian:13.7/stable [arm64])
+Inst openssl [3.5.6-1~deb13u2+rpt1] (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst ca-certificates [20250419] (20250419+deb13u1 Debian-Security:13/stable-security [all])
+Inst libc-l10n [2.41-12+rpt1+deb13u3] (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [all])
+Inst locales [2.41-12+rpt1+deb13u3] (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [all])
+Inst xz-utils [5.8.1-1+deb13u1] (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst gir1.2-atk-1.0 [2.56.2-1+deb13u1] (2.56.2-1+deb13u2 Debian:13.7/stable [arm64]) []
+Inst at-spi2-common [2.56.2-1+deb13u1] (2.56.2-1+deb13u2 Debian:13.7/stable [all]) []
+Inst libatk-bridge2.0-0t64 [2.56.2-1+deb13u1] (2.56.2-1+deb13u2 Debian:13.7/stable [arm64]) []
+Inst libatk1.0-0t64 [2.56.2-1+deb13u1] (2.56.2-1+deb13u2 Debian:13.7/stable [arm64]) []
+Inst libatspi2.0-0t64 [2.56.2-1+deb13u1] (2.56.2-1+deb13u2 Debian:13.7/stable [arm64])
+Inst libgtk-3-common [1:3.24.49-3+rpt8] (1:3.24.49-3+rpt9 Raspberry Pi Foundation:stable [all])
+Inst libgtk-3-0t64 [1:3.24.49-3+rpt8] (1:3.24.49-3+rpt9 Raspberry Pi Foundation:stable [arm64])
+Inst agnostics [1.6] (1.7 Raspberry Pi Foundation:stable [arm64])
+Inst python3-binwalk [2.4.3+dfsg1-2] (2.4.3+dfsg1-2+deb13u1 Debian:13.7/stable [all])
+Inst binwalk [2.4.3+dfsg1-2] (2.4.3+dfsg1-2+deb13u1 Debian:13.7/stable [all])
+Inst bubblewrap [0.11.0-2+deb13u1] (0.12.0-1~deb13u1 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Inst busybox [1:1.37.0-6+b8] (1:1.37.0-6+b9 Debian:13.7/stable [arm64])
+Inst chromium-l10n [1:151.0.7922.108-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [all]) []
+Inst chromium [1:151.0.7922.108-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64]) []
+Inst chromium-common [1:151.0.7922.108-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst chromium-sandbox [1:151.0.7922.108-1~deb13u1+rpt1] (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst libtalloc2 [2:2.4.3+samba4.22.10+dfsg-0+deb13u2] (2:2.4.3+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Inst libtevent0t64 [2:0.16.2+samba4.22.10+dfsg-0+deb13u2] (2:0.16.2+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Inst libsmbclient0 [2:4.22.10+dfsg-0+deb13u2] (2:4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64]) []
+Inst libtdb1 [2:1.4.13+samba4.22.10+dfsg-0+deb13u2] (2:1.4.13+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64]) []
+Inst samba-libs [2:4.22.10+dfsg-0+deb13u2] (2:4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64]) []
+Inst libldb2 [2:2.11.0+samba4.22.10+dfsg-0+deb13u2] (2:2.11.0+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Inst libwbclient0 [2:4.22.10+dfsg-0+deb13u2] (2:4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Inst cifs-utils [2:7.4-1] (2:7.4-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Inst libssh2-1t64 [1.11.1-1+deb13u1] (1.11.1-1+deb13u2 Debian:13.7/stable [arm64])
+Inst curl [8.14.1-2+deb13u4] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64]) []
+Inst libcurl4t64 [8.14.1-2+deb13u4] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst gpgsm [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64]) []
+Inst gnupg-utils [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64]) []
+Inst gpg-wks-client [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64]) []
+Inst dirmngr [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64]) []
+Inst gpg [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64]) []
+Inst gpgconf [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64]) [gpg-agent:arm64 ]
+Inst gpg-agent [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Inst dnsmasq-base [2.91-1+deb13u1] (2.91-1+deb13u2 Debian:13.7/stable [arm64])
+Inst libswscale8 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64]) []
+Inst libavdevice61 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64]) []
+Inst libavformat61 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64]) []
+Inst libavfilter10 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64]) []
+Inst libavcodec61 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64]) []
+Inst libavutil59 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Inst libpostproc58 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Inst libswresample5 [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Inst librabbitmq4 [0.15.0-1+deb13u1] (0.15.0-1+deb13u2 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Inst libsrt1.5-gnutls [1.5.4-1] (1.5.4-1+deb13u1 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Inst libjxl0.11 [0.11.2-0.1~deb13u2] (0.11.2-0.1~deb13u3 Debian-Security:13/stable-security [arm64])
+Inst librsvg2-common [2.60.0+dfsg-1] (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64]) []
+Inst librsvg2-2 [2.60.0+dfsg-1] (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst ffmpeg [8:7.1.5-0+deb13u1+rpt1] (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Inst libevent-2.1-7t64 [2.1.12-stable-10+b1] (2.1.13-stable-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst firefox [153.0.4-1+rpt1] (158.0.1-1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst ghostscript [10.05.1~dfsg-1+deb13u1] (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [arm64]) []
+Inst libgs10 [10.05.1~dfsg-1+deb13u1] (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [arm64]) []
+Inst libgs10-common [10.05.1~dfsg-1+deb13u1] (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [all])
+Inst libgs-common [10.05.1~dfsg-1+deb13u1] (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [all])
+Inst libjbig2dec0 [0.20-1+b3] (0.20-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst gir1.2-gtk-3.0 [1:3.24.49-3+rpt8] (1:3.24.49-3+rpt9 Raspberry Pi Foundation:stable [arm64])
+Inst gpgv [2.4.7-21+deb13u1+b4] (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Inst libgstreamer-plugins-base1.0-0 [1.26.2-1+rpt3+deb13u1] (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Inst gstreamer1.0-alsa [1.26.2-1+rpt3+deb13u1] (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Inst libgstreamer-gl1.0-0 [1.26.2-1+rpt3+deb13u1] (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Inst gstreamer1.0-gl [1.26.2-1+rpt3+deb13u1] (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Inst gstreamer1.0-plugins-bad [1.26.2-3+rpt3+deb13u2] (1.26.2-3+rpt4+deb13u3 Raspberry Pi Foundation:stable [arm64]) []
+Inst gstreamer1.0-plugins-base [1.26.2-1+rpt3+deb13u1] (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64]) []
+Inst libgstreamer-plugins-bad1.0-0 [1.26.2-3+rpt3+deb13u2] (1.26.2-3+rpt4+deb13u3 Raspberry Pi Foundation:stable [arm64])
+Inst libcurl3t64-gnutls [8.14.1-2+deb13u4] (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Inst pipewire-pulse [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) []
+Inst libpipewire-0.3-modules [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) [pipewire:arm64 pipewire-bin:arm64 ]
+Inst libpipewire-0.3-0t64 [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) [pipewire:arm64 pipewire-bin:arm64 ]
+Inst libspa-0.2-libcamera [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) [pipewire:arm64 pipewire-bin:arm64 ]
+Inst libspa-0.2-bluetooth [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) [pipewire:arm64 pipewire-bin:arm64 ]
+Inst libspa-0.2-modules [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) [pipewire:arm64 pipewire-bin:arm64 ]
+Inst pipewire [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) [pipewire-bin:arm64 ]
+Inst pipewire-bin [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64]) []
+Inst libpisp1 [1.6.0-1] (1.7.0-1 Raspberry Pi Foundation:stable [arm64]) []
+Inst libpisp-common [1.6.0-1] (1.7.0-1 Raspberry Pi Foundation:stable [all]) []
+Inst libcamera0.7 [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64]) []
+Inst libcamera-ipa [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Inst libfluidsynth3 [2.4.4+dfsg-1+deb13u2] (2.4.4+dfsg-1+deb13u3 Debian:13.7/stable [arm64])
+Inst gstreamer1.0-x [1.26.2-1+rpt3+deb13u1] (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Inst gui-pkinst [0.23] (0.24 Raspberry Pi Foundation:stable [arm64])
+Inst gui-runcmd [0.2] (0.3 Raspberry Pi Foundation:stable [arm64])
+Inst gui-updater [1.3] (1.5 Raspberry Pi Foundation:stable [arm64])
+Inst imagemagick-7.q16 [8:7.1.1.43+dfsg1-1+deb13u11] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst imagemagick [8:7.1.1.43+dfsg1-1+deb13u11] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst jq [1.7.1-6+deb13u3] (1.7.1-6+deb13u4 Debian-Security:13/stable-security [arm64]) []
+Inst libjq1 [1.7.1-6+deb13u3] (1.7.1-6+deb13u4 Debian-Security:13/stable-security [arm64])
+Inst libcamera-tools [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64]) []
+Inst libcamera-v4l2 [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Inst libcom-err2 [1.47.2-3+b11] (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Inst libevent-core-2.1-7t64 [2.1.12-stable-10+b1] (2.1.13-stable-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Inst libgtk-layer-shell0 [0.9.0-2] (0.9.0-2+rpt2 Raspberry Pi Foundation:stable [arm64])
+Inst libmagickcore-7.q16-10-extra [8:7.1.1.43+dfsg1-1+deb13u11] (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Inst libmbedcrypto16 [3.6.5-0.1~deb13u1] (3.6.6-0.1~deb13u1 Debian:13.7/stable [arm64])
+Inst libnfs14 [5.0.2-1+b2] (5.0.2-1+deb13u1 Debian:13.7/stable [arm64])
+Inst ntfs-3g [1:2022.10.3-5+deb13u2] (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64]) []
+Inst libntfs-3g89t64 [1:2022.10.3-5+deb13u2] (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Inst librpicam-app1 [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst libsdl2-image-2.0-0 [2.8.8+dfsg-1] (2.8.8+dfsg-1+deb13u1 Debian:13.7/stable [arm64])
+Inst libss2 [1.47.2-3+b11] (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Inst libunbound8 [1.22.0-2+deb13u3] (1.26.2-0+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst libvlccore9 [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-batt [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-bluetooth [1.8] (1.15 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-clock [1.6] (1.14 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-cpu [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-cputemp [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst pplug-ejecter-data [1.9] (1.20 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-ejecter [1.9] (1.20 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-gpu [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-magnifier [1.0] (1.4 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-menu [1.18] (1.27 Raspberry Pi Foundation:stable [arm64])
+Inst pplug-netman-schema [1.11] (1.19 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-netman [1.11] (1.19 Raspberry Pi Foundation:stable [arm64])
+Inst pplug-power-data [1.8] (1.16 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-power [1.8] (1.16 Raspberry Pi Foundation:stable [arm64])
+Inst pplug-updater-data [1.5] (1.14 Raspberry Pi Foundation:stable [arm64])
+Inst raspi-config-core [20260730] (20261026+2 Raspberry Pi Foundation:stable [all])
+Inst raspi-config [20260730] (20261026+2 Raspberry Pi Foundation:stable [all])
+Inst lpplug-updater [1.5] (1.14 Raspberry Pi Foundation:stable [arm64])
+Inst lpplug-volumepulse [1.13] (1.20 Raspberry Pi Foundation:stable [arm64])
+Inst lxpanel-pi [1.7] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst merp [0.2] (0.4 Raspberry Pi Foundation:stable [arm64])
+Inst mkvtoolnix [92.0-1] (92.0-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Inst pi-greeter [1.2] (1.3 Raspberry Pi Foundation:stable [arm64])
+Inst pi-package-data [0.19] (0.20 Raspberry Pi Foundation:stable [all])
+Inst pi-package-session [0.19] (0.20 Raspberry Pi Foundation:stable [arm64])
+Inst pi-package [0.19] (0.20 Raspberry Pi Foundation:stable [arm64])
+Inst sudopwd [0.2] (0.3 Raspberry Pi Foundation:stable [arm64])
+Inst piclone [1.5] (1.6 Raspberry Pi Foundation:stable [arm64])
+Inst pipanel [1:2.10] (1:2.26 Raspberry Pi Foundation:stable [arm64])
+Inst pipewire-libcamera [1.4.2-1+rpt3] (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [all])
+Inst pishutdown [0.39] (0.43 Raspberry Pi Foundation:stable [arm64])
+Inst piwiz [1.6] (1.8 Raspberry Pi Foundation:stable [arm64])
+Inst pixtrix-icons [0.5] (0.6 Raspberry Pi Foundation:stable [all])
+Inst pixtrix-theme [0.4] (0.7 Raspberry Pi Foundation:stable [arm64])
+Inst python3-flask [3.1.1-1] (3.1.1-1+deb13u1 Debian:13.7/stable [all])
+Inst python3-libcamera [0.7.1+rpt20260609-1] (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Inst python3-picamera2 [0.3.37-1] (0.3.38-1 Raspberry Pi Foundation:stable [all])
+Inst python3.13-tk [3.13.5-2+deb13u4] (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Inst qemu-user [1:10.0.11+ds-0+deb13u1] (1:10.0.13+ds-0+deb13u1 Debian:13.7/stable [arm64]) [qemu-user-binfmt:arm64 ]
+Inst qemu-user-binfmt [1:10.0.11+ds-0+deb13u1] (1:10.0.13+ds-0+deb13u1 Debian:13.7/stable [arm64])
+Inst qemu-user-static [1:10.0.11+ds-0+deb13u1] (1:10.0.13+ds-0+deb13u1 Debian:13.7/stable [arm64])
+Inst qt6ct [0.10-2+b1] (0.10-2+rpt1 Raspberry Pi Foundation:stable [arm64])
+Inst raindrop [1.18] (1.24 Raspberry Pi Foundation:stable [arm64])
+Inst raspberrypi-sys-mods [1:20260612] (1:20260914 Raspberry Pi Foundation:stable [arm64])
+Inst rasputin [1.8] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst rc-gui [2.18] (2.22 Raspberry Pi Foundation:stable [arm64])
+Inst rp-prefapps [1.12] (1.17 Raspberry Pi Foundation:stable [arm64])
+Inst rpcc [0.16] (0.18 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-applications [1.18] (1.35 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-developer [1.18] (1.35 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-graphics [1.18] (1.35 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-plym-splash [0.47] (0.48 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-theme [1.18] (1.35 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-wallpaper [0.5] (0.6 Raspberry Pi Foundation:stable [all])
+Inst rpd-x-core [1.18] (1.35 Raspberry Pi Foundation:stable [arm64])
+Inst rpd-x-extras [1.18] (1.35 Raspberry Pi Foundation:stable [arm64])
+Inst rpi-connect [2.12.2] (2.14.0 Raspberry Pi Foundation:stable [arm64])
+Inst rpi-eeprom [28.28-1] (28.34-1 Raspberry Pi Foundation:stable [all])
+Inst rpi-gui-nop [0.1.0] (0.1.1 Raspberry Pi Foundation:stable [arm64])
+Inst rpi-imager [2.0.11-1] (2.0.12-1 Raspberry Pi Foundation:stable [arm64])
+Inst rpi-loop-utils [1.2.3] (1.2.4 Raspberry Pi Foundation:stable [all])
+Inst rpicam-apps-core [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst rpicam-apps-encoder [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst rpicam-apps-opencv-postprocess [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst rpicam-apps-preview [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Inst rpicam-apps [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [all])
+Inst rpicam-apps-lite [1.12.0-1] (1.14.0-1 Raspberry Pi Foundation:stable [all])
+Inst rpinters [1.9] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst u-boot-tools [2025.01-3] (2025.01-3+deb13u1 Debian:13.7/stable [arm64])
+Inst vlc-l10n [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [all])
+Inst vlc-plugin-access-extra [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-notify [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-samba [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-video-splitter [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst vlc-plugin-visualization [1:3.0.23-0+deb13u1+rpt2] (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst wf-panel-pi [1.13] (1.43 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-batt [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-bluetooth [1.8] (1.15 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-clock [1.6] (1.14 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-connect [1.11] (1.18 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-cpu [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-cputemp [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-ejecter [1.9] (1.20 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-gpu [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-menu [1.18] (1.27 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-netman [1.11] (1.19 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-power [1.8] (1.16 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-squeek [1.3] (1.11 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-updater [1.5] (1.14 Raspberry Pi Foundation:stable [arm64])
+Inst wfplug-volumepulse [1.13] (1.20 Raspberry Pi Foundation:stable [arm64])
+Inst wpasupplicant [2:2.10-24] (2:2.10-24+rpt3 Raspberry Pi Foundation:stable [arm64])
+Inst xserver-common [2:21.1.16-1.3+rpt1+deb13u3] (2:21.1.16-1.3+rpt1+deb13u4 Raspberry Pi Foundation:stable [all])
+Inst xserver-xorg-core [2:21.1.16-1.3+rpt1+deb13u3] (2:21.1.16-1.3+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Conf libc6-dev (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Conf libc-dev-bin (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])
+Conf linux-libc-dev (1:6.18.50-1+rpt1 Raspberry Pi Foundation:stable [all])
+Conf libperl5.40 (5.40.1-6+deb13u1 Debian:13.7/stable [arm64])
+Conf perl (5.40.1-6+deb13u1 Debian:13.7/stable [arm64])
+Conf perl-modules-5.40 (5.40.1-6+deb13u1 Debian:13.7/stable [all])
+Conf logsave (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Conf e2fsprogs (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Conf libexpat1-dev (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libexpat1 (2.9.0-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libde265-0 (1.0.15-1+deb13u2 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Conf libheif-plugin-dav1d (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libheif1 (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libheif-plugin-libde265 (1.23.6-2~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libraw23t64 (0.21.4-2+deb13u1 Debian:13.7/stable [arm64])
+Conf imagemagick-7-common (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [all])
+Conf libmagickcore-7.q16-10 (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf libmagickwand-7.q16-10 (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf libssl-dev (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf python3.13-dev (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf python3.13-venv (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf python3.13 (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf libpython3.13-dev (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf libpython3.13 (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf libpython3.13-stdlib (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf python3.13-minimal (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf libpython3.13-minimal (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf tzdata (2026f-0+deb13u1 Debian:13-updates/stable-updates [all])
+Conf rsync (3.5.0+ds1-0+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf raspi-firmware (1:1.20260915-1 Raspberry Pi Foundation:stable [all])
+Conf dhcpcd-base (1:10.1.0-11+deb13u4 Debian:13.7/stable [arm64])
+Conf openssl (3.5.7-1~deb13u3+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf ca-certificates (20250419+deb13u1 Debian-Security:13/stable-security [all])
+Conf libc-l10n (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [all])
+Conf locales (2.41-12+rpt1+deb13u4 Raspberry Pi Foundation:stable [all])
+Conf xz-utils (5.8.1-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf gir1.2-atk-1.0 (2.56.2-1+deb13u2 Debian:13.7/stable [arm64])
+Conf at-spi2-common (2.56.2-1+deb13u2 Debian:13.7/stable [all])
+Conf libatk-bridge2.0-0t64 (2.56.2-1+deb13u2 Debian:13.7/stable [arm64])
+Conf libatk1.0-0t64 (2.56.2-1+deb13u2 Debian:13.7/stable [arm64])
+Conf libatspi2.0-0t64 (2.56.2-1+deb13u2 Debian:13.7/stable [arm64])
+Conf libgtk-3-common (1:3.24.49-3+rpt9 Raspberry Pi Foundation:stable [all])
+Conf libgtk-3-0t64 (1:3.24.49-3+rpt9 Raspberry Pi Foundation:stable [arm64])
+Conf agnostics (1.7 Raspberry Pi Foundation:stable [arm64])
+Conf python3-binwalk (2.4.3+dfsg1-2+deb13u1 Debian:13.7/stable [all])
+Conf binwalk (2.4.3+dfsg1-2+deb13u1 Debian:13.7/stable [all])
+Conf bubblewrap (0.12.0-1~deb13u1 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Conf busybox (1:1.37.0-6+b9 Debian:13.7/stable [arm64])
+Conf chromium-l10n (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [all])
+Conf chromium (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf chromium-common (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf chromium-sandbox (1:156.0.8078.73-1~deb13u1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf libtalloc2 (2:2.4.3+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf libtevent0t64 (2:0.16.2+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf libsmbclient0 (2:4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf libtdb1 (2:1.4.13+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf samba-libs (2:4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf libldb2 (2:2.11.0+samba4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf libwbclient0 (2:4.22.11+dfsg-0+deb13u1 Debian:13.7/stable [arm64])
+Conf cifs-utils (2:7.4-1+deb13u2 Debian-Security:13/stable-security [arm64])
+Conf libssh2-1t64 (1.11.1-1+deb13u2 Debian:13.7/stable [arm64])
+Conf curl (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf libcurl4t64 (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf gpgsm (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf gnupg-utils (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf gpg-wks-client (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf dirmngr (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf gpg (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf gpgconf (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf gpg-agent (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf dnsmasq-base (2.91-1+deb13u2 Debian:13.7/stable [arm64])
+Conf libswscale8 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libavdevice61 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libavformat61 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libavfilter10 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libavcodec61 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libavutil59 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libpostproc58 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libswresample5 (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf librabbitmq4 (0.15.0-1+deb13u2 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Conf libsrt1.5-gnutls (1.5.4-1+deb13u1 Debian:13.7/stable, Debian-Security:13/stable-security [arm64])
+Conf libjxl0.11 (0.11.2-0.1~deb13u3 Debian-Security:13/stable-security [arm64])
+Conf librsvg2-common (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf librsvg2-2 (2.60.0+dfsg-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf ffmpeg (8:7.1.5-0+deb13u1+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libevent-2.1-7t64 (2.1.13-stable-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf firefox (158.0.1-1+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf ghostscript (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf libgs10 (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf libgs10-common (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [all])
+Conf libgs-common (10.05.1~dfsg-1+deb13u3 Debian-Security:13/stable-security [all])
+Conf libjbig2dec0 (0.20-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf gir1.2-gtk-3.0 (1:3.24.49-3+rpt9 Raspberry Pi Foundation:stable [arm64])
+Conf gpgv (2.4.7-21+deb13u1+b5 Debian:13.7/stable [arm64])
+Conf libgstreamer-plugins-base1.0-0 (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Conf gstreamer1.0-alsa (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Conf libgstreamer-gl1.0-0 (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Conf gstreamer1.0-gl (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Conf gstreamer1.0-plugins-bad (1.26.2-3+rpt4+deb13u3 Raspberry Pi Foundation:stable [arm64])
+Conf gstreamer1.0-plugins-base (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Conf libgstreamer-plugins-bad1.0-0 (1.26.2-3+rpt4+deb13u3 Raspberry Pi Foundation:stable [arm64])
+Conf libcurl3t64-gnutls (8.14.1-2+deb13u7 Debian-Security:13/stable-security [arm64])
+Conf pipewire-pulse (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf libpipewire-0.3-modules (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf libpipewire-0.3-0t64 (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf libspa-0.2-libcamera (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf libspa-0.2-bluetooth (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf libspa-0.2-modules (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf pipewire (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf pipewire-bin (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [arm64])
+Conf libpisp1 (1.7.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf libpisp-common (1.7.0-1 Raspberry Pi Foundation:stable [all])
+Conf libcamera0.7 (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcamera-ipa (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libfluidsynth3 (2.4.4+dfsg-1+deb13u3 Debian:13.7/stable [arm64])
+Conf gstreamer1.0-x (1.26.2-1+rpt3+deb13u2 Raspberry Pi Foundation:stable [arm64])
+Conf gui-pkinst (0.24 Raspberry Pi Foundation:stable [arm64])
+Conf gui-runcmd (0.3 Raspberry Pi Foundation:stable [arm64])
+Conf gui-updater (1.5 Raspberry Pi Foundation:stable [arm64])
+Conf imagemagick-7.q16 (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf imagemagick (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf jq (1.7.1-6+deb13u4 Debian-Security:13/stable-security [arm64])
+Conf libjq1 (1.7.1-6+deb13u4 Debian-Security:13/stable-security [arm64])
+Conf libcamera-tools (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcamera-v4l2 (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf libcom-err2 (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Conf libevent-core-2.1-7t64 (2.1.13-stable-1~deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libgtk-layer-shell0 (0.9.0-2+rpt2 Raspberry Pi Foundation:stable [arm64])
+Conf libmagickcore-7.q16-10-extra (8:7.1.1.43+dfsg1-1+deb13u13 Debian-Security:13/stable-security [arm64])
+Conf libmbedcrypto16 (3.6.6-0.1~deb13u1 Debian:13.7/stable [arm64])
+Conf libnfs14 (5.0.2-1+deb13u1 Debian:13.7/stable [arm64])
+Conf ntfs-3g (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf libntfs-3g89t64 (1:2022.10.3-5+deb13u3 Debian-Security:13/stable-security [arm64])
+Conf librpicam-app1 (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf libsdl2-image-2.0-0 (2.8.8+dfsg-1+deb13u1 Debian:13.7/stable [arm64])
+Conf libss2 (1.47.2-3+b12 Debian:13.7/stable [arm64])
+Conf libunbound8 (1.26.2-0+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf libvlccore9 (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-batt (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-bluetooth (1.15 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-clock (1.14 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-cpu (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-cputemp (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf pplug-ejecter-data (1.20 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-ejecter (1.20 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-gpu (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-magnifier (1.4 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-menu (1.27 Raspberry Pi Foundation:stable [arm64])
+Conf pplug-netman-schema (1.19 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-netman (1.19 Raspberry Pi Foundation:stable [arm64])
+Conf pplug-power-data (1.16 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-power (1.16 Raspberry Pi Foundation:stable [arm64])
+Conf pplug-updater-data (1.14 Raspberry Pi Foundation:stable [arm64])
+Conf raspi-config-core (20261026+2 Raspberry Pi Foundation:stable [all])
+Conf raspi-config (20261026+2 Raspberry Pi Foundation:stable [all])
+Conf lpplug-updater (1.14 Raspberry Pi Foundation:stable [arm64])
+Conf lpplug-volumepulse (1.20 Raspberry Pi Foundation:stable [arm64])
+Conf lxpanel-pi (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf merp (0.4 Raspberry Pi Foundation:stable [arm64])
+Conf mkvtoolnix (92.0-1+deb13u1 Debian-Security:13/stable-security [arm64])
+Conf pi-greeter (1.3 Raspberry Pi Foundation:stable [arm64])
+Conf pi-package-data (0.20 Raspberry Pi Foundation:stable [all])
+Conf pi-package-session (0.20 Raspberry Pi Foundation:stable [arm64])
+Conf pi-package (0.20 Raspberry Pi Foundation:stable [arm64])
+Conf sudopwd (0.3 Raspberry Pi Foundation:stable [arm64])
+Conf piclone (1.6 Raspberry Pi Foundation:stable [arm64])
+Conf pipanel (1:2.26 Raspberry Pi Foundation:stable [arm64])
+Conf pipewire-libcamera (1.4.2-1+rpt4 Raspberry Pi Foundation:stable [all])
+Conf pishutdown (0.43 Raspberry Pi Foundation:stable [arm64])
+Conf piwiz (1.8 Raspberry Pi Foundation:stable [arm64])
+Conf pixtrix-icons (0.6 Raspberry Pi Foundation:stable [all])
+Conf pixtrix-theme (0.7 Raspberry Pi Foundation:stable [arm64])
+Conf python3-flask (3.1.1-1+deb13u1 Debian:13.7/stable [all])
+Conf python3-libcamera (0.7.2+rpt20261009-1 Raspberry Pi Foundation:stable [arm64])
+Conf python3-picamera2 (0.3.38-1 Raspberry Pi Foundation:stable [all])
+Conf python3.13-tk (3.13.5-2+deb13u5 Debian:13.7/stable [arm64])
+Conf qemu-user (1:10.0.13+ds-0+deb13u1 Debian:13.7/stable [arm64])
+Conf qemu-user-binfmt (1:10.0.13+ds-0+deb13u1 Debian:13.7/stable [arm64])
+Conf qemu-user-static (1:10.0.13+ds-0+deb13u1 Debian:13.7/stable [arm64])
+Conf qt6ct (0.10-2+rpt1 Raspberry Pi Foundation:stable [arm64])
+Conf raindrop (1.24 Raspberry Pi Foundation:stable [arm64])
+Conf raspberrypi-sys-mods (1:20260914 Raspberry Pi Foundation:stable [arm64])
+Conf rasputin (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf rc-gui (2.22 Raspberry Pi Foundation:stable [arm64])
+Conf rp-prefapps (1.17 Raspberry Pi Foundation:stable [arm64])
+Conf rpcc (0.18 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-applications (1.35 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-developer (1.35 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-graphics (1.35 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-plym-splash (0.48 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-theme (1.35 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-wallpaper (0.6 Raspberry Pi Foundation:stable [all])
+Conf rpd-x-core (1.35 Raspberry Pi Foundation:stable [arm64])
+Conf rpd-x-extras (1.35 Raspberry Pi Foundation:stable [arm64])
+Conf rpi-connect (2.14.0 Raspberry Pi Foundation:stable [arm64])
+Conf rpi-eeprom (28.34-1 Raspberry Pi Foundation:stable [all])
+Conf rpi-gui-nop (0.1.1 Raspberry Pi Foundation:stable [arm64])
+Conf rpi-imager (2.0.12-1 Raspberry Pi Foundation:stable [arm64])
+Conf rpi-loop-utils (1.2.4 Raspberry Pi Foundation:stable [all])
+Conf rpicam-apps-core (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf rpicam-apps-encoder (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf rpicam-apps-opencv-postprocess (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf rpicam-apps-preview (1.14.0-1 Raspberry Pi Foundation:stable [arm64])
+Conf rpicam-apps (1.14.0-1 Raspberry Pi Foundation:stable [all])
+Conf rpicam-apps-lite (1.14.0-1 Raspberry Pi Foundation:stable [all])
+Conf rpinters (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf u-boot-tools (2025.01-3+deb13u1 Debian:13.7/stable [arm64])
+Conf vlc-l10n (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [all])
+Conf vlc-plugin-access-extra (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-notify (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-samba (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-video-splitter (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf vlc-plugin-visualization (1:3.0.24-0+deb13u1+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf wf-panel-pi (1.43 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-batt (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-bluetooth (1.15 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-clock (1.14 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-connect (1.18 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-cpu (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-cputemp (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-ejecter (1.20 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-gpu (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-menu (1.27 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-netman (1.19 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-power (1.16 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-squeek (1.11 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-updater (1.14 Raspberry Pi Foundation:stable [arm64])
+Conf wfplug-volumepulse (1.20 Raspberry Pi Foundation:stable [arm64])
+Conf wpasupplicant (2:2.10-24+rpt3 Raspberry Pi Foundation:stable [arm64])
+Conf xserver-common (2:21.1.16-1.3+rpt1+deb13u4 Raspberry Pi Foundation:stable [all])
+Conf xserver-xorg-core (2:21.1.16-1.3+rpt1+deb13u4 Raspberry Pi Foundation:stable [arm64])

@@ -34,6 +34,19 @@
  *   What's new  the notes as plain text with version headings (D9: no styling), newest first, the notes of every
  *             skipped version, at most 5 versions or about 24 KB, up to the marker <!-- launcher-notes-end --> or the
  *             line **Install** (D10); a TextBlock (drag, Up / Down, Page Up / Down, Home / End)
+ *   P3 (apt, LIST ONLY: nothing is upgraded from here, that is P4). The Updates level gains two rows between Launcher and
+ *             Check now: "System packages" (amber "<N> updates", green "Up to date", grey "Lists are N days old" /
+ *             "not checked") and "App updates" (amber "<N> updates", grey "None"; opens Settings > Apps > Installed, D19;
+ *             hidden without the Store backend).
+ *   System packages  "Refresh package lists" (its value: the lists' age; the dot; the shared sudo prompt, then systemd-run
+ *             ... cyberdeckzero-update apt-refresh: apt-get update in a transient unit, progress bar and the percent as the
+ *             value; D12: only on request), then the sections of the plan of `apt-get -s upgrade` (settings_apt_model.hpp):
+ *             "Safe to upgrade (N)", "Launcher libraries (N)" (the board's ldd closure, curl, the session services),
+ *             "Kernel, firmware and boot (N)" and "Needs the terminal (N)" (kept back by apt, removals: a row opens the page
+ *             with the command to run in a terminal), "On this board" (grey information: automatic updates, PackageKit,
+ *             snapd, holds, Store apps left out: D18, shown and never changed). Package rows: name, "old > new" in grey, the
+ *             grey information dot. The Store's own apps never appear as system updates. The status line says why the list
+ *             may mislead (never refreshed, N days old) or: upgrading from here comes later, the terminal now.
  *   keys      Up / Down, Enter / Right open or run the highlighted row, Esc / Left go back a level (the root:
  *             Settings); touch: a tap highlights a row, a tap on the highlighted row runs it, the header's Esc
  *

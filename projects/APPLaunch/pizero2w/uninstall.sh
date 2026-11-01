@@ -325,7 +325,7 @@ if exists "$WP_DROPIN"; then echo "  - $WP_DROPIN (desktop boards: WirePlumber B
 echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
 echo "    $CTL_BIN (and its link $ROOT/usr/local/bin/$CTL_BIN), $UPDATE_HELPER, lib/libapplaunch_vfb.so"
 echo "  - Settings > Updates' helper files: $UPDATE_STATE_DIR (its status and last backup), $UPDATE_WORK_DIR,"
-echo "    $UPDATE_RUN_DIR, $UPDATE_LOG_DIR/update-*.log"
+echo "    $UPDATE_RUN_DIR, $UPDATE_LOG_DIR/update-*.log and apt-refresh.log"
 case "$ASSETS_SOURCE" in
     none) echo "  - launcher assets in $APP_ROOT: NOT removed (no payload/share.manifest next to this script; use --payload DIR)" ;;
     *) echo "  - $(wc -l < "$ASSETS_TMP" | tr -d ' ') launcher asset files in $APP_ROOT (from $ASSETS_SOURCE)" ;;
@@ -486,7 +486,7 @@ say "Removing Settings > Updates' helper files"
 for d in "$UPDATE_STATE_DIR" "$UPDATE_WORK_DIR" "$UPDATE_RUN_DIR"; do
     if [ -d "$d" ]; then act $SUDO rm -rf "$d"; CHANGED_SYS=1; else note "already gone: $d"; fi
 done
-for f in "$UPDATE_LOG_DIR"/update-*.log; do
+for f in "$UPDATE_LOG_DIR"/update-*.log "$UPDATE_LOG_DIR/apt-refresh.log"; do
     if exists "$f"; then rm_sys "$f"; fi
 done
 if [ -d "$UPDATE_LOG_DIR" ] && [ -z "$(ls -A "$UPDATE_LOG_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$UPDATE_LOG_DIR"; fi

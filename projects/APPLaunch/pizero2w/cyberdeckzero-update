@@ -29,6 +29,14 @@
 #   cyberdeckzero-update resume --user NAME
 #       after an interruption (a power cut: the status says running and no helper runs): a new launcher that is healthy
 #       now finishes the update, anything else from step 4 on is rolled back; before step 4 nothing had changed
+#   cyberdeckzero-update apt-refresh --user NAME
+#       Settings > Updates > System packages > Refresh package lists (report 047 P3): `apt-get update` and nothing else
+#       (no upgrade, no install, no remove), run the same way, through ONE short command in the shared sudo prompt:
+#       systemd-run --unit=cyberdeckzero-apt --collect --quiet <this file> apt-refresh --user NAME. Progress from apt's
+#       Status-Fd (dlstatus: lines, a file in /run: no pipe, no /tmp) into /var/lib/cyberdeckzero-update/apt-status
+#       (key=value lines: v state (running, done, failed) percent text reason pid boot started updated; world-readable),
+#       written when the figure changes; apt's own output in /var/log/cyberdeckzero/apt-refresh.log (the last run). Refuses
+#       to start while another refresh runs. It never touches the update status file, the backup or the launcher.
 #   cyberdeckzero-update plan --bundle DIR --user NAME    the options it would replay and the plan check (changes nothing)
 #   cyberdeckzero-update options --user NAME              the install options it would replay
 #   cyberdeckzero-update status                           the status file
@@ -100,7 +108,7 @@ BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/sys
 /usr/local/bin/cyberdeckzero-ctl /usr/share/APPLaunch/preinstalled-desktop-apps.tsv
 /usr/share/APPLaunch/applications/vim.desktop.temple"
 
-usage() { sed -n '3,39p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,49p' "$0" | sed 's/^# \{0,1\}//'; }
 now() { date +%s; }
 say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*"; [ -z "${LOG:-}" ] || printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
 oneline() { printf '%s' "$1" | tr '\n\r' '  ' | cut -c1-300; }
@@ -617,6 +625,77 @@ cmd_resume() {
     rollback "the update was interrupted"
 }
 
+# the list refresh (P3): apt-get update with Status-Fd progress. apt-status is its own file: a launcher update's status
+# (STATUS) and this one never overwrite each other.
+APT_STATUS="$STATE_DIR/apt-status"
+A_STATE=""; A_PERCENT=""; A_TEXT=""; A_REASON=""; A_STARTED=""
+write_apt_status() {
+    mkdir -p "$STATE_DIR"
+    tmp="$APT_STATUS.tmp.$$"
+    {
+        echo "v=1"
+        echo "state=$A_STATE"
+        echo "percent=$A_PERCENT"
+        echo "text=$(oneline "$A_TEXT")"
+        echo "reason=$(oneline "$A_REASON")"
+        echo "pid=$$"
+        echo "boot=$(boot_id)"
+        echo "started=$A_STARTED"
+        echo "updated=$(now)"
+    } > "$tmp" && chmod 644 "$tmp" && mv -f "$tmp" "$APT_STATUS"
+}
+
+cmd_apt_refresh() {
+    USER_ARG=""
+    while [ $# -gt 0 ]; do
+        case "$1" in --user) USER_ARG=${2:-}; shift 2 ;; *) echo "unknown option $1" >&2; exit 2 ;; esac
+    done
+    [ -n "$USER_ARG" ] || { echo "apt-refresh needs --user NAME" >&2; exit 2; }
+    set_user "$USER_ARG"
+    mkdir -p "$RUN_DIR" && chmod 755 "$RUN_DIR"
+    exec 8> "$RUN_DIR/apt-lock"
+    flock -n 8 || { echo "a package list refresh is running" >&2; exit 2; }
+    mkdir -p "$LOG_DIR"
+    ALOG="$LOG_DIR/apt-refresh.log"
+    FDF="$RUN_DIR/apt-status-fd"
+    : > "$ALOG"; chmod 644 "$ALOG"; : > "$FDF"
+    A_STARTED=$(now); A_STATE=running; A_PERCENT=""; A_TEXT=""; A_REASON=""
+    write_apt_status
+    # apt-get update only: the lists, never a package. Fd 3 is apt's progress, in a file (a pipe would hide the exit status
+    # from this shell); the unit's own journal gets nothing but our log line.
+    LC_ALL=C DEBIAN_FRONTEND=noninteractive apt-get update -o APT::Status-Fd=3 3> "$FDF" > "$ALOG" 2>&1 < /dev/null 8>&- &
+    apid=$!
+    last=""
+    while kill -0 "$apid" 2>/dev/null; do
+        line=$(tail -n 1 "$FDF" 2>/dev/null)
+        if [ -n "$line" ] && [ "$line" != "$last" ]; then
+            last=$line
+            case "$line" in
+                dlstatus:*|pmstatus:*)
+                    rest=${line#*:}; rest=${rest#*:}
+                    pct=${rest%%:*}; txt=${rest#*:}; pct=${pct%%.*}
+                    case "$pct" in ""|*[!0-9]*) pct="" ;; esac
+                    if [ -n "$pct" ] && { [ "$pct" != "$A_PERCENT" ] || [ "$txt" != "$A_TEXT" ]; }; then
+                        A_PERCENT=$pct; A_TEXT=$txt
+                        write_apt_status
+                    fi ;;
+            esac
+        fi
+        sleep 1
+    done
+    wait "$apid"; rc=$?
+    if [ "$rc" = 0 ]; then
+        A_STATE=done; A_PERCENT=100; A_REASON=""
+    else
+        A_STATE=failed
+        A_REASON=$(grep '^E:' "$ALOG" | tail -n 1)
+        [ -n "$A_REASON" ] || A_REASON="apt-get update exited with status $rc"
+    fi
+    write_apt_status
+    echo "$(date +%H:%M:%S) apt-get update: $A_STATE (exit status $rc)"
+    [ "$rc" = 0 ]
+}
+
 cmd_plan() {
     BUNDLE=""; USER_ARG=""
     while [ $# -gt 0 ]; do
@@ -649,6 +728,7 @@ case "$cmd" in
     apply) need_root; run_from_copy apply "$@"; cmd_apply "$@" ;;
     resume) need_root; run_from_copy resume "$@"; cmd_resume "$@" ;;
     __install) cmd_install_inner "$@" ;;
+    apt-refresh) need_root; cmd_apt_refresh "$@" ;;
     plan) cmd_plan "$@" ;;
     options) cmd_options "$@" ;;
     status) if [ -f "$STATUS" ]; then cat "$STATUS"; else echo "no update has run"; fi ;;

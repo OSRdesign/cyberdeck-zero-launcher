@@ -62,9 +62,20 @@ bool RootJob::resume(const std::string &user)
     return run(argv);
 }
 
-bool RootJob::run(const std::vector<std::string> &args)
+bool RootJob::refresh_lists(const std::string &user)
+{
+    const std::vector<std::string> argv = launcher_apt::refresh_argv(user);
+    if (argv.empty()) {
+        snap_.error = "The refresh could not start";
+        return false;
+    }
+    return run(argv, true);
+}
+
+bool RootJob::run(const std::vector<std::string> &args, bool apt)
 {
     if (snap_.asking) return false;
+    apt_request_ = apt;
     std::vector<const char *> argv;
     for (const std::string &arg : args) argv.push_back(arg.c_str());
     argv.push_back(nullptr);
@@ -98,9 +109,9 @@ void RootJob::complete_cb(int result, int exit_code, void *user)
     if (!self) return;
     self->snap_.asking = false;
     if (result == CP0_SUDO_RESULT_SUCCESS && exit_code == 0) {
-        ++self->snap_.started;
+        ++(self->apt_request_ ? self->snap_.apt_started : self->snap_.started);
         self->snap_.error.clear();
-        SLOGI("[UPDATE] the update helper runs (unit cyberdeckzero-update)");
+        SLOGI("[UPDATE] the helper runs (unit %s)", self->apt_request_ ? launcher_apt::kRefreshUnit : "cyberdeckzero-update");
         return;
     }
     self->snap_.error = root_failure_text(result, exit_code, self->output_);

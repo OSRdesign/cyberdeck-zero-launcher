@@ -1,0 +1,7 @@
+serial-console
+markdown-notes
+mine-field
+system-monitor
+rss-reader
+net-toolbox
+klondike-solitaire

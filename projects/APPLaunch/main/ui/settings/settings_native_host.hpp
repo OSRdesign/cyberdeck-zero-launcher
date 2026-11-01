@@ -88,6 +88,7 @@ private:
     void poll_direct_toggles();
     void open_native(int index);
     void close_native();
+    bool open_apps_installed();
     void binding_done(std::uint64_t generation, const SettingEntry *entry);
     void choice_selected(int row, int index);
     void choice_status(int row, const std::string &text, bool error);

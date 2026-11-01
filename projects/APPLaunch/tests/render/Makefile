@@ -126,6 +126,10 @@ APPS_BACKEND_SYMS := _ZN12apps_backend(3run|11run_program|9available)E
 # src/harness_update.cpp, answering from the scene's fixtures; the rest of the feature is real code.
 UPDATE_PLATFORM_SRC := $(UI)/settings/settings_update_platform.cpp
 
+# Settings > Updates > System packages (report 047 P3): the apt scan's system side (apt-get -s, ldd, dpkg-query, the lists' age)
+# is src/harness_apt.cpp, answering from the P0 captures in tests/fixtures/apt; the scan, the classifier and the page are real.
+APT_PLATFORM_SRC := $(UI)/settings/settings_apt_platform.cpp
+
 # Launcher sources (real code).
 APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp launcher_update.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
@@ -141,7 +145,7 @@ APP_SRCS := $(addprefix $(UI)/,\
     page_app/ui_app_st_session.cpp page_app/ui_app_st_viewport.cpp \
     model/st_key_encoder.cpp model/terminal_unicode.cpp model/async_operation_lifecycle.cpp \
     multitask/display_handoff.cpp multitask/switcher_view.cpp multitask/switcher_model.cpp) \
-    $(filter-out $(APPS_JOBS_SRC) $(UPDATE_PLATFORM_SRC),$(wildcard $(UI)/settings/*.cpp))
+    $(filter-out $(APPS_JOBS_SRC) $(UPDATE_PLATFORM_SRC) $(APT_PLATFORM_SRC),$(wildcard $(UI)/settings/*.cpp))
 
 HARNESS_SRCS := $(wildcard $(HARNESS)/src/*.c $(HARNESS)/src/*.cpp)
 

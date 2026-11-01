@@ -1,0 +1,83 @@
+# Settings > Updates > System packages (report 047 P3): "Refresh lists". The lists are 9 days old (the page says to
+# refresh first). Refresh asks for the password (env HARNESS_SUDO ok: systemd-run "returns", nothing runs), the row turns to
+# "starting" with its dot blue and the bar under the status line; the scene then writes the helper's apt-status file as the
+# helper would: 37 %, the text apt gives; then done: the lists' age is today, the plan is read again. A second refresh fails
+# like a network error (apt's last E: line); with no network the refresh is refused before the password. Keys only.
+# Review only: no golden; the headers are checked against the home grid's.
+title updates system refresh
+review
+sizes 640x480 480x800 480x640 720x720 1280x800 480x320
+@480x800,480x640 profile pda
+env APPLAUNCH_DEV 0
+env HARNESS_SUDO ok
+env HARNESS_APPS catalogue
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+apps Settings CLI SSH Calculator
+clock 20:30 2026-11-01
+wifi 70
+bt on
+update net on
+update build 0.9.1 release arm64
+update answer releases-real.json
+apt board pi4b
+apt lists-age 9
+home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 4000
+key DOWN
+key ENTER
+wait 600
+shot refresh_stale
+expect_text "Lists are 9 days old: refresh them first"
+expect_text "9 days ago"
+# Refresh package lists: the password (here at once), the helper's unit started, no status yet
+key ENTER
+wait 800
+shot refresh_starting
+expect_text "starting"
+# apt-get update at 37 %
+apt refresh state running
+apt refresh started now-0
+apt refresh percent 37
+apt refresh text Retrieving file 2 of 4
+wait 1500
+shot refresh_progress
+header refresh_progress "Settings > Updates > Packages" "Updates > Packages" "Packages"
+expect_text "37 %"
+expect_text "Retrieving file 2 of 4"
+# done: the lists are from now, the plan is read again
+apt lists-age 0
+apt refresh state done
+apt refresh percent 100
+apt refresh text Done
+wait 4000
+shot refresh_done
+expect_text "today 17:30"
+expect_text "From a terminal: sudo apt-get upgrade"
+# a second refresh fails
+apt refresh clear
+key ENTER
+wait 800
+apt refresh state failed
+apt refresh started now-0
+apt refresh updated now-0
+apt refresh reason E: Failed to fetch
+wait 4000
+shot refresh_failed
+expect_text "Refresh failed: E: Failed to fetch"
+# no network: refused before the password
+apt refresh clear
+update net off
+key ENTER
+wait 800
+shot refresh_offline
+expect_text "No network"
+key ESC
+key ESC
+wait 300

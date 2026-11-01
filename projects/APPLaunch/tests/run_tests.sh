@@ -272,6 +272,15 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$build_dir/cJSON.o" \
     -o "$build_dir/test_settings_update_install_model"
 "$build_dir/test_settings_update_install_model" "$test_root/fixtures/update"
+# Report 047 P3, Settings > Updates > System packages (apt, list only): the simulation parser, the classifier (safe,
+# launcher libraries, boot chain, the terminal, the Store's apps left out) on the P0 captures of the six boards
+# (tests/fixtures/apt), the owner / ldd / installed.json parsers, detection and the page's texts
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    "$test_root/test_settings_apt_model.cpp" \
+    "$settings_ui_root/settings_apt_model.cpp" \
+    -o "$build_dir/test_settings_apt_model"
+"$build_dir/test_settings_apt_model" "$test_root/fixtures/apt"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     -DLAUNCHER_VERSION_RAW=0.8.12 -DLAUNCHER_CHANNEL_RAW=release \
     -I"$settings_ui_root" -I"$cjson_root" -I"$cp0_root/include" \

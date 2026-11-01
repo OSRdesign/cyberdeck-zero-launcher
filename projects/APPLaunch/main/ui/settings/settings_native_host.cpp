@@ -8,6 +8,7 @@
 
 #include "lvgl_components.hpp"
 #include "settings_keyboard_page.hpp"
+#include "settings_native_apps_page.hpp"
 #include "settings_native_panel.hpp"
 #include "settings_page.hpp"
 #include "ui_app_page.hpp"
@@ -472,9 +473,30 @@ void SettingsNativeHost::open_native(int index)
     clear_caption();
     native_row_ = index;
     page_->set_title(title_path()); /* before the page: a page with levels of its own sets deeper titles itself */
-    native_ = settings_native_panel_create(node, SettingsNativePanelContext{*page_, group, title_path(),
-                                                                            [this] { post([this] { back(); }); }});
+    native_ = settings_native_panel_create(
+        node, SettingsNativePanelContext{*page_, group, title_path(), [this] { post([this] { back(); }); },
+                                         [this] { return open_apps_installed(); }});
     if (!native_) close_native();
+}
+
+/* The Updates page's "App updates" row: this panel closes, Settings > Apps opens on Installed (posted: the panel is in its
+ * own event). The Apps page's own Esc goes back to this list. */
+bool SettingsNativeHost::open_apps_installed()
+{
+    if (native_row_ < 0) return false;
+    for (int i = 0; i < static_cast<int>(rows_.size()); ++i) {
+        if (rows_[static_cast<size_t>(i)]->type != RowType::Native ||
+            settings_native_page(rows_[static_cast<size_t>(i)]->node) != SettingsNativePage::Apps)
+            continue;
+        post([this, i] {
+            if (native_row_ < 0) return;
+            close_native();
+            settings_apps_open_at_installed();
+            open_native(i);
+        });
+        return true;
+    }
+    return false;
 }
 
 void SettingsNativeHost::close_native()
