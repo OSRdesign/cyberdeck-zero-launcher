@@ -358,6 +358,11 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_screensaver_clock_layout.cpp" \
     -o "$build_dir/test_screensaver_clock_layout"
 "$build_dir/test_screensaver_clock_layout"
+# A system suspend is told from the clocks only (CLOCK_BOOTTIME minus CLOCK_MONOTONIC), never from a stalled thread
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    "$test_root/test_resume_detector.cpp" \
+    -o "$build_dir/test_resume_detector"
+"$build_dir/test_resume_detector"
 ${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \
     -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_ui_metrics.c" \

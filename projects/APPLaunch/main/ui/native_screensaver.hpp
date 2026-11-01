@@ -22,6 +22,9 @@ bool filter_key(const struct key_item *item);
 
 bool active();
 
+/* The render harness: what the idle timer does when it finds the machine slept for that long (no clock involved). */
+void resume_for_test(int slept_seconds);
+
 /* External apps own the framebuffer: the saver is paused while one runs. */
 void set_enabled(bool enabled);
 
