@@ -2508,6 +2508,10 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     } else if (cmd == "screensaver") {
         native_screensaver::init(); /* ui_screensaver_init() does this on the Pi */
         settle(50);
+    } else if (cmd == "resume") {
+        /* resume [SECONDS]: the machine woke from a system suspend (native_screensaver's detector fired) */
+        native_screensaver::resume_for_test(w.size() > 1 ? std::atoi(w[1].c_str()) : 7);
+        settle(200);
     } else if (cmd == "metrics") {
         /* what the layout service computed for this size, plus what the launcher exported to its children */
         if (w.size() != 2) return fail(scene, line, "usage: metrics NAME");

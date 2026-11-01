@@ -1060,14 +1060,9 @@ int cp0_display_suspended(void)
     return suspended ? 1 : 0;
 }
 
-void cp0_display_resume(void)
+/* Every screen and layer of both displays, and the PDA band, marked for a full redraw (LVGL thread). */
+static void invalidate_everything(void)
 {
-    pthread_mutex_lock(&fb_lock);
-    const bool was = suspended;
-    suspended = false;
-    if (was && g.ready) pan_to(0); /* the launcher draws page 0 */
-    pthread_mutex_unlock(&fb_lock);
-    if (!was || !g.ready) return;
     lv_obj_invalidate(lv_display_get_screen_active(g.native));
     lv_obj_invalidate(lv_display_get_layer_top(g.native));
     lv_obj_invalidate(lv_display_get_layer_sys(g.native));
@@ -1077,12 +1072,35 @@ void cp0_display_resume(void)
         lv_obj_invalidate(lv_display_get_layer_top(g.compat));
         lv_obj_invalidate(lv_display_get_layer_sys(g.compat));
     }
+    if (zone.on) cp0_display_zone_invalidate();
+}
+
+void cp0_display_resume(void)
+{
+    pthread_mutex_lock(&fb_lock);
+    const bool was = suspended;
+    suspended = false;
+    if (was && g.ready) pan_to(0); /* the launcher draws page 0 */
+    pthread_mutex_unlock(&fb_lock);
+    if (!was || !g.ready) return;
+    invalidate_everything();
     if (zone.on) {
         /* the app drew over the band; a stroke or a held strip key from before is not finished now */
-        cp0_display_zone_invalidate();
         cp0_zone_router_reset(&zone.router, 0); /* a finger still down is swallowed (swallow_mode, the launcher sets it) */
         cp0_zone_ui_reset_input();
     }
+}
+
+void cp0_display_repaint_all(void)
+{
+    if (!g.ready) return;
+    pthread_mutex_lock(&fb_lock);
+    const bool app_owns_panel = suspended;
+    if (!app_owns_panel) pan_to(0);
+    pthread_mutex_unlock(&fb_lock);
+    if (app_owns_panel) return; /* an app draws there; the launcher's resume repaints when it comes back */
+    fprintf(stderr, "[dpi] full repaint\n");
+    invalidate_everything();
 }
 
 size_t cp0_display_fb_page_bytes(void)

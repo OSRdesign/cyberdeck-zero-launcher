@@ -1,0 +1,13 @@
+# Wake from a system suspend (tablet power key): the clock screen was up, the resume detector fires, the home grid shows
+# at once without a touch.
+title screensaver_resume
+review
+apps Settings CLI SSH Calculator
+clock 21:07 2026-10-10
+config dark_time 10
+home
+screensaver
+wait 10600
+shot clock_screen
+resume 7
+shot grid_after_resume

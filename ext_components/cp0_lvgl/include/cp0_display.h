@@ -110,6 +110,10 @@ void cp0_display_set_mode(cp0_display_mode_t mode);
  *    else gets the touches). 0 = done or already in that state, -1 = no touch device or the ioctl failed. */
 void cp0_display_suspend(void);
 void cp0_display_resume(void);
+/* The machine slept (system suspend) and the kernel may have cleared the framebuffer: panned back to page 0 and
+ * every screen and layer of both displays invalidated, so the next refresh rewrites the whole panel. LVGL thread.
+ * Does nothing while an app owns the panel (cp0_display_suspended) or before the display exists. */
+void cp0_display_repaint_all(void);
 int cp0_display_suspended(void);
 size_t cp0_display_fb_page_bytes(void);
 int cp0_display_fb_snapshot(void *dst, size_t len, int *page_y);

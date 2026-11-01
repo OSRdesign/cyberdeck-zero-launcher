@@ -14,6 +14,7 @@
 #include "launcher_media_controls.h"
 #include "launcher_zone.hpp"
 #include "lvgl/lvgl.h"
+#include "model/resume_detector.hpp"
 #include "model/screensaver_clock_layout.hpp"
 #include "model/screensaver_runtime_contract.hpp"
 #include "native_ui.hpp"
@@ -22,6 +23,7 @@
 
 #include <cstdint>
 #include <ctime>
+#include <time.h>
 #include <string>
 
 namespace {
@@ -35,6 +37,7 @@ lv_obj_t *s_time = nullptr;
 lv_obj_t *s_date = nullptr;
 lv_timer_t *s_idle_timer = nullptr;
 lv_timer_t *s_clock_timer = nullptr;
+ResumeDetector s_resume_detector;
 
 bool s_enabled = true;
 bool s_held = false; // hold(): a page keeps the screen awake (Settings > Updates while the update helper runs)
@@ -109,7 +112,7 @@ void ensure_overlay()
     lv_obj_add_flag(s_overlay, LV_OBJ_FLAG_HIDDEN);
 }
 
-void wake()
+void wake(bool swallow_touch = true)
 {
     if (!s_active) return;
     s_active = false;
@@ -122,7 +125,9 @@ void wake()
     launcher_zone::set_blank(false);
     if (s_saved_backlight > 0) launcher_media_controls::restore_backlight(s_saved_backlight);
     s_saved_backlight = -1;
-    cp0_display_set_touch_swallow(2); // the touch that woke us must not click anything
+    // The touch that woke us must not click anything. A wake by resume has no touch: activate() armed the swallow
+    // until cleared (mode 1), so it is lifted here and the first real touch goes through.
+    cp0_display_set_touch_swallow(swallow_touch ? 2 : 0);
     s_last_activity = lv_tick_get();
     SLOGI("[SAVER] woke");
 }
@@ -152,8 +157,36 @@ void activate()
     SLOGI("[SAVER] active");
 }
 
+// Milliseconds on a clock, or -1 where the clock does not exist.
+int64_t clock_ms(clockid_t id)
+{
+    struct timespec ts;
+    if (clock_gettime(id, &ts) != 0) return -1;
+    return static_cast<int64_t>(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
+}
+
+// The machine slept (suspend through logind on the tablet): this process was frozen, the LVGL tick (CLOCK_MONOTONIC)
+// did not run, and the kernel may have cleared the framebuffer. Repaint everything, start a whole idle interval, and
+// leave the clock screen so the grid shows at normal brightness without a touch.
+void on_resume(int64_t slept_ms)
+{
+    SLOGI("resume detected: slept %lld s", static_cast<long long>((slept_ms + 500) / 1000));
+    s_last_activity = lv_tick_get();
+    if (s_active) wake(false);
+    cp0_display_repaint_all();
+}
+
 void idle_timer_cb(lv_timer_t *)
 {
+#ifdef CLOCK_BOOTTIME
+    // Before the early returns: the saver being up, off or held does not change that the machine slept.
+    const int64_t boot = clock_ms(CLOCK_BOOTTIME);
+    const int64_t mono = clock_ms(CLOCK_MONOTONIC);
+    if (boot >= 0 && mono >= 0) {
+        const int64_t slept = s_resume_detector.sample(boot, mono);
+        if (slept > 0) on_resume(slept);
+    }
+#endif
     if (s_active || !s_enabled || s_held) return;
     const int seconds = timeout_seconds();
     if (seconds > 0 && lv_tick_elaps(s_last_activity) >= static_cast<uint32_t>(seconds) * 1000u) activate();
@@ -210,6 +243,11 @@ bool filter_key(const struct key_item *item)
 bool active()
 {
     return s_active;
+}
+
+void resume_for_test(int slept_seconds)
+{
+    on_resume(static_cast<int64_t>(slept_seconds) * 1000);
 }
 
 void set_enabled(bool enabled)
