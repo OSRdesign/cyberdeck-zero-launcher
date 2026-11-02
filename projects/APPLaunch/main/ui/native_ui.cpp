@@ -92,6 +92,7 @@ struct Layout {
     int tile_radius, tile_border, tile_border_sel;
     int icon, icon_top;
     const lv_font_t *label_font;
+    int label_px;
     int label_bottom, label_inset;
     int tb_pad_x, tb_pad_y, tb_gap, tb_radius;
     const lv_font_t *tb_text_font, *tb_symbol_font;
@@ -120,6 +121,7 @@ const Layout &layout()
         v.icon = s.icon;
         v.icon_top = s.icon_top;
         v.label_font = cp0_ui_font_px(s.label_px);
+        v.label_px = s.label_px;
         v.label_bottom = s.label_bottom;
         v.label_inset = s.label_inset;
         v.tb_pad_x = s.tb_pad_x;
@@ -265,6 +267,24 @@ void ensure_home()
     lv_obj_add_event_cb(s_grid, [](lv_event_t *) { move_update_outline(); }, LV_EVENT_SCROLL, nullptr);
 }
 
+// The font for a tile's name: the normal label font when the name fits `max_w`, else the next smaller compiled-in
+// sizes down to a floor of 80 % of it (the last one tried when none fits: the label then ends with an ellipsis)
+const lv_font_t *tile_label_font(const std::string &name, int max_w)
+{
+    const Layout &l = layout();
+    const lv_font_t *best = l.label_font;
+    const int floor_px = (l.label_px * 8 + 5) / 10;
+    for (int px = l.label_px;; px -= 2) {
+        const lv_font_t *font = px == l.label_px ? l.label_font : cp0_ui_font_px(px);
+        if (px != l.label_px && lv_font_get_line_height(font) >= lv_font_get_line_height(best)) break;
+        best = font;
+        lv_point_t size;
+        lv_text_get_size(&size, name.c_str(), font, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        if (size.x <= max_w || px - 2 < floor_px) break;
+    }
+    return best;
+}
+
 void build_tile(int index, const app &item)
 {
     const Layout &l = layout();
@@ -312,10 +332,15 @@ void build_tile(int index, const app &item)
 
     lv_obj_t *label = lv_label_create(tile);
     lv_obj_remove_flag(label, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_width(label, width - l.label_inset);
+    // One line, always: a name that is too wide for the tile first gets a smaller font (down to about 80 % of the normal
+    // size, the compiled-in sizes only), then an ellipsis. The height is fixed to the line, or the label would wrap and
+    // grow upwards over the icon (it is bottom aligned).
+    const int label_w = width - l.label_inset;
+    const lv_font_t *font = tile_label_font(item.Name, label_w);
+    lv_obj_set_size(label, label_w, lv_font_get_line_height(font));
     lv_label_set_long_mode(label, LV_LABEL_LONG_MODE_DOTS);
     lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_font(label, l.label_font, 0);
+    lv_obj_set_style_text_font(label, font, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
     lv_label_set_text(label, item.Name.c_str());
     lv_obj_align(label, LV_ALIGN_BOTTOM_MID, 0, -l.label_bottom);
