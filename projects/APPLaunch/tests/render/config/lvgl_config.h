@@ -209,6 +209,13 @@
 #undef CONFIG_LV_DRAW_SW_ASM_NEON
 #undef CONFIG_LV_USE_DRAW_SW_ASM
 #define CONFIG_LV_USE_DRAW_SW_ASM 0
+/* No LVGL OS layer, so no software draw thread: every frame is rendered on the thread that calls lv_refr_now.
+ * With the device's pthread layer a draw thread renders while the LVGL thread keeps walking the object tree and
+ * measuring text; on a loaded host about 1 frame in 100 came out with the tail of one row label missing (the same
+ * scene rendered twice differed: the flaky `twice` step, upgrade_deck_libraries at 480x640), never with a single
+ * thread (0 in 400). Pixels do not depend on which thread blends them, so the goldens are unchanged. */
+#undef CONFIG_LV_OS_PTHREAD
+#define CONFIG_LV_OS_NONE 1
 /* Image paths come from the harness filesystem service as "A:/<absolute path>". */
 #undef CONFIG_LV_FS_POSIX_PATH
 #define CONFIG_LV_FS_POSIX_PATH ""
