@@ -33,6 +33,8 @@
 #include "apps_backend.hpp"
 #include "apps_status_model.hpp"
 
+#include "settings_apps_compat.hpp"
+
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -56,6 +58,7 @@ enum class RowType {
     Update,
     Install,     /* an Available app's list: the install */
     Description, /* an app's list: its description (informational, a chevron: the read-only text page) */
+    Info,        /* an app's list: a read-only fact (Screen, Minimum size): grey, no chevron, does nothing */
     Remove,
     Enable,
     Disable,
@@ -138,6 +141,10 @@ public:
     /* A fresh catalogue and source list from the workers (the first one ends "Loading..."). */
     void set_lists(std::vector<apps_backend::App> apps, std::vector<apps_backend::Source> sources);
     bool loaded() const { return loaded_; }
+    /* The board's current logical screen (the panel): the Available list shows only the apps that fit it
+     * (settings_apps_compat.hpp); installed apps are always listed. 0 x 0 (unknown): every app fits. Returns true when
+     * it changed (the list is filtered again at the next rows()). */
+    bool set_screen(int width, int height);
     void set_sync(const apps_status::SyncProgress &sync) { sync_ = sync; }
     /* A job runs (nothing else starts); package_id: the app the running package job is for ("" none). */
     void set_busy(bool busy, const std::string &package_id = std::string());
@@ -168,6 +175,8 @@ public:
     std::string actions_description() const;
     /* The list's app or source is still there (a refreshed list may have lost it). */
     bool actions_valid() const;
+    /* The row an action list opens on: the first that is not a read-only fact (Info). */
+    int first_actionable_row() const;
     /* The row of the list's app or source on its level (where the highlight goes back to), -1 when it is gone. */
     int actions_row() const;
 
@@ -212,6 +221,7 @@ public:
 
 private:
     const apps_backend::App *app(const std::string &id) const;
+    bool fits(const apps_backend::App &entry) const;
     const apps_backend::Source *source(const std::string &url) const;
     Row row(int index) const;
     std::vector<Row> list_rows() const;
@@ -224,6 +234,8 @@ private:
     apps_status::SyncProgress sync_;
     Level level_ = Level::Root;
     bool loaded_ = false;
+    int screen_w_ = 0;
+    int screen_h_ = 0;
     bool backend_missing_ = false;
     bool busy_ = false;
     std::string package_id_;

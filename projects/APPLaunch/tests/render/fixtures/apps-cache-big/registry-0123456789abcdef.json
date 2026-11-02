@@ -1,0 +1,5 @@
+{"url":"https://example.invalid/deck-lab/registry.json","status":"ok","index":{"apps":[
+ {"uuid":"tools1","title":"Bench Tools","min_size":"2000x1500"},
+ {"uuid":"meter","title":"Signal Meter","min_size":"2000x1500"},
+ {"uuid":"ruler","title":"Pocket Ruler","min_size":"2000x1500"}
+]}}

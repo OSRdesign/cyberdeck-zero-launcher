@@ -205,9 +205,17 @@ private:
 
     /* The model's rows; rows that kept their kind change in place (the highlight and the scroll stay), otherwise the
      * list is rebuilt with the highlight on the same row (selected >= 0: on that row instead). */
+    /* The panel's current logical size (a PDA / portrait switch changes it at run time): the Available list follows. */
+    bool sync_screen()
+    {
+        const cp0_ui_metrics_t *panel = cp0_ui_metrics_panel();
+        return model_.set_screen(panel ? panel->w : 0, panel ? panel->h : 0);
+    }
+
     void rebuild(int selected = -1)
     {
         if (!roller_) return;
+        sync_screen();
         std::vector<Row> rows = model_.rows();
         std::vector<cp0::ui::RowSpec> specs;
         specs.reserve(rows.size());
@@ -322,7 +330,7 @@ private:
     {
         if (dialog_ || !model_.open_actions(index)) return;
         show_title();
-        rebuild(0);
+        rebuild(model_.first_actionable_row()); /* not on a read-only fact */
         show_caption();
     }
 
@@ -349,7 +357,7 @@ private:
     void poll()
     {
         settings_apps::JobsUpdate update = jobs_->take();
-        bool changed = false;
+        bool changed = sync_screen();
         if (update.lists) {
             model_.set_lists(std::move(update.apps), std::move(update.sources));
             changed = true;

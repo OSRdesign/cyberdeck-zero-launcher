@@ -132,7 +132,7 @@ APT_PLATFORM_SRC := $(UI)/settings/settings_apt_platform.cpp
 
 # Launcher sources (real code).
 APP_SRCS := $(addprefix $(UI)/,\
-    native_ui.cpp launcher_update.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
+    native_ui.cpp desktop_entry.cpp launcher_update.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp launcher_zone.cpp     pda_mode.cpp \
     launcher_ssh.cpp model/ssh_indicator_model.cpp \

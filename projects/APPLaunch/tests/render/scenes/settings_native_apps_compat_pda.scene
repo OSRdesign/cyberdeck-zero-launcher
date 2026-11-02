@@ -1,0 +1,37 @@
+# Settings > Apps > Available on the portrait PDA profile at 480x640 and 480x800: orientation hides nothing, an app is
+# judged as the turned landscape canvas (640x480 and 800x480), so every fixture app is listed and its page carries the
+# Screen and Minimum size rows. Review only, no golden.
+title settings native apps screen filter pda
+review
+sizes 480x640 480x800
+profile pda
+env APPLAUNCH_PDA 0
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+env HARNESS_APPS catalogue
+env HARNESS_APPS_DESC on
+env HARNESS_APPS_NEEDS on
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+key DOWN
+key ENTER
+wait 500
+shot compat_pda_list
+expect_rows "Bench Tools" "Pocket Ruler" "Signal Meter"
+key ENTER
+wait 500
+shot compat_pda_page
+expect_rows Screen "Minimum size" Description Install Cancel

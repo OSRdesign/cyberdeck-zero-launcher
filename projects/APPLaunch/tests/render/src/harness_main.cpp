@@ -1054,7 +1054,20 @@ void boot(Run &run)
     setenv("APPLAUNCH_STROKES_DIR", (harness::fixtures().resource_root + "/strokes").c_str(), 1);
     setenv("APPLAUNCH_STROKES_USER", "", 1);
     unsetenv("APPLAUNCH_STROKES_LOG");
+    /* Settings > Apps' screen fields (the registries the Store backend caches, an installed app's .desktop): nothing by
+     * default, never the machine's own; `env HARNESS_APPS_NEEDS on` points them at tests/render/fixtures/apps-cache and
+     * apps-root (big: apps-cache-big) */
+    setenv("M5APPSTORE_CACHE_DIR", "/nonexistent/harness-appstore-cache", 1);
+    setenv("M5APPSTORE_APP_ROOT", "/nonexistent/harness-appstore-root", 1);
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
+    if (run.profile.env.count("HARNESS_APPS_NEEDS")) { /* on: the usual fixture; big: every app needs 2000x1500 */
+        const std::string needs = run.profile.env["HARNESS_APPS_NEEDS"];
+        if (needs == "on" || needs == "big") {
+            setenv("M5APPSTORE_CACHE_DIR",
+                   (harness::fixtures().fixture_root + (needs == "big" ? "/apps-cache-big" : "/apps-cache")).c_str(), 1);
+            setenv("M5APPSTORE_APP_ROOT", (harness::fixtures().fixture_root + "/apps-root").c_str(), 1);
+        }
+    }
     /* screen.state lands next to the shots, never in the real runtime directory */
     const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";
     mkdirs(runtime);

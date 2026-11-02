@@ -122,9 +122,24 @@ int Model::installed_count() const
         std::count_if(apps_.begin(), apps_.end(), [](const apps_backend::App &entry) { return entry.installed; }));
 }
 
+bool Model::set_screen(int width, int height)
+{
+    if (width == screen_w_ && height == screen_h_) return false;
+    screen_w_ = width;
+    screen_h_ = height;
+    return true;
+}
+
+bool Model::fits(const apps_backend::App &entry) const
+{
+    return app_fits_screen(entry.min_size, screen_w_, screen_h_);
+}
+
 int Model::available_count() const
 {
-    return static_cast<int>(apps_.size()) - installed_count();
+    return static_cast<int>(std::count_if(apps_.begin(), apps_.end(), [this](const apps_backend::App &entry) {
+        return !entry.installed && fits(entry);
+    }));
 }
 
 const apps_backend::App *Model::app(const std::string &id) const
@@ -185,9 +200,17 @@ bool Model::actions_valid() const
     }
     if (level_ == Level::Available) {
         const apps_backend::App *chosen = app(actions_key_);
-        return chosen && !chosen->installed; /* installed meanwhile: nothing left to install */
+        return chosen && !chosen->installed && fits(*chosen); /* installed meanwhile, or the screen changed */
     }
     return source(actions_key_) != nullptr;
+}
+
+int Model::first_actionable_row() const
+{
+    const std::vector<Row> all = rows();
+    for (std::size_t i = 0; i < all.size(); ++i)
+        if (all[i].type != RowType::Info) return static_cast<int>(i);
+    return 0;
 }
 
 int Model::actions_row() const
@@ -269,6 +292,7 @@ void Model::add_apps(std::vector<Row> &rows, bool installed) const
     bool any = false;
     for (const apps_backend::App &entry : apps_) {
         if (entry.installed != installed) continue;
+        if (!installed && !fits(entry)) continue; /* an app for a bigger screen is not listed (installed ones always are) */
         rows.push_back({RowType::App, entry.id, entry.title, app_value(entry), busy_ && package_id_ == entry.id,
                         app_tone(entry)});
         any = true;
@@ -325,8 +349,16 @@ std::vector<Row> Model::action_rows() const
 {
     std::vector<Row> rows;
     auto add = [&](RowType type, const char *label) { rows.push_back({type, actions_key_, label, {}, false, Tone::Normal}); };
+    /* the app's screen facts (read-only, before the Description): nothing when it states none */
+    auto facts = [&](const apps_backend::App &chosen) {
+        const ScreenFacts f = screen_facts(chosen.min_size, chosen.portrait_min_size);
+        if (!f.screen.empty()) rows.push_back({RowType::Info, actions_key_, "Screen", f.screen, false, Tone::Muted});
+        if (!f.minimum.empty())
+            rows.push_back({RowType::Info, actions_key_, "Minimum size", f.minimum, false, Tone::Muted});
+    };
     if (level_ == Level::Installed) {
         if (const apps_backend::App *chosen = app(actions_key_)) {
+            facts(*chosen);
             const std::string line = first_line(chosen->description); /* no description: no row */
             if (!line.empty()) rows.push_back({RowType::Description, actions_key_, "Description", line, false, Tone::Muted});
             if (chosen->upgradable()) add(RowType::Update, "Update");
@@ -334,6 +366,7 @@ std::vector<Row> Model::action_rows() const
         }
     } else if (level_ == Level::Available) {
         if (const apps_backend::App *chosen = app(actions_key_)) {
+            facts(*chosen);
             const std::string line = first_line(chosen->description);
             if (!line.empty()) rows.push_back({RowType::Description, actions_key_, "Description", line, false, Tone::Muted});
             if (!chosen->installed) add(RowType::Install, "Install");
@@ -461,6 +494,7 @@ Action Model::activate(int index) const
     case RowType::Sources:
     case RowType::App:
     case RowType::Description:
+    case RowType::Info:
     case RowType::Cancel:
         break;
     }

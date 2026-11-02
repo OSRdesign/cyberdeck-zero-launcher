@@ -476,8 +476,24 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$settings_ui_root/apps_backend.cpp" \
     "$settings_ui_root/apps_status_model.cpp" \
     "$settings_ui_root/settings_apps_model.cpp" \
+    "$settings_ui_root/settings_apps_compat.cpp" \
+    "$settings_ui_root/../desktop_entry.cpp" \
     -o "$build_dir/test_settings_apps_model"
 "$build_dir/test_settings_apps_model"
+# Settings > Apps shows only the apps that fit the board's screen (the launcher's own X-MinSize / X-Portrait rule, the
+# registry reader on the backend's cache records, the Available list)
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" -I"$cjson_root" \
+    "$test_root/test_settings_apps_compat.cpp" \
+    "$settings_ui_root/apps_backend.cpp" \
+    "$settings_ui_root/apps_status_model.cpp" \
+    "$settings_ui_root/settings_apps_model.cpp" \
+    "$settings_ui_root/settings_apps_compat.cpp" \
+    "$settings_ui_root/settings_apps_registry_needs.cpp" \
+    "$settings_ui_root/../desktop_entry.cpp" \
+    "$build_dir/cJSON.o" \
+    -o "$build_dir/test_settings_apps_compat"
+"$build_dir/test_settings_apps_compat"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -I"$settings_ui_root" \
     -I"$test_root/../../AppStore/main/interface" \

@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Packet Radar
+Exec=/bin/true
+X-MinSize=640x480
+X-Portrait=480x640
