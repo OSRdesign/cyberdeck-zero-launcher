@@ -22,6 +22,7 @@
  * `env HARNESS_APPS_PACKAGE job` it answers a package job, so the page asks for the sudo password (with
  * `env HARNESS_SUDO prompt` the responsive prompt opens, harness_stubs.cpp).
  */
+#include "harness.h"
 #include "settings/apps_backend.hpp"
 
 #include <cstdlib>
@@ -186,12 +187,16 @@ bool available()
 apps_backend::Result run(const std::vector<std::string> &args, int)
 {
     const std::string command = arg(args, 0);
-    if (fixture_case() == "hold" && command == "--summary")
+    if (fixture_case() == "hold" && command == "--summary") {
+        const harness::BlockedWhile held([] { return true; }); /* never ends: not at work */
         for (;;) usleep(100 * 1000); /* the first list never comes */
+    }
     if (command == "--prepare-package") {
         const char *package = std::getenv("HARNESS_APPS_PACKAGE");
-        if (package && std::string(package) == "hold")
+        if (package && std::string(package) == "hold") {
+            const harness::BlockedWhile held([] { return true; });
             for (;;) usleep(100 * 1000); /* the package job never ends */
+        }
         if (package && std::string(package) == "job") /* prepared: the privileged step asks for the sudo password */
             return answer(0, "PACKAGE_JOB\t" + arg(args, 1) + "\t" + arg(args, 2) +
                                  "\t0\t\tharness-1\t/nonexistent/harness-appstore/pending\n");

@@ -207,5 +207,31 @@ std::string resolve_resource(const std::string &name);
  * cancelled); OK / Enter leaves it authenticating. False when a prompt is already open. LVGL thread. */
 bool sudo_prompt_request(std::function<void()> cancelled);
 
+/* ---- worker threads (harness_threads.cpp) ----
+ * Every thread the launcher code starts (std::thread, std::async, pthread_create: the link wraps pthread_create) is
+ * tracked from its start to its end. wait_workers() returns when none is at work, so what a scene shows never depends
+ * on how fast the host scheduled a worker: the apt scan and its plans, the update check, the Apps catalogue read.
+ * A worker is not at work while the scene deliberately holds it (apt board pending, an answer "pending", a hold):
+ * it says so with BlockedWhile, whose predicate tells whether the scene still holds it right now. A thread that
+ * neither ends nor says so within kWorkerGraceMs of real time (a poll loop that lives as long as its page) stops
+ * being waited for. Threads started inside an IgnoreNewThreads scope are never waited for (the launch's own
+ * background threads, such as the Store mirror's 3 s sleep). Call wait_workers() on the LVGL thread, holding no lock. */
+constexpr int kWorkerGraceMs = 2000;
+void wait_workers();
+class BlockedWhile {
+public:
+    explicit BlockedWhile(std::function<bool()> still_held);
+    ~BlockedWhile();
+    BlockedWhile(const BlockedWhile &) = delete;
+    BlockedWhile &operator=(const BlockedWhile &) = delete;
+};
+class IgnoreNewThreads {
+public:
+    IgnoreNewThreads();
+    ~IgnoreNewThreads();
+    IgnoreNewThreads(const IgnoreNewThreads &) = delete;
+    IgnoreNewThreads &operator=(const IgnoreNewThreads &) = delete;
+};
+
 } // namespace harness
 #endif
