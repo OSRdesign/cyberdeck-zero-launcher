@@ -1,0 +1,19 @@
+# Home tile names that do not fit the tile (2026-11-02): a name is one line and never touches the icon. Too wide for
+# the tile: a smaller font (down to about 80 % of the normal size), then an ellipsis. Short names ("Net Walk",
+# "Calculator") keep the normal size. 480x800 is the PDA portrait (profile pda). Review only: no golden; look at the
+# images (the long names must stay under their icons).
+title home long names
+review
+sizes 480x320 640x480 480x800
+@480x800 profile pda
+env APPLAUNCH_DEV 0
+clock 20:30
+wifi 70
+bt on
+apps "Home Assistant"=fixture:2048_128.png "Markdown Notes"=fixture:2048_128.png "System Monitor"=fixture:2048_128.png "Klondike Solitaire"=fixture:2048_128.png "Serial Console"=fixture:2048_128.png "Net Toolbox"=fixture:2048_128.png "Net Walk"=fixture:2048_128.png Calculator "Packet Radar Extended Edition"=fixture:2048_128.png "Mine Field"=fixture:2048_128.png Settings CLI
+home
+shot home_long_names
+key DOWN
+key DOWN
+key DOWN
+shot home_long_names_selected
