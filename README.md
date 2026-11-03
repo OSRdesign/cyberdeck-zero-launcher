@@ -155,9 +155,10 @@ puts its last picture back at once and it carries on where it was.
 ## Your own apps
 
 **Settings > Apps** installs and removes apps from any public GitHub repository you add as a source
-(`owner/repo`), so you can sideload your own. Our apps (LAN Scan, Mesh Hop, Net Toolbox, Serial Console, System
-Monitor, viz1090, Wi-Fi Survey) are in [cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps),
-which is also the template to host your own: see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
+(`owner/repo`), so you can sideload your own. Our apps (Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop,
+Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial Console, System Monitor, viz1090) are in
+[cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps), which is also the template to host your own:
+see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
 Settings > Apps shows the installed and the available version of each app (an update is marked in yellow, for
 example `0.1.2>0.1.3`), with **Update** for one app and **Update all** when several have one. An upgraded app
@@ -166,7 +167,9 @@ keeps its tile where it was on the home grid (the order is stored in `~/.config/
 `failed` with the reason), and installs, updates and removals show the step and the seconds taken, then a plain
 success or failure message. Each app shows its description: a **Description** row on an installed app's list, and a
 page with Description and **Install** before an available app is installed (the text is cut at 500 characters with
-dots; the long documentation is the app's README in its repository). With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
+dots; the long documentation is the app's README in its repository). Since v0.9.2 **Available lists only the apps that
+fit the screen** (the registry's `min_size`, a portrait screen judged turned; installed apps always stay listed), and an
+app's page shows its Screen and Minimum size. With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
 plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
 ## What is in this repository
@@ -188,8 +191,8 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 
 - **`main`** is for screens of 640x480 and more (and the portrait PDA screens). The apps that stay with it are the
   ones that meet 640x480: the built-in Settings, CLI, Python, SSH and Calculator, and from the apps repository
-  Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, RSS Reader, Serial Console, System Monitor and
-  viz1090.
+  Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial
+  Console, System Monitor and viz1090.
 - **`small-screen`** (created at v0.8.13, commit 5ddd2e9f) is the long-lived fork for 480x320-only screens. It keeps
   the Store screen and the 320x170 apps that main removed after v0.8.13 (the Store tile, Snake, Tank, IP Panel). There
   is no release from it for now. Changes flow from main to it by cherry-pick only (never a merge, which would bring
@@ -219,15 +222,27 @@ Since v0.8.13, **Settings > Updates** updates the launcher from the device:
 - It checks GitHub's releases when you open the page and once a day in the background (a toast announces a new
   version once), and shows **What's new**: the release notes of every version you skipped.
 - **Install** downloads the bundle with a progress bar, checks its sha256, asks for the sudo password, makes a backup
-  and installs it with the options of the first install. If the new version does not start within 90 s, the old one is
-  put back by itself.
+  and installs it with the options of the first install (recorded in `/etc/applaunch/install.conf`). If the new version
+  does not start within 90 s, the old one is put back by itself.
 - Only release-channel builds offer the install; a development or test build shows the notes only.
 - The first install of v0.8.13 over v0.8.12 or older is by hand (`sudo ./install.sh` from the bundle, as in Quick
   start); after that, Settings > Updates does it.
 - On the desktop boards (the launcher started from the menu) the launcher restarts through exit status 76 and its
   systemd unit; on the other boards `install.sh` restarts the user service.
 
-What runs as root, where the logs and the backup are, and how to repair an interrupted update:
+Since v0.9.2, **Settings > Updates > Packages** handles the system's apt updates:
+
+- It lists the pending updates in groups: Safe to upgrade, Launcher libraries, Kernel, firmware and boot, and Needs the
+  terminal. Refresh lists asks for the sudo password. The Store's own apps are never offered as Debian upgrades; the App
+  updates row opens Settings > Apps > Installed.
+- **Upgrade N packages** upgrades the safe set after a confirmation, with progress (Cancel works during the download)
+  and a result page. The Launcher libraries switch is off by default. Kernel, firmware, bootloader and EEPROM updates
+  stay in the terminal. It never reboots (it says when a reboot is advised), and it refuses on a battery under 50 %
+  that is not charging, under-voltage, low disk space, held packages, or when apt would do more than the list shows.
+- `install.sh` installs a small package, `cyberdeckzero-runtime`, that keeps apt from removing what the launcher needs
+  (`uninstall.sh` removes it). Every long wait shows a box with a bar and an elapsed mm:ss timer.
+
+What runs as root, where the logs and the backup are, and how to repair an interrupted update or package upgrade:
 [Pi port README, Settings > Updates](projects/APPLaunch/pizero2w/README.md#settings--updates).
 
 ## Licence
