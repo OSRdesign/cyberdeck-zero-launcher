@@ -33,7 +33,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Area | What it does |
 | --- | --- |
 | Display | Two LVGL displays share `/dev/fb0`: a **native 640x480** one (home grid, terminal, Calculator) and the legacy **320x170** one drawn 2x into a window at the top (`cp0_lvgl_dpi_scaled.c`, `cp0_display.h`). |
-| Home | Touch-friendly app grid with clock, Wi-Fi bars and Bluetooth state (`native_ui.cpp`). |
+| Home | Touch-friendly app grid with clock, Wi-Fi bars and Bluetooth state (`native_ui.cpp`). A tile's name is one line (v0.9.3): a long name gets a smaller font, down to 80 % of the normal size, then ends in dots; it never runs over the icon. |
 | Terminal | CLI, Python and SSH use a full-screen terminal with touch scrolling (`ui_app_st*.cpp`). |
 | Calculator | Native touch + keyboard calculator (the only one: the external 320x170 calculator program of the inherited code is gone). |
 | Legacy apps | Fullscreen 320x170 framebuffer apps (the older apps, installed from a source in Settings > Apps) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
@@ -42,7 +42,7 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | SSH indicator | While someone is connected to the board over SSH (an incoming connection to its sshd; `ssh localhost` counts), the status strip shows a terminal glyph (`>_`) in its leftmost place: blue, alternating blue and white once a second while data flows (typing, output, a copy). Nothing without a session; the place stays reserved, so the page headers do not move when one starts. On a board with a battery its percentage hides while the glyph shows. **Settings > System > SSH indicator** Off stops it (On by default); the clock screensaver covers it. Apps show it once rebuilt with a toolkit of this release (`status.state` `ssh=`, `docs/APP-CONTRACT.md` section 5b). The launcher reads `/proc/net/tcp*` and `/etc/ssh/sshd_config` (ports; `APPLAUNCH_SSH_PORTS=22,2222` in `board.conf` overrides them) as the launcher user: no root, no new permission (`cp0_ssh_watch.h`). |
 | Settings | **Speaker, Battery and Screen > Brightness are detected at run time** each time Settings opens (`cp0_capabilities`, report 030): a row shows only when the board has that hardware, see [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board). The hardware profile (`settings_hw_profile.hpp`) still hides Ethernet and the upstream bq27220 battery pages and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). **Battery** (after Bluetooth) shows only on a board with a Linux `power_supply` battery (a PC's ACPI `BAT0`/`BAT1`, a gauge driver's; read when Settings opens): charge, status, time left or to full, power, voltage, health, device, refreshed every 2 s; the status strip then shows the battery's level and percentage left of the Bluetooth icon (green while charging). The Pi boards have none: no row, nothing in the strip. |
 | Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present (a keyboard listed in `APPLAUNCH_KBD_IGNORE` does not count); in a terminal it has an **Alt** key next to Ctrl (one-shot, double tap locks: Alt then Tab is Alt+Tab). Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
-| Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: LAN Scan, viz1090, Wi-Fi Survey, Mesh Hop, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. See `docs/HOSTING-APPS.md`. |
+| Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: Mesh Hop, Net Toolbox, viz1090, Home Assistant, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. Available lists only the apps whose registry `min_size` fits the screen (v0.9.2; a portrait screen is judged turned, installed apps always stay listed), and an app's page shows Screen and Minimum size. See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
 | Launcher | **Settings > Launcher** shows or hides the built-in tiles. The Store has no tile any more (its program still ships, as the back end of Settings > Apps). |
 | Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the inherited matrix keymap); the Bluetooth keyboard re-attaches after sleep. Volume, mute and brightness keys work from any device that has them, a keyboard or not (a tablet's buttons, the ACPI video bus, a headset's buttons: media-key devices, `docs/APP-CONTRACT.md` section 14), on the launcher's pages and inside apps; such a device never counts as a keyboard. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
@@ -152,7 +152,7 @@ as an appliance: run `install.sh` again (the FZ-M1 with Armbian's XFCE:
 use the clock long-press, the Windows button pressed twice (its button cannot be held: it reports press and release at once), or Alt+Tab (the terminal's on-screen keyboard has Alt). Its
 volume and brightness buttons are not on a keyboard device; the launcher reads them anyway (media-key devices,
 `docs/APP-CONTRACT.md` section 14). The battery (`BAT1`) shows in the
-status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (five apps since v0.8.2). The profile still writes `APPLAUNCH_HIDE_TILES=app_Store` (from when the Store tile existed; the Store's hub has arm64
+status strip and in Settings > Battery. Settings > Apps reads `registry-amd64.json` of the apps repository (since v0.8.2; every published app has an amd64 package today). The profile still writes `APPLAUNCH_HIDE_TILES=app_Store` (from when the Store tile existed; the Store's hub has arm64
 packages only); since v0.9.0 there is no Store tile, so the key names no tile and is ignored.
 
 ## Settings > Updates
@@ -181,8 +181,14 @@ the launcher's restart, a crash or the hold-Esc watchdog).
 | `plan --bundle DIR --user NAME` | the options it would replay and the plan check; changes nothing |
 | `options --user NAME` | the install options it would replay |
 | `status` | the status file |
+| `apt-refresh --user NAME` | Packages > Refresh lists (v0.9.2): `apt-get update` and nothing else |
+| `apt-upgrade --user NAME [--libraries] PACKAGE...` | Packages > Upgrade now (v0.9.2): exactly the listed installed packages (`apt-get install --only-upgrade --no-remove --no-install-recommends`): check and download (cancellable), install (not cancellable; local configuration files kept, never a question), `apt-get clean`. Never a removal, a new package, the boot chain or a held package; the packages the anchor `cyberdeckzero-runtime` depends on only with `--libraries` |
+| `apt-repair --user NAME` | after an interrupted upgrade (or whenever `dpkg --audit` is not empty): `dpkg --configure -a`, then apt must plan nothing more; a broken dependency is left to `sudo apt-get -f install` in a terminal |
 
-Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused (nothing changed) or a usage error.
+The apt commands run the same way, in a transient unit of their own: `systemd-run --unit=cyberdeckzero-apt --collect
+--quiet .../cyberdeckzero-update apt-upgrade ...` (one unit name for every apt job, so two cannot run at once).
+
+Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused or cancelled (nothing changed) or a usage error.
 
 - **Options.** Every `install.sh` run (not `--dry-run` or `--board-only`) records its options in
   `/etc/applaunch/install.conf`: `keyboard_name`, `board` (empty when the board was detected), `boot_config`,
@@ -217,7 +223,36 @@ Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused (
   `sudo /usr/share/APPLaunch/bin/cyberdeckzero-update resume --user <user>`.
 - The first install of 0.8.13 on a board with 0.8.12 or older is by hand (`sudo ./install.sh` from the bundle): the
   older launchers have no Settings > Updates and no helper. `uninstall.sh` removes the helper, `install.conf`, the status folder with the
-  backup, the work folder and the update logs.
+  backup, the work folder and the update logs, and purges the anchor package `cyberdeckzero-runtime`.
+
+**Packages (apt, v0.9.2, report 047 P3 and P4).** Settings > Updates > Packages:
+
+- **The list** comes from `apt-get -s upgrade` (as the user, no lock), in groups: **Safe to upgrade**; **Launcher
+  libraries** (what the launcher's binaries load, curl, ca-certificates and the session services); **Kernel, firmware
+  and boot** (kernel, firmware, bootloader, EEPROM, initramfs: terminal only); **Needs the terminal** (kept back, held,
+  phased, new or removed packages; the Terminal page gives the `sudo apt-get upgrade` / `dist-upgrade` command). A
+  package the Store installed, or one that owns files under `/usr/share/APPLaunch`, is left out of the list (Debian's
+  own `2048` is not an update of the Store's). unattended-upgrades, PackageKit, snapd and holds are shown, never changed.
+- **Upgrade N packages** offers the safe set, closed the way apt will really run it (a package that pulls in a launcher
+  library moves to Launcher libraries, one that pulls in anything else to Needs the terminal). The confirmation page
+  has the Launcher libraries switch (off by default, a warning before use); then the progress page (Cancel during the
+  download only) and a result page.
+- **Guards** (before the password, and again in the helper): another package job running, an interrupted run to
+  repair first, a battery under 50 % and not charging, under-voltage now (the firmware's throttled bits), too little
+  disk (the download, plus what the packages grow by, plus 64 MB or the largest package), no network, `dpkg --audit` not
+  empty, a held or boot-chain package, and a second simulation that differs from the list ("refresh the lists and try
+  again").
+- **Never a reboot**: the result page advises one (`/run/reboot-required`, or libc6, systemd, udev or dbus upgraded).
+  An apt upgrade has no rollback; an interrupted one (a power cut) is refused until **Repair** (`apt-repair`) has run.
+- **The anchor package** `cyberdeckzero-runtime` (no files, Architecture all), built and installed by `install.sh`,
+  depends on what the launcher needs on this board (the packages `install.sh` installs, ca-certificates, the owners of
+  the libraries and programs it uses), with no version, so security updates keep coming; apt never autoremoves them,
+  and a plan that would remove one removes the anchor too, which the helper refuses.
+- **Waits**: every long wait (a scan, the plan, the helper's check, a refresh) shows a box with the step in words, a
+  bar and an elapsed mm:ss timer, so a slow board never looks frozen.
+- **Files**: status `/var/lib/cyberdeckzero-update/apt-status` (refresh) and `apt-upgrade-status` (upgrade, repair);
+  logs `/var/log/cyberdeckzero/apt-refresh.log` and `apt-upgrade-<date>.log` (the last 5); `journalctl -u
+  cyberdeckzero-apt`. Cancel file `/run/user/<uid>/applaunch/apt-cancel` (read during the check and the download).
 
 ### Upgrading from v0.8.13 by hand
 
@@ -355,7 +390,7 @@ What works in this phase:
 - the portrait profile still lists the keys of the old fixed-pixel tiles (`APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store`):
   IP Panel, Snake, Tank and the Store tile are gone from this branch (they live on `small-screen`), so the keys name no
   tile and are ignored (the profile text stays as it is: it is checksummed, see install.sh). Desktop apps that are neither fullscreen
-  nor a terminal (fixed-pixel apps such as LAN Scan, Wi-Fi Survey, MeshZero) are not listed on a portrait launcher at all
+  nor a terminal (fixed-pixel 320x170 apps, as LAN Scan and Wi-Fi Survey were) are not listed on a portrait launcher at all
   (docs/APP-CONTRACT.md, section 3); responsive fullscreen apps and the terminal apps are;
 - the number pad of the on-screen keyboard is the full width of the key area on a portrait canvas (keys about 148 px,
   digits at 26 px).

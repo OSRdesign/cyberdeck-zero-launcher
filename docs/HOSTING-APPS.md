@@ -8,8 +8,9 @@ under **Settings > Apps > Available**, where each one installs with Enter or a t
 Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZero Hub catalogue is not shown there
 (its apps are 320x170 keyboard apps; the Store screen that lists them is on the `small-screen` branch only).
 
-**The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (LAN Scan,
-Mesh Hop, Net Toolbox, Serial Console, System Monitor, viz1090, Wi-Fi Survey) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
+**The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (Home
+Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial Console,
+System Monitor, viz1090) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
 Available lists its apps without typing anything. It is an ordinary source: switch it off or remove it in Sources, and
 the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
 shows after a sync (Sources > Sync my sources). Details: `projects/APPLaunch/pizero2w/README.md`, "Default app source".
@@ -71,6 +72,15 @@ your enabled sources that are not installed, with the version offered; Enter or 
 (Description, Install, Cancel), and Install installs it. The **Description** row shows the first line; Enter or a tap
 opens the whole text in a read-only page (plain, wrapped, scrollable), cut at 500 characters with dots (see the
 descriptor rule above). While a job runs, its app's row shows a spinner. Empty levels say `No apps installed` or `Nothing to install` (`Loading...` before the first list).
+
+**Apps that fit the screen** (v0.9.2). Available (and its count) leaves out an app whose registry entry has a
+`min_size` larger than the screen in either dimension; a portrait screen is judged turned (480x800 as 800x480), as a
+landscape app runs there, so orientation hides nothing. An entry without `min_size`, or with a value the launcher cannot
+read, is listed. Installed and the update count are not filtered. An app's page (Installed or Available) starts with
+two read-only rows from its registry entry: **Screen** (`Landscape`, or `Landscape and portrait` when it has a
+`portrait_min_size`) and **Minimum size** (the `min_size`). The apps repo's `tools/make_registry.py` copies both values
+from the packaged `.desktop` (`X-MinSize`, `X-Portrait`). The filter reads the lists the Store backend cached at the last
+sync.
 
 **Versions and updates.** Installed shows each app's installed version and, when the sources offer a newer one
 (compared the Debian way, as `dpkg --compare-versions` does, not as text), both, for example `0.1.2>0.1.3`, in
@@ -153,7 +163,8 @@ The panel is not always 640x480 (the Pi 3A+ is 800x480 with its DSI panel or 480
 SPI panel, the HackBerry 720x720): a full-screen app
 should take its size, rotation, depth and framebuffer from the app contract (next section) instead of hard-coding
 them. If it really needs a minimum size, add `X-MinSize=WxH` (logical pixels, for example `X-MinSize=640x480`): on a
-smaller screen the launcher hides its tile (and it does not appear in Settings > Apps either). An older launcher
+smaller screen the launcher hides its tile, and Settings > Apps > Available leaves it out through the registry's
+`min_size` (above). An older launcher
 ignores the key, so the app must still start there and say that the screen is too small. New native (LVGL) apps
 declare `X-MinSize=640x480` by default (decision of 2026-10-13): they are hidden on the Pi 3A+ with its 480x320 SPI panel, while
 text-mode apps (`Terminal=true`) may still run there.
