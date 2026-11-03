@@ -1,0 +1,20 @@
+# Native Settings at 320x480 (profile p320; study portrait-320, PR-B): the root, the Screen section and the DarkTime
+# choice list. Golden at 320x480 only.
+title p320 settings
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+config dark_time 60
+home
+launch Settings
+shot p320_settings_root
+key ENTER
+shot p320_settings_screen
+key DOWN
+key ENTER
+shot p320_settings_darktime

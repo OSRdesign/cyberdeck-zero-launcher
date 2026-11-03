@@ -472,6 +472,11 @@ Profile make_profile(const std::string &name, const Size &size)
         p.env = {{"APPLAUNCH_BOARD", "pi3a-wsdsi43-portrait"}, {"APPLAUNCH_ROTATE", "90"}, {"APPLAUNCH_PDA", "1"}};
         if (size == Size{480, 800}) p.env["APPLAUNCH_PANEL_MM"] = "94x56";
         else if (size == Size{480, 640}) p.env["APPLAUNCH_PANEL_MM"] = "71x53";
+    } else if (name == "p320") { /* the 3.5" 480x320 panel (79x49 mm, 6.3 px/mm) run in portrait without the turn:
+                                  * 320x480 RGB565, rotate 0 (PDA mode "On, rotate right"); study portrait-320 */
+        p.pw = 320, p.ph = 480, p.bpp = 16, p.rot = 0;
+        p.env = {{"APPLAUNCH_BOARD", "pi3a-luckfox35"}, {"APPLAUNCH_ROTATE", "0"}, {"APPLAUNCH_PDA", "1"},
+                 {"APPLAUNCH_PANEL_MM", "79x49"}};
     } else { /* "deck" (no board.conf, the Zero 2 W) and "generic": XRGB8888, no rotation */
         p.pw = size.w, p.ph = size.h, p.bpp = 32, p.rot = 0;
     }
@@ -482,6 +487,7 @@ Profile make_profile(const std::string &name, const Size &size)
 std::string default_profile(const Size &size)
 {
     if (size == Size{480, 320}) return "pi3a";
+    if (size == Size{320, 480}) return "p320";
     if (size == Size{640, 480}) return "deck";
     return "generic";
 }

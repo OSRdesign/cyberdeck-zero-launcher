@@ -1,0 +1,26 @@
+# The full-screen terminal at 320x480 (profile p320; study portrait-320, PR-A): the CLI takes the whole screen, 14 px
+# font (40 columns), and asks for the on-screen keyboard (no physical keyboard). Letters are tapped on the keyboard and
+# reach the PTY; a physical keyboard then removes the keyboard and the grid takes the full height. Golden at 320x480.
+title p320 terminal
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch CLI
+ptyout "user@zero8:~$ "
+wait 300
+expect_osk shown
+shot p320_terminal_osk
+tapkey h
+tapkey i
+ptylog p320_terminal_keys
+keyboards 1
+wait 800
+expect_osk hidden
+shot p320_terminal_full

@@ -1,0 +1,20 @@
+# The sudo prompt at 320x480 (profile p320; study portrait-320, PR-B), over native Settings, with the on-screen keyboard
+# (no physical keyboard): open, typed (masked), a wrong password. Golden at 320x480 only.
+title p320 dialog
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+sudoprompt open
+shot p320_sudo_open
+type secret
+shot p320_sudo_typed
+sudoprompt wrong
+shot p320_sudo_wrong

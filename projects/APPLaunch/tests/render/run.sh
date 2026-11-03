@@ -6,9 +6,9 @@
 #   run.sh            build + render + compare with golden/ + header (exit 1 on any changed pixel)
 #   run.sh build      build only (build/render-harness)
 #   run.sh render [scene ...]   render scenes (default: all) into out/, contact sheets in out/sheets/
-#   run.sh compare    compare out/ with golden/ (640x480, 480x320, the PDA's 480x640 and 480x800), diff PNGs in out/diff/
+#   run.sh compare    compare out/ with golden/ (640x480, 480x320, the PDA's 480x640 and 480x800, the narrow portrait 320x480), diff PNGs in out/diff/
 #   run.sh header     page headers (scene command "header") against the home grid: status strip pixels, title origin
-#   run.sh golden     copy out/640x480, out/480x320, out/480x640 and out/480x800 into golden/ (a deliberate change)
+#   run.sh golden     copy out/640x480, out/480x320, out/480x640, out/480x800 and out/320x480 into golden/ (a deliberate change)
 #   run.sh validate   compare the harness with real device captures (reference/, docs/screenshots/)
 #   run.sh twice      render everything twice and check the PNGs are byte-identical
 #   run.sh contract   app contract: the host app-contract-probe --report against the metrics scene (docs/APP-CONTRACT.md)
@@ -23,7 +23,7 @@ bin="$here/build/render-harness"
 out=${OUT:-$here/out}
 golden="$here/golden"
 jobs=${JOBS:-$(nproc)}
-golden_sizes="640x480 480x320 480x640 480x800" # 480x640, 480x800: the PDA scenes (report 038 S2, profile pda)
+golden_sizes="640x480 480x320 480x640 480x800 320x480" # 480x640, 480x800: the PDA scenes (report 038 S2, profile pda); 320x480: the p320_* scenes (profile p320)
 
 build() {
     mkdir -p "$here/build"
