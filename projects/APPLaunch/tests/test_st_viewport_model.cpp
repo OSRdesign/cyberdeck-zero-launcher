@@ -85,6 +85,10 @@ int main()
     static_assert(st_viewport::font_px(640, 480) == 20);
     static_assert(st_viewport::font_px(320, 170) == 20);
     static_assert(st_viewport::font_px(800, 1280) == 20);
+    static_assert(st_viewport::font_px(479, 800) == 14);  /* the shared narrow-portrait predicate (cp0_ui_metrics.h) */
+    static_assert(st_viewport::font_px(360, 640) == 14);
+    static_assert(st_viewport::font_px(320, 320) == 20);  /* not taller than wide */
+    static_assert(CP0_UI_NARROW_PORTRAIT_SIZE(320, 480) && !CP0_UI_NARROW_PORTRAIT_SIZE(480, 640));
 
     return 0;
 }

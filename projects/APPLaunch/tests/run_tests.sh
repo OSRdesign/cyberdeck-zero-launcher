@@ -559,6 +559,7 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     -o "$build_dir/test_st_key_encoder"
 "$build_dir/test_st_key_encoder"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$(dirname "$0")/../../../ext_components/cp0_lvgl/include" \
     "$(dirname "$0")/test_st_viewport_model.cpp" \
     -o "$build_dir/test_st_viewport_model"
 "$build_dir/test_st_viewport_model"

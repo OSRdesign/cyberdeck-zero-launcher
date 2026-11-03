@@ -72,8 +72,9 @@ Page::Page(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TitleFactory ma
     lv_obj_remove_flag(header_, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_remove_flag(header_, LV_OBJ_FLAG_CLICKABLE);
 
-    if (make_title) title_ = make_title(header_, "");
-    if (!title_) { /* same place, size and colour as the home grid's title */
+    /* narrow portrait: the bar holds the Esc and the strip only, no title label exists (no cut "..." state) */
+    if (make_title && !layout_.title_hidden) title_ = make_title(header_, "");
+    if (!title_ && !layout_.title_hidden) { /* same place, size and colour as the home grid's title */
         title_ = lv_label_create(header_);
         lv_label_set_text(title_, "");
         lv_obj_set_style_text_font(title_, cp0_ui_font_px(layout_.title_px), 0);
@@ -102,6 +103,7 @@ Page::Page(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TitleFactory ma
     if (lv_obj_get_group(esc_)) lv_group_remove_obj(esc_); /* touch only: the keyboard has its own Esc */
     lv_obj_set_size(esc_, layout_.esc_w, layout_.esc_h);
     lv_obj_set_pos(esc_, layout_.esc_x, layout_.esc_y);
+    if (layout_.esc_hit_pad > 0) lv_obj_set_ext_click_area(esc_, layout_.esc_hit_pad);
     lv_obj_set_style_radius(esc_, layout_.esc_radius, 0);
     lv_obj_set_style_bg_color(esc_, lv_color_hex(kKeyBg), 0);
     lv_obj_set_style_bg_opa(esc_, LV_OPA_COVER, 0);

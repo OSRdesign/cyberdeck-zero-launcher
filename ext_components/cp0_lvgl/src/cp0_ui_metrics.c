@@ -32,6 +32,10 @@ static const class_spec_t k_class[CP0_UI_CLASS__COUNT] = {
     [CP0_UI_PORTRAIT] = {56, 100, {8, 16, 20}, {8, 18, 28}, 128, 560, {32, 28, 24, 18}},
 };
 
+/* Narrow portrait (320x480, cp0_ui_narrow_portrait): the Compact numbers, the body text at 16 px (owner decision
+ * 2026-11-03: the Compact row has 18). Dialog width 300 = the canvas minus 2 x SPACE_M. */
+static const class_spec_t k_narrow_portrait = {40, 72, {5, 10, 14}, {6, 14, 20}, 88, 440, {24, 20, 16, 14}};
+
 /* Today's home grid and toolbar (native_ui.cpp before P1b): the deck layout and the compact one (task 013 T3,
  * status bar 40, padding 10, icon and text about 72 % of the deck sizes). Do not change: the render harness goldens
  * at 640x480 and 480x320 are drawn from these. */
@@ -350,6 +354,11 @@ static void shell_fill(cp0_ui_preset_t preset, int w, int h, cp0_ui_shell_t *s)
 
 /* ------------------------------------------------------------------ compute */
 
+int cp0_ui_narrow_portrait(const cp0_ui_metrics_t *m)
+{
+    return m && m->preset == CP0_UI_PRESET_COMPUTED && CP0_UI_NARROW_PORTRAIT_SIZE(m->w, m->h);
+}
+
 int cp0_ui_narrow_header(const cp0_ui_metrics_t *m)
 {
     return m && m->preset == CP0_UI_PRESET_COMPUTED && m->w < CP0_UI_NARROW_BELOW_W &&
@@ -372,7 +381,8 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
                : (w == 480 && h == 320) ? CP0_UI_PRESET_COMPACT
                                         : CP0_UI_PRESET_COMPUTED;
 
-    const class_spec_t *k = &k_class[m.cls];
+    const int narrow_portrait = m.preset == CP0_UI_PRESET_COMPUTED && CP0_UI_NARROW_PORTRAIT_SIZE(w, h);
+    const class_spec_t *k = narrow_portrait ? &k_narrow_portrait : &k_class[m.cls];
     m.tok[CP0_TOK_SPACE_S] = k->space[0];
     m.tok[CP0_TOK_SPACE_M] = k->space[1];
     m.tok[CP0_TOK_SPACE_L] = k->space[2];
@@ -394,10 +404,10 @@ int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_
     m.text_px[CP0_TEXT_SYMBOL] = m.text_px[CP0_TEXT_TITLE];
 
     m.shell_preset = m.preset != CP0_UI_PRESET_COMPUTED ? m.preset
-                     : h < SHELL_COMPACT_BELOW_H        ? CP0_UI_PRESET_COMPACT
-                                                        : CP0_UI_PRESET_DECK;
+                     : (h < SHELL_COMPACT_BELOW_H || narrow_portrait) ? CP0_UI_PRESET_COMPACT
+                                                                      : CP0_UI_PRESET_DECK;
     shell_fill(m.shell_preset, w, h, &m.shell);
-    if (m.preset == CP0_UI_PRESET_COMPUTED) shell_computed_grid(&k_class[m.cls], w, h, m.ppmm_x100, &m.shell);
+    if (m.preset == CP0_UI_PRESET_COMPUTED) shell_computed_grid(k, w, h, m.ppmm_x100, &m.shell);
     /* a narrow computed canvas (480x640, 480x800): the strip at the Compact scale; when it is also 400 px high or more
      * (cp0_ui_narrow_header: the deck's shell, so not 320x170) the title at NARROW_TITLE_PX, moved down by half the
      * size it lost so it stays centred on the same line; the bar, its top margin and the Esc unchanged (the pinned

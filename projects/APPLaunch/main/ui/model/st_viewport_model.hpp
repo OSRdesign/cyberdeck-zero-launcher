@@ -14,6 +14,8 @@
  */
 #pragma once
 
+#include "cp0_ui_metrics.h" /* CP0_UI_NARROW_PORTRAIT_SIZE: the one narrow-portrait predicate */
+
 namespace st_viewport {
 
 /* The compat canvas (320x170): the terminal there is the old fixed grid with the top bar and no keyboard. */
@@ -30,7 +32,7 @@ constexpr bool native_display(int w, int h)
 /* Terminal font in px: 20, except a narrow portrait display (taller than wide, under 480 wide): 14 px = 40 columns. */
 constexpr int font_px(int w, int h)
 {
-    return (h > w && w < 480) ? 14 : 20;
+    return CP0_UI_NARROW_PORTRAIT_SIZE(w, h) ? 14 : 20;
 }
 
 /* fewest rows a terminal is given above the keyboard (a prompt line and the line under it) */

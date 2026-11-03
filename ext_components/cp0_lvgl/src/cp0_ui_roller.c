@@ -121,6 +121,18 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
     p.esc_text_px = s->tb_text_px;
     p.title_max_w = imax(0, p.esc_x - space_m - p.title_x);
     p.title_last_only = cp0_ui_narrow_header(m);
+    if (cp0_ui_narrow_portrait(m)) {
+        /* 320x480: Esc 44 x 30 (TARGET wide, the bar minus its margins high) at the left edge, SPACE_M from it; the tap
+         * area is stretched over the whole bar height; no title (study portrait-320, owner decisions 2026-11-03) */
+        p.esc_w = m->tok[CP0_TOK_TARGET];
+        p.esc_h = imax(1, p.header_h - 2 * s->status_top);
+        p.esc_y = (p.header_h - p.esc_h) / 2;
+        p.esc_x = space_m;
+        p.esc_hit_pad = p.esc_y;
+        p.title_max_w = 0;
+        p.title_last_only = 0;
+        p.title_hidden = 1;
+    }
 
     /* body */
     p.body_y = p.header_h;

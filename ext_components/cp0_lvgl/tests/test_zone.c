@@ -149,6 +149,8 @@ static void test_layout(void)
         CHECK_EQ(cp0_zone_layout(&square, &s), -1);
         const cp0_ui_metrics_t small = metrics(320, 480, 1130);
         CHECK_EQ(cp0_zone_layout(&small, &s), -1);
+        const cp0_ui_metrics_t zero8 = metrics(320, 480, 630); /* the 3.5in panel upright: small tokens, still no zone */
+        CHECK_EQ(cp0_zone_layout(&zero8, &s), -1);
         CHECK_EQ(cp0_zone_layout(NULL, &s), -1);
         CHECK_EQ(s.w, 0x5A5A5A5A); /* untouched */
     }

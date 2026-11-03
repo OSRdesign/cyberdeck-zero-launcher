@@ -198,8 +198,46 @@ static void test_password_dialog_at_target_sizes(void)
     }
 }
 
+/* The sudo prompt at 320x480 (zero8 upright, 6.3 px/mm): the tokens alone shrink it (heading 20, body 16, padding 10,
+ * gap 5, buttons 44 high), no layout change: about 300 x 182, the label above the field. No page title: the title never
+ * moves into the (title-less) bar. */
+static void test_narrow_portrait_dialog(void)
+{
+    cp0_ui_metrics_t m;
+    CHECK_EQ(cp0_ui_metrics_compute(320, 480, 0, 630, CP0_UI_DENSITY_PANEL_MM, 0, &m), 0);
+    cp0_ui_dialog_t d;
+    const int title = m.text_px[CP0_TEXT_HEADING] * 5 / 4; /* 25 */
+    const int label = m.text_px[CP0_TEXT_CAPTION] * 5 / 4; /* 17 */
+    const int status = m.text_px[CP0_TEXT_BODY] * 5 / 4;   /* 20 */
+    const int content = label + 4 + m.tok[CP0_TOK_ROW_H] + m.tok[CP0_TOK_SPACE_S] + status;
+    CHECK_EQ(cp0_ui_dialog_layout(&m, 40, 0, title, content, 2, 0, &d), 0);
+    CHECK_EQ(d.w, 300);
+    CHECK_EQ(d.x, 10);
+    CHECK_EQ(d.pad, 10);
+    CHECK_EQ(d.pad_y, 10);
+    CHECK_EQ(d.gap, 5);
+    CHECK_EQ(d.title_px, 20);
+    CHECK_EQ(d.text_px, 16);
+    CHECK_EQ(d.button_px, 16);
+    CHECK_EQ(d.button_h, 44);
+    CHECK_EQ(d.content_w, 280);
+    CHECK_EQ(d.button_w, (280 - 5) / 2);
+    CHECK_EQ(d.buttons, 2);
+    CHECK_EQ(d.title_in_header, 0);
+    CHECK(d.h >= 170 && d.h <= 190);
+    CHECK(d.y >= 40 && d.y + d.h <= 480);
+    /* with the keyboard up a title-less bar keeps the title in the box: the layout is told no header title is possible */
+    cp0_ui_osk_layout_t k;
+    CHECK_EQ(cp0_ui_osk_layout(&m, &k), 0);
+    CHECK_EQ(cp0_ui_dialog_layout(&m, 40, k.height, title, content, 2, 0, &d), 0);
+    CHECK_EQ(d.title_in_header, 0);
+    CHECK(d.y >= 40 && d.y + d.h <= 480 - k.height);
+    CHECK(d.body_h >= m.tok[CP0_TOK_ROW_H] + m.tok[CP0_TOK_SPACE_S] + status);
+}
+
 int main(void)
 {
+    test_narrow_portrait_dialog();
     test_tokens();
     test_centred_without_keyboard();
     test_above_keyboard();

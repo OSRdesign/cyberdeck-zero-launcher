@@ -71,6 +71,13 @@ typedef struct {
     /* a narrow header (cp0_ui_narrow_header: 480x640, 480x800): a breadcrumb title ("Net Toolbox > Diagnosis",
      * a path or one string with " > ") shows its last part only; 0 elsewhere (the whole path when it fits) */
     int title_last_only;
+
+    /* narrow portrait (cp0_ui_narrow_portrait: 320x480; 0 elsewhere): the bar holds the Esc (at the left edge,
+     * TARGET wide) and the status strip only. title_hidden: no page title at all (title_max_w is 0, Page makes no
+     * title label, a dialog never moves its title to the header); esc_hit_pad: px the Esc's tap area reaches beyond
+     * its button on every side (the whole bar height takes the tap). Appended: apps compile their own copy. */
+    int title_hidden;
+    int esc_hit_pad;
 } cp0_ui_roller_page_t;
 
 /* The roller page for the metrics m. strip_left: the screen x of the leftmost pixel the shared status strip draws
