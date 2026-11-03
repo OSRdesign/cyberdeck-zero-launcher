@@ -16,6 +16,23 @@
 
 namespace st_viewport {
 
+/* The compat canvas (320x170): the terminal there is the old fixed grid with the top bar and no keyboard. */
+constexpr int kCompatW = 320;
+constexpr int kCompatH = 170;
+
+/* Full-screen (native) terminal: the display is bigger than the compat canvas in either direction. Not the width alone:
+ * the 320x480 portrait canvas is 320 wide and needs the native terminal and the on-screen keyboard (study portrait-320). */
+constexpr bool native_display(int w, int h)
+{
+    return w > kCompatW || h > kCompatH;
+}
+
+/* Terminal font in px: 20, except a narrow portrait display (taller than wide, under 480 wide): 14 px = 40 columns. */
+constexpr int font_px(int w, int h)
+{
+    return (h > w && w < 480) ? 14 : 20;
+}
+
 /* fewest rows a terminal is given above the keyboard (a prompt line and the line under it) */
 constexpr int kMinRows = 2;
 

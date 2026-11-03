@@ -64,5 +64,27 @@ int main()
     static_assert(same.scroll_up == 0 && same.pull_back == 0 && same.cursor_y == 3 && same.pushed == 2);
     constexpr auto bad = resize(12, 0, 3, -4, 10);
     static_assert(bad.scroll_up == 0 && bad.pull_back == 0 && bad.cursor_y == 3 && bad.pushed == 0);
+    // the full-screen terminal: bigger than the 320x170 compat canvas in either direction (study portrait-320, PR-A)
+    static_assert(!st_viewport::native_display(320, 170));  /* the compat display and SDL */
+    static_assert(st_viewport::native_display(320, 480));   /* zero8 portrait: 320 wide, but not the compat canvas */
+    static_assert(st_viewport::native_display(480, 320));
+    static_assert(st_viewport::native_display(640, 480));
+    static_assert(st_viewport::native_display(480, 640));
+    static_assert(st_viewport::native_display(480, 800));
+    static_assert(st_viewport::native_display(800, 1280));
+    static_assert(st_viewport::native_display(321, 170));
+    static_assert(st_viewport::native_display(320, 171));
+    static_assert(!st_viewport::native_display(240, 160));
+
+    // the terminal font: 14 px (40 columns) on a narrow portrait display, 20 px everywhere else
+    static_assert(st_viewport::font_px(320, 480) == 14);
+    static_assert(st_viewport::font_px(240, 320) == 14);
+    static_assert(st_viewport::font_px(480, 800) == 20);
+    static_assert(st_viewport::font_px(480, 640) == 20);
+    static_assert(st_viewport::font_px(480, 320) == 20);
+    static_assert(st_viewport::font_px(640, 480) == 20);
+    static_assert(st_viewport::font_px(320, 170) == 20);
+    static_assert(st_viewport::font_px(800, 1280) == 20);
+
     return 0;
 }
