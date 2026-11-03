@@ -14,6 +14,7 @@
 #include "page_app/ui_app_st.hpp"
 #include "settings/settings_page.hpp"
 
+#include "harness.h"
 #include "harness_launch.hpp"
 #include "app_registry.h"
 #include "home_order_launcher.hpp"
@@ -197,7 +198,7 @@ void Launch::go_back_home()
 
 void Launch::show_home()
 {
-    native_ui::show_home();
+    { harness::IgnoreNewThreads untracked; native_ui::show_home(); }
 }
 
 void Launch::launch_Exec(const std::string &, bool, bool, const std::string &, multitask::Background, bool) {}

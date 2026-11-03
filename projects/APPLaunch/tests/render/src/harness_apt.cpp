@@ -94,6 +94,13 @@ std::vector<std::string> lines_of(const std::string &text)
 /* the scan blocks at a held stage until the scene moves on, or the launcher cancels the scan; false: cancelled */
 bool hold_at(const char *stage)
 {
+    const std::string wanted = stage;
+    harness::BlockedWhile held([wanted] {
+        if (apt_cancel_flag().load()) return false;
+        harness::Fixtures &fx = harness::fixtures();
+        std::lock_guard<std::mutex> lock(fx.apt_mutex);
+        return fx.apt_hold == wanted;
+    });
     for (;;) {
         if (apt_cancel_flag().load()) return false;
         {
@@ -108,6 +115,7 @@ bool hold_at(const char *stage)
 bool simulate(bool dist_upgrade, std::string &output)
 {
     std::string board = board_name();
+    harness::BlockedWhile held([] { return !apt_cancel_flag().load() && board_name() == "pending"; });
     while (board == "pending") { /* the scene gives the board later: "Reading the package lists..." */
         if (apt_cancel_flag().load()) return false;
         ::usleep(2000);

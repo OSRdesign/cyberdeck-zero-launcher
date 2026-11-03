@@ -1027,6 +1027,9 @@ void settle(uint32_t ms, useconds_t real_us = kSettleRealUs)
     for (uint32_t t = 0; t < ms; t += 5) {
         g_tick += 5;
         lv_timer_handler();
+        /* every step, not only every 50 ms: a worker a key started (the Updates page's scan, check and catalogue read)
+         * has answered before the next step's timers run, at the same fake time on every host, however loaded */
+        harness::wait_workers();
         if (t % 50 == 0) usleep(real_us);
     }
 }
@@ -1397,7 +1400,7 @@ bool multitask_command(Run &run, const Scene &scene, const Line &line)
     if (cmd == "switcher") {
         /* switcher CARD... (Name=front|running|paused|nr), switcher select ITEM, switcher off */
         if (w.size() == 2 && w[1] == "off") {
-            native_ui::show_home();
+            { harness::IgnoreNewThreads untracked; native_ui::show_home(); }
             d.screen.reset();
             settle(300);
             return true;
@@ -1447,7 +1450,7 @@ bool multitask_command(Run &run, const Scene &scene, const Line &line)
          * writes it back dimmed and draws only the sheet's box over it, as multitask_ui does; sheet off */
         if (w.size() == 2 && w[1] == "off") {
             cp0_display_set_native_clip(0, 0, 0, 0);
-            native_ui::show_home();
+            { harness::IgnoreNewThreads untracked; native_ui::show_home(); }
             d.sheet.reset();
             settle(300);
             return true;
@@ -2341,7 +2344,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         harness::set_apps(apps);
     } else if (cmd == "home") {
         native_ui::refresh_apps();
-        native_ui::show_home();
+        { harness::IgnoreNewThreads untracked; native_ui::show_home(); }
         settle(300);
     } else if (cmd == "launch") {
         if (w.size() != 2) return fail(scene, line, "usage: launch NAME");

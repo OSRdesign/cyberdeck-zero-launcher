@@ -121,6 +121,10 @@ FetchResult fetch(const std::string &, const std::string &, const std::string &)
 {
     harness::Fixtures &fx = harness::fixtures();
     std::string answer;
+    harness::BlockedWhile held([&fx] {
+        std::lock_guard<std::mutex> lock(fx.update_mutex);
+        return fx.update_answer == "pending";
+    });
     for (;;) {
         {
             std::lock_guard<std::mutex> lock(fx.update_mutex);
@@ -201,6 +205,11 @@ std::string download_dir()
 DownloadResult download(const std::string &, const std::string &, const std::string &, const std::atomic<bool> &cancel)
 {
     harness::Fixtures &fx = harness::fixtures();
+    harness::BlockedWhile held([&fx, &cancel] { /* a percent or "pending": the scene finishes it later */
+        if (cancel.load()) return false;
+        std::lock_guard<std::mutex> lock(fx.update_mutex);
+        return fx.update_download != "done" && fx.update_download != "fail";
+    });
     for (;;) {
         std::string state;
         {
