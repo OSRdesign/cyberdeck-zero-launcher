@@ -70,7 +70,8 @@ Startup compute(int stored)
     s.board = board_from(std::getenv("APPLAUNCH_LOGICAL"), std::getenv("APPLAUNCH_ROTATE"), std::getenv("APPLAUNCH_PDA"));
     s.offered = offered(s.board, std::getenv("APPLAUNCH_PANEL_MM"));
     s.stored = stored;
-    s.mode = plan(s.board, stored, s.offered).mode;
+    s.band = band(s.board, std::getenv("APPLAUNCH_PANEL_MM"));
+    s.mode = plan(s.board, stored, s.offered, s.band).mode;
     return s;
 }
 
@@ -128,16 +129,27 @@ bool zone_fits(const Canvas &portrait, const char *panel_mm)
     return cp0_zone_layout(&metrics, &layout) == 0;
 }
 
-bool offered(const Board &board, const char *panel_mm, ZoneFits fits)
+bool band(const Board &board, const char *panel_mm, ZoneFits fits)
 {
     if (!board.known || board.canvas.w == board.canvas.h) return false;
     if (std::min(board.canvas.w, board.canvas.h) < kMinShortSide) return false;
     return fits && fits(board.left, panel_mm); /* both sides: the same size and density */
 }
 
+bool offered(const Board &board, const char *panel_mm, ZoneFits fits)
+{
+    if (!board.known || board.canvas.w == board.canvas.h) return false;
+    const int shortest = std::min(board.canvas.w, board.canvas.h);
+    if (shortest < kMinNarrowShortSide) return false;
+    if (shortest < kMinShortSide) return true; /* portrait without the writing band */
+    return band(board, panel_mm, fits);
+}
+
 int board_default(const Board &board)
 {
-    if (!board.known || board.canvas.h <= board.canvas.w || !board.pda) return kOff;
+    if (!board.known || board.canvas.h <= board.canvas.w) return kOff;
+    /* a portrait canvas under kMinShortSide has no band, so no APPLAUNCH_PDA to read: it is the side it turns to */
+    if (!board.pda && std::min(board.canvas.w, board.canvas.h) >= kMinShortSide) return kOff;
     return board.canvas == board.right ? kRight : kLeft;
 }
 
@@ -170,7 +182,7 @@ int stored_from_json(const std::string &json)
     return value;
 }
 
-Plan plan(const Board &board, int stored, bool is_offered)
+Plan plan(const Board &board, int stored, bool is_offered, bool with_band)
 {
     Plan p;
     p.mode = board_default(board);
@@ -180,7 +192,7 @@ Plan plan(const Board &board, int stored, bool is_offered)
     p.canvas = canvas_of(board, stored);
     p.env.emplace_back("APPLAUNCH_LOGICAL", size_text(p.canvas));
     p.env.emplace_back("APPLAUNCH_ROTATE", std::to_string(p.canvas.rot));
-    p.env.emplace_back("APPLAUNCH_PDA", stored == kOff ? "0" : "1");
+    p.env.emplace_back("APPLAUNCH_PDA", stored != kOff && with_band ? "1" : "0");
     return p;
 }
 
@@ -197,7 +209,7 @@ const Startup &apply_at_start()
     s_ready = true;
     Startup s = compute(-1);
     if (s.offered) s.stored = read_stored_file(config_path());
-    const Plan p = plan(s.board, s.stored, s.offered);
+    const Plan p = plan(s.board, s.stored, s.offered, s.band);
     s.mode = p.mode;
     for (const auto &kv : p.env) ::setenv(kv.first.c_str(), kv.second.c_str(), 1);
     s.applied = !p.env.empty();
@@ -212,7 +224,7 @@ const Startup &apply_at_start()
         std::fprintf(stderr, "[pda-mode] board %s rotate %d (APPLAUNCH_PDA %d), %s %s: %s rotate %d%s\n",
                      size_text(s.board.canvas).c_str(), s.board.canvas.rot, s.board.pda ? 1 : 0,
                      s.stored < 0 ? "nothing stored, the board's" : "stored", label(s.mode),
-                     size_text(p.canvas).c_str(), p.canvas.rot, s.mode != kOff ? " with the writing zone" : "");
+                     size_text(p.canvas).c_str(), p.canvas.rot, s.mode == kOff ? "" : s.band ? " with the writing zone" : ", portrait, no writing zone");
     }
     s_startup = s;
     return s_startup;

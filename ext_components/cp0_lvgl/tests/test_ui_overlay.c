@@ -61,12 +61,12 @@ static void test_compat_branch(void)
         cp0_ui_toast_t t;
         cp0_ui_osd_t o;
         cp0_ui_loading_t l;
-        cp0_ui_overlay_toast(cases[i], 320, 1, &t);
+        cp0_ui_overlay_toast(cases[i], 320, 170, 1, &t);
         CHECK_EQ(t.w, 280); CHECK_EQ(t.h, 22); CHECK_EQ(t.top, 4); CHECK_EQ(t.radius, 6);
         CHECK_EQ(t.font_px, 12); CHECK_EQ(t.label_w, 268);
-        cp0_ui_overlay_toast(cases[i], 320, 2, &t);
+        cp0_ui_overlay_toast(cases[i], 320, 170, 2, &t);
         CHECK_EQ(t.h, 38);
-        cp0_ui_overlay_toast(cases[i], 320, 3, &t);
+        cp0_ui_overlay_toast(cases[i], 320, 170, 3, &t);
         CHECK_EQ(t.h, 38);
         cp0_ui_overlay_osd(cases[i], 320, 170, &o);
         CHECK_EQ(o.w, 190); CHECK_EQ(o.h, 82); CHECK_EQ(o.radius, 8); CHECK_EQ(o.border, 1);
@@ -87,7 +87,7 @@ static void test_compat_branch(void)
     /* narrower than the compat window: still today's numbers */
     {
         cp0_ui_toast_t t;
-        cp0_ui_overlay_toast(&small, 240, 1, &t);
+        cp0_ui_overlay_toast(&small, 240, 170, 1, &t);
         CHECK_EQ(t.w, 280);
     }
     CHECK(cp0_ui_overlay_is_compat_display(320));
@@ -95,7 +95,7 @@ static void test_compat_branch(void)
     /* the ribbon's rectangle is the compat toast's */
     {
         cp0_ui_toast_t t;
-        cp0_ui_overlay_toast(NULL, 320, 1, &t);
+        cp0_ui_overlay_toast(NULL, 320, 170, 1, &t);
         CHECK_EQ(CP0_UI_RIBBON_W, t.w);
         CHECK_EQ(CP0_UI_RIBBON_H, t.h);
         CHECK_EQ(CP0_UI_RIBBON_Y, t.top);
@@ -109,25 +109,25 @@ static void test_pinned_toast(void)
     cp0_ui_toast_t t;
     CHECK_EQ(deck.preset, CP0_UI_PRESET_DECK);
     CHECK_EQ(pi.preset, CP0_UI_PRESET_COMPACT);
-    cp0_ui_overlay_toast(&deck, 640, 1, &t);
+    cp0_ui_overlay_toast(&deck, 640, 480, 1, &t);
     CHECK_EQ(t.w, 560); CHECK_EQ(t.h, 44); CHECK_EQ(t.top, 8); CHECK_EQ(t.radius, 12);
     CHECK_EQ(t.font_px, 24); CHECK_EQ(t.label_w, 536);
     check_toast_literals(&t, 640, 1);
-    cp0_ui_overlay_toast(&deck, 640, 2, &t);
+    cp0_ui_overlay_toast(&deck, 640, 480, 2, &t);
     CHECK_EQ(t.h, 76);
     check_toast_literals(&t, 640, 2);
-    cp0_ui_overlay_toast(&pi, 480, 1, &t);
+    cp0_ui_overlay_toast(&pi, 480, 320, 1, &t);
     CHECK_EQ(t.w, 420); CHECK_EQ(t.h, 33); CHECK_EQ(t.top, 6); CHECK_EQ(t.radius, 9);
     CHECK_EQ(t.font_px, 18); CHECK_EQ(t.label_w, 402);
     check_toast_literals(&t, 480, 1);
-    cp0_ui_overlay_toast(&pi, 480, 2, &t);
+    cp0_ui_overlay_toast(&pi, 480, 320, 2, &t);
     CHECK_EQ(t.h, 57);
     check_toast_literals(&t, 480, 2);
     /* the density does not move a pinned size */
     {
         const cp0_ui_metrics_t deck2 = metrics(640, 480, 1800);
         cp0_ui_toast_t t2;
-        cp0_ui_overlay_toast(&deck2, 640, 1, &t2);
+        cp0_ui_overlay_toast(&deck2, 640, 480, 1, &t2);
         CHECK_EQ(t2.w, 560);
         CHECK_EQ(t2.font_px, 24);
     }
@@ -165,9 +165,9 @@ static void test_computed(void)
         cp0_ui_osd_t o;
         cp0_ui_loading_t l;
         CHECK_EQ(m.preset, CP0_UI_PRESET_COMPUTED);
-        cp0_ui_overlay_toast(&m, sizes[i].w, 1, &t1);
-        cp0_ui_overlay_toast(&m, sizes[i].w, 2, &t2);
-        cp0_ui_overlay_toast(&m, sizes[i].w, 9, &t3);
+        cp0_ui_overlay_toast(&m, sizes[i].w, sizes[i].h, 1, &t1);
+        cp0_ui_overlay_toast(&m, sizes[i].w, sizes[i].h, 2, &t2);
+        cp0_ui_overlay_toast(&m, sizes[i].w, sizes[i].h, 9, &t3);
         CHECK_EQ(t1.font_px, m.text_px[CP0_TEXT_BODY]);
         CHECK_EQ(t1.top, m.tok[CP0_TOK_SPACE_S]);
         CHECK(t1.w <= sizes[i].w - 2 * m.tok[CP0_TOK_SPACE_L]);
@@ -218,16 +218,54 @@ static void test_monotonic_and_clamp(void)
         cp0_ui_toast_t t;
         cp0_ui_overlay_osd(&m, 400, 300, &o);
         cp0_ui_overlay_loading(&m, 400, 300, &l);
-        cp0_ui_overlay_toast(&m, 400, 1, &t);
+        cp0_ui_overlay_toast(&m, 400, 300, 1, &t);
         CHECK(o.w <= 400);
         CHECK(l.w <= 400);
         CHECK(t.w <= 400);
     }
 }
 
+static void test_narrow_portrait(void)
+{
+    /* 320x480 (a 480x320 panel turned, 6.3 px/mm): 320 wide but not the compat window */
+    const cp0_ui_metrics_t m = metrics(320, 480, 630);
+    cp0_ui_toast_t t, tc;
+    cp0_ui_osd_t o, oc;
+    cp0_ui_loading_t l, lc;
+    CHECK_EQ(m.preset, CP0_UI_PRESET_COMPUTED);
+    CHECK(!cp0_ui_overlay_is_compat(&m, 320, 480));
+    /* the 320x170 compat window while the native metrics are 320x480 (cp0_ui_metrics_get() gives those): unchanged */
+    CHECK(cp0_ui_overlay_is_compat(&m, 320, 170));
+    CHECK(cp0_ui_overlay_is_compat(NULL, 320, 480));
+    cp0_ui_overlay_toast(&m, 320, 170, 1, &tc);
+    CHECK_EQ(tc.w, 280); CHECK_EQ(tc.h, 22); CHECK_EQ(tc.top, 4); CHECK_EQ(tc.font_px, 12);
+    cp0_ui_overlay_osd(&m, 320, 170, &oc);
+    CHECK_EQ(oc.w, 190); CHECK_EQ(oc.h, 82);
+    cp0_ui_overlay_loading(&m, 320, 170, &lc);
+    CHECK_EQ(lc.w, 200); CHECK_EQ(lc.h, 40);
+    /* the native 320x480 display: computed from the tokens, on the display */
+    cp0_ui_overlay_toast(&m, 320, 480, 1, &t);
+    CHECK_EQ(t.font_px, m.text_px[CP0_TEXT_BODY]);
+    CHECK(t.font_px > 12);
+    CHECK(t.w > 280 - 1 && t.w <= 320 - 2 * m.tok[CP0_TOK_SPACE_L]);
+    CHECK(t.h > 22 && t.label_w < t.w);
+    cp0_ui_overlay_osd(&m, 320, 480, &o);
+    CHECK(o.w > 190 && o.w <= 320 - 2 * m.tok[CP0_TOK_SPACE_L]);
+    CHECK(o.bar.x + o.bar.w <= o.w && o.value.x + o.value.w <= o.w);
+    cp0_ui_overlay_loading(&m, 320, 480, &l);
+    CHECK(l.w > 200 && l.w <= 320 - 2 * m.tok[CP0_TOK_SPACE_L]);
+    CHECK(l.spinner + 2 * l.pad <= l.h);
+    /* a native 320x240 landscape display is not a portrait one: still the compat numbers */
+    {
+        const cp0_ui_metrics_t land = metrics(320, 240, 630);
+        CHECK(cp0_ui_overlay_is_compat(&land, 320, 240));
+    }
+}
+
 int main(void)
 {
     test_compat_branch();
+    test_narrow_portrait();
     test_pinned_toast();
     test_pinned_osd_loading();
     test_computed();

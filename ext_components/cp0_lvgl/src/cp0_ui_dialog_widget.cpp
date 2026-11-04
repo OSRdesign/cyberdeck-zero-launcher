@@ -70,7 +70,7 @@ Dialog::Dialog(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, DialogSpec 
 {
     if (spec_.buttons.size() > CP0_UI_DIALOG_MAX_BUTTONS) spec_.buttons.resize(CP0_UI_DIALOG_MAX_BUTTONS);
     cp0_ui_dialog_layout(cp0_ui_metrics_get(), layout_.header_h, 0, 0, 0, static_cast<int>(spec_.buttons.size()),
-                         spec_.page != nullptr, &geometry_);
+                         spec_.page != nullptr && !layout_.title_hidden, &geometry_);
     field_layout_.roller_w = geometry_.content_w;
     field_layout_.roller_x = 0;
 
@@ -256,7 +256,7 @@ void Dialog::relayout()
     lv_obj_update_layout(content_);
     const int content_h = lv_obj_get_height(content_);
     cp0_ui_dialog_layout(cp0_ui_metrics_get(), layout_.header_h, osk::bottom_inset(), title_h, content_h,
-                         static_cast<int>(buttons_.size()), spec_.page != nullptr, &geometry_);
+                         static_cast<int>(buttons_.size()), spec_.page != nullptr && !layout_.title_hidden, &geometry_);
     const cp0_ui_dialog_t &g = geometry_;
 
     lv_obj_set_pos(box_, g.x, g.y);

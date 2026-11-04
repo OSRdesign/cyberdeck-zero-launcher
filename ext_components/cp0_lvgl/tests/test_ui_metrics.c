@@ -316,11 +316,12 @@ static void test_odd_sizes(void)
     m = compute(1280, 400, 0, 0);
     CHECK(m.cls == CP0_UI_WIDE && m.shell_preset == CP0_UI_PRESET_DECK);
 
-    /* portrait (D12: not supported, still sane) */
+    /* portrait, 320x480 at the default density: the narrow-portrait numbers (test_narrow_portrait); the toolbar is the
+     * Compact shell's: 102 + 2 x 5 */
     m = compute(320, 480, 0, 0);
     CHECK(m.cls == CP0_UI_PORTRAIT);
-    check_compat(&m, 1, 0, 94, 358, 122);
-    CHECK_EQ(m.tok[CP0_TOK_DIALOG_MAX_W], 320 - 2 * 16);
+    check_compat(&m, 1, 0, 99, 368, 112);
+    CHECK_EQ(m.tok[CP0_TOK_DIALOG_MAX_W], 320 - 2 * 10);
 
     /* exactly the window, and smaller than it: never negative, toolbar 0 */
     m = compute(320, 170, 0, 0);
@@ -566,7 +567,7 @@ static void test_computed_grid(void)
 static void test_narrow_strip(void)
 {
     static const int narrow[][3] = {{480, 800, 854}, {480, 640, 900}, {480, 640, 1130}, {480, 640, 790},
-                                    {480, 480, 0},   {599, 800, 854}, {320, 480, 630}};
+                                    {480, 480, 0},   {599, 800, 854}};
     for (size_t i = 0; i < sizeof(narrow) / sizeof(narrow[0]); i++) {
         const cp0_ui_metrics_t m = compute(narrow[i][0], narrow[i][1], narrow[i][2], 0);
         CHECK(m.preset == CP0_UI_PRESET_COMPUTED);
@@ -605,6 +606,89 @@ static void test_narrow_strip(void)
     CHECK_EQ(m.shell.title_px, 24);
     CHECK(!cp0_ui_narrow_header(&m));
     CHECK(!cp0_ui_narrow_header(NULL));
+}
+
+/* The narrow-portrait rule (study portrait-320, owner decisions 2026-11-03): one predicate, 320x480 at zero8's 6.3 px/mm
+ * gets the Compact numbers with the body text at 16 px; nothing else moves. */
+static void test_narrow_portrait(void)
+{
+    /* the size predicate: portrait (taller than wide) and under 480 px wide */
+    CHECK(CP0_UI_NARROW_PORTRAIT_SIZE(320, 480));
+    CHECK(CP0_UI_NARROW_PORTRAIT_SIZE(240, 320));
+    CHECK(CP0_UI_NARROW_PORTRAIT_SIZE(360, 640));
+    CHECK(CP0_UI_NARROW_PORTRAIT_SIZE(479, 800));
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(480, 640)); /* the PDA boards are exactly 480 wide */
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(480, 800));
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(800, 1280)); /* the tablet */
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(480, 320));  /* landscape */
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(640, 480));
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(320, 170));
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(320, 320));  /* square */
+    CHECK(!CP0_UI_NARROW_PORTRAIT_SIZE(240, 160));
+
+    /* the metrics predicate agrees, for every size the harness knows */
+    static const int sizes[][3] = {{320, 480, 1}, {240, 320, 1},  {360, 640, 1},  {480, 640, 0}, {480, 800, 0},
+                                   {800, 1280, 0}, {480, 320, 0}, {640, 480, 0},  {320, 170, 0}, {800, 480, 0},
+                                   {720, 720, 0},  {1280, 720, 0}, {1024, 600, 0}, {480, 480, 0}};
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+        const cp0_ui_metrics_t m = compute(sizes[i][0], sizes[i][1], 630, 0);
+        CHECK_EQ(cp0_ui_narrow_portrait(&m), sizes[i][2]);
+        CHECK_EQ(m.cls == CP0_UI_PORTRAIT || sizes[i][2] == 0 ? 1 : 0, 1);
+    }
+    CHECK(!cp0_ui_narrow_portrait(NULL));
+
+    /* 320x480, 79x49 mm panel: 6.3 px/mm */
+    cp0_ui_metrics_t m = compute(320, 480, 630, 0);
+    CHECK(m.cls == CP0_UI_PORTRAIT); /* the class is unchanged: screen.state, the OSK cap, desktop_fit */
+    CHECK(m.preset == CP0_UI_PRESET_COMPUTED);
+    CHECK(m.shell_preset == CP0_UI_PRESET_COMPACT);
+    check_tokens(&m, 5, 10, 14, 6, 14, 20, 40, 72, 44, 44, 67, 88, 300);
+    CHECK_EQ(m.tok[CP0_TOK_DIALOG_MAX_W], 300);
+    CHECK_EQ(m.tok[CP0_TOK_LIST_ROW_H], 32);
+    CHECK_EQ(m.text_px[CP0_TEXT_TITLE], 24);
+    CHECK_EQ(m.text_px[CP0_TEXT_HEADING], 20);
+    CHECK_EQ(m.text_px[CP0_TEXT_BODY], 16);
+    CHECK_EQ(m.text_px[CP0_TEXT_CAPTION], 14);
+    /* the bar and the strip: 40 px, the pill 75 x 29 as zero8 draws it landscape, top margin 5 */
+    CHECK_EQ(m.shell.bar_h, 40);
+    CHECK_EQ(m.shell.status_pct, 72);
+    CHECK_EQ(m.shell.status_w, 230);
+    CHECK_EQ(m.shell.status_top, 5);
+    CHECK(!cp0_ui_narrow_header(&m)); /* the compact shell: no 18 px title (there is no title) */
+    /* the home grid stays 2 x 3: the 16 px the bar gained flow into the tiles */
+    CHECK_EQ(m.shell.cols, 2);
+    CHECK_EQ(m.shell.rows, 3);
+    CHECK_EQ(m.shell.tile_w, 140);
+    CHECK_EQ(m.shell.tile_h, 129);
+    CHECK_EQ(m.shell.icon, 64);
+    CHECK_EQ(m.shell.label_px, 16);
+    CHECK_EQ(m.shell.tile_radius, 20);
+    CHECK(m.shell.cols * m.shell.tile_w + (m.shell.cols + 1) * m.shell.pad <= m.w);
+    CHECK(m.shell.top_extra == 0 && m.shell.bar_h + m.shell.rows * m.shell.tile_h + (m.shell.rows + 1) * m.shell.pad <= m.h);
+    /* the published state shows the narrow row */
+    char text[512];
+    CHECK(cp0_ui_state_format(&m, NULL, 1, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "class=portrait\n") != NULL);
+    CHECK(strstr(text, "header=40\n") != NULL);
+    CHECK(strstr(text, "dialog_max_w=300\n") != NULL);
+    CHECK(strstr(text, "text=24,20,16,14\n") != NULL);
+
+    /* the other portrait and landscape canvases keep their row: 480x640 / 480x800 are the Standard-portrait numbers */
+    m = compute(480, 800, 854, 0);
+    CHECK_EQ(m.tok[CP0_TOK_HEADER_H], 56);
+    CHECK_EQ(m.tok[CP0_TOK_SPACE_M], 16);
+    CHECK_EQ(m.text_px[CP0_TEXT_BODY], 24);
+    CHECK_EQ(m.shell.bar_h, 56);
+    CHECK(m.shell_preset == CP0_UI_PRESET_DECK);
+    m = compute(800, 1280, 0, 0);
+    CHECK_EQ(m.tok[CP0_TOK_HEADER_H], 56);
+    CHECK_EQ(m.text_px[CP0_TEXT_BODY], 24);
+    m = compute(480, 320, 630, 1);
+    CHECK_EQ(m.text_px[CP0_TEXT_BODY], 18);
+    check_shell_compact(&m.shell, 480, 320);
+    m = compute(640, 480, 1130, 0);
+    CHECK_EQ(m.text_px[CP0_TEXT_BODY], 24);
+    check_shell_deck(&m.shell, 640, 480);
 }
 
 /* ------------------------------------------------------------------ determinism, current */
@@ -840,6 +924,7 @@ int main(void)
     test_pinned();
     test_computed_grid();
     test_narrow_strip();
+    test_narrow_portrait();
     test_determinism();
     test_state_text();
     test_publish();

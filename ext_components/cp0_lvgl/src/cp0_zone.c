@@ -29,6 +29,9 @@ static const int k_strip_weight[CP0_ZONE_KEY__COUNT] = {11, 10, 10, 10, 10, 10, 
 int cp0_zone_layout(const cp0_ui_metrics_t *m, cp0_zone_layout_t *out)
 {
     if (!m || !out || m->w <= 0 || m->h <= m->w) return -1;
+    /* narrow portrait (320x480): no writing zone, as before the narrow rule made the tokens small enough for one to fit
+     * (study portrait-320: PDA mode below 480 px wide is a portrait canvas without the band) */
+    if (cp0_ui_narrow_portrait(m)) return -1;
     cp0_zone_layout_t l;
     memset(&l, 0, sizeof(l));
     l.w = m->w;

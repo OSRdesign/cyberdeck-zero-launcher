@@ -193,6 +193,18 @@ int cp0_ui_font_snap(int px);
 int cp0_ui_metrics_compute(int w, int h, int rot, int ppmm_x100, cp0_ui_density_src_t density_src, int compat_cap,
                            cp0_ui_metrics_t *out);
 
+/* Narrow portrait (study portrait-320): a portrait canvas (taller than wide) under CP0_UI_NARROW_PORTRAIT_BELOW_W px
+ * wide: 320x480 (zero8 upright). One predicate for everything that differs there: the token row (Compact numbers with the
+ * body text at 16 px), the compact shell (bar 40), the Esc at the left edge and no page title (cp0_ui_roller_page),
+ * the dialog, and the terminal font (st_viewport::font_px). A macro so that constexpr C++ and C share it. The 480
+ * px wide portrait panels (480x640, 480x800) and the tablet are not narrow. */
+#define CP0_UI_NARROW_PORTRAIT_BELOW_W 480
+#define CP0_UI_NARROW_PORTRAIT_SIZE(w, h) ((h) > (w) && (w) < CP0_UI_NARROW_PORTRAIT_BELOW_W)
+
+/* 1 when m is a computed canvas of narrow portrait size (CP0_UI_NARROW_PORTRAIT_SIZE; the pinned 640x480 and 480x320
+ * are never portrait). 0 for NULL. */
+int cp0_ui_narrow_portrait(const cp0_ui_metrics_t *m);
+
 /* The narrow page header (report 040): a computed canvas under CP0_UI_NARROW_BELOW_W wide drawn with the deck's shell
  * (400 px high or more: the portrait 480x640 / 480x800, not 320x170). Its title is 18 px (shell.title_px) and a
  * breadcrumb title shows its last part only (cp0_ui_roller_page_t.title_last_only). 0 for NULL and everywhere else,

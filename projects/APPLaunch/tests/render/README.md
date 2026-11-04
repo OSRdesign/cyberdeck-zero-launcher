@@ -2,7 +2,7 @@
 
 Renders the native shell (home grid, status strip, stock-app toolbar, Calculator, screensaver, toasts) and
 the native Settings pages to PNG at any logical screen size, on the PC, with no board and no
-SDL. Goldens at 640x480 (deck) and 480x320 (Pi 3A+), and at 480x640 and 480x800 for the PDA scenes (`pda_*`, profile
+SDL. Goldens at 640x480 (deck) and 480x320 (Pi 3A+), at 480x640 and 480x800 for the PDA scenes, and at 320x480 for the `p320_*` scenes (`pda_*`, profile
 `pda`, report 038 S2), catch any changed pixel, so the responsive-shell
 work (task 014, P1b onwards) can be checked without a person at a board.
 
@@ -27,7 +27,7 @@ flock /tmp/wsl-build.lock bash run.sh      # build + render all scenes + compare
 | `run.sh render [scene ...]` | render into `out/<WxH>/<shot>.png`, one contact sheet per scene in `out/sheets/<scene>.png` |
 | `run.sh compare` | compare `out/` with `golden/`; diff images in `out/diff/<WxH>/` (changed pixels red). Shots of a review-only scene (listed in `out/<WxH>/review.list`) need no golden |
 | `run.sh header` | every page header cut by a scene's `header` command against the home grid's: the status strip rectangle pixel-identical (`render-harness compare`) and the title label at the same origin |
-| `run.sh golden` | copy `out/640x480`, `out/480x320`, `out/480x640` and `out/480x800` into `golden/` (a deliberate baseline change, commit it) |
+| `run.sh golden` | copy `out/640x480`, `out/480x320`, `out/480x640`, `out/480x800` and `out/320x480` into `golden/` (a deliberate baseline change, commit it) |
 | `run.sh validate` | compare the harness with real device captures (see Fidelity) |
 | `run.sh twice` | render everything twice and check the PNGs are byte-identical |
 | `run.sh contract` | app contract 1 (`docs/APP-CONTRACT.md`): builds the host `tools/dev/app-contract-probe`, renders the `metrics` scene, then runs the probe in `--report` mode with the per-launch environment the launcher's builder wrote (`out/<WxH>/metrics.{compat,fullscreen}.env`) against `out/<WxH>/runtime/applaunch` (plus an `input.state` fixture, `vkb=force`), and checks size, class, density, rotation, canvas, window, scale and the keyboard rule against the layout service (`out/<WxH>/metrics.facts`); also the degrade cases (no environment, nothing). Reports: `out/<WxH>/contract.*.txt` |
@@ -61,6 +61,7 @@ Each size runs in its own forked process (the display manager is process-wide). 
 |---|---|---|
 | 640x480 | `deck` (no board.conf) | 640x480 XRGB8888, no rotation, no physical size (11.3 px/mm default), compat 2x at (0,0) |
 | 480x320 | `pi3a` (board.conf of the Pi 3A+: `APPLAUNCH_BOARD`, rotate 90, compat scale 1, `APPLAUNCH_PANEL_MM=79x49`, gpio backlight) | 320x480 RGB565, turned 90 deg clockwise, compat 1x at (80,25) |
+| 320x480 (the narrow portrait; zero8 turned to portrait, study portrait-320) | `p320` (the 3.5" 480x320 panel, 79x49 mm = 6.3 px/mm, not turned: `APPLAUNCH_ROTATE` 0, `APPLAUNCH_PDA` 1) | 320x480 RGB565, no rotation, compat 1x; scenes `p320_*` (golden size `320x480`) |
 | others | `generic` | WxH XRGB8888, no rotation, reports the physical size of the size's density (`var.width/height` in mm), compat window placed by the layout service (`cp0_ui_metrics`) |
 | 480x640, 480x800 with `profile pda` (the PDA scenes) | `pda` (report 038 S2: the board.conf of `pi3a-wsdsi43-portrait`: `APPLAUNCH_BOARD`, rotate 90, `APPLAUNCH_PDA=1` (the writing zone, report 041; the `pda_*` scenes set it to 0); `APPLAUNCH_PANEL_MM` 94x56 at 480x800, the 4.3" DSI, and 71x53 at 480x640, a 3.5" 640x480 panel) | the landscape panel (800x480 / 640x480) RGB565, turned 90 deg clockwise to the portrait canvas, compat 1x; the native display is the whole panel, the band (the key strip and the writing zone, 318 / 240 px) a third display drawn over its bottom while text input is wanted (report 042) |
 

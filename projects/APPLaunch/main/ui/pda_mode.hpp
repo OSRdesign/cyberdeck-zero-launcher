@@ -24,7 +24,8 @@
  * output stage (the toolkit of every app since v0.8.5) and viz1090's draw as well.
  * Offered (the row is shown) only when the board's geometry is known (both variables set and valid: the deck has no
  * board profile, its unit sets the rotation only), not square (a square panel has no portrait: turning it changes nothing), its short side is at least
- * kMinShortSide px and the writing zone fits the portrait canvas (cp0_zone_layout(): a third of the panel, the page
+ * kMinNarrowShortSide px (320; from kMinShortSide 480 up the writing zone must fit the portrait canvas, below it the
+ * portrait canvas has no band at all) (cp0_zone_layout(): a third of the panel, the page
  * keeping CP0_ZONE_APP_KEEP_PX above the band; the density from APPLAUNCH_PANEL_MM as the display manager reads it).
  * Every offered board offers the three values.
  *
@@ -54,6 +55,9 @@ constexpr int kLeft = 1;  /* On rotate left: the landscape canvas + 90 */
 constexpr int kRight = 2; /* On rotate right: the landscape canvas + 270 */
 /* the short side of the panel a portrait PDA canvas needs (480x800 is the reference) */
 constexpr int kMinShortSide = 480;
+/* the short side from which the row is offered at all: 320..479 gives the portrait canvas WITHOUT the writing band
+ * (the normal on-screen keyboard; APPLAUNCH_PDA is written as 0) */
+constexpr int kMinNarrowShortSide = 320;
 
 struct Canvas {
     int w = 0, h = 0, rot = 0; /* logical size, clockwise pre-rotation into the framebuffer */
@@ -81,11 +85,14 @@ bool zone_fits(const Canvas &portrait, const char *panel_mm);
 
 using ZoneFits = bool (*)(const Canvas &portrait, const char *panel_mm);
 
-/* The row is shown (see above). */
+/* The writing band exists on the portrait canvas: short side >= kMinShortSide and the zone fits. */
+bool band(const Board &board, const char *panel_mm, ZoneFits fits = zone_fits);
+
+/* The row is shown (see above): the short side is kMinNarrowShortSide or more; from kMinShortSide the band must fit. */
 bool offered(const Board &board, const char *panel_mm, ZoneFits fits = zone_fits);
 
 /* What runs when nothing is stored: a portrait board.conf with APPLAUNCH_PDA=1 is its side (kLeft or kRight), anything
- * else kOff. */
+ * else kOff; a portrait canvas under kMinShortSide (no band, a hand-edited 320x480) is its side without the flag. */
 int board_default(const Board &board);
 
 /* The canvas of a value (kOff: the landscape one). */
@@ -108,13 +115,15 @@ struct Plan {
     Vars env;           /* APPLAUNCH_LOGICAL, APPLAUNCH_ROTATE, APPLAUNCH_PDA to set; empty = board.conf as it is */
 };
 
-/* stored (-1 = nothing) applied to the board: only where offered; otherwise board.conf as it is. */
-Plan plan(const Board &board, int stored, bool is_offered);
+/* stored (-1 = nothing) applied to the board: only where offered; otherwise board.conf as it is. APPLAUNCH_PDA is 1
+ * only for an On value with the band (with_band, band()). */
+Plan plan(const Board &board, int stored, bool is_offered, bool with_band = true);
 
 /* What this launcher started with. */
 struct Startup {
     Board board;
     bool offered = false;
+    bool band = false; /* the writing band exists on the portrait canvas (false: portrait without it, or landscape) */
     int stored = -1;
     int mode = kOff;
     bool applied = false; /* the environment was changed by apply_at_start() */

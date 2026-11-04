@@ -1,0 +1,49 @@
+# Settings > Updates > System packages > the terminal text page at 320x480 (profile p320; study portrait-320, PR-C+D): the
+# body text at 16 px, the text block 24 px from the left edge (roller margin 10 + inset 14, lines 272 px wide), no page
+# title in the bar. Pi 4 B's apt capture as in updates_system. Golden at 320x480 only.
+title p320 text
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env HARNESS_APPS catalogue
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+apps Settings CLI SSH Calculator
+clock 20:30 2026-11-01
+wifi 70
+bt on
+update net on
+update build 0.9.1 release arm64
+update answer releases-real.json
+apt board pi4b
+apt lists-age 1
+home
+launch Settings
+wait 300
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 3000
+shot p320_text_root
+expect_text "21 updates"
+expect_color "21 updates" F0B400
+expect_chevron "Packages" yes
+expect_chevron "App updates" yes
+key DOWN
+key ENTER
+wait 600
+shot p320_text_list
+expect_text "Refresh lists"
+# a package row: grey value, the grey information dot, no chevron and no action
+key DOWN
+shot p320_text_package
+expect_chevron "cifs-utils" no
+# the end of the list: the boot chain row (rpi-eeprom) opens the terminal command page
+key END
+key UP
+shot p320_text_end
+expect_chevron "rpi-eeprom" yes
+key ENTER
+wait 300
+shot p320_text_page

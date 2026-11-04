@@ -6,6 +6,7 @@
 
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_st.hpp"
+#include "../model/st_viewport_model.hpp"
 
 #include <sstream>
 
@@ -87,12 +88,13 @@ void UISTPage::exec(const std::string &command, const std::list<std::string> &ar
 void UISTPage::init_geometry()
 {
     lv_display_t *display = root_screen_ ? lv_obj_get_display(root_screen_) : lv_display_get_default();
-    native_ = display && lv_display_get_horizontal_resolution(display) > COMPAT_TERM_W;
+    native_ = display && st_viewport::native_display(lv_display_get_horizontal_resolution(display),
+                                                      lv_display_get_vertical_resolution(display));
     if (!native_) return;
 
     term_w_ = lv_display_get_horizontal_resolution(display);
     term_h_ = lv_display_get_vertical_resolution(display);
-    font_px_ = 20;
+    font_px_ = st_viewport::font_px(term_w_, term_h_);
     if (const char *requested = std::getenv("APPLAUNCH_TERM_FONT")) {
         const int value = std::atoi(requested);
         if (value >= 10 && value <= 48) font_px_ = value;

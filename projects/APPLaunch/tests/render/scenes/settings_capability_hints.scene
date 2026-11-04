@@ -23,5 +23,7 @@ expect_rows Screen "Speaker: pair XWF-M18-M28-M38 in Bluetooth" Wi-Fi Bluetooth 
 shot settings_hints_root
 key ENTER
 wait 300
-expect_rows "Brightness: use the button on the case" DarkTime
+@720x720 expect_rows "Brightness: use the button on the case" DarkTime
+@640x480 expect_rows "Brightness: use the button on the case" DarkTime
+@480x320 expect_rows "Brightness: use the button on the case" DarkTime "PDA mode"
 shot settings_hints_screen

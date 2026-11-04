@@ -1,0 +1,17 @@
+# The home grid at 320x480 (the 3.5" 480x320 panel run upright, profile p320; study portrait-320, PR-B): seven tiles, so
+# the grid scrolls. Golden at 320x480 only.
+title p320 home
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+keyboards 0
+apps Settings CLI SSH Calculator "Mesh Hop=fixture:ip_panel_100.png" "RSS Reader=fixture:store_100.png" "Net Toolbox=ssh_100.png"
+clock 20:30
+wifi 70
+bt on
+home
+shot p320_home
+key DOWN
+key DOWN
+key DOWN
+shot p320_home_scrolled

@@ -1,0 +1,39 @@
+# The page bar at 320x480 (profile p320; study portrait-320, PR-C+D, owner decisions 2026-11-03): 40 px bar, the Esc 44x30 at
+# the left edge with a 54x40 tap area, no page title, the status strip as on the home grid. Settings root, the Screen
+# section, Esc by its button and by a tap at the edge of its tap area (x 6, y 2) and the other edge (x 57, y 38).
+# `header` checks the strip rectangle against the home grid's and that no label stands at the title origin.
+# Golden at 320x480 only.
+title p320 bar
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+config dark_time 60
+home
+header home
+launch Settings
+wait 300
+shot p320_bar_root
+key ENTER
+wait 300
+shot p320_bar_screen
+header p320_bar_screen
+expect_text "DarkTime"
+tapbutton Esc
+wait 300
+shot p320_bar_back_button
+key ENTER
+wait 300
+expect_text "DarkTime"
+tap 6 2
+wait 300
+shot p320_bar_back_edge
+key ENTER
+wait 300
+tap 57 38
+wait 300
+shot p320_bar_back_edge2

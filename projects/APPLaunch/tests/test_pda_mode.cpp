@@ -115,8 +115,8 @@ static void test_board_from()
 
 static void test_offered()
 {
-    // the real rule: the board known, not square, the short side 480 px or more, the writing zone on the portrait
-    // canvas
+    // the real rule: the board known, not square; the short side 480 px or more with the writing zone on the portrait
+    // canvas, or 320..479 px (the portrait canvas without a band)
     const struct {
         const char *logical, *rotate, *panel_mm;
         bool offered;
@@ -131,8 +131,13 @@ static void test_offered()
         {"1024x600", "0", "154x90", true, "a 7\" 1024x600"},
         {"640x480", "0", "71x53", true, "a 3.5\" 640x480 panel (480x640 portrait, report 041)"},
         {"720x720", "0", nullptr, false, "square"},
-        {"480x320", "90", "79x49", false, "short side 320"},
-        {"800x479", "0", nullptr, false, "short side 479"},
+        {"480x320", "90", "79x49", true, "short side 320: portrait without the band (zero8, the 3.5\" Luckfox panel)"},
+        {"480x320", "90", nullptr, true, "short side 320 at the default density"},
+        {"320x480", "180", "79x49", true, "a hand-edited portrait board.conf at short side 320"},
+        {"800x479", "0", nullptr, true, "short side 479: no band"},
+        {"320x240", "0", nullptr, false, "short side 240"},
+        {"320x170", "0", nullptr, false, "the deck's panel, if a profile gave its size"},
+        {"320x320", "0", nullptr, false, "square at 320"},
         {nullptr, "0", nullptr, false, "the deck: no board profile (its unit sets the rotation only)"},
     };
     for (const auto &c : cases) {
@@ -142,6 +147,15 @@ static void test_offered()
         CHECK(got == c.offered);
         CHECK(pda_mode::choices(b, got).size() == (got ? 3u : 0u));
     }
+    // the band: only from short side 480 and where the zone fits; never at 320
+    CHECK(pda_mode::band(pda_mode::board_from("800x480", "0", nullptr), "94x56"));
+    CHECK(pda_mode::band(pda_mode::board_from("640x480", "0", nullptr), "71x53"));
+    CHECK(!pda_mode::band(pda_mode::board_from("480x320", "90", nullptr), "79x49"));
+    CHECK(!pda_mode::band(pda_mode::board_from("480x320", "90", nullptr), "79x49", always));
+    CHECK(!pda_mode::band(pda_mode::board_from("720x720", "0", nullptr), nullptr, always));
+    CHECK(!pda_mode::band(pda_mode::board_from("800x480", "0", nullptr), nullptr, never));
+    // 480x320 never asks the zone check (no band at 320: the check is not what decides)
+    CHECK(pda_mode::offered(pda_mode::board_from("480x320", "90", nullptr), "79x49", never));
     // the zone check gets the portrait canvas (the left one: both sides have its size) and decides
     const Board tablet = pda_mode::board_from("1280x800", "0", nullptr);
     CHECK(pda_mode::offered(tablet, nullptr, always));
@@ -174,6 +188,10 @@ static void test_board_default()
     CHECK(pda_mode::board_default(pda_mode::board_from("480x800", "90", nullptr)) == pda_mode::kOff);
     CHECK(pda_mode::board_default(pda_mode::board_from("800x480", "0", "1")) == pda_mode::kOff);
     CHECK(pda_mode::board_default(pda_mode::board_from("480x800", nullptr, "1")) == pda_mode::kOff);
+    // a hand-edited 320x480 board.conf has no band, so no APPLAUNCH_PDA: the row follows the actual rotation anyway
+    CHECK(pda_mode::board_default(pda_mode::board_from("320x480", "180", nullptr)) == pda_mode::kLeft);
+    CHECK(pda_mode::board_default(pda_mode::board_from("320x480", "0", nullptr)) == pda_mode::kRight);
+    CHECK(pda_mode::board_default(pda_mode::board_from("480x320", "90", nullptr)) == pda_mode::kOff);
 }
 
 static void test_stored()
@@ -226,6 +244,30 @@ static void test_plan()
     p = pda_mode::plan(portrait, pda_mode::kRight, true);
     CHECK(value_of(p.env, "APPLAUNCH_LOGICAL") == "480x800" && value_of(p.env, "APPLAUNCH_ROTATE") == "270" &&
           value_of(p.env, "APPLAUNCH_PDA") == "1");
+    // zero8 / a 480x320 panel (board.conf 480x320 rotate 90): left is the hand edit 320x480 rotate 180, right is rotate 0,
+    // both without the band (APPLAUNCH_PDA 0); Off is today's landscape; nothing stored changes nothing
+    const Board small = pda_mode::board_from("480x320", "90", nullptr);
+    const bool small_offered = pda_mode::offered(small, "79x49");
+    const bool small_band = pda_mode::band(small, "79x49");
+    CHECK(small_offered && !small_band);
+    p = pda_mode::plan(small, -1, small_offered, small_band);
+    CHECK(p.env.empty() && p.mode == pda_mode::kOff);
+    p = pda_mode::plan(small, pda_mode::kLeft, small_offered, small_band);
+    CHECK(p.mode == pda_mode::kLeft && same(p.canvas, 320, 480, 180) && p.env.size() == 3);
+    CHECK(value_of(p.env, "APPLAUNCH_LOGICAL") == "320x480" && value_of(p.env, "APPLAUNCH_ROTATE") == "180" &&
+          value_of(p.env, "APPLAUNCH_PDA") == "0");
+    p = pda_mode::plan(small, pda_mode::kRight, small_offered, small_band);
+    CHECK(value_of(p.env, "APPLAUNCH_LOGICAL") == "320x480" && value_of(p.env, "APPLAUNCH_ROTATE") == "0" &&
+          value_of(p.env, "APPLAUNCH_PDA") == "0");
+    p = pda_mode::plan(small, pda_mode::kOff, small_offered, small_band);
+    CHECK(value_of(p.env, "APPLAUNCH_LOGICAL") == "480x320" && value_of(p.env, "APPLAUNCH_ROTATE") == "90" &&
+          value_of(p.env, "APPLAUNCH_PDA") == "0");
+    // the hand-edited portrait board.conf with Off stored: back to the landscape canvas
+    const Board hand = pda_mode::board_from("320x480", "180", nullptr);
+    p = pda_mode::plan(hand, pda_mode::kOff, true, false);
+    CHECK(value_of(p.env, "APPLAUNCH_LOGICAL") == "480x320" && value_of(p.env, "APPLAUNCH_ROTATE") == "90");
+    p = pda_mode::plan(hand, -1, true, false);
+    CHECK(p.env.empty() && p.mode == pda_mode::kLeft);
     // the tablet: 800x1280 rotate 90 / 270 (the study's P0 values for the left side)
     p = pda_mode::plan(tablet, pda_mode::kLeft, true);
     CHECK(value_of(p.env, "APPLAUNCH_LOGICAL") == "800x1280" && value_of(p.env, "APPLAUNCH_ROTATE") == "90" &&
@@ -304,6 +346,17 @@ static void test_apply_at_start()
     run_start("{\"pda_mode\": 2}", "480x800", "90", "1", "480x800", "270", "1", pda_mode::kRight, true);
     // a stored value on a board where the row is not offered (square): nothing changes
     run_start("{\"pda_mode\": 1}", "720x720", "0", nullptr, "720x720", "0", nullptr, pda_mode::kOff, false);
+    // 480x320 (zero8): stored On rotate left = 320x480 rotate 180, right = rotate 0, APPLAUNCH_PDA 0 (no band); stored
+    // Off and nothing stored keep the landscape
+    run_start(nullptr, "480x320", "90", nullptr, "480x320", "90", nullptr, pda_mode::kOff, false);
+    run_start("{\"pda_mode\": 1}", "480x320", "90", nullptr, "320x480", "180", "0", pda_mode::kLeft, true);
+    run_start("{\"pda_mode\": 2}", "480x320", "90", nullptr, "320x480", "0", "0", pda_mode::kRight, true);
+    run_start("{\"pda_mode\": 0}", "480x320", "90", nullptr, "480x320", "90", "0", pda_mode::kOff, true);
+    // the hand-edited board.conf: nothing stored, the row's value follows the actual rotation; Off stored goes back
+    run_start(nullptr, "320x480", "180", nullptr, "320x480", "180", nullptr, pda_mode::kLeft, false);
+    run_start("{\"pda_mode\": 0}", "320x480", "180", nullptr, "480x320", "90", "0", pda_mode::kOff, true);
+    // a 320x240 board: not offered
+    run_start("{\"pda_mode\": 1}", "320x240", "0", nullptr, "320x240", "0", nullptr, pda_mode::kOff, false);
     // an unreadable config.json: nothing changes
     run_start("{\"pda_mode\": ", "1280x800", "0", nullptr, "1280x800", "0", nullptr, pda_mode::kOff, false);
 }

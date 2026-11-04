@@ -250,7 +250,46 @@ static void test_page_layout(void)
             CHECK_EQ(pp.title_px, 18); /* report 040: "On-screen keyboard" is about 186 px at 18 */
             CHECK(pp.title_last_only);
             CHECK_EQ(pp.esc_h, 40); /* the header's Esc keeps its height: the bar and its margin are unchanged */
+            CHECK(!pp.title_hidden && pp.esc_hit_pad == 0); /* the narrow-portrait bar is for 320x480 only */
         }
+    }
+
+    /* narrow portrait (320x480 at zero8's 6.3 px/mm; study portrait-320, owner decisions 2026-11-03): the bar is 40 px
+     * with the Esc 44 x 30 at the left edge (x 10, y 5), its tap area 54 x 40 (5 px on every side: the bar's whole
+     * height), no title; the body is 440 px high, the centre bar at y 238 */
+    {
+        cp0_ui_metrics_t nm;
+        cp0_ui_roller_page_t np;
+        CHECK_EQ(cp0_ui_metrics_compute(320, 480, 0, 630, CP0_UI_DENSITY_PANEL_MM, 0, &nm), 0);
+        CHECK_EQ(cp0_ui_roller_page(&nm, 320 - 230 + 75, &np), 0); /* strip left of 165: the Esc is nowhere near it */
+        CHECK_EQ(np.header_h, 40);
+        CHECK_EQ(np.esc_w, 44);
+        CHECK_EQ(np.esc_h, 30);
+        CHECK_EQ(np.esc_x, 10);
+        CHECK_EQ(np.esc_y, 5);
+        CHECK_EQ(np.esc_radius, 14);
+        CHECK_EQ(np.esc_text_px, 18);
+        CHECK_EQ(np.esc_hit_pad, 5);
+        CHECK_EQ(np.esc_w + 2 * np.esc_hit_pad, 54);
+        CHECK_EQ(np.esc_h + 2 * np.esc_hit_pad, 40);
+        CHECK(np.esc_x - np.esc_hit_pad >= 0 && np.esc_y - np.esc_hit_pad >= 0);
+        CHECK(np.esc_x + np.esc_w + np.esc_hit_pad < np.strip_left);
+        CHECK(np.title_hidden);
+        CHECK_EQ(np.title_max_w, 0);
+        CHECK(!np.title_last_only);
+        CHECK_EQ(np.body_y, 40);
+        CHECK_EQ(np.body_h, 440);
+        CHECK_EQ(np.roller_x, 10);
+        CHECK_EQ(np.roller_w, 300);
+        CHECK_EQ(np.row_h, 44);
+        CHECK_EQ(np.edge_pad, 198);
+        CHECK_EQ(np.body_y + np.edge_pad, 238); /* the highlight bar */
+        CHECK_EQ(np.inset, 14);                 /* a text page: 10 + 14 = 24 px from the edge, 272 px lines */
+        CHECK_EQ(np.roller_w - 2 * np.inset, 272);
+        CHECK_EQ(np.caption_px, 14);
+        /* the strip is the home grid's: same rectangle */
+        CHECK_EQ(np.strip_x, 320 - nm.shell.status_w);
+        CHECK_EQ(np.strip_h, 40);
     }
 
     /* no measured strip: the Esc goes SPACE_M left of the strip canvas */

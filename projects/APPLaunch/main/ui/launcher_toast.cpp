@@ -20,16 +20,17 @@ constexpr uint32_t kBackgroundColor = 0x1F3A5F;
 constexpr uint32_t kTextColor = 0xFFFFFF;
 
 // The size comes from cp0_ui_overlay.h (task 014 P4): a display at most 320 px wide (the compat window, stock
-// stock, SDL) keeps today's 280x22 / 38 toast; the native display gets the pinned DECK / COMPACT table (the
+// stock, SDL) keeps today's 280x22 / 38 toast (the 320x480 native portrait display does not: it gets a computed one); the native display gets the pinned DECK / COMPACT table (the
 // old width / 320 scaling, byte-identical there) or a size from the tokens.
 cp0_ui_toast_t spec_for(const lv_obj_t *object, int lines, bool *native)
 {
     lv_display_t *display = object ? lv_obj_get_display(object) : lv_display_get_default();
     const int width = display ? static_cast<int>(lv_display_get_horizontal_resolution(display))
                               : CP0_UI_OVERLAY_COMPAT_MAX_W;
+    const int height = display ? static_cast<int>(lv_display_get_vertical_resolution(display)) : CP0_UI_COMPAT_H;
     cp0_ui_toast_t spec;
-    cp0_ui_overlay_toast(cp0_ui_metrics_get(), width, lines, &spec);
-    if (native) *native = !cp0_ui_overlay_is_compat_display(width);
+    cp0_ui_overlay_toast(cp0_ui_metrics_get(), width, height, lines, &spec);
+    if (native) *native = !cp0_ui_overlay_is_compat(cp0_ui_metrics_get(), width, height);
     return spec;
 }
 

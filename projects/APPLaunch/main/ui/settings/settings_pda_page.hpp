@@ -5,7 +5,8 @@
  *
  *   Screen > PDA mode   Off / On rotate left / On rotate right (a value page: a ChoicePage in the native host). Listed
  *                       only where pda_mode::startup() says the board offers it (a portrait canvas with the writing
- *                       zone fits: short side at least 480 px, not square, a board profile). The current value is what
+ *                       zone fits: short side at least 480 px; from 320 to 479 px the row is there too, with a portrait canvas and no writing
+ *                       band; not square, a board profile). The current value is what
  *                       this launcher started with. Picking another one asks first ("Restart the launcher?": this
  *                       restarts the launcher and closes open apps); Restart stores it (config "pda_mode" through the
  *                       config service, SetInt + Save) and ends the launcher with the restart exit status
