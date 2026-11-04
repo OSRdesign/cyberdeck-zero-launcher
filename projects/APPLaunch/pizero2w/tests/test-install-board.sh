@@ -1148,6 +1148,175 @@ printf '[all]\ndtoverlay=vc4-kms-v3d\n' > "$R/boot/firmware/config.txt"
 hp_install --pwm-backlight
 check "fake Pi 5 install --pwm-backlight without the HyperPixel line: warned, config.txt untouched, no dtc" '[ $RC = 0 ] && has "WARNING: no dtoverlay=vc4-kms-dpi-hyperpixel4 line" && [ "$(cat "$R/boot/firmware/config.txt")" = "$(printf "[all]\ndtoverlay=vc4-kms-v3d")" ] && ! called "hyperpixel4-pwm-backlight"'
 
+# --- the 3.5" SPI panel's PWM backlight (pi3a-luckfox35 on a Zero 2 W: the Waveshare 3.5" RPi LCD (F), zero8): the stock
+# mipi-dbi-spi overlay's dtparam=backlight-pwm in place of backlight-gpio=18, and the profile line
+# APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm. First, every other profile body (and this one without the
+# PWM backlight) is still the one v0.9.3 wrote, checksum for checksum: no generated board.conf of another board is
+# rewritten by this change.
+body_sum_of() {  # body_sum_of FIXTURE [install.sh options]: the checksum line install.sh --board-only writes there
+    s="$TMP/sum-$1"; rm -rf "$s"; cp -R "$FIX/$1" "$s"; shift
+    SYSROOT="$s" sh "$INSTALL" --board-only "$@" > /dev/null 2>&1
+    sed -n 's/^# applaunch-profile-sum: //p' "$s/etc/applaunch/board.conf" 2>/dev/null
+}
+for spec in "pi3a-luckfox35|724676656 664|" "pi3a-wsdsi43|833775195 571|" "pi3a-wsdsi43|2175249641 1138|--board pi3a-wsdsi43-portrait" \
+            "pi4b-dsi|3376657049 694|" "pi5-hyperpixel4|806221525 186|" "hackberry-cm5|1252750838 297|"; do
+    fx=${spec%%|*}; rest=${spec#*|}; want=${rest%%|*}; opt=${rest#*|}
+    # shellcheck disable=SC2086
+    got=$(body_sum_of "$fx" $opt)
+    if [ "$got" = "$want" ]; then ok "profile body as v0.9.3 wrote it: $fx${opt:+ $opt} ($want)"; else ko "profile body as v0.9.3 wrote it: $fx${opt:+ $opt} ($want)" "got: $got"; fi
+done
+# zero8's boot files: its config.txt before the hand test (Z8_CFG0) and after it (Z8_CFG1, what install.sh must write)
+Z8_CFG0='dtparam=audio=on
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+[cm5]
+dtoverlay=dwc2,dr_mode=host
+[all]
+dtparam=spi=on
+dtoverlay=mipi-dbi-spi,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18
+dtoverlay=goodix,addr=0x5d'
+Z8_CFG1='dtparam=audio=on
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+[cm5]
+dtoverlay=dwc2,dr_mode=host
+[all]
+dtparam=spi=on
+dtoverlay=mipi-dbi-spi,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22
+dtparam=backlight-pwm
+dtoverlay=goodix,addr=0x5d'
+Z8_PWM_KEYS='APPLAUNCH_BOARD=pi3a-luckfox35
+APPLAUNCH_FB=/dev/fb1
+APPLAUNCH_LOGICAL=480x320
+APPLAUNCH_ROTATE=90
+APPLAUNCH_COMPAT_SCALE=1
+APPLAUNCH_PANEL_MM=79x49
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm
+LV_LINUX_FBDEV_DEVICE=/dev/fb1
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+# z8_root [CONFIG]: the Pi 3A+ SPI tree with the Zero 2 W's model and zero8's boot files, installed before (cmdline.txt
+# has the console arguments and their backup); a Zero 2 W is detected as the deck, so it is pi3a-luckfox35 with --board
+z8_root() {
+    R=$(root pi3a-luckfox35); P="$R/etc/applaunch/board.conf"
+    printf 'Raspberry Pi Zero 2 W Rev 1.0\n' > "$R/proc/device-tree/model"
+    mkdir -p "$R/boot/firmware/overlays"
+    printf '%s\n' "${1:-$Z8_CFG0}" > "$R/boot/firmware/config.txt"
+    printf '%s\n' "$CMD0 vt.global_cursor_default=0 consoleblank=0" > "$R/boot/firmware/cmdline.txt"
+    printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt.bak-applaunch"
+}
+z8_install() { : > "$CALLS"; OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \
+    sh "$BUN/install.sh" --user "$U" --no-default-source --board pi3a-luckfox35 "$@" 2>&1); RC=$?; }
+z8_state() { snapshot "$R/boot"; cksum < "$P"; }
+CFG="boot/firmware/config.txt"
+# dry run of a fresh board: the whole plan, nothing written
+z8_root
+run --dry-run --board pi3a-luckfox35
+check "zero8 dry-run: the PWM backlight planned (config.txt line 11, the profile line, its udev rule, a reboot)" '[ $RC = 0 ] && has "board: pi3a-luckfox35 (forced" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && ! has "APPLAUNCH_BACKLIGHT=gpio:" && has "PWM backlight in config.txt (below) + cmdline cursor/consoleblank" && has "backlight-gpio=18 comes off line 11 and dtparam=backlight-pwm" && has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of backlight_pwm)"'
+check "zero8 dry-run: nothing written" '[ ! -e "$R/etc" ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG0" ] && [ ! -e "$R/$CFG.bak-applaunch" ]'
+# a fresh install: config.txt as the hand test left it (the original kept), the PWM profile, a reboot asked for
+z8_root
+printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"; rm -f "$R/boot/firmware/cmdline.txt.bak-applaunch"
+z8_install
+check "zero8 fresh install: exit 0, config.txt as the hand test left it, the original kept as config.txt.bak-applaunch" '[ $RC = 0 ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && [ "$(cat "$R/$CFG.bak-applaunch")" = "$Z8_CFG0" ] && has "config.txt: backlight-gpio=18 taken off line 11, dtparam=backlight-pwm added after it"'
+check "zero8 fresh install: the profile names the PWM backlight (generated: checksum 1141298570 664), its udev rule" '[ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && grep -qx "# applaunch-profile-sum: 1141298570 664" "$P" && [ "$(sed 1,3d "$P" | cksum | cut -d" " -f1-2)" = "1141298570 664" ] && grep -q "KERNEL==\"backlight_pwm\"" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"'
+check "zero8 fresh install: a reboot asked for, for the PWM backlight" 'has "REBOOT for it" && has "reboot now so the PWM backlight and console settings apply"'
+check "zero8 fresh install: no dtc, no overlay of ours (the stock overlay's parameter), install.conf as given" '! called "dtc " && [ -z "$(ls "$R/boot/firmware/overlays")" ] && grep -qx "board=pi3a-luckfox35" "$R/etc/applaunch/install.conf" && grep -qx "pwm_backlight=0" "$R/etc/applaunch/install.conf"'
+STATE1=$(z8_state)
+z8_install
+check "zero8 second run: a no-op (config.txt, its backup, cmdline.txt and board.conf as they were), no reboot asked" '[ $RC = 0 ] && [ "$(z8_state)" = "$STATE1" ] && has "already up to date" && has "config.txt already has the panel" && ! has "reboot now" && [ ! -e "$P.bak" ]'
+run --plan --board pi3a-luckfox35
+check "zero8 after the install: --plan keeps board.conf (Settings > Updates goes ahead)" 'has "profile_action=keep" && has "profile_state=ours"'
+: > "$CALLS"
+OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      sh "$BUN/uninstall.sh" --dry-run 2>&1); RC=$?
+check "zero8 uninstall dry-run: the stock overlay's dtparam=backlight-pwm stays in config.txt (README: revert by hand)" '[ $RC = 0 ] && has "config.txt: no line of install.sh to remove" && ! has "backlight-pwm" && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ]'
+# an update of a board that has the old generated profile (v0.9.3's on/off body; --board-only leaves config.txt alone)
+z8_root
+SYSROOT="$R" sh "$INSTALL" --board-only --board pi3a-luckfox35 > /dev/null 2>&1
+OLD=$(cat "$P")
+check "zero8 old profile: the on/off body of v0.9.3 (checksum 724676656 664, the one measured on zero8)" 'grep -qx "# applaunch-profile-sum: 724676656 664" "$P" && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$P"'
+run --plan --board pi3a-luckfox35
+check "zero8 old profile: --plan replaces board.conf (Settings > Updates stops there: install.sh by hand)" 'has "profile_action=replace" && has "profile_state=ours"'
+z8_install
+check "zero8 update from the old profile: recognised as generated, replaced (old one kept as board.conf.bak), the PWM line" '[ $RC = 0 ] && has "pi3a-luckfox35: update" && [ "$(cat "$P.bak")" = "$OLD" ] && [ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && grep -qx "# applaunch-profile-sum: 1141298570 664" "$P"'
+check "zero8 update from the old profile: config.txt changed (backup first), reboot asked for" '[ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && [ "$(cat "$R/$CFG.bak-applaunch")" = "$Z8_CFG0" ] && has "reboot now so the PWM backlight and console settings apply"'
+# zero8 as hand-tested: board.conf edited by hand (the old header, the PWM line), config.txt already PWM: nothing to do
+z8_root
+SYSROOT="$R" sh "$INSTALL" --board-only --board pi3a-luckfox35 > /dev/null 2>&1
+sed -i 's|^APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio$|APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm|' "$P"
+printf '%s\n' "$Z8_CFG1" > "$R/$CFG"
+STATE1=$(z8_state)
+run --plan --board pi3a-luckfox35
+check "zero8 as hand-tested: --plan keeps the edited board.conf (Settings > Updates goes ahead)" 'has "profile_action=keep" && has "profile_state=edited"'
+z8_install
+check "zero8 as hand-tested: a no-op: board.conf kept byte for byte, config.txt untouched, no backup made, no reboot asked" '[ $RC = 0 ] && has "edited by hand: kept" && has "config.txt already has the panel" && [ "$(z8_state)" = "$STATE1" ] && [ ! -e "$R/$CFG.bak-applaunch" ] && [ ! -e "$P.bak" ] && ! has "reboot now"'
+check "zero8 as hand-tested: the edited body is the generated PWM body (so --force changes only its checksum line)" '[ "$(sed 1,3d "$P" | cksum | cut -d" " -f1-2)" = "1141298570 664" ]'
+z8_install --force
+check "zero8 as hand-tested + --force: generated again (same body), the edited file kept as .bak, config.txt as it was, no reboot" '[ $RC = 0 ] && grep -qx "# applaunch-profile-sum: 1141298570 664" "$P" && [ "$(sed 1,3d "$P")" = "$(sed 1,3d "$P.bak")" ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && ! has "reboot now"'
+# another hand edit (the rotation) while config.txt is still on/off: both kept; --force writes both
+z8_root
+SYSROOT="$R" sh "$INSTALL" --board-only --board pi3a-luckfox35 > /dev/null 2>&1
+sed -i 's/^APPLAUNCH_ROTATE=90$/APPLAUNCH_ROTATE=270/' "$P"
+STATE1=$(z8_state)
+z8_install
+check "zero8 board.conf edited by hand, config.txt on/off: both kept, said so, no reboot" '[ $RC = 0 ] && has "edited by hand: kept" && has "board.conf was edited by hand: config.txt left as it is too (--force writes both)" && [ "$(z8_state)" = "$STATE1" ] && ! has "reboot now"'
+z8_install --force
+check "zero8 board.conf edited by hand + --force: both written (the edit kept in board.conf.bak), reboot" '[ $RC = 0 ] && grep -qx "APPLAUNCH_ROTATE=270" "$P.bak" && [ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && has "reboot now so the PWM backlight"'
+# the ways out: --no-boot-config, --board-only, a desktop board: config.txt left alone and the on/off profile
+z8_root
+run --dry-run --board pi3a-luckfox35 --no-boot-config
+check "zero8 --no-boot-config: config.txt left alone, the on/off profile" '[ $RC = 0 ] && has "skipped (--no-boot-config): on/off backlight" && has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" && has "boot config: skipped (--no-boot-config)"'
+run --dry-run --board pi3a-luckfox35 --board-only
+check "zero8 --board-only: the on/off profile (config.txt is for a whole install)" '[ $RC = 0 ] && has "--board-only: config.txt left as it is" && has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio"'
+run --dry-run --board pi3a-luckfox35 --pwm-backlight
+check "zero8 --pwm-backlight: not needed, ignored, the same plan" '[ $RC = 0 ] && has "--pwm-backlight: not needed on pi3a-luckfox35 on a Zero 2 W" && ! has "ignored on pi3a-luckfox35" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"'
+desktop "$R" lightdm.service lightdm labwc
+run --dry-run --board pi3a-luckfox35
+check "zero8 desktop board: config.txt left alone, the on/off profile" '[ $RC = 0 ] && has "session: desktop" && has "desktop board: config.txt left as it is (on/off backlight)" && has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio"'
+# other shapes of config.txt: the parameter on the overlay line itself, or alone on its line: changed the same way
+V0=$(printf '[all]\ndtoverlay=mipi-dbi-spi,speed=48000000,backlight-gpio=18\ndtparam=reset-gpio=27,dc-gpio=22\ndtoverlay=goodix,addr=0x5d')
+V1=$(printf '[all]\ndtoverlay=mipi-dbi-spi,speed=48000000\ndtparam=backlight-pwm\ndtparam=reset-gpio=27,dc-gpio=22\ndtoverlay=goodix,addr=0x5d')
+z8_root "$V0"
+z8_install
+check "zero8 config.txt with backlight-gpio=18 on the overlay line: taken off it, dtparam=backlight-pwm after it" '[ $RC = 0 ] && [ "$(cat "$R/$CFG")" = "$V1" ] && grep -qx "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" "$P"'
+V0=$(printf '[all]\ndtoverlay=mipi-dbi-spi\ndtparam=backlight-gpio=18\ndtparam=reset-gpio=27\ndtoverlay=goodix')
+V1=$(printf '[all]\ndtoverlay=mipi-dbi-spi\ndtparam=backlight-pwm\ndtparam=reset-gpio=27\ndtoverlay=goodix')
+z8_root "$V0"
+z8_install
+check "zero8 config.txt with backlight-gpio=18 alone on its line: that line becomes dtparam=backlight-pwm" '[ $RC = 0 ] && [ "$(cat "$R/$CFG")" = "$V1" ]'
+# ... and the shapes it does not touch: another pin, both parameters, two such overlays, the parameter after the next
+# overlay (it is not the panel's), no panel overlay: the on/off profile, said so
+for V0 in "$(printf '[all]\ndtoverlay=mipi-dbi-spi\ndtparam=backlight-gpio=13')" \
+          "$(printf '[all]\ndtoverlay=mipi-dbi-spi\ndtparam=backlight-gpio=18\ndtparam=backlight-pwm')" \
+          "$(printf '[all]\ndtoverlay=mipi-dbi-spi\ndtparam=backlight-gpio=18\ndtoverlay=mipi-dbi-spi,cs=1')" \
+          "$(printf '[all]\ndtoverlay=mipi-dbi-spi\ndtoverlay=goodix\ndtparam=backlight-gpio=18')" \
+          "$(printf '[all]\ndtoverlay=vc4-kms-v3d')"; do
+    z8_root "$V0"
+    z8_install
+    check "zero8 config.txt not changed: $(printf '%s' "$V0" | sed -n '2,$p' | tr '\n' ' ')" '[ $RC = 0 ] && [ "$(cat "$R/$CFG")" = "$V0" ] && [ ! -e "$R/$CFG.bak-applaunch" ] && has "config.txt has no dtoverlay=mipi-dbi-spi with backlight-gpio=18 to change" && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$P" && ! has "reboot now"'
+done
+# the Pi 3A+ with the same overlay keeps its on/off backlight (its PWM0 is the headphone jack's): v0.9.3's profile,
+# config.txt untouched; one whose config.txt has the PWM backlight already (by hand) gets the PWM profile line
+R=$(root pi3a-luckfox35); P="$R/etc/applaunch/board.conf"
+mkdir -p "$R/boot/firmware/overlays"
+printf '%s\n' "$Z8_CFG0" > "$R/$CFG"
+printf '%s\n' "$CMD0 vt.global_cursor_default=0 consoleblank=0" > "$R/boot/firmware/cmdline.txt"
+z8_install
+check "Pi 3A+ with the same panel overlay: config.txt untouched (the headphone jack), the on/off profile of v0.9.3" '[ $RC = 0 ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG0" ] && [ ! -e "$R/$CFG.bak-applaunch" ] && grep -qx "# applaunch-profile-sum: 724676656 664" "$P" && has "pi3a-luckfox35: config.txt left as it is (the PWM backlight overlay is for the deck" && ! has "PWM backlight and"'
+printf '%s\n' "$Z8_CFG1" > "$R/$CFG"
+run --dry-run
+check "Pi 3A+ whose config.txt has the PWM backlight already (by hand): the profile names it, config.txt left alone" '[ $RC = 0 ] && has "pi3a-luckfox35: update" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && has "config.txt has it already (dtparam=backlight-pwm): left as it is"'
+
 # --- PC (amd64, report 028): the Panasonic FZ-M1 tablet as measured in x-a: DMI, the i915 framebuffer 1280x800, the
 # eDP connector with an EDID, intel_backlight (and an acpi_video0), a disconnected HDMI port; generated here (an EDID is
 # binary). pc_root NAME [PRODUCT] [CHASSIS]: the fake root; edid FILE W_MM H_MM W_CM H_CM: a 128-byte EDID blob.
@@ -1227,6 +1396,7 @@ check "pc board-only: intel_backlight rule (video group), no gpio rule" '[ -f "$
 SUM1=$(cksum < "$P")
 pcrun --board-only
 check "pc second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ]'
+check "pc profile body as v0.9.3 wrote it (checksum 2904715111 905)" 'grep -qx "# applaunch-profile-sum: 2904715111 905" "$P"'
 # the size when the EDID's detailed timing has none: the basic block (cm), else the known model, else nothing
 R=$(pc_root pc-cm); edid "$R/sys/class/drm/card1-eDP-1/edid" 0 0 15 9
 pcrun --dry-run

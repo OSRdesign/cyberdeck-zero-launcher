@@ -316,7 +316,7 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | Board | Detected by | Profile |
 | --- | --- | --- |
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
-| `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` | `/etc/applaunch/board.conf` (below); the PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio` |
+| `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel; also a Pi Zero 2 W with the Waveshare 3.5" RPi LCD (F) (the same `mipi-dbi-spi` overlay) | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` (a Zero 2 W only with `--board pi3a-luckfox35`: it is detected as the deck) | `/etc/applaunch/board.conf` (below); the deck's PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio`. On a Zero 2 W the panel's own PWM backlight instead (brightness levels, below) |
 | `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
 | `pi3a-wsdsi43-portrait`: the same board and panel turned to portrait, the PDA profile ([below](#pda-portrait-on-the-43-dsi-panel)) | never detected: only `--board pi3a-wsdsi43-portrait` (the panel must be there, as for `pi3a-wsdsi43`) | `board.conf`: as `pi3a-wsdsi43` but `APPLAUNCH_LOGICAL=480x800`, `APPLAUNCH_ROTATE=90`, `APPLAUNCH_PDA=1` (the writing zone) and no `APPLAUNCH_COMPAT_SCALE`; the same backlight line and rule, config.txt and cmdline.txt as `pi3a-wsdsi43` |
 | `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
@@ -429,6 +429,42 @@ Revert by hand: delete the line `dtoverlay=hyperpixel4-pwm-backlight` from `/boo
 `config.txt.bak-applaunch` back if nothing else changed since), `sudo rm /boot/firmware/overlays/hyperpixel4-pwm-backlight.dtbo`,
 `sudo reboot`: the on/off `gpio-backlight` is back. If the panel stays dark after the reboot, take the SD card to another
 computer and remove the line from `config.txt` on its boot partition.
+
+**3.5" SPI panel on a Zero 2 W: brightness levels (`pi3a-luckfox35`, by default; tested by hand on zero8 with the
+Waveshare 3.5" RPi LCD (F)).** The panel's overlay drives its backlight pin GPIO18 on or off
+(`dtparam=...,backlight-gpio=18`: the `backlight_gpio` device), so Settings offered On / Off 10 s. The same stock
+`mipi-dbi-spi` overlay has a `backlight-pwm` parameter: a kernel `pwm-backlight` on the hardware PWM0 of GPIO18 (5 kHz,
+16 levels: `/sys/class/backlight/backlight_pwm`, `max_brightness` 15). On a Zero 2 W, whose PWM0 has no other user, a
+whole install sets it up without any option:
+
+- copies `config.txt` to `config.txt.bak-applaunch` (once), takes `backlight-gpio=18` off its line and adds
+  `dtparam=backlight-pwm` on the next line (a `dtparam` applies to the last overlay loaded: it stays before the next
+  `dtoverlay=` line, the touch panel's);
+- writes `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm` in `board.conf` (the only line that differs from
+  the on/off profile) and the udev rule `92-applaunch-backlight-sysfs.rules` for it;
+- asks for a reboot: until then the on/off device is still the one there, and Settings > Screen > Brightness cannot set
+  the panel.
+
+After the reboot Brightness has the 10 steps, the idle clock dims (`APPLAUNCH_DIM_PERCENT`, default 10 %: level 1 of 15)
+and the level comes back at start-up. A second run changes nothing. The on/off backlight stays (the output says why)
+with `--no-boot-config`, with `--board-only` (a whole install does it), on a desktop board, when `config.txt` has no
+`dtoverlay=mipi-dbi-spi` with `backlight-gpio=18` (another pin, two such overlays, both parameters), and when
+`board.conf` was edited by hand: the kept file names its own backlight, so `config.txt` is kept as well (`--force` writes
+both, the old `board.conf` kept as `board.conf.bak`). A `config.txt` that already has `dtparam=backlight-pwm` (an
+earlier run, a hand edit) is left as it is and gets the PWM line in the profile, on any model. `--pwm-backlight` is not
+needed (it is ignored here).
+
+- **Pi 3A+:** keeps the on/off backlight. Its PWM0 is the 3.5 mm jack's, which `backlight-pwm` turns off
+  (`snd_bcm2835.enable_headphones=0`), and its panel's backlight wiring is not tested.
+- **Updates:** a board with the on/off profile an earlier release generated gets the new profile from
+  `sudo ./install.sh --board pi3a-luckfox35` run by hand (the old one kept as `board.conf.bak`; it asks for the reboot).
+  Settings > Updates does not do it: it stops there ("it would change /etc/applaunch/board.conf"). A board changed by
+  hand already (both files, as zero8 was) updates as before, with nothing changed in either file.
+- **Revert by hand:** in `/boot/firmware/config.txt` replace the line `dtparam=backlight-pwm` with
+  `dtparam=backlight-gpio=18` (or copy `config.txt.bak-applaunch` back if nothing else changed since), run
+  `sudo ./install.sh --board pi3a-luckfox35 --no-boot-config` (the on/off profile; the option is recorded, so updates keep
+  it), `sudo reboot`. `uninstall.sh` leaves `dtparam=backlight-pwm` in `config.txt`: it is the stock overlay's own
+  parameter, and without the launcher the panel stays lit (the kernel's default level 15, full).
 
 The profile is a systemd `EnvironmentFile` (`EnvironmentFile=-/etc/applaunch/board.conf` in `cyberdeckzero.service`,
 `-` = optional). systemd lets its values override the service's `Environment=` lines, so the deck's values
@@ -677,7 +713,8 @@ lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `
 `dtoverlay=hyperpixel4-pwm-backlight`; a timestamped
 `config.txt.bak-uninstall-<time>` is made first and the removed lines are printed), the `.dtbo`, and the
 `vt.global_cursor_default=0` / `consoleblank=0` arguments in `cmdline.txt` when the `*.bak-applaunch` backup shows that
-`install.sh` added them. Reboot afterwards.
+`install.sh` added them. Reboot afterwards. The 3.5" SPI panel's `dtparam=backlight-pwm` (a Zero 2 W with
+`pi3a-luckfox35`) stays in `config.txt`: the panel stays lit without the launcher ([Boards](#boards) says how to revert it).
 
 It keeps by default: `~/.config/cardputerzero`, the Settings > Apps sources and install records
 (`~/.local/share/cardputerzero-appstore`, with the default source and its marker), the download cache, every installed
@@ -740,6 +777,7 @@ What each board gets (from the boards' measured facts, the fake trees of `projec
 | Deck (Zero 2 W, Waveshare 2.8" DPI) | no row | levels (PWM `backlight`, as before) | no row (no audio output) |
 | Pi 3A+ Luckfox SPI | no row | On / Off (`gpio:` profile, as before) | a row when the 3.5 mm jack's card (`bcm2835 Headphones`, PCM) is there; HDMI alone: no row |
 | Pi 3A+ Waveshare DSI | no row | levels (`sysfs:` profile, as before) | as the Luckfox |
+| Zero 2 W + Waveshare 3.5" (F) (`pi3a-luckfox35`) | no row | levels (`sysfs:` profile, `backlight_pwm` 0..15, set up by install.sh, [Boards](#boards)); On / Off without it | no row (no audio output) |
 | Pi 5 + HyperPixel 4 | no row | **On / Off** (detected: `gpio-backlight`, max 1; it offered 10 levels that all wrote 1 before); levels after `install.sh --pwm-backlight` ([Boards](#boards)) | no row (vc4-hdmi only, no `pactl`) |
 | HackBerry CM5 | no row | **no row** (no backlight device; the row did nothing before) | a row while the case speaker is connected over Bluetooth (its sink); otherwise none |
 | FZ-M1 tablet | Battery row | levels (`intel_backlight`, 937) | **Speaker row** (HDA Intel PCH, Master; with or without a sound server) |

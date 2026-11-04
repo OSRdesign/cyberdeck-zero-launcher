@@ -393,6 +393,47 @@ check "update: the user could read it (file 644, folder 755) and it is the bundl
 check "update: the copy is removed again" '[ ! -e "$DS_PATH" ]'
 
 # ------------------------------------------------------------------------------------------------------------------
+# the 3.5" SPI panel on a Zero 2 W (pi3a-luckfox35, zero8): install.sh sets up its PWM backlight (config.txt and the
+# profile line). An update never does it: a board with the old generated on/off profile is refused (board.conf would
+# change: install.sh by hand, which also asks for the reboot); zero8 as hand-tested (board.conf edited, config.txt PWM)
+# updates with nothing changed in either file
+Z8_PANEL='[all]
+dtoverlay=mipi-dbi-spi,speed=48000000
+dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18
+dtoverlay=goodix,addr=0x5d'
+Z8_PANEL_PWM='[all]
+dtoverlay=mipi-dbi-spi,speed=48000000
+dtparam=reset-gpio=27,dc-gpio=22
+dtparam=backlight-pwm
+dtoverlay=goodix,addr=0x5d'
+z8_root() {
+    R=$(root pi3a-luckfox35)
+    printf 'Raspberry Pi Zero 2 W Rev 1.0\n' > "$R/proc/device-tree/model"
+    mkdir -p "$R/boot/firmware"
+    printf '[all]\ndtoverlay=vc4-kms-v3d\n' > "$R/boot/firmware/config.txt"
+    echo 'console=tty1 root=PARTUUID=3-02 rootwait vt.global_cursor_default=0 consoleblank=0' > "$R/boot/firmware/cmdline.txt"
+}
+z8_snap() { cksum < "$R/etc/applaunch/board.conf"; cksum < "$R/boot/firmware/config.txt"; ls "$R/boot/firmware"; }
+# installed by an earlier release, which left config.txt alone: the old on/off profile, the panel lines in config.txt
+z8_root
+first_install --board pi3a-luckfox35 --no-default-source
+printf '%s\n' "$Z8_PANEL" > "$R/boot/firmware/config.txt"
+check "zero8, old profile: the first install wrote the on/off profile" '[ $RC = 0 ] && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$R/etc/applaunch/board.conf"'
+SNAP=$(z8_snap)
+download "$NEWTGZ"
+apply "$NEWTGZ" 0.8.13
+check "zero8, old profile: the update is refused (board.conf would change: install.sh by hand), nothing changed" '[ $RC = 2 ] && [ "$(st state)" = refused ] && [ "$(st reason)" = "needs install.sh by hand: it would change /etc/applaunch/board.conf" ] && [ "$(z8_snap)" = "$SNAP" ]'
+# zero8 as hand-tested: the PWM line in an edited board.conf (the old checksum line), config.txt PWM, no config.txt backup
+z8_root
+first_install --board pi3a-luckfox35 --no-default-source
+sed -i 's|^APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio$|APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm|' "$R/etc/applaunch/board.conf"
+printf '%s\n' "$Z8_PANEL_PWM" > "$R/boot/firmware/config.txt"
+SNAP=$(z8_snap)
+download "$NEWTGZ"
+apply "$NEWTGZ" 0.8.13
+check "zero8 as hand-tested: the update is done, board.conf and config.txt unchanged, no config.txt backup, no reboot asked" '[ $RC = 0 ] && [ "$(st state)" = done ] && [ "$(bin_version)" = 0.8.13 ] && [ "$(z8_snap)" = "$SNAP" ] && ! grep -q "reboot now" "$(ls -t "$R"/var/log/cyberdeckzero/update-*.log | head -n 1)" && grep -q "config.txt already has the panel" "$(ls -t "$R"/var/log/cyberdeckzero/update-*.log | head -n 1)"'
+
+# ------------------------------------------------------------------------------------------------------------------
 # desktop board (HackBerry, the desktop unit): the running launcher exits with status 76 when asked
 R=$(root hackberry-cm5)
 mkdir -p "$R/etc/systemd/system" "$R/lib/systemd/system" "$R/proc/701" "$R/proc/702"
