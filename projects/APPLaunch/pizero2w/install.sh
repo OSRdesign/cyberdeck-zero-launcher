@@ -151,6 +151,8 @@ UDEV_DIR="$SYSROOT/etc/udev/rules.d"
 MENU_DIR="$SYSROOT/usr/share/applications"
 DESKTOP_ENTRY="$MENU_DIR/$DESKTOP_ENTRY_NAME"
 DOC_DIR="$SYSROOT/usr/share/doc/$DOC_NAME"
+BOOT="$SYSROOT/boot/firmware"
+[ -d "$BOOT" ] || BOOT="$SYSROOT/boot"
 
 # ---------------------------------------------------------------------------------------------------------
 # glibc floor: the launcher and every app package are built against Debian 13 (they need GLIBC_2.38).
@@ -398,8 +400,13 @@ HP_PWM_NOTE=""
 HP_DTS=hyperpixel4-pwm-backlight.dts
 HP_DTBO=hyperpixel4-pwm-backlight.dtbo
 HP_LINE=dtoverlay=hyperpixel4-pwm-backlight
+# true on a model whose PWM0 has no other user (no headphone jack): there the 3.5" SPI panel (pi3a-luckfox35) gets its
+# PWM backlight by default (LF_SETUP below)
+lf_pwm_free() { case "$MODEL" in *"Zero 2"*) return 0 ;; esac; return 1; }
 if [ "$PWM_BACKLIGHT" = 1 ]; then
-    if [ "$BOARD" != pi5-hyperpixel4 ]; then
+    if [ "$BOARD" = pi3a-luckfox35 ] && lf_pwm_free; then
+        HP_PWM_NOTE="--pwm-backlight: not needed on pi3a-luckfox35 on a Zero 2 W (its panel's PWM backlight needs no option): ignored"
+    elif [ "$BOARD" != pi5-hyperpixel4 ]; then
         HP_PWM_NOTE="--pwm-backlight is for the Pi 5 + HyperPixel 4 (pi5-hyperpixel4) only: ignored on ${BOARD:-this board}"
     elif [ "$BOOT_CONFIG" = 0 ]; then
         HP_PWM_NOTE="--pwm-backlight: skipped (--no-boot-config)"
@@ -518,7 +525,11 @@ if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ] && wireplumber_install
 # service of v0.6.0 for that reason.
 profile_body() {
     case "$BOARD" in
-        pi3a-luckfox35) cat <<EOF
+        # The backlight line is the only one that varies: the on/off backlight_gpio, or the overlay's PWM backlight_pwm
+        # when config.txt has it or this run sets it up (LF_PWM). The on/off body is byte for byte the one of v0.9.3
+        # and before, so a board without the PWM backlight keeps its generated profile as it is.
+        pi3a-luckfox35)
+            cat <<EOF
 APPLAUNCH_BOARD=pi3a-luckfox35
 APPLAUNCH_FB=$PANEL_FB
 APPLAUNCH_LOGICAL=480x320
@@ -528,7 +539,10 @@ APPLAUNCH_COMPAT_SCALE=1
 APPLAUNCH_PANEL_MM=79x49
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
-APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio
+EOF
+            if [ "$LF_PWM" = 1 ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"
+            else echo "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio"; fi
+            cat <<EOF
 # same device for the code that still reads the LVGL name (the service sets it to /dev/fb0)
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 # the deck's legacy touch axes (set in APPLaunch.service) must not apply here: neutral values
@@ -762,6 +776,76 @@ apply_profile() {
     esac
     echo "$PROFILE_MSG"
 }
+# The 3.5" SPI panel's backlight in config.txt (pi3a-luckfox35): the parameters of the one dtoverlay=mipi-dbi-spi line,
+# on that line and on the dtparam= lines after it, up to the next dtoverlay= line or [section] (a dtparam applies to the
+# last overlay loaded). "lf_config state FILE" prints pwm (backlight-pwm, no backlight-gpio), gpio (one
+# backlight-gpio=18, no backlight-pwm) or nothing (no such overlay, several, another pin, both, no file);
+# "lf_config line FILE" the number of the line with backlight-gpio=18; "lf_config convert FILE" the file with
+# backlight-gpio=18 taken off its line (a dtparam= line left empty goes) and dtparam=backlight-pwm on the next line.
+lf_config() {
+    { [ -f "$2" ] && [ -r "$2" ]; } || return 0
+    awk -v mode="$1" '
+    { line[NR] = $0 }
+    END {
+        ov = 0; n = 0; bg = 0; nbg = 0; npwm = 0
+        for (i = 1; i <= NR; i++) if (line[i] ~ /^dtoverlay=mipi-dbi-spi(,|$)/) { ov = i; n++ }
+        if (n == 1) {
+            for (i = ov; i <= NR; i++) {
+                if (i > ov && line[i] ~ /^(dtoverlay=|\[)/) break
+                if (i > ov && line[i] !~ /^dtparam=/) continue
+                k = split(substr(line[i], index(line[i], "=") + 1), it, ",")
+                for (j = (i == ov ? 2 : 1); j <= k; j++) {
+                    if (it[j] ~ /^backlight-gpio=/) { nbg++; if (it[j] == "backlight-gpio=18") bg = i }
+                    else if (it[j] ~ /^backlight-pwm(=(on|true|yes|1))?$/) npwm++
+                }
+            }
+        }
+        st = ""
+        if (npwm > 0 && nbg == 0) st = "pwm"
+        else if (npwm == 0 && nbg == 1 && bg > 0) st = "gpio"
+        if (mode == "state") { if (st != "") print st; exit }
+        if (mode == "line") { if (st == "gpio") print bg; exit }
+        for (i = 1; i <= NR; i++) {
+            if (st != "gpio" || i != bg) { print line[i]; continue }
+            p = substr(line[i], 1, index(line[i], "=")); k = split(substr(line[i], length(p) + 1), it, ","); out = ""
+            for (j = 1; j <= k; j++) if (it[j] != "backlight-gpio=18" && it[j] != "") out = out (out == "" ? "" : ",") it[j]
+            if (out != "") print p out
+            print "dtparam=backlight-pwm"
+        }
+    }' "$2"
+}
+# The 3.5" SPI panel's PWM backlight (pi3a-luckfox35): the stock mipi-dbi-spi overlay's own backlight-pwm parameter in
+# place of its on/off backlight-gpio=18, a kernel pwm-backlight on PWM0 / GPIO18 with 16 levels at
+# /sys/class/backlight/backlight_pwm; the profile names it as sysfs: (the 10 brightness steps, the idle dim, the start-up
+# restore). Set up by default on a Zero 2 W (the Waveshare 3.5" RPi LCD (F), tested by hand on zero8), whose PWM0 has no
+# other user; a Pi 3A+ keeps its on/off backlight (its PWM0 is the headphone jack's, which that parameter turns off).
+# config.txt is changed only by a whole install on an appliance board without --no-boot-config that writes the profile
+# too: with a hand-edited board.conf (kept) config.txt is kept as well, --force writes both. The profile names
+# backlight_pwm when config.txt has it already (an earlier run or a hand edit, on any model) or this run sets it up.
+LF_CFG=""      # pwm | gpio | "": config.txt's panel backlight (lf_config state)
+LF_PWM=0       # 1: the profile names the PWM backlight
+LF_SETUP=0     # 1: this run turns backlight-gpio=18 into dtparam=backlight-pwm in config.txt (then a reboot)
+LF_NOTE=""     # why not, on a Zero 2 W
+if [ "$BOARD" = pi3a-luckfox35 ]; then
+    LF_CFG=$(lf_config state "$BOOT/config.txt")
+    if [ "$LF_CFG" = pwm ]; then
+        LF_PWM=1
+    elif lf_pwm_free; then
+        if [ "$LF_CFG" != gpio ]; then
+            LF_NOTE="config.txt has no dtoverlay=mipi-dbi-spi with backlight-gpio=18 to change: left as it is (on/off backlight)"
+        elif [ "$BOARD_ONLY" = 1 ]; then
+            LF_NOTE="--board-only: config.txt left as it is (on/off backlight; a whole install sets up the PWM one)"
+        elif [ "$SESSION" = desktop ]; then
+            LF_NOTE="desktop board: config.txt left as it is (on/off backlight)"
+        elif [ "$BOOT_CONFIG" = 0 ]; then
+            LF_NOTE="skipped (--no-boot-config): on/off backlight"
+        elif [ "$(profile_state)" = edited ] && [ "$FORCE" = 0 ]; then
+            LF_NOTE="board.conf was edited by hand: config.txt left as it is too (--force writes both)"
+        else
+            LF_PWM=1; LF_SETUP=1
+        fi
+    fi
+fi
 # The on/off GPIO backlight of non-PWM boards (the deck has the PWM one, see 90-backlight-unblank.rules)
 GPIO_BL=0
 if [ "$BOARD" != zero2w ] && [ -d "$SYSROOT/sys/class/backlight/backlight_gpio" ]; then GPIO_BL=1; fi
@@ -974,6 +1058,8 @@ if [ "$DRY" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
     elif [ "$HP_PWM" = 1 ]; then
         echo "boot config: the HyperPixel's PWM backlight overlay (--pwm-backlight, below) + cmdline cursor/consoleblank"
+    elif [ "$LF_SETUP" = 1 ]; then
+        echo "boot config: the panel's PWM backlight in config.txt (below) + cmdline cursor/consoleblank"
     else
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)" || echo "boot config: skipped (--no-boot-config)"
     fi
@@ -982,6 +1068,15 @@ if [ "$DRY" = 1 ]; then
         echo "  after the vc4-kms-dpi-hyperpixel4 line of config.txt (config.txt.bak-applaunch first); then reboot"
     elif [ -n "$HP_PWM_NOTE" ]; then
         echo "$HP_PWM_NOTE"
+    fi
+    if [ "$LF_SETUP" = 1 ]; then
+        echo "PWM backlight (3.5\" SPI panel): in config.txt, backlight-gpio=18 comes off line $(lf_config line "$BOOT/config.txt") and dtparam=backlight-pwm"
+        echo "  goes after it (config.txt.bak-applaunch first; the mipi-dbi-spi overlay's PWM0 on GPIO18, 16 levels at"
+        echo "  /sys/class/backlight/backlight_pwm in the profile); then reboot"
+    elif [ "$LF_PWM" = 1 ]; then
+        echo "PWM backlight (3.5\" SPI panel): config.txt has it already (dtparam=backlight-pwm): left as it is"
+    elif [ -n "$LF_NOTE" ]; then
+        echo "PWM backlight (3.5\" SPI panel): $LF_NOTE"
     fi
     if [ "$BOARD_ONLY" = 0 ]; then
         TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
@@ -1064,8 +1159,6 @@ bundle_arch() {
         " 62 0 ") echo amd64 ;;
     esac
 }
-BOOT="$SYSROOT/boot/firmware"
-[ -d "$BOOT" ] || BOOT="$SYSROOT/boot"
 
 [ -d "$PAYLOAD" ] || { echo "payload/ not found next to install.sh (unpack the whole bundle)" >&2; exit 1; }
 TARGET_USER=${TARGET_USER:-${SUDO_USER:-}}
@@ -1582,7 +1675,7 @@ elif [ "$SESSION" = desktop ]; then
     say "Boot configuration"
     echo "desktop board: config.txt and cmdline.txt left as they are"
 elif [ "$BOOT_CONFIG" = 1 ]; then
-    say "Boot configuration ($( [ "$DECK_BOOT" = 1 ] && echo 'PWM backlight, ' )hidden console cursor)"
+    say "Boot configuration ($( { [ "$DECK_BOOT" = 1 ] || [ "$LF_SETUP" = 1 ]; } && echo 'PWM backlight, ' )hidden console cursor)"
     CONFIG="$BOOT/config.txt"
     CMDLINE="$BOOT/cmdline.txt"
     [ "$DECK_BOOT" = 0 ] || [ -f "$CONFIG.bak-applaunch" ] || cp "$CONFIG" "$CONFIG.bak-applaunch"
@@ -1602,6 +1695,24 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
             fi
             REBOOT=1
         fi
+    elif [ "$LF_SETUP" = 1 ]; then
+        # the 3.5" SPI panel's PWM backlight (LF_SETUP): the profile written above names backlight_pwm already
+        [ -f "$CONFIG.bak-applaunch" ] || cp "$CONFIG" "$CONFIG.bak-applaunch"
+        LF_LINE=$(lf_config line "$CONFIG")
+        if lf_config convert "$CONFIG" > "$CONFIG.applaunch-new" && [ "$(lf_config state "$CONFIG.applaunch-new")" = pwm ]; then
+            mv "$CONFIG.applaunch-new" "$CONFIG"
+            echo "config.txt: backlight-gpio=18 taken off line $LF_LINE, dtparam=backlight-pwm added after it (the original is"
+            echo "config.txt.bak-applaunch): the panel's PWM backlight with 16 levels from the next boot. REBOOT for it: until"
+            echo "then Settings > Screen > Brightness cannot set the panel"
+            REBOOT=1
+        else
+            rm -f "$CONFIG.applaunch-new"
+            echo "WARNING: config.txt could not be changed, but board.conf names the PWM backlight: run install.sh again" >&2
+        fi
+    elif [ "$LF_PWM" = 1 ]; then
+        echo "$BOARD: config.txt already has the panel's PWM backlight (dtparam=backlight-pwm): left as it is"
+    elif [ -n "$LF_NOTE" ]; then
+        echo "$BOARD: PWM backlight: $LF_NOTE"
     elif [ "$HP_PWM" = 0 ]; then
         echo "${BOARD:-this board}: config.txt left as it is (the PWM backlight overlay is for the deck's Waveshare panel)"
     fi
@@ -1740,6 +1851,6 @@ if [ "${REBOOT:-0}" = 1 ]; then
         # only --pwm-backlight changes the boot configuration of a desktop board
         echo "Boot configuration changed: reboot now so the PWM backlight applies:  sudo reboot"
     else
-        echo "Boot configuration changed: reboot now so the $( { [ "$DECK_BOOT" = 1 ] || [ "$HP_PWM" = 1 ]; } && echo 'PWM backlight and ' )console settings apply:  sudo reboot"
+        echo "Boot configuration changed: reboot now so the $( { [ "$DECK_BOOT" = 1 ] || [ "$HP_PWM" = 1 ] || [ "$LF_SETUP" = 1 ]; } && echo 'PWM backlight and ' )console settings apply:  sudo reboot"
     fi
 fi
