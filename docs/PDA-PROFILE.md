@@ -39,8 +39,9 @@ On rotate left).
 
 The row is there when the short side of the screen is 480 px or more, the screen is not square and the band leaves at
 least 400 px above it in portrait: the Pi 3A+ and Pi 4 B DSI panels, the FZ-M1 tablet (800x1280 in portrait), a
-HyperPixel 4. The deck, the 3.5" Luckfox panel and the HackBerry's square 720x720 screen do not have it. Landscape PDA
-is not offered.
+HyperPixel 4. When the short side is 320 to 479 px (the 480x320 panels) the row is there as well, but the portrait
+canvas (320x480) has no writing band: the normal on-screen keyboard, and apps get APPLAUNCH_PDA=0. The deck and the
+HackBerry's square 720x720 screen do not have the row. Landscape PDA is not offered.
 
 | Screen > PDA mode | The question |
 | --- | --- |
@@ -145,7 +146,7 @@ Two files are kept in `~/.config/applaunch/`:
 ## Large screens: the tablet
 
 The profile was made for a 4.3" panel, but the setting is not tied to it. Since v0.8.9 any panel whose short side is at
-least 480 px, that is not square and leaves room for the band offers Settings > Screen > PDA mode: the 7-inch FZ-M1
+least 480 px (320 px without the band), that is not square and leaves room for the band offers Settings > Screen > PDA mode: the 7-inch FZ-M1
 tablet, a 1024x600 panel, the 800x480 DSI panels (the Pi 3A+ and Pi 4 B screens). Square panels (the HackBerry's
 720x720) and the deck (no board profile with a screen size) do not have the row; a 3.5" 640x480 panel (480x640 in portrait) does, once its board profile gives the size. There is no landscape PDA.
 

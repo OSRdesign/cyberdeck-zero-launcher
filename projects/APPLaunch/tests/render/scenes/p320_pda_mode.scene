@@ -1,0 +1,38 @@
+# Settings > Screen > PDA mode at 320x480 (profile p320; study portrait-320, PR-E): the row is offered from short side
+# 320, with the portrait canvas and NO writing band (the normal on-screen keyboard). The Screen section with the row and
+# its value (On rotate right: the profile's rotate 0 while nothing is stored), the list of the three values and the
+# restart question when another one is picked. Golden at 320x480 only.
+title p320 pda mode
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+key ENTER
+wait 300
+expect_text "PDA mode"
+expect_text "On rotate right"
+shot p320_pda_mode_screen
+key DOWN
+key DOWN
+key ENTER
+wait 300
+expect_text Off
+expect_text "On rotate left"
+expect_text "On rotate right"
+shot p320_pda_mode_choice
+key UP
+key ENTER
+wait 300
+expect_text "Restart the launcher?"
+shot p320_pda_mode_dialog
+key ESC
+wait 300
+key ESC
+wait 300
+expect_text "On rotate right"
