@@ -8,6 +8,10 @@
  * so a 320x170 window classifies as a computed Compact screen):
  *   - a display at most CP0_UI_OVERLAY_COMPAT_MAX_W wide (the legacy-app compat window, the SDL
  *     320x170 simulator) or a missing metrics pointer gets exactly the numbers the overlays always had;
+ *   - EXCEPT a native PORTRAIT display of exactly the metrics' size (the 320x480 canvas of a 480x320 panel turned):
+ *     it is 320 wide but not the compat window, so it takes the computed branch (the compat window is 320x170, and
+ *     the metrics of cp0_ui_metrics_get() are the native display's even while a toast sits on the compat display,
+ *     which is why the display's height is part of the rule);
  *   - the native display gets: the pinned DECK (640x480) and COMPACT (480x320) tables, which are today's rendering
  *     on those screens (today's numbers x 2 and x 3/2: the old "scaled by width / 320" rule), and for every other
  *     size a size computed from the tokens (toast) or today's box scaled by the body font (OSD, loading), so they
@@ -34,8 +38,12 @@ typedef struct {
     int x, y, w, h;
 } cp0_ui_orect_t;
 
-/* 1 when a display this wide keeps today's overlay numbers. */
+/* 1 when a display this wide keeps today's overlay numbers (the width alone: see cp0_ui_overlay_is_compat()). */
 int cp0_ui_overlay_is_compat_display(int display_w);
+
+/* 1 when the overlays on this display (display_w x display_h, metrics m) keep today's numbers: at most 320 wide and
+ * not the native portrait display of m (m->w == display_w, m->h == display_h, display_h > display_w), or m is NULL. */
+int cp0_ui_overlay_is_compat(const cp0_ui_metrics_t *m, int display_w, int display_h);
 
 typedef struct {
     int w, h;          /* box; centred at the top */
@@ -46,7 +54,7 @@ typedef struct {
 } cp0_ui_toast_t;
 
 /* lines: 1, or 2 and more (a newline in the text). m may be NULL (compat numbers). */
-void cp0_ui_overlay_toast(const cp0_ui_metrics_t *m, int display_w, int lines, cp0_ui_toast_t *out);
+void cp0_ui_overlay_toast(const cp0_ui_metrics_t *m, int display_w, int display_h, int lines, cp0_ui_toast_t *out);
 
 typedef struct {
     int w, h;          /* box; centred on the display */

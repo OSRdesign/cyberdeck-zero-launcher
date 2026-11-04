@@ -1,0 +1,28 @@
+# The shell's overlays at 320x480 (profile p320; study portrait-320, PR-F): the toast (one and two lines), the media OSD
+# of the brightness / volume keys, mute, and the "Loading..." overlay take the computed (token) sizes of the narrow
+# portrait display instead of the 320x170 numbers. Golden at 320x480 only.
+title p320 overlays
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 1
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+toast "Connected to Home Wi-Fi"
+shot p320_toast_home
+toast "Bluetooth keyboard connected\nM4 keyboard"
+shot p320_toast_two_lines
+toast off
+osd level Brightness 60
+shot p320_osd_brightness
+osd level Volume 85
+shot p320_osd_volume
+osd mute on
+shot p320_osd_mute
+wait 1200
+loading "Loading..."
+shot p320_loading
+loading off

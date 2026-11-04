@@ -19,10 +19,18 @@ int cp0_ui_overlay_is_compat_display(int display_w)
     return display_w <= CP0_UI_OVERLAY_COMPAT_MAX_W;
 }
 
-/* 0: today's numbers (factor 1), 1: pinned DECK (2), 2: pinned COMPACT (3/2), 3: computed. */
-static int mode_of(const cp0_ui_metrics_t *m, int display_w)
+int cp0_ui_overlay_is_compat(const cp0_ui_metrics_t *m, int display_w, int display_h)
 {
-    if (!m || cp0_ui_overlay_is_compat_display(display_w)) return 0;
+    if (!m) return 1;
+    if (!cp0_ui_overlay_is_compat_display(display_w)) return 0;
+    /* the native narrow portrait display (320x480): 320 wide, but not the 320x170 compat window */
+    return !(m->w == display_w && m->h == display_h && display_h > display_w);
+}
+
+/* 0: today's numbers (factor 1), 1: pinned DECK (2), 2: pinned COMPACT (3/2), 3: computed. */
+static int mode_of(const cp0_ui_metrics_t *m, int display_w, int display_h)
+{
+    if (cp0_ui_overlay_is_compat(m, display_w, display_h)) return 0;
     if (m->w == 640 && m->h == 480 && m->preset == CP0_UI_PRESET_DECK && display_w == 640) return 1;
     if (m->w == 480 && m->h == 320 && m->preset == CP0_UI_PRESET_COMPACT && display_w == 480) return 2;
     return 3;
@@ -34,9 +42,9 @@ static void factor_of(int mode, int *num, int *den)
     *den = mode == 2 ? 2 : 1;
 }
 
-void cp0_ui_overlay_toast(const cp0_ui_metrics_t *m, int display_w, int lines, cp0_ui_toast_t *out)
+void cp0_ui_overlay_toast(const cp0_ui_metrics_t *m, int display_w, int display_h, int lines, cp0_ui_toast_t *out)
 {
-    const int mode = mode_of(m, display_w);
+    const int mode = mode_of(m, display_w, display_h);
     const int multi = lines >= 2;
     if (mode != 3) {
         int num, den;
@@ -92,7 +100,7 @@ static void osd_fill(cp0_ui_osd_t *o, int num, int den)
 
 void cp0_ui_overlay_osd(const cp0_ui_metrics_t *m, int display_w, int display_h, cp0_ui_osd_t *out)
 {
-    const int mode = mode_of(m, display_w);
+    const int mode = mode_of(m, display_w, display_h);
     int num, den;
     if (mode != 3) {
         factor_of(mode, &num, &den);
@@ -114,7 +122,7 @@ void cp0_ui_overlay_osd(const cp0_ui_metrics_t *m, int display_w, int display_h,
 
 void cp0_ui_overlay_loading(const cp0_ui_metrics_t *m, int display_w, int display_h, cp0_ui_loading_t *out)
 {
-    const int mode = mode_of(m, display_w);
+    const int mode = mode_of(m, display_w, display_h);
     int num, den;
     if (mode != 3) {
         factor_of(mode, &num, &den);
