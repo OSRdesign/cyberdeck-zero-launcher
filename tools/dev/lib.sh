@@ -91,8 +91,36 @@ sync_tree() {
         mkdir -p "$dst/projects/AppStore"
         rsync -a --exclude .git --exclude build/ "$DEV_SEED/projects/AppStore/" "$dst/projects/AppStore/"
     fi
-    rsync -a "${excludes[@]}" "$src/" "$dst/"
+    local copied
+    copied=$(mktemp)
+    rsync -a --out-format='%n' "${excludes[@]}" "$src/" "$dst/" >>"$copied"
     for d in projects/APPLaunch ext_components LICENSES tools/strokes; do
-        rsync -a --delete "${excludes[@]}" "$src/$d/" "$dst/$d/"
+        rsync -a --delete --out-format="$d/%n" "${excludes[@]}" "$src/$d/" "$dst/$d/" >>"$copied"
     done
+    strip_crlf "$src" "$dst" <"$copied"
+    rm -f "$copied"
+}
+
+# strip_crlf SRC DST < list: a Windows checkout (core.autocrlf=true) has CRLF text files, which break bash scripts and text
+# goldens in WSL. For each path just copied (relative to DST), turn CRLF into LF when it is a text file: a known text
+# extension, no extension, or a #! script, and grep -I does not see it as binary. PNG, fonts, archives, audio are never
+# touched; a file already LF is left as is (no rewrite). The converted file keeps the source mtime, so a sync that copies
+# it again (size differs from the CRLF source) leaves it unchanged for make.
+strip_crlf() {
+    local src=$1 dst=$2 rel f
+    while IFS= read -r rel; do
+        f=$dst/$rel
+        [[ -f $f && ! -L $f ]] || continue
+        case ${rel##*/} in
+            *.sh|*.bash|*.py|*.c|*.h|*.cc|*.cpp|*.hpp|*.inc|*.txt|*.md|*.json|*.scene|*.mk|*.rules|*.service|*.desktop|\
+            *.tsv|*.csv|*.cmake|*.conf|*.cfg|*.ini|*.yml|*.yaml|*.toml|*.dts|*.headers|*.snippet|*.gitignore|*.gitattributes|\
+            *.gitmodules|*.log|.clang-format) ;;
+            *.*) [[ $(head -c2 "$f" | tr -d '\0') == '#!' ]] || continue ;;
+            *) ;;
+        esac
+        if grep -q $'\r' "$f" && grep -Iq . "$f"; then
+            sed -i 's/\r$//' "$f" && touch -r "$src/$rel" "$f"
+        fi
+    done
+    return 0
 }
