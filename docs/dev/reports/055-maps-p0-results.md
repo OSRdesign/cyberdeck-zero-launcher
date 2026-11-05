@@ -364,4 +364,4 @@ generated tiles, the venv and the build trees are not copied.
 | `probe/stub.cpp` | the second-app stub (M4) |
 | `probe/build.sh`, `probe/run_p0.sh` | WSL build and the per-host run script |
 | `probe/test/magtest.c` | dumps one tile through the fast 1.5x and the bilinear paths, to compare by eye |
-| `tools/brd.py` | the ssh helper (paramiko; password from `PIPW` only) |
+| `probe/brd.py` | the ssh helper (paramiko; password from `PIPW` only); `tools/brd.py` in the work folder (the repo's `.gitignore` skips `tools/` folders) |
