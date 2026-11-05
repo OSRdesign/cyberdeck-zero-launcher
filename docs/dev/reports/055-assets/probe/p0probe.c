@@ -257,6 +257,12 @@ static int cmd_decode(int argc, char **argv)
     pmt_t p;
     if (pmt_open(&p, path, 0)) { fprintf(stderr, "open %s failed\n", path); return 1; }
     zxy_t *t; int n = tile_list(&t);
+    int maxn = atoi(arg(argc, argv, "--max", "0"));
+    if (maxn > 0 && maxn < n) {           /* an evenly spaced sample of the list (all zooms, mostly z14) */
+        zxy_t *s = (zxy_t *)malloc(sizeof(zxy_t) * maxn);
+        for (int i = 0; i < maxn; i++) s[i] = t[(long)i * n / maxn];
+        t = s; n = maxn;
+    }
     /* tiles are read (untimed) just before each decode: nothing big is held in RAM (the deck) */
     long *len = (long *)calloc(n, sizeof *len);
     uint8_t *tmp = (uint8_t *)malloc(4 << 20);
