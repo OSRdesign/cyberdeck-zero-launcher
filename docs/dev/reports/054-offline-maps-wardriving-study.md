@@ -12,6 +12,8 @@ This report gives options and a recommendation; design and visual decisions stay
   `make_world.py`, `.desktop`); Mesh Hop (`nodes`, `model`, `client`, `serial_transport`, `deck_clock`); RSS Reader
   (`docs/IMAGES.md`, `image_codecs.h`, `fetch.hpp`); Home Assistant (`curl_api.cpp`); `_common/scons/main.SConstruct`.
 - The web (read 2026-11-05), listed under Sources with their licences.
+- Addendum (section 12): prior-art repositories (READMEs, docs, source, licence files) through the GitHub API, read
+  2026-11-05.
 
 **Markers.** **V** = verified in our code or a measured board fact already recorded in a report; **S** = read in a
 source (Sources list); **I** = inferred or estimated, needs a spike or a board. **Cost unit:** one worker session
@@ -21,15 +23,23 @@ source (Sources list); **I** = inferred or estimated, needs a spike or a board. 
 
 **Recommendation: build it, raster first, in four small phases, as one native `cp0_lvgl` app.**
 
+**Addendum (section 12, prior art).** Existing open-source map viewers and tile tools, NavBoxLib among them, were
+surveyed after the first draft. They change details, not the plan: Geoapify (the user's own free key) is added as an
+opt-in source that allows area downloads (D3); archives rendered at a higher DPI or as `@2x` are preferred over
+magnifying on the board; the source records get a blocked-tile guard; P0 adds palette PNG and `mmap` timings. NavBoxLib
+and the other GPL/AGPL map apps are design references only; no change to formats, storage, GPS reader, phases or cost.
+
 1. **Tiles.** Never use `tile.openstreetmap.org` for this app: its policy forbids offline use and any area download
    (S, quoted in 2.1). No online source is on by default; the ones below are opt-in. Get maps onto the board in three ways:
    **import** a raster MBTiles/PMTiles file from USB/SD (prepared on a PC from legal sources), **download an area**
-   only from sources whose terms allow it (the owner's own tile server on the LAN, a provider plan that allows bulk),
-   and an **on-demand viewing cache** (LRU, size cap) for sources that allow on-device caching (OpenTopoMap,
-   Thunderforest with the user's own key). Every source carries policy flags; the app enforces them.
+   only from sources whose terms allow it (the owner's own tile server on the LAN, Geoapify with the user's own key
+   (12.4), a provider plan that allows bulk), and an **on-demand viewing cache** (LRU, size cap) for sources that allow
+   on-device caching (OpenTopoMap, Thunderforest with the user's own key). Every source carries policy flags; the app
+   enforces them.
 2. **Rendering.** Raster tiles (PNG/JPEG) decoded with stb_image (already in RSS Reader, public domain/MIT), kept as
    RGB565, blitted by a custom LVGL map widget. A 256 px tile is designed for about 3.8 px/mm; our panels have 6.5 to
-   11.3 px/mm (I), so tiles must be **magnified about 2x** (or be 512 px "@2x" tiles) or the labels are unreadable.
+   11.3 px/mm (I), so tiles must be **magnified about 2x** (or be 512 px "@2x" tiles, or files rendered at a higher DPI
+   on a PC, 12.4) or the labels are unreadable.
    Vector tiles (10-20x smaller files, crisp at any density) are a later option after a spike; MapLibre Native is out
    (needs OpenGL ES 3.0 or Vulkan, S).
 3. **GPS.** Our own NMEA reader, reusing MIT code we already have: viz1090's listen-only NMEA watcher and Serial
@@ -55,7 +65,7 @@ download, cache cap, tracks, `position.state` 1.25-1.75; **0.3** wardriving log 
 link 0.75-1.25; docs 0.25. MVP (P0 + 0.1 + docs) about 2.75-3.5 ws (1.1-1.4 M tokens); everything through 0.4 about
 6-8.25 ws (2.4-3.3 M tokens). Optional: vector renderer (spike + 2.5-4 ws), launcher-owned GPS (1.5-2.5 ws + release).
 
-**Owner questions:** section 11 (12 questions, each with a proposed default).
+**Owner questions:** section 11 (13 questions, each with a proposed default).
 
 ## 1. Decisions for the owner
 
@@ -63,7 +73,7 @@ link 0.75-1.25; docs 0.25. MVP (P0 + 0.1 + docs) about 2.75-3.5 ws (1.1-1.4 M to
 |---|---|---|---|
 | D1 | Scope and order | 0.1 viewer, 0.2 downloads + tracks, 0.3 wardrive, 0.4 Mesh Hop; or wardrive earlier | as listed |
 | D2 | One app or two | (a) one app with a Wardrive page; (b) a map app + a separate logger app sharing the store | (a): wardriving needs the map and the GPS anyway |
-| D3 | Default tile sources | (a) none online, import + own server only; (b) add OpenTopoMap viewing cache; (c) add Thunderforest with the user's key | (a) + (b) + (c) as opt-in sources the user enables; never `tile.openstreetmap.org` |
+| D3 | Default tile sources | (a) none online, import + own server only; (b) add OpenTopoMap viewing cache; (c) add Thunderforest with the user's key; (d) add Geoapify with the user's key, area download allowed (12.4) | (a) + (b) + (c) + (d) as opt-in sources the user enables; never `tile.openstreetmap.org` |
 | D4 | Raster now, vector later | (a) raster only; (b) raster now, vector spike after 0.2; (c) vector first | (b) |
 | D5 | Display scale | automatic from density (about 2x), a Settings choice 1x/1.5x/2x/3x | automatic with an override (the exact rule is a design pass) |
 | D6 | Who owns the GPS | app (0.1), launcher later; launcher now; gpsd | app first, contract ready for the launcher (6.4) |
@@ -110,6 +120,7 @@ cache that is shown when the board is offline is "offline use". Proposal: leave 
 | `tile.openstreetmap.org` (OSMF) | viewing cache only, no offline use (S) | no | free, no key | "© OpenStreetMap contributors" | **excluded** |
 | OpenTopoMap | apps allowed "provided the server is not overloaded, e.g. by mass downloads"; small server since 2026-01-05; licence CC-BY-SA (S [OTM]) | no (mass downloads) | free, no key | "Kartendaten: © OpenStreetMap-Mitwirkende, SRTM, Kartendarstellung: © OpenTopoMap (CC-BY-SA)" | viewing cache, opt-in |
 | Thunderforest (OpenCycleMap, Outdoors, Transport...) | "Tiles may be cached in-browser and on-device for offline use"; may keep tiles past expiry (S [TF-terms]) | only on Small Business plan or higher (S [TF-price]) | free Hobby plan 150,000 tiles/month with an API key | "Thunderforest" and "OpenStreetMap contributors", with links | viewing cache with the user's own key; `@2x` tiles exist (I) |
+| Geoapify (OSM Bright, Positron and other raster styles; added by the addendum, 12.4) | "you can cache, store, and redistribute the generated map tiles" (S [Geoapify-tiles]) | yes, within the plan's credits: free plan 3,000 credits a day, a tile costs 0.25 credit, so 12,000 tiles a day (S [Geoapify-price]) | free plan with an API key | "Powered by Geoapify" and OpenStreetMap; mandatory on the free plan (S [Geoapify-terms]) | **opt-in with the user's own key, area download allowed** (daily cap); `@2x` URLs exist (S) |
 | Stadia Maps | on-device caching with an active subscription, 100 MB per device (S [Stadia], a tutorial, not the ToS) | not stated | paid | per their docs | not proposed |
 | The owner's own tile server on the LAN (tileserver-gl, a static folder of tiles) | the owner's data | yes | free | per the data used (ODbL: "© OpenStreetMap") | **recommended** for area downloads |
 | Raster MBTiles/PMTiles made on a PC | the owner's file | n/a (import) | free | per the data | **recommended** (import) |
@@ -187,15 +198,20 @@ Three paths, all into one store per source:
    the view (smooth panning) only where the source allows prefetch.
 2. **Download this area.** A rectangle (the current view or a drawn box) and a zoom range; the page shows the tile
    count and an estimated size before it starts; rate-limited (at most 4 parallel requests, as OpenFreeMap asks),
-   resumable, cancellable; refused for a source without `bulk_ok`, and capped by the source's own limit.
+   resumable, cancellable; refused for a source without `bulk_ok`, and capped by the source's own limit (a daily tile
+   cap for Geoapify).
 3. **Import a file.** An MBTiles or PMTiles file from a USB stick or the SD card: either copied into the store or used
    in place (a stick that stays plugged). The PC side (outside the app): `pmtiles extract` (BSD-3) to cut a region from
    Protomaps or Mapterhorn; BBBike/Geofabrik downloads; raster rendering on the PC for raster files (tool choice: P0).
 
 **Per-source policy record** (proposal, a small text file per source, shipped and user-added): name, URL template,
 raster or vector, image format, tile size (256/512), min and max zoom, attribution text, `offline_ok`, `bulk_ok`,
-`max_bulk_tiles`, `prefetch_ok`, minimum TTL, an API key field, the User-Agent (always
+`max_bulk_tiles`, `daily_cap`, `prefetch_ok`, minimum TTL, an API key field, the User-Agent (always
 `<app-id>/<version> (+https://github.com/OSRdesign/cyberdeck-zero-apps)`).
+
+**Two guards (from prior art, 12.2):** a download stops when different tiles come back with identical bytes (an error
+picture: the OSMF servers send an "Access Blocked" image with HTTP 200, S [OMD]), except plain one-colour tiles such as
+open sea; absent tiles (404) are remembered per source, so a second pass does not ask again.
 
 **Store format options for the cache:**
 
@@ -248,7 +264,9 @@ Typical writes: 2,000 new tiles in a day of use is about 30 MB (I): small.
   | Vector rendering at the panel's density | crisp at any size | section 3.3 |
 
   Proposal: magnify at decode time with an automatic factor from the canvas density (about 2x on most boards) and a
-  Settings override; prefer `@2x` tiles where the source has them. The exact rule is a design pass (D5).
+  Settings override; prefer `@2x` tiles where the source has them. For files made on a PC, render at a higher DPI
+  (QGIS "Generate XYZ tiles (MBTiles)" has a DPI setting, S [QGIS-xyz]; tileserver-gl serves `@2x`) so the board
+  does not have to magnify them (addendum, 12.4). The exact rule is a design pass (D5).
 
 ### 3.3 Vector rendering options
 
@@ -274,7 +292,8 @@ time and RAM) decides.
   Douglas-Peucker per zoom); waypoints; Wi-Fi/BLE sightings (5.7); Mesh Hop nodes (6). Lines through LVGL's line or
   ThorVG path drawing; at most a few thousand points per frame, pre-projected per zoom.
 - **Day/night:** raster tiles cannot be restyled; a night view = a dim/darken pass applied at decode time (cheap) or
-  dark tiles from a source that has them. The app's own chrome follows the app palette.
+  dark tiles from a source that has them; NavBoxLib's lightness-inverting lookup table (12.1) is another cheap option
+  for the design pass. The app's own chrome follows the app palette.
 
 ### 3.5 Pan and zoom by touch, keys and pointer
 
@@ -291,7 +310,9 @@ The map widget keeps an offset and blits the visible tiles; a pan only invalidat
 
 Raster PNG/JPEG via stb_image (same build flags as RSS Reader), RGB565 at the display scale, an LRU sized from
 `board.state` `ram_mb`, one custom LVGL map widget, MBTiles (SQLite) and PMTiles readers in `core/`, overlays drawn on
-top. No WebP, no vector, no imagery in 0.1.
+top. No WebP, no vector, no imagery in 0.1. From prior art (12.3): 8-bit palette PNG in the archives we prepare; the
+parent tile magnified as a placeholder while a tile loads; tiles queued newest first; a loader thread that writes only
+into the cache slot it was handed, with slots allocated on the LVGL thread (no lock around the LRU).
 
 ## 4. GPS (question 3)
 
@@ -413,7 +434,7 @@ deauthentication or injection.
   `WIFI`, `BT`, `BLE` (and cell types we do not log); for BLE `Channel` is 0 and `MfgrId` the company id.
   One row per sighting (each helps WiGLE place the AP).
 - **Kismet compatibility:** Kismet's own log is an SQLite `.kismet` file, and Kismet writes WiGLE CSV for upload
-  (S [Kismet-log]); Kismet is GPL (I, not re-checked). WiGLE CSV is the common ground: Kismet users can read it and
+  (S [Kismet-log]); Kismet is GPL-2.0 unless a file says otherwise (its licence file, read for the addendum, 12.2). WiGLE CSV is the common ground: Kismet users can read it and
   WiGLE takes it. No `.kismet` writer is proposed.
 - **Track:** an append-only line file (UTC, lat, lon, alt, speed, fix, accuracy), crash-safe; GPX 1.1 written on
   export (GPX is XML with closing tags: bad for a file that may be cut by a power loss).
@@ -597,7 +618,7 @@ Text input is rare (a source URL, an API key, a waypoint name): the shared on-sc
 | vtzero, protozero (later, vector) | BSD-2 (S) | MVT decode |
 | libwebp (later, terrain) | BSD-3 (I) | WebP |
 | gpsd (optional external source) | BSD-2 (S) | not linked |
-| Not used: Mapsforge (LGPL-3.0), libosmscout (LGPL), OsmAnd (GPL-3.0), Kismet (GPL), nexmon (GPL-3.0) | | named only |
+| Not used: Mapsforge (LGPL-3.0), libosmscout (LGPL), OsmAnd (GPL-3.0), Kismet (GPL-2.0), nexmon (GPL-3.0); from the addendum (12.2): NavBoxLib (GPL-3.0), Meshtastic device-ui (GPL-3.0), Trail Mate (AGPL-3.0), IceNav (GPL-3.0), osm-gps-map and Viking (GPL-2.0) | | named only, design references; nothing copied |
 | Map data | ODbL (OSM), CC-BY (OpenMapTiles design), CC-BY-SA (OpenTopoMap), provider terms | attribution in the app and README |
 
 ### 7.6 Per-board feasibility
@@ -619,7 +640,7 @@ Text input is rare (a source URL, an API key, a waypoint name): the shared on-sc
 
 | Phase | Worker | Content | Cost (ws) | Owner test |
 |---|---|---|---|---|
-| P0 spike | savvy-medium | decode timing and RSS for 256/512 px PNG/JPEG tiles (host + an arm64 probe for the deck); MBTiles and PMTiles readers on generated fixtures; NMEA fixture replay with the viz1090 parser extended; fake tile server; `iw scan dump` as a normal user; vector tile sizes with `pmtiles extract --dry-run` | 0.5-0.75 | 5 min: run the probe on the deck (ms per tile, VmRSS) and `iw ... scan dump` |
+| P0 spike | savvy-medium | decode timing and RSS for 256/512 px PNG/JPEG tiles (host + an arm64 probe for the deck); MBTiles and PMTiles readers on generated fixtures; NMEA fixture replay with the viz1090 parser extended; fake tile server; `iw scan dump` as a normal user; vector tile sizes with `pmtiles extract --dry-run`; from the addendum (12.4): 8-bit palette PNG vs RGB PNG vs JPEG decode on the same tiles, PMTiles read through `mmap` vs `pread`, a blocked-tile fixture | 0.5-0.75 | 5 min: run the probe on the deck (ms per tile, VmRSS) and `iw ... scan dump` |
 | 0.1 viewer | savvy-heavy | map widget, Web Mercator, RAM LRU, display scale, imported MBTiles/PMTiles raster, on-demand cache store with source policy flags (OpenTopoMap, Thunderforest key, own server), GPS reader + status page + dot, scale bar, attribution, keys/touch/pointer, scenes at 640x480, 800x480, 720x720, 1280x800, 480x640, 480x800, BOARD-TESTS, README, icon, amd64 | 2-2.5 | 15 min: plug the GPS outdoors on the deck and the Pi 3A+; pan/zoom by keys and touch; Wi-Fi off: cached tiles still show; unplug/replug the GPS |
 | 0.2 downloads + tracks | savvy-medium | area download (count, size, rate limit, resume), cache cap and eviction, tracks (record, list, GPX export), `position.state` writer, "Set the clock from GPS" | 1.25-1.75 | 10 min: download a small area from the owner's server, a 10 min walk recorded, GPX opened on the PC |
 | 0.3 wardrive | savvy-medium | nmcli scan loop (Net Toolbox port), optional `iw` dump, BLE (Net Toolbox port, off by default on the deck), WiGLE CSV with GPS time, AP table, overlay and list, export | 1.25-1.75 | 15 min walk: log, overlay, export; the deck's BT keyboard with BLE off and on |
@@ -638,7 +659,9 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
   `$VIZ_DEV_DIR` hook, V) and through pseudo-terminals (Serial Console's `sim` pattern, V).
 - **Fake tile server:** Python stdlib serving generated tiles (each tile shows its z/x/y) with `Cache-Control`,
   `ETag`, 304 answers, 429/503, slow and dropped responses (RSS Reader's `tests/unit/local_server.py` is the precedent, V); the
-  test asserts the User-Agent, the parallel request cap and that a `bulk_ok=0` source refuses an area download.
+  test asserts the User-Agent, the parallel request cap and that a `bulk_ok=0` source refuses an area download; a mode
+  that returns one identical "blocked" image for every tile (the download must stop) and 404s that are cached as
+  absent (12.4).
 - **Archives:** a script generates tiny MBTiles and PMTiles fixtures (raster PNG/JPEG, 256 and 512 px, TMS rows).
 - **Wardrive:** Net Toolbox's recorded `nmcli` and `bluetoothctl` outputs (V); a golden WiGLE CSV; a scripted walk
   that joins scans and fixes.
@@ -651,6 +674,8 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
 ## 9. Risks and non-goals
 
 - **Licence drift:** provider terms change; the source records carry the flags, the README dates them.
+- **Copyleft prior art:** the closest map apps are GPL/AGPL (12.2); they are read as design references only, and no
+  code from them goes into the app.
 - **Readability:** raster labels at 2x are soft; if the owner finds them poor on the deck, `@2x` sources or the
   vector phase are the answers (D4, D5).
 - **Storage:** raster archives grow by 4x per zoom; the download page must show size before starting.
@@ -669,7 +694,8 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
 - Vector tile sizes per area and an MVT render time on the deck.
 - Thunderforest `@2x` URLs and their caching headers; OpenTopoMap headers.
 - The deck's power margin with a USB GPS plugged in.
-- Kismet's licence text (named only).
+- From the addendum: the items listed in 12.5. (Kismet's licence text, listed here before, was read for the
+  addendum: GPL-2.0 unless a file says otherwise, 12.2.)
 
 ## 11. Questions for the owner
 
@@ -677,9 +703,12 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
    *Default: yes.*
 2. **Name (7.1):** pick one, or give your own. *No default.*
 3. **Tile sources (D3):** no OSMF servers at all; import files and your own LAN server as the main way; OpenTopoMap
-   (viewing cache) and Thunderforest (your own free key) as opt-in sources? *Default: yes.*
-4. **Do you have, or want, a tile server on the PC** (a folder of tiles, or tileserver-gl) for area downloads, and
-   a USB stick for imports? *Needed for the 0.1/0.2 board tests.*
+   (viewing cache) and Thunderforest (your own free key) as opt-in viewing caches; Geoapify (your own free key) as an
+   opt-in source that also allows area downloads (12.4)? *Default: yes.*
+4. **Do you have, or want, a tile server on the PC** for area downloads (a ready archive served by `pmtiles serve` or
+   mbtileserver; tileserver-gl only to render raster from vector; or raster MBTiles made with QGIS at a higher DPI,
+   12.2), and a USB stick (exFAT) for imports? A free community bundle (raster PMTiles per country, 12.3) could be the
+   first import once its terms are checked. *Needed for the 0.1/0.2 board tests.*
 5. **Raster now, vector spike after 0.2 (D4)?** *Default: yes.*
 6. **Display scale (D5):** automatic about 2x with a Settings override? *Default: yes; the exact rule in the design
    pass.*
@@ -694,6 +723,165 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
     yes.*
 12. **Clock (D12):** offer "Set the clock from GPS" (sudo prompt) when the clock is unsynced, never automatic?
     *Default: yes.*
+13. **Prior art (12, added by the addendum):** NavBoxLib and the other GPL/AGPL map apps (Meshtastic device-ui, Trail
+    Mate, IceNav) used as design references only, nothing copied, and our own MIT map widget as planned? *Default: yes.*
+
+## 12. Prior art (addendum)
+
+Added 2026-11-05. The owner pointed out a gap: sections 2-4 compared providers and formats, but not the open-source
+projects that already store OSM tiles and show maps on small devices (the owner's pointer: NavBoxLib). Read on 2026-11-05
+through the GitHub API (READMEs, docs, source files, licence files, last push dates) and the web. **In this section
+V = read in the project's own repository (README, docs or source), S = read in another source, I = inferred.**
+Nothing was copied from any project; GPL/AGPL projects are named as references only.
+
+### 12.1 NavBoxLib (the owner's pointer)
+
+- **What (V):** "Maps for embedded devices, tiling + markers + tracks + GPX for LVGL", by t413. C++, LVGL 8 and 9,
+  PlatformIO; about 45 KB of source in `src/navboxlib` (map renderer, pixel buffer, layers, track log, geo point). It
+  also runs on a desktop through a POSIX copy of the Arduino `SD` file API, which its unit tests use. Created
+  2026-05-28, 58 commits, last push 2026-06-12, 3 stars. **Licence GPL-3.0**; the README says the author may move to
+  LGPL later.
+- **Where it is used (V):** the author's NavBoxESP firmware (GPL-3.0, last push 2026-06-13) for the M5 Cardputer
+  (ESP32-S3) and the LilyGo T-Deck, with the M5 GPS unit or a LoRa cap that carries a GNSS receiver.
+- **Fetching (V):** none; the library has no network code. NavBoxESP's README lists three ways to fill the SD card: a
+  "global basemap" zip from its releases, the author's AlphaMap web downloader (its page does not say which tile
+  server it uses: not verified), and the author's `osm2edgetx` script. The script fetches
+  `https://tile.openstreetmap.org/{z}/{x}/{y}.png` by default (`--url` points elsewhere), one tile at a time with a
+  100 ms delay and a User-Agent carrying the author's e-mail; re-runs skip existing files; there is no licence file.
+  Fetching a radius over a zoom range from the OSMF server is the bulk download the OSMF policy forbids (2.1): **the
+  default ignores the policy** (I).
+- **Storage (V):** plain files, `<dir>/z/x/y.png`, standard 256 px OSM PNGs on the SD card (NavBoxESP: `/maps/osm`);
+  the map picks the deepest zoom that has a tile at the centre with `SD.exists()`. The map writes nothing: no cache
+  store, no eviction. NavBoxESP also embeds a small base tile set in its firmware and writes it to the card at first
+  boot (count not checked).
+- **Decode and render (V):** PNGdec (Apache-2.0) with a per-row callback into RGB565. It can **crop while decoding**
+  (rows outside the visible part are skipped, only the needed columns copied); that is how the README claims 80-180 KB
+  of tile RAM instead of 524 KB on boards without PSRAM. A RAM cache of `TILECACHE_SIZE` tiles (default 4) evicts the
+  least recently used tile that is not on screen. One `lv_image` per slot points at the decoded buffer (no copy),
+  placed with `lv_obj_set_pos` and scaled with `lv_img_set_zoom`. While a tile loads, **the parent tile (up to three
+  levels up) is shown magnified**; queued tiles load newest first. Images wider than 256 px are refused. A "smart
+  invert" night view inverts HSL lightness, boosts saturation and caches the result in a 4,096-entry RGB444 lookup
+  table (8 KB).
+- **GPS (V):** not in the library. NavBoxESP uses TinyGPS++ (LGPL-2.1) on a UART and probes each candidate pin pair
+  for up to 1.2 s for a `$`; when the GPS date is invalid, its timestamps fall back to seconds since boot.
+- **Verdict: design reference only.** GPL-3.0 code cannot go into our MIT apps, neither copied nor linked (7.5).
+  Even under LGPL it would fit poorly: Arduino-style file API, a 4-tile cache, a 256 px limit (no `@2x`), no network,
+  no cache store, no MBTiles or PMTiles (I). Ideas worth writing again in our own code: the magnified parent tile as a
+  placeholder, newest-first loading, a lookup table for a night view. Crop-while-decoding matters little on our
+  boards, which keep 6-8 MB for tiles (3.2) (I).
+
+### 12.2 Comparison
+
+| Project | What | Licence; last push | Tiles: where from, policy | Storage | Reusable? | Lessons for us |
+|---|---|---|---|---|---|---|
+| NavBoxLib + NavBoxESP (t413) | LVGL map library; GPS firmware for Cardputer and T-Deck | GPL-3.0; 2026-06-12 / 2026-06-13 | PC and web downloaders; `osm2edgetx` defaults to bulk from OSMF: **ignores the policy** (V, I) | `z/x/y.png` on the SD card | no: reference | 12.1 |
+| Meshtastic device-ui ("MUI") | LVGL UI for Meshtastic devices with a map panel; also a Linux build that downloads with libcurl | GPL-3.0; 2026-11-04 | no default server: the user enters a URL template (a field, or a `.url` file per style) and every fetched tile is saved; no `ETag`/`Cache-Control` handling, no eviction; User-Agent `MUI/2.8 (+https://meshtastic.org)` (V). Starter zips (zoom 1-6) credited to Thunderforest, Geoapify and OSM (V); points users to a community tile service with its own server (S [MUI]) | `/maps/<style>/z/x/y.png` on FAT32/exFAT (exFAT recommended), plus an optional raster `<style>.pmtiles` read-only through the reference `pmtiles.hpp`, one cached directory per depth; tiles fetched later go beside it (V) | no: reference | PMTiles works even on an ESP32-S3 with the reference reader; 8-bit palette PNG to cut size (ImageMagick `-colors 256`); grey decoding on 2 MB PSRAM boards; a "save every tile" cache with no policy flags is what we avoid |
+| Trail Mate (vicliu624) | offline-first handheld: maps, LoRa, GPS; ESP32 boards plus Linux builds, among them an APPLaunch-packaged Cardputer Zero app and a uConsole build | AGPL-3.0; 2026-11-03 (PC packer Trail Mate Center: AGPL-3.0) | devices: its own TMAP packages made by Trail Mate Center; Linux: on-demand download with defaults `tile.openstreetmap.org`, OpenTopoMap and Esri World Imagery, User-Agent `TrailMate-uConsole/0.1` without a contact, no caching-header code found (V): **offline use of OSMF tiles, against 2.1** (I) | Linux: files under `<sd>/maps/base` plus an SQLite index (`map_tile_cache`: status, HTTP status, bytes) (V) | no: AGPL | a map app already exists for the same launcher family; GPS and LoRa run as resident services that pages only read (like 6.4 B) |
+| IceNav-v3 (jgauchia) | ESP32-S3/P4 GPS navigator, LVGL + LovyanGFX | GPL-3.0; 2026-11-01 | raster tiles **rendered on the PC from OSM data** with Maperitive, no tile server; vector `.nav` files per zoom from Geofabrik extracts with Tile-Generator (GPL-3.0) (V) | `MAP/z/x/y.png`, `NAVMAP/Z<zoom>.nav`; advice: 32 KB clusters and an rsync tool that writes Z, X, Y in order against fragmentation (V) | no: reference | rendering locally is the clean legal path; many small files are slow on SD cards (hence their tooling); a GPX logger with walk/bike/car sampling profiles |
+| 0015 map_tiles + OfflineMapDownloader | ESP-IDF component for LVGL 9 (`map_view` widget, LRU tile cache, routes) and a Flask packager for the PC | MIT; 2026-09-27 | the packager (v2) **refuses the OSMF servers**; per-source records with `bulk_ok`, `bulk_limit_bytes` and the terms in words (checked 2026-09): self-hosted server, local MBTiles or folder, Geoapify, Stadia (100 MB cap), Thunderforest (bulk only from Small Business), MapTiler (no bulk); stops when identical bytes come back for different tiles; caches absent tiles; User-Agent with a contact (V) | `{base}/{style}/z/x/y.bin`: LVGL 9 RGB565, 12-byte header + 128 KB per tile, nothing to decode on the device (V) | design, and small parts under MIT with attribution; the code is ESP-IDF/FreeRTOS-specific (I) | the closest to our plan: it confirms the policy record (2.7); its loader task writes only the slot it was handed and slots are allocated only on the LVGL thread, so the cache needs no lock; placeholder on a miss; a prefetch ring. Raw RGB565 tiles are not for us: about 10x the PNG size (I) |
+| Cyclenerd offline-map-tile-downloader | Go PC tool for MUI and MeshCore devices | MIT; 2026-09-15 | sources from a JSON file, no provider built in; 10 tiles/s and 4 workers by default, an honest User-Agent, "respect the tile server's Terms of Service" (V) | `maps/<style>/z/x/y.png`, optional 8-bit conversion (V) | a PC tool | leaves the policy to the user |
+| Hogesyx lvgl_map_tiles_downloader | Python packager "for LVGL" | MIT; 2025-05-29 | **Google Maps tiles** (V); against Google's terms (I) | zip of `z/x/y.png`, 8-bit PNG (V) | no | what not to do |
+| osm-gps-map | GTK map widget used by Linux GPS apps | GPL-2.0; 2026-10-11 | on-demand cache; built-in sources include OSM, OpenTopoMap, Google and Bing URLs; a bulk call `osm_gps_map_download_maps()` capped at 10,000 tiles per zoom; User-Agent `libosmgpsmap/<version>` (V); the policy is not enforced (I) | `<base>/<source name or md5>/z/x/y`, no eviction (V) | no: reference | the classic Linux design, and its gaps |
+| Viking | GTK GPS data editor with maps | GPL-2.0; 2026-10-03 | per-source `use-etag` and a tile-age setting; "Download Maps in Zoom Levels" with built-in limits and a warning that links the OSM policy (V) | its own tile cache; MBTiles layers (V) | no: reference | per-source caching flags, as in our records |
+| MOBAC; JTileDownloader | PC bulk downloaders and atlas makers | GPL-2.0 (MOBAC 2.4.0, updated 2026-10-19); GPL-3.0 (JTD 0.6.2, 2020) | both were blocked by the OSMF tile servers for bulk downloading (S [MOBAC], [JTD]) | many atlas formats | no | the OSMF enforces its policy against tools |
+| Navit; QMapShack; Pure Maps + OSM Scout Server | navigation, GIS and offline phone maps on Linux | GPL-2.0 with LGPL parts; GPL-3.0; GPL-3.0 | Navit draws its own vector files made from OSM extracts (I); the others are Qt applications (I) | their own formats | no | vector drawing in plain C runs on small Linux devices (Navit, I); Qt stacks are too heavy for a Zero 2 W (I) |
+| PC and server tools: go-pmtiles, mbutil, VersaTiles, mbtileserver, tileserver-gl, tilemaker, QGIS | convert, cut, serve, render | BSD-3 (2026-07-22); BSD-3 (archived); MIT (2026-11-04); ISC (2025-05-21); BSD-2 (2026-11-01); FTWPL (2026-11-03); QGIS is a GPL program used as a tool | the owner's own files: `pmtiles serve` (used in MUI's guide) and mbtileserver serve `z/x/y` from one archive; QGIS "Generate XYZ tiles (MBTiles)" renders any layer to raster MBTiles with a **DPI** setting (S [QGIS-xyz]) | MBTiles, PMTiles, folders | as programs, never linked | the PC side of "Import" and "own server" (2.7) |
+| Kismet | Wi-Fi/Bluetooth capture and wardriving server with a web UI | GPL-2.0 unless a file says otherwise; 2026-11-05 | its web map loads online tiles (default OSMF) only after the user agrees to that tile server: viewing in a browser, no offline store (V) | `.kismet` (SQLite) and WiGLE CSV (S, 5.4) | no | its own serial GPS driver (automatic baud, NMEA, UBX, SiRF), a listen-only `gps=nmea` mode that "never sends anything to the GPS", raw NMEA over TCP, gpsd, the browser's location; "Only one process can open a serial or USB device" (V, `kismet.conf`) |
+| Pwnagotchi (jayofelony fork) | Pi Zero handshake collector (bettercap, monitor mode) | GPL-3.0; 2026-09-28 | GPS map plugin: Leaflet in a browser (V) | a `.gps.json` per capture (V) | no | GPS through bettercap on a serial port; monitor mode stays out of scope (5.3) |
+| Sparrow-wifi | Wi-Fi/Bluetooth analyser for Linux (Qt) | GPL-3.0; 2026-10-21 | map export is a Google Maps HTML page that needs an API key (V) | - | no | nothing for the map side |
+| WiGLE Android; ESP32 wardrivers: ESP32 Marauder, wardriver rev3, Bruce, Evil-M5Project | phone app; ESP32 firmwares | BSD-3 (2026-11-02); MIT (2026-10-29); GPL-3.0 (2026-05-25); AGPL-3.0 (2026-11-04); no licence (2026-11-04) | no maps on the device found in the firmwares (I) | Marauder (`WigleWifi-1.6`), wardriver rev3 and Bruce write WiGLE CSV; Evil-M5Project ships WiGLE merge tools (V, code search) | format only | WiGLE CSV 1.6 is the common ground, as proposed (5.4) |
+
+Searched without a result: an official LVGL map widget or an `lv_lib_*` map library (GitHub searches "lvgl map
+tiles" and "lvgl openstreetmap", one web search, 2026-11-05); the only LVGL map components found are NavBoxLib and
+0015 map_tiles. MapProxy (Apache-2.0) warns about the OSM policy in its docs but does not enforce it (V).
+
+### 12.3 The four questions
+
+**(a) How they get tiles onto the device, legally and automatically.**
+
+- Three patterns: (1) **prepared on a PC and copied** (NavBox, IceNav, map_tiles, MUI starter sets, Trail Mate
+  packages); (2) **an on-demand cache on the device** (MUI, Trail Mate on Linux, osm-gps-map, Viking); (3) **bulk
+  download** on a PC or the device (osm2edgetx, MOBAC, JTileDownloader, osm-gps-map's call, Viking's dialog).
+- Servers they point to: the OSMF server by default (osm2edgetx, Trail Mate on Linux, Kismet's browser map, the source
+  lists of osm-gps-map and Viking); OpenTopoMap and Esri imagery (Trail Mate); Google tiles (Hogesyx, osm-gps-map's
+  list); keyed providers (MUI's starter sets, 0015); self-rendered data (IceNav with Maperitive, 0015's first choice
+  "self-hosted", the community service MUI points to).
+- Policy: **only 0015's packager enforces the source terms** (refuses OSMF, per-source bulk flags, caps, the
+  blocked-image check). Viking warns and limits; Cyclenerd and MUI leave it to the user; osm2edgetx and Trail Mate on
+  Linux default to uses the OSMF policy forbids (bulk, offline). Of the projects read, only Viking uses `ETag` (per
+  source). Our policy-first design (2.1, 2.7) is stricter than most prior art; 0015 shows it is practical.
+- Legal ways that need no server of our own: render on a PC from OSM data (IceNav); keyed providers whose terms allow
+  storing (0015 lists Geoapify and Stadia's 100 MB; Geoapify's own page says "you can cache, store, and redistribute
+  the generated map tiles", S [Geoapify-tiles]); community bundles made from OSM data on their own server (the one MUI
+  points to: free, rebuilt monthly, raster PMTiles or zip, zoom 0-15 per European country and US state, World zoom
+  0-9 in 509 MB, France 10 GB; the page states no terms and no licence, S [Oxed]: check before we recommend it).
+
+**(b) Storage layout on the SD card, and why.**
+
+- Almost every microcontroller project uses `z/x/y` folders: FAT32/exFAT cards, no SQLite on an ESP32, simple PC
+  tools (I). The cost shows in their own docs: IceNav asks for 32 KB clusters and ships an ordered rsync tool; MUI's
+  guide warns that large regions mean very many files (a community post reports over 800,000 files for one country
+  set, S).
+- MUI added a read-only **PMTiles** archive per style (from 2.8.1) and keeps `z/x/y` only for tiles fetched later; it
+  never writes the archive (V). Trail Mate on Linux keeps files plus an **SQLite index**. No device project writes
+  tiles into MBTiles (no SQLite on microcontrollers, I).
+- For our boards (ext4 on the SD card, SQLite available): **no change**. One MBTiles file per source for the cache,
+  PMTiles/MBTiles imported read-only (2.4, 2.7), batched commits (2.7). Prior art confirms the reasons: one file instead
+  of hundreds of thousands, eviction by one SQL statement, no per-file block slack (a 12 KB tile takes 12-16 KB as a
+  file on ext4, I). Two additions: a `z/x/y` folder from another tool is converted on the PC (`pmtiles convert`,
+  VersaTiles, mbutil) or read in place from a stick, never copied tile by tile onto the SD card; sticks use exFAT,
+  because FAT32 stops at 4 GB per file (I).
+
+**(c) Decode and render tricks for little RAM.**
+
+- **Raw RGB565 tiles** (0015): nothing to decode, but 128 KB per 256 px tile, about 10x the PNG (I), and on our boards
+  reading 128 KB from the SD card likely costs about as much as decoding a 12 KB PNG (I, P0). Not for archives; RGB565
+  stays our in-RAM format (3.2).
+- **8-bit palette PNG** (MUI starter sets, Cyclenerd, Hogesyx): smaller files, decoded by stb_image like any PNG (I).
+  Adopt for the archives we prepare or document; P0 times it.
+- **Crop while decoding and a 4-tile cache** (NavBoxLib): made for boards with a few hundred KB; we keep 6-8 MB for
+  tiles (I). Not needed.
+- **Parent tile magnified as a placeholder** (NavBoxLib; map_tiles draws a placeholder), **newest-first loading**, a
+  **prefetch ring** where the source allows it (map_tiles): adopt in the 0.1 widget.
+- **A loader that writes only into the slot it was handed**, slots allocated on the LVGL thread (map_tiles): adopt as
+  the threading rule; no lock around the LRU.
+- Grey decoding on low-memory boards (MUI) and a lookup-table night view (NavBoxLib): options for the design pass,
+  not decisions.
+- **Memory-mapped files:** no project uses `mmap` (microcontrollers cannot); MUI reads PMTiles by offset with one
+  cached directory per depth (V). On Linux a read-only `mmap` of a PMTiles or MBTiles file lets the page cache do the
+  caching (I); P0 compares it with `pread`.
+
+**(d) Changes to our recommendation:** listed in 12.4.
+
+### 12.4 Changes to the recommendation and to the owner questions
+
+| Item | Change |
+|---|---|
+| D3 tile sources | **change:** add (d) Geoapify with the user's own key as an opt-in source **that allows "Download this area"**. Its tile page says "you can cache, store, and redistribute the generated map tiles"; the free plan gives 3,000 credits a day and a tile costs 0.25 credit, so 12,000 tiles a day (a city at zoom 0-16 in one day, I); `@2x` raster URLs exist; attribution ("Powered by Geoapify" and OpenStreetMap) is mandatory on the free plan (S). The record gets `bulk_ok=1` and a daily cap. Why: the only free, legal area download found that needs neither a PC nor a server. OSMF servers stay excluded; the owner's own server stays recommended. Sections 0, 1, 2.2, 2.7 and 11 are updated. |
+| Source records (2.7) | **change:** two guards from 0015's packager: stop a download when different tiles return identical bytes (an error picture such as the OSMF "Access Blocked" image, sent with HTTP 200), except plain one-colour tiles; remember absent tiles (404) per source. Plus a `daily_cap` field. Tests in 8.2. |
+| Display scale (D5, 3.2) | **change of preference, not of principle:** files made on a PC are rendered at a higher DPI (QGIS DPI setting) or as `@2x` (tileserver-gl), so labels are crisp without magnification; decode-time magnification stays for sources without `@2x`. |
+| Format inside prepared archives | **change:** 8-bit palette PNG in the raster MBTiles/PMTiles we prepare or document (smaller files); JPEG only for imagery. The formats themselves (MBTiles cache, PMTiles/MBTiles import, 2.4): **no change**. |
+| P0 spike (8.1) | **change of scope, cost unchanged (0.5-0.75 ws, I):** add palette PNG vs RGB PNG vs JPEG decode times on the same tiles, PMTiles read through `mmap` vs `pread`, the blocked-tile fixture. |
+| 0.1 map widget (3.6) | **change (details):** parent tile magnified as the placeholder, newest-first loading, a prefetch ring only where `prefetch_ok`, the loader writes only its own slot. Cost unchanged (I). |
+| Storage (D10, 2.7, 6.2) | **no change.** Added: convert `z/x/y` folders on the PC; exFAT sticks (FAT32's 4 GB per-file limit). |
+| GPS reader (4.2) | **no change.** Prior art agrees: Kismet has its own serial NMEA driver, a listen-only NMEA mode, and warns that only one process can hold a serial port; NavBoxESP probes its UARTs for NMEA like viz1090's watcher; Trail Mate runs GPS as a resident service, our option B for later (6.4). |
+| Licences (7.5) | **no change in substance:** no code from NavBoxLib, Meshtastic device-ui, Trail Mate, IceNav, osm-gps-map or Viking (GPL/AGPL); 0015's MIT code may be adapted with attribution if it helps (I). |
+| Phases and cost (8.1) | **no change.** |
+
+**Owner questions (section 11):** question 3 now includes Geoapify; question 4 lists lighter server choices, QGIS at a
+higher DPI and the community bundles; question 13 is new (NavBoxLib and the other GPL/AGPL apps as references only).
+
+### 12.5 Not verified (addendum)
+
+- The tile server behind the AlphaMap web downloader (its page does not say); the content of NavBoxESP's "global
+  basemap" zip.
+- The terms and licence of the community raster bundles MUI points to (none stated on the page).
+- Geoapify's caching headers, `@2x` tile sizes and the free plan's request rate (the pricing page says tiles may use
+  4x the plan's request rate, without the number for the free plan).
+- Whether the OSMF "Access Blocked" image is still sent with HTTP 200 (0015's README says so; not tested).
+- ESP32_Offline_GPS_MAPS (no licence) and FoxtrotGPS were not read; Navit, QMapShack, Pure Maps and OSM Scout Server
+  were judged from their descriptions only.
+- The estimates in 12.3 (RGB565 read vs PNG decode time, palette PNG decode cost, `mmap` benefit): P0.
 
 ## Sources
 
@@ -741,6 +929,36 @@ Wardriving:
 - [iw-dump] Scan dump readable without root (secondary): https://www.lieberbiber.de/?p=193
 - [iwinfo] iwinfo helper with network capabilities: https://www.linuxlinks.com/iwinfo-provides-wifi-information/
 - [WP29] Article 29 WP Opinion 13/2011 (WP185) summary: https://www.hunton.com/privacy-and-cybersecurity-law-blog/article-29-working-party-opines-on-geolocation-services ; primary PDF (not opened): https://lists.oasis-open.org/archives/pmrm/201106/pdf00000.pdf
+
+Prior art (section 12; licence from each repository's licence file or metadata, last push from the GitHub API,
+read 2026-11-05):
+- [NavBoxLib] t413/NavBoxLib (GPL-3.0; last push 2026-06-12), `readme.md`, `src/navboxlib/{MapRenderer,PixelBuffer,fileclass}`: https://github.com/t413/NavBoxLib
+- [NavBoxESP] t413/NavBoxESP (GPL-3.0; 2026-06-13), `readme.md`, `platformio.ini`, `lib/corelib/{GpsManager,views/MapView}.cpp`, `lib/staticfiles/basetilewriter.cpp`: https://github.com/t413/NavBoxESP
+- [osm2edgetx] t413/osm2edgetx (no licence file; 2026-05-29), `osm2edgetx.py`: https://github.com/t413/osm2edgetx
+- [AlphaMap] AlphaMap web tile downloader (tile server not stated): https://t413.com/go/alphamaptool ; widget t413/AlphaMapLua (GPL-3.0; 2026-05-13): https://github.com/t413/AlphaMapLua
+- [PNGdec] bitbank2/PNGdec (Apache-2.0): https://github.com/bitbank2/PNGdec
+- [TinyGPS++] mikalhart/TinyGPSPlus (LGPL-2.1 per the header): https://github.com/mikalhart/TinyGPSPlus
+- [MUI] meshtastic/device-ui (GPL-3.0; 2026-11-04), `maps/README.md`, `source/graphics/map/CURLService.cpp`, `include/graphics/map/{PMTileService,MapTileSettings}.h`: https://github.com/meshtastic/device-ui ; Meshtastic UI docs: https://meshtastic.org/docs/configuration/device-uis/meshtasticui/
+- [Oxed] community raster tile bundles (free, monthly, no terms stated): https://download.tiles.coalition.space/bundles
+- [TrailMate] vicliu624/trail-mate (AGPL-3.0; 2026-11-03), `platform/linux/common/src/platform/linux/map_tile_cache.cpp`, `apps/linux_cardputer_zero/README.md`: https://github.com/vicliu624/trail-mate ; Trail Mate Center (AGPL-3.0; 2026-10-22): https://github.com/vicliu624/trail-mate-center
+- [IceNav] jgauchia/IceNav-v3 (GPL-3.0; 2026-11-01), `docs/sd-card-file-structure.md`, `docs/mass-copy.md`: https://github.com/jgauchia/IceNav-v3 ; Tile-Generator (GPL-3.0; 2026-11-01): https://github.com/jgauchia/Tile-Generator
+- [map_tiles] 0015/map_tiles (MIT; 2026-09-27): https://github.com/0015/map_tiles ; component page: https://components.espressif.com/components/0015/map_tiles
+- [OMD] 0015/OfflineMapDownloader (MIT; 2026-09-27), `README.md`, `tile_sources.py`: https://github.com/0015/OfflineMapDownloader
+- [Cyclenerd] Cyclenerd/offline-map-tile-downloader (MIT; 2026-09-15): https://github.com/cyclenerd/offline-map-tile-downloader
+- [Hogesyx] Hogesyx/lvgl_map_tiles_downloader (MIT; 2025-05-29): https://github.com/Hogesyx/lvgl_map_tiles_downloader
+- [osm-gps-map] nzjrs/osm-gps-map (GPL-2.0; 2026-10-11), `src/osm-gps-map-widget.c`, `src/osm-gps-map-source.c`: https://github.com/nzjrs/osm-gps-map
+- [Viking] viking-gps/viking (GPL-2.0; 2026-10-03), `src/osm.c`, `help/C/index.docbook`: https://github.com/viking-gps/viking
+- [MOBAC] Mobile Atlas Creator (GPL-2.0; 2.4.0, updated 2026-10-19): https://sourceforge.net/projects/mobac/ ; OSMF block (2011): https://help.openstreetmap.org/questions/5715/access-blocked-when-using-mobile-atlas-creator/
+- [JTD] JTileDownloader (GPLv3; 0.6.2 of 2020; blocked by the OSMF servers): https://wiki.openstreetmap.org/wiki/JTileDownloader
+- Navit (GPL-2.0 with LGPL parts; 2026-11-03): https://github.com/navit-gps/navit ; QMapShack (GPL-3.0; 2026-11-02): https://github.com/Maproom/qmapshack ; Pure Maps (GPL-3.0; 2026-09-16): https://github.com/rinigus/pure-maps ; OSM Scout Server (GPL-3.0; 2026-08-26): https://github.com/rinigus/osmscout-server
+- PC and server tools: go-pmtiles (BSD-3; 2026-07-22) https://github.com/protomaps/go-pmtiles ; mbutil (BSD-3; archived) https://github.com/mapbox/mbutil ; VersaTiles (MIT; 2026-11-04) https://github.com/versatiles-org/versatiles-rs ; mbtileserver (ISC; 2025-05-21) https://github.com/consbio/mbtileserver ; tileserver-gl (BSD-2; 2026-11-01) https://github.com/maptiler/tileserver-gl ; tilemaker (FTWPL; 2026-11-03) https://github.com/systemed/tilemaker ; MapProxy (Apache-2.0; `doc/configuration_examples.rst`) https://github.com/mapproxy/mapproxy
+- [QGIS-xyz] QGIS "Generate XYZ tiles (MBTiles)" (`native:tilesxyzmbtiles`, DPI parameter): https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/qgis/rastertools.html
+- [Geoapify-tiles] Geoapify map tiles (caching, storing, redistribution; `@2x` URLs): https://www.geoapify.com/map-tiles/
+- [Geoapify-price] Geoapify pricing (free plan 3,000 credits a day): https://www.geoapify.com/pricing/ ; pricing details (a tile costs 0.25 credit): https://www.geoapify.com/pricing-details/
+- [Geoapify-terms] Geoapify terms (attribution mandatory on the free plan): https://www.geoapify.com/terms-and-conditions/
+- [Kismet] kismetwireless/kismet (GPL-2.0 unless a file says otherwise; 2026-11-05), `conf/kismet.conf` (GPS types), `http_data/js/widgets/map.js` (tile consent): https://github.com/kismetwireless/kismet ; GPS docs: https://www.kismetwireless.net/docs/readme/gps/
+- Pwnagotchi (GPL-3.0; jayofelony fork 2026-09-28), `pwnagotchi/plugins/default/{gps.py,webgpsmap.html}`: https://github.com/jayofelony/pwnagotchi ; Sparrow-wifi (GPL-3.0; 2026-10-21), `sparrowmap.py`: https://github.com/ghostop14/sparrow-wifi ; WiGLE Android (BSD-3; 2026-11-02): https://github.com/wiglenet/wigle-wifi-wardriving
+- ESP32 wardrivers with WiGLE CSV: ESP32Marauder (MIT; 2026-10-29) https://github.com/justcallmekoko/ESP32Marauder ; wardriver_rev3 (GPL-3.0; 2026-05-25) https://github.com/JosephHewitt/wardriver_rev3 ; Bruce (AGPL-3.0; 2026-11-04) https://github.com/BruceDevices/firmware ; Evil-M5Project (no licence; 2026-11-04) https://github.com/7h30th3r0n3/Evil-M5Project
 
 Our repositories (V):
 - Apps `origin/main` `bec05f3`: `apps/net-toolbox/src/core/{wifiscan,ble,walktest,netlog_wifi}.hpp`;
