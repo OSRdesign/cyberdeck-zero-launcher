@@ -77,7 +77,7 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | FreeType; Montserrat Medium, Font Awesome 5 Free (fonts) | Status bar of the Pi port (cp0_statusbar), shared with full-screen apps | FreeType FTL/GPL-2.0; fonts SIL OFL 1.1; Font Awesome icons CC BY 4.0 |
 | libcrypt, libc, libstdc++ | Account setup and runtime | Package-specific LGPL/GPL with runtime exceptions |
 
-Packaging must preserve notices for the selected configuration, including static libraries, fonts and audio. SimpleBLE restrictions and the selection of libv4l objects must be checked against the shipped artifact; this source inventory does not resolve those release-specific questions. The Settings menu tree used the GPL-3.0-only `tree.hh` (Kasper Peeters) until 2026-10-13; it is now the project's own MIT `ext_components/cp0_lvgl/include/cp0_tree.hpp`.
+Packaging must preserve notices for the selected configuration, including static libraries, fonts and audio. SimpleBLE restrictions must be checked against the shipped artifact; this source inventory does not resolve that release-specific question (libv4l, which this sentence also named, went with CameraApp on 2026-10-22: no build of ours links it). The Settings menu tree used the GPL-3.0-only `tree.hh` (Kasper Peeters) until 2026-10-13; it is now the project's own MIT `ext_components/cp0_lvgl/include/cp0_tree.hpp`.
 
 ## Removed on 2026-10-22
 

@@ -5,6 +5,9 @@ draft PR. Apps repo read at origin/main 3dde2c4; the bundled Store is the `proje
 No board touched, nothing merged, git history unchanged. Builds and PC tests in section 3; nothing was tried on a
 board (the removed code was compiled out or unreachable on every board, so a short smoke test is enough).
 
+Update 2026-11-05: that draft became PR #75, merged on 2026-10-21 (b996720) and released in v0.8.1. A re-check on
+v0.9.4 main found only small leftovers (section 6, branch `upstream-decouple`).
+
 ## 1. Decision and scope
 
 Owner, 2026-10-22: "we should be completely unrelated now to the CardputerZero from M5Stack repo". Chosen scope:
@@ -198,3 +201,43 @@ would take.
 | `M5CardputerZero-<app>` app binaries | `.desktop` `Exec=` of LAN Scan, Wi-Fi Survey, the MeshZero draft | the apps' next versions (report 025 decision 7) |
 | `tca8418_keypad_m5stack_keymap` | the inherited matrix keyboard path (`keyboard_map`) | goes with that keyboard support, if ever |
 | `SPDX-FileCopyrightText: ... M5Stack Technology CO LTD`, `LICENSE`, `LICENSES/` | the MIT licence | never: they stay |
+
+## 6. Re-check on v0.9.4 (2026-11-05)
+
+The draft branch of sections 1-3 was merged as PR #75 on 2026-10-21 (squash b996720: 653 files, +463 / -105 394
+lines) and released in v0.8.1 (#76); the ROADMAP row had stayed at "building (draft PR)". After the owner's GO of
+2026-11-05 the inventory of section 2 was checked again against launcher main 3824b2c (v0.9.4 + #140), on branch
+`upstream-decouple` (local, not pushed).
+
+How: `git grep` for every file, symbol, config switch and path of sections 2.1 and 2.2, a look at every `Kconfig`,
+`SConstruct` and `*_config_defaults.mk`, the globs of `tools/dev/branding-allow.txt`, the current guides (not the
+dated reports, release notes and test logs, which record history), and the bundle file list.
+
+### 6.1 Findings
+
+| Item | Result |
+| --- | --- |
+| Projects, submodules, CI, scripts, documents, components of 2.1 marked "removed" | all gone: two submodules (SDK, AppStore), `ext_components` = Miniaudio, Sigslot, cp0_lvgl, `projects` = APPLaunch, AppStore, no `.github/`, `scripts/` = the two ZeroMQ clients of section 4 item 5 |
+| Hardware and stock-app code of 2.2 (ExtPort, ADB, `.deb` updater, LoRa, external Calculator) | all gone: no symbol, `APPLAUNCH_SETTINGS_*` switch, page or path left. Only test strings remain on purpose: `extport_*` as generic key names in `test_config_service.cpp` and the "`GpioSet` is `Unknown`" asserts of `test_settings_policy.cpp`, which guard the removal |
+| `# CONFIG_SMOOTH_UI_TOOLKIT_ENABLED=y` in the four `projects/APPLaunch/*_config_defaults.mk` | leftover (SmoothUI went in #75): **removed** (comment only) |
+| `docs/dev/native-settings-page-howto.md`: rows "System > Software" and "ExtPort, Developer (ADB)" | stale (their code and switches went in #75): **removed**, one line says where they went |
+| `docs/OPEN_SOURCE_COMPONENTS.md`: "the selection of libv4l objects must be checked" | stale (libv4l was CameraApp's; no build links it): **reworded** |
+| `RETIRED_FILES` / `RETIRED_DIRS` of `install.sh` and `uninstall.sh`, the `adb/` folder in `cyberdeckzero-update`'s backup | kept: they clean the files of older bundles off upgraded boards (`nihao.so`, the desktop template, ZClaw icons, `logo_lcd.png`, `adb/`) and the install tests cover them |
+| `build.sh`: `rm -f .../logo_lcd.png`, `rm -rf .../adb` | kept: no-ops since #75, but a guard that an install test asserts |
+| `LICENSES/` texts of removed components, the "Removed on 2026-10-22" table, README credits | kept (section 1: notices and credits stay) |
+| `#if defined(_WIN32)` branches in 11 cp0_lvgl sources and 1 test | new finding, not removed: Windows-host code paths, dead on our Linux builds, but inside the apps' pinned path (`ext_components/cp0_lvgl`: removing them moves the pin) and not in the list of 2026-10-22 |
+| Section 4 items 1-9 | unchanged and still open; item 1 can now be decided: x-d (v0.8.3) shipped its own `power_supply` reader, while the bq27220 service is still compiled in (`CONFIG_CP0_LVGL_INIT_BQ27220=y`) and feeds `cp0_battery_read`, which the Store calls |
+
+### 6.2 Checks (2026-11-05)
+
+| Check | Result |
+| --- | --- |
+| arm64 and amd64 bundles with the Store, fresh build trees, `-j3`, release environment (0.9.4, release channel), branch f395948 | BUILD OK both (arm64 176 s, amd64 142 s with the private `-dev` root); only the warnings that were there before (`settings_rtc_page.cpp`, `lv_inv_area`, the Kconfig `EVENTPP_ENABLED` note) |
+| Same builds of main 3824b2c, same environment | BUILD OK both. The bundle file lists match: 139 entries each, the same as the published v0.9.4 tarballs. Content: `OPEN_SOURCE_COMPONENTS.md` differs (the reworded sentence); `cyberdeckzero` and the Store binary keep their size and differ only in the build-folder path strings and the build ID (52 and 131 bytes on arm64) |
+| `tools/dev/check-all.sh` | cp0-unit PASS, app-unit PASS, strokes PASS; the host ran low on memory during the render step and the run was stopped there, so render, compare, twice, header and contract did not run. No source file, harness config or golden changed (the `.mk` files are not read by the harness, which has its own `tests/render/config`), and the launcher binary matches main's |
+| Branding check (`tools/dev/check-branding.sh`) | OK |
+| `test-install-board.sh` (LF clone) | 442 passed, 0 failed (it also compares the amd64 and device configs edited here) |
+| `test-update-helper.sh` (LF clone) | 144 passed, 0 failed |
+
+To do before merging: run `tools/dev/check-all.sh` again when the build box has memory to spare (render, compare,
+twice, header, contract).

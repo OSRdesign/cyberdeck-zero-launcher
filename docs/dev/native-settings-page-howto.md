@@ -124,7 +124,6 @@ not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
 | Touch | `APPLAUNCH_SETTINGS_TOUCH` (1 on our profile) | every board (stock: no) | aligned (stock has no touch panel) |
 | Apps | `APPLAUNCH_SETTINGS_APPS` (1 on our profile) | every board (stock: no, it has the Store) | aligned |
 | User, Date & Time (Info, Network Time, Set Manually) | none (Set Manually refuses while Network Time is on) | every board | aligned |
-| System > Software | `APPLAUNCH_SETTINGS_SOFTWARE_UPDATE` | stock only | hardware-dependent (stock update source) |
 | System > Storage, Licenses | none | every board | aligned |
 | System > About | none (its "Board:" line only with `APPLAUNCH_BOARD`) | every board | changed: was a board profile only |
 | System > Pointer navigation | native Settings host | every board (stock: no) | aligned |
@@ -135,7 +134,10 @@ not one of our boards. A board label (`APPLAUNCH_BOARD`) never decides a row.
 | System > Reboot | none | every board | aligned |
 | System > Shutdown | `APPLAUNCH_SETTINGS_SHUTDOWN` (1 on our profile, 0 stock) | every board (stock: no) | stock rule, needs owner decision for stock |
 | Battery (after Bluetooth; a read-only page: charge, status, time, power, voltage, health, device) | a Linux `power_supply` battery when Settings opens (`cp0_capabilities.h` / `settings_battery::present()`, `cp0_power_supply.h`: type Battery, scope not Device, present), native host; an Info row when `APPLAUNCH_HINT_BATTERY` names one that is not set up | boards with a battery (the FZ-M1 tablet; the HackBerry through its MAX17048 gauge, `APPLAUNCH_GAUGE`); none of the other Pi boards | hardware-dependent (no battery, no row; `settings_battery*.scene`) |
-| Ethernet, ExtPort, Battery > Info (the bq27220 pages), Developer (ADB) | `APPLAUNCH_SETTINGS_*` (0 or not defined on our profile) | stock only | hardware-dependent (RJ45, IO expander, bq27220 gauge, USB gadget) |
+| Ethernet, Battery > Info (the bq27220 pages) | `APPLAUNCH_SETTINGS_ETHERNET` (0 on our profile), `APPLAUNCH_SETTINGS_BATTERY` (not defined on our profile) | stock only | hardware-dependent (RJ45, bq27220 gauge) |
+
+The upstream device's ExtPort, Developer (ADB) and System > Software (`.deb` updater) rows were removed with their
+code on 2026-10-22 (report 029); Settings > Updates (report 047) is ours.
 
 The native host hides a node it has no widget for (`SettingsNodeKind::Custom`); none of our profile's nodes is one.
 Rows that follow the hardware (Battery, Brightness, Speaker) are decided by `settings_caps::rows_for()` from
