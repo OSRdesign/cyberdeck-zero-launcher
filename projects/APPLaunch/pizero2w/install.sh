@@ -523,11 +523,17 @@ if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ] && wireplumber_install
 # The body below is checksummed into the file (profile_state): changing its text, comments included, rewrites the
 # profile of every board at the next install (the old one kept as board.conf.bak). Its comments still name the user
 # service of v0.6.0 for that reason.
+# A backlight with levels (an APPLAUNCH_BACKLIGHT=sysfs: line) comes with its idle dim level written out: the
+# launcher's default 10 %, pi4b-dsi its own 20 (in its body). On/off and no backlight: no dim line (nothing to dim to).
+dim_lines() {
+    echo "# idle dim level, percent of the backlight: 1..100 (the launcher's default is 10)"
+    echo "APPLAUNCH_DIM_PERCENT=$1"
+}
 profile_body() {
     case "$BOARD" in
-        # The backlight line is the only one that varies: the on/off backlight_gpio, or the overlay's PWM backlight_pwm
-        # when config.txt has it or this run sets it up (LF_PWM). The on/off body is byte for byte the one of v0.9.3
-        # and before, so a board without the PWM backlight keeps its generated profile as it is.
+        # The backlight lines are the only ones that vary: the on/off backlight_gpio, or the overlay's PWM backlight_pwm
+        # and its idle dim level when config.txt has it or this run sets it up (LF_PWM). The on/off body is byte for byte
+        # the one of v0.9.3 and before, so a board without the PWM backlight keeps its generated profile as it is.
         pi3a-luckfox35)
             cat <<EOF
 APPLAUNCH_BOARD=pi3a-luckfox35
@@ -540,7 +546,7 @@ APPLAUNCH_PANEL_MM=79x49
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 EOF
-            if [ "$LF_PWM" = 1 ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"
+            if [ "$LF_PWM" = 1 ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"; dim_lines 10
             else echo "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio"; fi
             cat <<EOF
 # same device for the code that still reads the LVGL name (the service sets it to /dev/fb0)
@@ -567,7 +573,7 @@ APPLAUNCH_PANEL_MM=94x56
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 EOF
-            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; dim_lines 10; fi
             cat <<EOF
 LV_LINUX_FBDEV_DEVICE=$PANEL_FB
 # the deck's legacy touch axes (set in its user service) must not apply here: neutral values
@@ -593,7 +599,7 @@ APPLAUNCH_PANEL_MM=94x56
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 EOF
-            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; dim_lines 10; fi
             cat <<EOF
 # the fixed-pixel built-in tiles (IP Panel, Snake, Tank: 320x170 pages; the Store) start hidden on the portrait panel;
 # Settings > Launcher shows them, and what is saved there wins
@@ -682,7 +688,7 @@ EOF
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 EOF
-            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; dim_lines 10; fi
             if pc_is_tablet; then
                 echo "# the tablet's built-in keyboard device (i8042, bus 0011) is always there: it does not count as a"
                 echo "# connected keyboard (the on-screen keyboard shows without a USB or Bluetooth one); its keys still work"
