@@ -434,6 +434,56 @@ apply "$NEWTGZ" 0.8.13
 check "zero8 as hand-tested: the update is done, board.conf and config.txt unchanged, no config.txt backup, no reboot asked" '[ $RC = 0 ] && [ "$(st state)" = done ] && [ "$(bin_version)" = 0.8.13 ] && [ "$(z8_snap)" = "$SNAP" ] && ! grep -q "reboot now" "$(ls -t "$R"/var/log/cyberdeckzero/update-*.log | head -n 1)" && grep -q "config.txt already has the panel" "$(ls -t "$R"/var/log/cyberdeckzero/update-*.log | head -n 1)"'
 
 # ------------------------------------------------------------------------------------------------------------------
+# the idle dim level written out (APPLAUNCH_DIM_PERCENT=10 after an APPLAUNCH_BACKLIGHT=sysfs: line): a release before it
+# (the "predim" bundle: its install.sh without the dim lines) generated the profiles of the levels-backlight boards
+# without the line. An update from it is refused (board.conf would change: install.sh by hand); install.sh by hand
+# recognises the old file as generated and replaces it (old one kept as board.conf.bak), after which updates go ahead;
+# a hand-edited old profile is kept by the update, byte for byte
+bundle "$TMP/predim" 0.8.12
+sed -i 's/; dim_lines 10//' "$TMP/predim/bundle/install.sh"
+predim_install() {
+    : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 FAKE_LAUNCHER_PID="$LPID" \
+          sh "$TMP/predim/bundle/install.sh" --user "$U" "$@" 2>&1); RC=$?
+}
+by_hand() {  # the new bundle's install.sh run by hand (as README says for a refused update)
+    : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 FAKE_LAUNCHER_PID="$LPID" \
+          sh "$TMP/new/bundle/install.sh" --user "$U" "$@" 2>&1); RC=$?
+}
+dim_root() {  # dim_root FIXTURE: a tree with its boot files (the Zero 2 W with the 3.5" panel's PWM config.txt for luckfox)
+    if [ "$1" = pi3a-luckfox35 ]; then z8_root; printf '%s\n' "$Z8_PANEL_PWM" > "$R/boot/firmware/config.txt"; return; fi
+    R=$(root "$1"); mkdir -p "$R/boot/firmware"
+    printf 'dtoverlay=vc4-kms-v3d\ndtoverlay=vc4-kms-dsi-waveshare-800x480\n' > "$R/boot/firmware/config.txt"
+    echo 'console=tty1 root=PARTUUID=4-02 rootwait' > "$R/boot/firmware/cmdline.txt"
+}
+for spec in "pi3a-wsdsi43|pi3a-wsdsi43|s/^APPLAUNCH_PANEL_MM=94x56\$/APPLAUNCH_PANEL_MM=95x57/" \
+            "pi3a-wsdsi43|pi3a-wsdsi43-portrait|s/^APPLAUNCH_ROTATE=90\$/APPLAUNCH_ROTATE=270/" \
+            "pi3a-luckfox35|pi3a-luckfox35|s/^APPLAUNCH_ROTATE=90\$/APPLAUNCH_ROTATE=270/"; do
+    fx=${spec%%|*}; rest=${spec#*|}; brd=${rest%%|*}; ed=${rest#*|}
+    P=""
+    # the old generated profile: refused by the update, replaced by install.sh by hand, then updates go ahead
+    dim_root "$fx"; P="$R/etc/applaunch/board.conf"
+    predim_install --board "$brd" --no-default-source
+    check "dim level, $brd: the earlier release wrote its profile without the dim line" '[ $RC = 0 ] && grep -q "^APPLAUNCH_BACKLIGHT=sysfs:" "$P" && ! grep -q APPLAUNCH_DIM_PERCENT "$P"'
+    OLD=$(cat "$P")
+    download "$NEWTGZ"
+    apply "$NEWTGZ" 0.8.13
+    check "dim level, $brd, old generated profile: the update is refused (board.conf would change), board.conf unchanged" '[ $RC = 2 ] && [ "$(st state)" = refused ] && [ "$(st reason)" = "needs install.sh by hand: it would change /etc/applaunch/board.conf" ] && [ "$(cat "$P")" = "$OLD" ] && [ "$(bin_version)" = 0.8.12 ]'
+    by_hand --board "$brd" --no-default-source
+    check "dim level, $brd, install.sh by hand: the old profile recognised as generated, replaced (kept as board.conf.bak), the dim level 10" '[ $RC = 0 ] && has "$brd: update $P (old one kept as board.conf.bak)" && [ "$(cat "$P.bak")" = "$OLD" ] && grep -qx "APPLAUNCH_DIM_PERCENT=10" "$P"'
+    OUT=$(PATH="$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" plan --bundle "$TMP/new/bundle" --user "$U" 2>&1); RC=$?
+    check "dim level, $brd, after install.sh by hand: the update plan keeps board.conf (updates go ahead)" '[ $RC = 0 ] && has "profile_action=keep" && has "profile_state=ours"'
+    # the old profile edited by hand: the update goes ahead and keeps it byte for byte, no dim line added
+    dim_root "$fx"; P="$R/etc/applaunch/board.conf"
+    predim_install --board "$brd" --no-default-source
+    sed -i "$ed" "$P"; HAND=$(cksum < "$P")
+    download "$NEWTGZ"
+    apply "$NEWTGZ" 0.8.13
+    check "dim level, $brd, old profile edited by hand: the update is done, board.conf kept byte for byte, no dim line, no .bak" '[ $RC = 0 ] && [ "$(st state)" = done ] && [ "$(bin_version)" = 0.8.13 ] && [ "$(cksum < "$P")" = "$HAND" ] && ! grep -q APPLAUNCH_DIM_PERCENT "$P" && [ ! -e "$P.bak" ]'
+done
+
+# ------------------------------------------------------------------------------------------------------------------
 # desktop board (HackBerry, the desktop unit): the running launcher exits with status 76 when asked
 R=$(root hackberry-cm5)
 mkdir -p "$R/etc/systemd/system" "$R/lib/systemd/system" "$R/proc/701" "$R/proc/702"
