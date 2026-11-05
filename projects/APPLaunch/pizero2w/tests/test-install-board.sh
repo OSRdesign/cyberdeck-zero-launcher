@@ -128,15 +128,16 @@ APPLAUNCH_PANEL_MM=94x56
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+APPLAUNCH_DIM_PERCENT=10
 LV_LINUX_FBDEV_DEVICE=/dev/fb0
 APPLAUNCH_TOUCH_SWAP_XY=0
 APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0'
 GOT=$(grep -v '^#' "$P")
-if [ "$GOT" = "$EXPECT" ]; then ok "wsdsi43 profile: exact keys and values (the board's working profile)"; else ko "wsdsi43 profile: exact keys and values (the board's working profile)" "$GOT"; fi
+if [ "$GOT" = "$EXPECT" ]; then ok "wsdsi43 profile: exact keys and values (the board's working profile, the dim level 10 written out)"; else ko "wsdsi43 profile: exact keys and values (the board's working profile, the dim level 10 written out)" "$GOT"; fi
 # shellcheck disable=SC1090
-GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_FB $APPLAUNCH_LOGICAL $APPLAUNCH_ROTATE $APPLAUNCH_COMPAT_SCALE $APPLAUNCH_BACKLIGHT" ) )
-check "wsdsi43 profile: valid sh syntax" '[ "$GOT" = "/dev/fb0 800x480 0 2 sysfs:/sys/class/backlight/10-0045" ]'
+GOT=$( ( set -a; . "$P"; echo "$APPLAUNCH_FB $APPLAUNCH_LOGICAL $APPLAUNCH_ROTATE $APPLAUNCH_COMPAT_SCALE $APPLAUNCH_BACKLIGHT $APPLAUNCH_DIM_PERCENT" ) )
+check "wsdsi43 profile: valid sh syntax" '[ "$GOT" = "/dev/fb0 800x480 0 2 sysfs:/sys/class/backlight/10-0045 10" ]'
 check "wsdsi43 profile: only KEY=VALUE or comment lines, no fbcon" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && ! grep -qi fbcon "$P"'
 SUM1=$(cksum < "$P")
 run --board-only
@@ -170,7 +171,7 @@ run --dry-run
 check "wsdsi43 with another single backlight device: that one" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/rpi_backlight" && has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of rpi_backlight)"'
 rm -rf "$R/sys/class/backlight"
 run --dry-run
-check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line, no backlight rule" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT=" && ! has "92-applaunch-backlight-sysfs"'
+check "wsdsi43 without a backlight device: no APPLAUNCH_BACKLIGHT line, no dim level, no backlight rule" '[ $RC = 0 ] && has "board: pi3a-wsdsi43" && ! has "APPLAUNCH_BACKLIGHT=" && ! has "APPLAUNCH_DIM_PERCENT=" && ! has "92-applaunch-backlight-sysfs"'
 # unambiguous against the SPI profile and against other DSI or HDMI set-ups
 R=$(root pi3a-wsdsi43); echo disconnected > "$R/sys/class/drm/card0-DSI-1/status"
 run --dry-run
@@ -286,6 +287,7 @@ APPLAUNCH_PANEL_MM=94x56
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+APPLAUNCH_DIM_PERCENT=10
 APPLAUNCH_HIDE_TILES=app_IP_Panel,app_Game,app_Tank,app_Store
 APPLAUNCH_PDA=1
 LV_LINUX_FBDEV_DEVICE=/dev/fb0
@@ -303,11 +305,11 @@ check "wsdsi43 portrait profile: the install.sh header and checksum of the body 
 SUM1=$(cksum < "$P")
 run --board-only --board pi3a-wsdsi43-portrait
 check "wsdsi43 portrait second run: idempotent" '[ $RC = 0 ] && has "pi3a-wsdsi43-portrait: $P already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && [ ! -e "$P.bak" ]'
-# the landscape profile's text did not change with the portrait variant: its checksum line is v0.8.7's, so an installed
-# pi3a-wsdsi43 board.conf stays "already up to date" (a changed body would rewrite every DSI board's profile)
+# the landscape profile's text did not change with the portrait variant: its checksum line is the one of the body with
+# the dim level (v0.8.7's body 833775195 571 plus the two dim lines; the upgrade from that body is tested further down)
 R2="$TMP/wsdsi43-landscape"; rm -rf "$R2"; cp -R "$FIX/pi3a-wsdsi43" "$R2"   # a second tree: root() would reuse $R's
 OUT=$(SYSROOT="$R2" sh "$INSTALL" --board-only 2>&1)
-check "wsdsi43 landscape profile body unchanged since v0.8.7 (checksum 833775195 571)" 'grep -qx "# applaunch-profile-sum: 833775195 571" "$R2/etc/applaunch/board.conf"'
+check "wsdsi43 landscape profile body: v0.8.7's plus the dim level (checksum 932526304 678)" 'grep -qx "# applaunch-profile-sum: 932526304 678" "$R2/etc/applaunch/board.conf"'
 check "wsdsi43 landscape profile: no APPLAUNCH_HIDE_TILES (every tile shown, as before)" '! grep -q APPLAUNCH_HIDE_TILES "$R2/etc/applaunch/board.conf"'
 check "wsdsi43 landscape profile: no writing zone (APPLAUNCH_PDA only on the portrait profile, report 041)" '! grep -q APPLAUNCH_PDA "$R2/etc/applaunch/board.conf"'
 # the hand-edited 270 is kept by later installs, and --force puts the generated 90 back
@@ -1158,13 +1160,48 @@ body_sum_of() {  # body_sum_of FIXTURE [install.sh options]: the checksum line i
     SYSROOT="$s" sh "$INSTALL" --board-only "$@" > /dev/null 2>&1
     sed -n 's/^# applaunch-profile-sum: //p' "$s/etc/applaunch/board.conf" 2>/dev/null
 }
-for spec in "pi3a-luckfox35|724676656 664|" "pi3a-wsdsi43|833775195 571|" "pi3a-wsdsi43|2175249641 1138|--board pi3a-wsdsi43-portrait" \
-            "pi4b-dsi|3376657049 694|" "pi5-hyperpixel4|806221525 186|" "hackberry-cm5|1252750838 297|"; do
+for spec in "pi3a-luckfox35|724676656 664|" "pi4b-dsi|3376657049 694|" "pi5-hyperpixel4|806221525 186|" "hackberry-cm5|1252750838 297|"; do
     fx=${spec%%|*}; rest=${spec#*|}; want=${rest%%|*}; opt=${rest#*|}
     # shellcheck disable=SC2086
     got=$(body_sum_of "$fx" $opt)
     if [ "$got" = "$want" ]; then ok "profile body as v0.9.3 wrote it: $fx${opt:+ $opt} ($want)"; else ko "profile body as v0.9.3 wrote it: $fx${opt:+ $opt} ($want)" "got: $got"; fi
 done
+# The idle dim level written out (APPLAUNCH_DIM_PERCENT=10 and its comment, after an APPLAUNCH_BACKLIGHT=sysfs: line):
+# the profiles with a levels backlight have a new body. A board.conf an earlier release generated (the body without the
+# two lines, its own checksum line) is still recognised as generated and replaced (old one kept as board.conf.bak); one
+# edited by hand is kept. dim_old: the file of an earlier release, made from the one this install.sh wrote.
+dim_old() {
+    b=$(sed '1,3d' "$1" | grep -v -e '^APPLAUNCH_DIM_PERCENT=10$' -e '^# idle dim level, percent of the backlight: 1\.\.100 ')
+    { sed -n '1,2p' "$1"; printf '# applaunch-profile-sum: %s\n' "$(printf '%s\n' "$b" | cksum | cut -d' ' -f1-2)"; printf '%s\n' "$b"; } > "$1.old"
+    mv "$1.old" "$1"
+}
+# dim_upgrade LABEL OLD_SUM NEW_SUM EDIT_SED [install.sh options]: $R is a fresh tree; the run function runs install.sh
+dim_upgrade() {
+    lbl=$1; old=$2; new=$3; ed=$4; shift 4
+    P="$R/etc/applaunch/board.conf"; rm -rf "$R/etc/applaunch"
+    run --board-only "$@"
+    check "$lbl: the new body has the dim level 10 (checksum $new)" '[ $RC = 0 ] && grep -qx "# applaunch-profile-sum: $new" "$P" && grep -qx "APPLAUNCH_DIM_PERCENT=10" "$P"'
+    dim_old "$P"; OLD=$(cat "$P")
+    check "$lbl: the body without the dim line is the one an earlier release wrote (checksum $old)" 'grep -qx "# applaunch-profile-sum: $old" "$P" && ! grep -q "APPLAUNCH_DIM_PERCENT" "$P"'
+    run --plan "$@"
+    check "$lbl, old generated profile: --plan replaces board.conf (recognised as generated)" 'has "profile_action=replace" && has "profile_state=ours"'
+    run --board-only "$@"
+    check "$lbl, old generated profile: replaced (old one kept as board.conf.bak), the dim level 10 added" '[ $RC = 0 ] && has ": update $P (old one kept as board.conf.bak)" && [ "$(cat "$P.bak")" = "$OLD" ] && grep -qx "# applaunch-profile-sum: $new" "$P" && grep -qx "APPLAUNCH_DIM_PERCENT=10" "$P"'
+    run --board-only "$@"
+    check "$lbl, after the upgrade: a second run is a no-op" '[ $RC = 0 ] && has "already up to date" && grep -qx "# applaunch-profile-sum: $new" "$P"'
+    # the old body edited by hand: kept byte for byte, no dim line added, no .bak; --force writes the new body
+    rm -f "$P.bak"; dim_old "$P"; sed -i "$ed" "$P"; EDITED=$(cksum < "$P")
+    run --plan "$@"
+    check "$lbl, old profile edited by hand: --plan keeps it" 'has "profile_action=keep" && has "profile_state=edited"'
+    run --board-only "$@"
+    check "$lbl, old profile edited by hand: kept byte for byte, no dim line added, no .bak" '[ $RC = 0 ] && has "edited by hand: kept" && [ "$(cksum < "$P")" = "$EDITED" ] && ! grep -q "APPLAUNCH_DIM_PERCENT" "$P" && [ ! -e "$P.bak" ]'
+    run --board-only --force "$@"
+    check "$lbl, old profile edited by hand + --force: the new body, the edit kept in board.conf.bak" '[ $RC = 0 ] && grep -qx "# applaunch-profile-sum: $new" "$P" && [ "$(cksum < "$P.bak")" = "$EDITED" ]'
+}
+R=$(root pi3a-wsdsi43)
+dim_upgrade "dim level, pi3a-wsdsi43" "833775195 571" "932526304 678" 's/^APPLAUNCH_PANEL_MM=94x56$/APPLAUNCH_PANEL_MM=95x57/'
+R=$(root pi3a-wsdsi43)
+dim_upgrade "dim level, pi3a-wsdsi43-portrait" "2175249641 1138" "433934191 1245" 's/^APPLAUNCH_ROTATE=90$/APPLAUNCH_ROTATE=270/' --board pi3a-wsdsi43-portrait
 # zero8's boot files: its config.txt before the hand test (Z8_CFG0) and after it (Z8_CFG1, what install.sh must write)
 Z8_CFG0='dtparam=audio=on
 dtoverlay=vc4-kms-v3d
@@ -1200,6 +1237,7 @@ APPLAUNCH_PANEL_MM=79x49
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm
+APPLAUNCH_DIM_PERCENT=10
 LV_LINUX_FBDEV_DEVICE=/dev/fb1
 APPLAUNCH_TOUCH_SWAP_XY=0
 APPLAUNCH_TOUCH_INVERT_X=0
@@ -1228,7 +1266,7 @@ z8_root
 printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"; rm -f "$R/boot/firmware/cmdline.txt.bak-applaunch"
 z8_install
 check "zero8 fresh install: exit 0, config.txt as the hand test left it, the original kept as config.txt.bak-applaunch" '[ $RC = 0 ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && [ "$(cat "$R/$CFG.bak-applaunch")" = "$Z8_CFG0" ] && has "config.txt: backlight-gpio=18 taken off line 11, dtparam=backlight-pwm added after it"'
-check "zero8 fresh install: the profile names the PWM backlight (generated: checksum 1141298570 664), its udev rule" '[ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && grep -qx "# applaunch-profile-sum: 1141298570 664" "$P" && [ "$(sed 1,3d "$P" | cksum | cut -d" " -f1-2)" = "1141298570 664" ] && grep -q "KERNEL==\"backlight_pwm\"" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"'
+check "zero8 fresh install: the profile names the PWM backlight (generated: checksum 761918996 771), its udev rule" '[ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && grep -qx "# applaunch-profile-sum: 761918996 771" "$P" && [ "$(sed 1,3d "$P" | cksum | cut -d" " -f1-2)" = "761918996 771" ] && grep -q "KERNEL==\"backlight_pwm\"" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"'
 check "zero8 fresh install: a reboot asked for, for the PWM backlight" 'has "REBOOT for it" && has "reboot now so the PWM backlight and console settings apply"'
 check "zero8 fresh install: no dtc, no overlay of ours (the stock overlay's parameter), install.conf as given" '! called "dtc " && [ -z "$(ls "$R/boot/firmware/overlays")" ] && grep -qx "board=pi3a-luckfox35" "$R/etc/applaunch/install.conf" && grep -qx "pwm_backlight=0" "$R/etc/applaunch/install.conf"'
 STATE1=$(z8_state)
@@ -1248,8 +1286,11 @@ check "zero8 old profile: the on/off body of v0.9.3 (checksum 724676656 664, the
 run --plan --board pi3a-luckfox35
 check "zero8 old profile: --plan replaces board.conf (Settings > Updates stops there: install.sh by hand)" 'has "profile_action=replace" && has "profile_state=ours"'
 z8_install
-check "zero8 update from the old profile: recognised as generated, replaced (old one kept as board.conf.bak), the PWM line" '[ $RC = 0 ] && has "pi3a-luckfox35: update" && [ "$(cat "$P.bak")" = "$OLD" ] && [ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && grep -qx "# applaunch-profile-sum: 1141298570 664" "$P"'
+check "zero8 update from the old profile: recognised as generated, replaced (old one kept as board.conf.bak), the PWM line" '[ $RC = 0 ] && has "pi3a-luckfox35: update" && [ "$(cat "$P.bak")" = "$OLD" ] && [ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && grep -qx "# applaunch-profile-sum: 761918996 771" "$P"'
 check "zero8 update from the old profile: config.txt changed (backup first), reboot asked for" '[ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && [ "$(cat "$R/$CFG.bak-applaunch")" = "$Z8_CFG0" ] && has "reboot now so the PWM backlight and console settings apply"'
+# the PWM profile the release before the dim level generated (checksum 1141298570 664, config.txt already PWM): replaced
+z8_root "$Z8_CFG1"
+dim_upgrade "dim level, pi3a-luckfox35 PWM" "1141298570 664" "761918996 771" 's/^APPLAUNCH_ROTATE=90$/APPLAUNCH_ROTATE=270/' --board pi3a-luckfox35
 # zero8 as hand-tested: board.conf edited by hand (the old header, the PWM line), config.txt already PWM: nothing to do
 z8_root
 SYSROOT="$R" sh "$INSTALL" --board-only --board pi3a-luckfox35 > /dev/null 2>&1
@@ -1260,9 +1301,9 @@ run --plan --board pi3a-luckfox35
 check "zero8 as hand-tested: --plan keeps the edited board.conf (Settings > Updates goes ahead)" 'has "profile_action=keep" && has "profile_state=edited"'
 z8_install
 check "zero8 as hand-tested: a no-op: board.conf kept byte for byte, config.txt untouched, no backup made, no reboot asked" '[ $RC = 0 ] && has "edited by hand: kept" && has "config.txt already has the panel" && [ "$(z8_state)" = "$STATE1" ] && [ ! -e "$R/$CFG.bak-applaunch" ] && [ ! -e "$P.bak" ] && ! has "reboot now"'
-check "zero8 as hand-tested: the edited body is the generated PWM body (so --force changes only its checksum line)" '[ "$(sed 1,3d "$P" | cksum | cut -d" " -f1-2)" = "1141298570 664" ]'
+check "zero8 as hand-tested: the edited body is the PWM body of the release before the dim level (checksum 1141298570 664)" '[ "$(sed 1,3d "$P" | cksum | cut -d" " -f1-2)" = "1141298570 664" ] && ! grep -q APPLAUNCH_DIM_PERCENT "$P"'
 z8_install --force
-check "zero8 as hand-tested + --force: generated again (same body), the edited file kept as .bak, config.txt as it was, no reboot" '[ $RC = 0 ] && grep -qx "# applaunch-profile-sum: 1141298570 664" "$P" && [ "$(sed 1,3d "$P")" = "$(sed 1,3d "$P.bak")" ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && ! has "reboot now"'
+check "zero8 as hand-tested + --force: generated again (the PWM body with the dim level 10), the edited file kept as .bak, config.txt as it was, no reboot" '[ $RC = 0 ] && grep -qx "# applaunch-profile-sum: 761918996 771" "$P" && [ "$(sed 1,3d "$P.bak" | cksum | cut -d" " -f1-2)" = "1141298570 664" ] && [ "$(grep -v "^#" "$P")" = "$Z8_PWM_KEYS" ] && [ "$(cat "$R/$CFG")" = "$Z8_CFG1" ] && ! has "reboot now"'
 # another hand edit (the rotation) while config.txt is still on/off: both kept; --force writes both
 z8_root
 SYSROOT="$R" sh "$INSTALL" --board-only --board pi3a-luckfox35 > /dev/null 2>&1
@@ -1378,6 +1419,7 @@ APPLAUNCH_PANEL_MM=152x94
 APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+APPLAUNCH_DIM_PERCENT=10
 APPLAUNCH_KBD_IGNORE=bus:0011
 APPLAUNCH_HIDE_TILES=app_Store
 LV_LINUX_FBDEV_DEVICE=/dev/fb0
@@ -1396,7 +1438,16 @@ check "pc board-only: intel_backlight rule (video group), no gpio rule" '[ -f "$
 SUM1=$(cksum < "$P")
 pcrun --board-only
 check "pc second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ]'
-check "pc profile body as v0.9.3 wrote it (checksum 2904715111 905)" 'grep -qx "# applaunch-profile-sum: 2904715111 905" "$P"'
+check "pc profile body: v0.9.3's plus the dim level (checksum 2744093056 1012)" 'grep -qx "# applaunch-profile-sum: 2744093056 1012" "$P"'
+# the pc profile v0.9.3 generated (checksum 2904715111 905): replaced; edited by hand: kept (run as a PC here)
+run() { pcrun "$@"; }
+R=$(pc_root pc-dim)
+dim_upgrade "dim level, pc-fzm1-2" "2904715111 905" "2744093056 1012" 's/^APPLAUNCH_PANEL_MM=152x94$/APPLAUNCH_PANEL_MM=150x93/'
+run() { OUT=$(SYSROOT="$R" sh "$INSTALL" "$@" 2>&1); RC=$?; }
+# a PC without a backlight device: no backlight line, no dim level
+R=$(pc_root pc-nobl); rm -rf "$R/sys/class/backlight"
+pcrun --dry-run
+check "pc without a backlight device: no APPLAUNCH_BACKLIGHT line, no dim level" '[ $RC = 0 ] && has "board: pc-fzm1-2" && ! has "APPLAUNCH_BACKLIGHT=" && ! has "APPLAUNCH_DIM_PERCENT="'
 # the size when the EDID's detailed timing has none: the basic block (cm), else the known model, else nothing
 R=$(pc_root pc-cm); edid "$R/sys/class/drm/card1-eDP-1/edid" 0 0 15 9
 pcrun --dry-run
