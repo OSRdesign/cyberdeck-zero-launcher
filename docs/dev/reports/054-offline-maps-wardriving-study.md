@@ -1183,6 +1183,17 @@ higher DPI and the community bundles; question 13 is new (NavBoxLib and the othe
 
 ## 13. P0 spike plan (plan only)
 
+> **Results: report 055 (`055-maps-p0-results.md`), run 2026-11-05 with generated tiles.** Ran on the PC; on zero8
+> only the 256 px decode, then the board reset during the next probe and the board work stopped; the deck was not
+> reachable. Headline: Zero 2 W decode per tile (median / town tiles) palette PNG 1.28 / 2.54 ms, RGB PNG 2.20 / 5.89
+> ms, JPEG 4.35 / 5.41 ms; 2x nearest magnify 0.75 ms, generic bilinear 10-18 ms (use a fixed-phase 1.5x path); reads
+> `pread` for PMTiles and plain SQLite (never `mmap`: it puts the archive pages into VmRSS); an RGB565 LRU of 6-8 MB on
+> the 512 MB boards (128 tiles or ARGB8888 break the 25 MB rule); engine in a second app +50 KB binary with SQLite
+> `dlopen`ed (+0.71-1.04 MB static), +5.2-6.0 MB VmRSS with a 3 MB cache; folder import 5,600+ tiles/s on the PC with a
+> rollback journal (half the SD writes of WAL). Go/no-go: M1, M3, M4 binary PASS; M2 and M8 PASS on the PC or by
+> estimate; M4 VmRSS PASS at a 3 MB cache; M5 and M7 open. No change to the engine interface, the phases or the costs;
+> the board runs need a follow-up of about 0.25 ws.
+
 Added 2026-11-05 after the owner decisions. **A plan, nothing run:** no board touched, nothing built. Cost 1-1.25 ws
 (estimate, I; 8.1), worker tier **savvy-heavy** (unfamiliar formats, cross-builds, board measurements and a go/no-go
 call). The spike writes throwaway probes and a short report with numbers; no product code, no PR to `main`.
