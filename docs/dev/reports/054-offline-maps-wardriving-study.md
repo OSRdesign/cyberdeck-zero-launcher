@@ -21,7 +21,19 @@ source (Sources list); **I** = inferred or estimated, needs a spike or a board. 
 
 ## 0. Summary
 
-**Recommendation: build it, raster first, in four small phases, as one native `cp0_lvgl` app.**
+**Recommendation: build it, raster first, in four small phases, as one native `cp0_lvgl` app whose map engine is a
+reusable MIT component of the toolkit `cp0_lvgl`.**
+
+**Owner decision (2026-11-05, question 1).** The map app does not embed Mesh Hop, and Mesh Hop does not get a copy of
+the map app's widget code. The **map engine** (tile widget, Web Mercator, MBTiles/PMTiles readers, RAM tile LRU, the
+shared-folder tile store and source-policy cache, display scale, overlay/marker/track layers) is built once in the
+toolkit (`ext_components/cp0_lvgl` of the launcher repo) behind a small public interface (3.7). The map app is its first
+user, Mesh Hop its second: Mesh Hop's own Map tab shows the shared tile store and its mesh nodes with the engine (6.2,
+phase 0.4). The data contracts stay (the shared folder `~/.local/share/cyberdeckzero/maps/`, `position.state`, overlay
+files, `geo:` waypoints), so any app can read positions and points without linking the engine. Sections 0, 1, 3.4, 3.6,
+3.7 (new), 6, 7.4, 7.5, 8, 9, 10, 11 and one row of 12.4 are updated for it; for this update I also read the apps
+repo's `apps/_common/LAUNCHER_REF`, `apps/_common/README.md` (the launcher pin) and APP-GUIDELINES section 3, and the
+toolkit's `ext_components/cp0_lvgl/AGENTS.md` and `SConstruct` (V).
 
 **Addendum (section 12, prior art).** Existing open-source map viewers and tile tools, NavBoxLib among them, were
 surveyed after the first draft. They change details, not the plan: Geoapify (the user's own free key) is added as an
@@ -37,7 +49,7 @@ and the other GPL/AGPL map apps are design references only; no change to formats
    on-device caching (OpenTopoMap, Thunderforest with the user's own key). Every source carries policy flags; the app
    enforces them.
 2. **Rendering.** Raster tiles (PNG/JPEG) decoded with stb_image (already in RSS Reader, public domain/MIT), kept as
-   RGB565, blitted by a custom LVGL map widget. A 256 px tile is designed for about 3.8 px/mm; our panels have 6.5 to
+   RGB565, blitted by the map engine's LVGL widget, part of `cp0_lvgl` (3.7). A 256 px tile is designed for about 3.8 px/mm; our panels have 6.5 to
    11.3 px/mm (I), so tiles must be **magnified about 2x** (or be 512 px "@2x" tiles, or files rendered at a higher DPI
    on a PC, 12.4) or the labels are unreadable.
    Vector tiles (10-20x smaller files, crisp at any density) are a later option after a spike; MapLibre Native is out
@@ -49,8 +61,10 @@ and the other GPL/AGPL map apps are design references only; no change to formats
    `bluetoothctl` like the Net Toolbox radar (V, off by default on the deck: the radio is shared with its Bluetooth
    keyboard). Log WiGLE CSV 1.6 (S) with **GPS time** (the boards have no RTC), local only, export by hand.
 5. **Sharing.** A documented shared folder for tile archives and overlays, and a `position.state` file in the state
-   directory. First the map app writes it (0.2); later the launcher may own the GPS and write it (section 6.4). Over
-   the LoRa mesh only positions and waypoints travel, never tiles (bandwidth).
+   directory. First the map app writes it (0.2); later the launcher may own the GPS and write it (section 6.4). Mesh
+   Hop reuses the toolkit's map engine for its own Map tab (0.4) instead of a copy; apps that only need positions or
+   points read the files and link nothing. Over the LoRa mesh only positions and waypoints travel, never tiles
+   (bandwidth).
 
 **Key facts.**
 - Pi Zero 2 W: 512 MB (about 414 MB usable), 2.4 GHz-only Wi-Fi, Wi-Fi and Bluetooth on one chip (V). App rule:
@@ -60,19 +74,22 @@ and the other GPL/AGPL map apps are design references only; no change to formats
 - LVGL 9.5 in our toolkit already has ThorVG vector drawing, lodepng and NEON blending switched on (V).
 - Mesh Hop already knows node positions from adverts and can set the radio's position (V).
 
-**Phases (cost in ws).** P0 spike 0.5-0.75; **0.1** viewer + imported/cached tiles + GPS dot 2-2.5; **0.2** area
-download, cache cap, tracks, `position.state` 1.25-1.75; **0.3** wardriving log and overlay 1.25-1.75; **0.4** Mesh Hop
-link 0.75-1.25; docs 0.25. MVP (P0 + 0.1 + docs) about 2.75-3.5 ws (1.1-1.4 M tokens); everything through 0.4 about
-6-8.25 ws (2.4-3.3 M tokens). Optional: vector renderer (spike + 2.5-4 ws), launcher-owned GPS (1.5-2.5 ws + release).
+**Phases (cost in ws, all estimates, I; recomputed for the engine decision of 2026-11-05).** P0 spike 0.75-1;
+**0.1** map engine in `cp0_lvgl` (launcher merge) + apps toolkit pin move + viewer app with imported/cached tiles and a
+GPS dot 2.5-3.25; **0.2** area download, cache cap, tracks, `position.state` 1.5-2 (one more engine round);
+**0.3** wardriving log and overlay 1.25-1.75; **0.4** Mesh Hop shows the map and its nodes with the engine 1.5-2.25;
+docs 0.25. MVP (P0 + 0.1 + docs) about 3.5-4.5 ws (1.4-1.8 M tokens; was 2.75-3.5); everything through 0.4 about
+7.75-10.5 ws (3.1-4.2 M tokens; was 6-8.25). Optional: vector renderer (spike + 2.5-4 ws), launcher-owned GPS
+(1.5-2.5 ws + release).
 
-**Owner questions:** section 11 (13 questions, each with a proposed default).
+**Owner questions:** section 11 (13 questions, each with a proposed default; question 1 decided 2026-11-05).
 
 ## 1. Decisions for the owner
 
 | # | Decision | Options | Proposed default |
 |---|---|---|---|
-| D1 | Scope and order | 0.1 viewer, 0.2 downloads + tracks, 0.3 wardrive, 0.4 Mesh Hop; or wardrive earlier | as listed |
-| D2 | One app or two | (a) one app with a Wardrive page; (b) a map app + a separate logger app sharing the store | (a): wardriving needs the map and the GPS anyway |
+| D1 | Scope and order | 0.1 engine in the toolkit + viewer, 0.2 downloads + tracks, 0.3 wardrive, 0.4 Mesh Hop shows the map and its nodes with the engine; or wardrive earlier | as listed. **Decided 2026-11-05 (owner):** the map app does not embed Mesh Hop; the map engine is a reusable MIT component of `cp0_lvgl`, the map app its first user, Mesh Hop its second (0.4) |
+| D2 | One app or two; where the map code lives | (a) one app with a Wardrive page; (b) a map app + a separate logger app sharing the store. Map code: (i) inside the map app, Mesh Hop gets overlay files only or a copy; (ii) **an engine in the toolkit that both apps link**, data contracts kept for everyone else | (a) + (ii): wardriving needs the map and the GPS anyway. **Decided 2026-11-05 (owner):** (ii), engine reuse, no copy |
 | D3 | Default tile sources | (a) none online, import + own server only; (b) add OpenTopoMap viewing cache; (c) add Thunderforest with the user's key; (d) add Geoapify with the user's key, area download allowed (12.4) | (a) + (b) + (c) + (d) as opt-in sources the user enables; never `tile.openstreetmap.org` |
 | D4 | Raster now, vector later | (a) raster only; (b) raster now, vector spike after 0.2; (c) vector first | (b) |
 | D5 | Display scale | automatic from density (about 2x), a Settings choice 1x/1.5x/2x/3x | automatic with an override (the exact rule is a design pass) |
@@ -284,8 +301,8 @@ time and RAM) decides.
 
 - **Web Mercator (EPSG:3857):** tile x from longitude, tile y from `ln(tan(lat) + sec(lat))`, latitude limited to
   +-85.0511; MBTiles stores rows in TMS order (row = 2^z - 1 - y). Ground resolution in metres per pixel =
-  156,543.03 x cos(latitude) / 2^z for 256 px tiles (25.6 m at z12, 1.6 m at z16 at 48 N). All in `core/`, tested
-  on known points.
+  156,543.03 x cos(latitude) / 2^z for 256 px tiles (25.6 m at z12, 1.6 m at z16 at 48 N). All in the map engine
+  (3.7, plain C/C++ without LVGL for this part), tested on known points in the toolkit's tests.
 - **Scale bar:** from the ground resolution at the screen centre and the display scale; rounded to 1-2-5 steps;
   metric or imperial (Settings).
 - **Overlays:** GPS dot with an accuracy circle and a heading wedge; the current track (decimated with
@@ -309,10 +326,88 @@ The map widget keeps an offset and blits the visible tiles; a pan only invalidat
 ### 3.6 Recommended minimal path
 
 Raster PNG/JPEG via stb_image (same build flags as RSS Reader), RGB565 at the display scale, an LRU sized from
-`board.state` `ram_mb`, one custom LVGL map widget, MBTiles (SQLite) and PMTiles readers in `core/`, overlays drawn on
-top. No WebP, no vector, no imagery in 0.1. From prior art (12.3): 8-bit palette PNG in the archives we prepare; the
+`board.state` `ram_mb`, one LVGL map widget, MBTiles (SQLite) and PMTiles readers, overlays drawn on top: all of it
+the map engine in `cp0_lvgl` (3.7), not in the app's `core/`; the app keeps its GPS reader, pages, downloads UI and
+wardriving in its own `core/` and `ui/`. No WebP, no vector, no imagery in 0.1. From prior art (12.3): 8-bit palette PNG in the archives we prepare; the
 parent tile magnified as a placeholder while a tile loads; tiles queued newest first; a loader thread that writes only
 into the cache slot it was handed, with slots allocated on the LVGL thread (no lock around the LRU).
+
+### 3.7 Where the engine lives: the toolkit (owner decision 2026-11-05)
+
+**Place.** A new module of `ext_components/cp0_lvgl` in the launcher repo, MIT like the rest of the toolkit (SPDX
+headers), with host tests in `ext_components/cp0_lvgl/tests/run_tests.sh` and its interface documented in
+`docs/cp0_lvgl.en.md` (the toolkit's own rule for public interfaces, `ext_components/cp0_lvgl/AGENTS.md`, V). It is
+compiled only when a Kconfig switch asks for it (proposal: `CONFIG_CP0_LVGL_MAP`, after the pattern of the
+`CONFIG_CP0_LVGL_INIT_*` service switches, V), so the launcher and the apps that do not draw maps carry none of it (I:
+how unused toolkit objects are dropped today is checked in P0).
+
+**How the apps repo gets it (V, apps repo `bec05f3`).** Apps do not copy the toolkit: `apps/_common/LAUNCHER_REF` pins
+one launcher commit, `build_app.sh` checks that the launcher checkout matches it and compiles that commit's `cp0_lvgl`
+statically into each app (`apps/_common/scons/main.SConstruct`, `REQUIREMENTS = ['cp0_lvgl', ...]`). The guidelines'
+rule: "a new reader or client in `cp0_lvgl` reaches an app only at a pin that has it" (a new widget the same way, I);
+a pin is moved deliberately; only a change to the status strip's drawing forces a rebuild of every app. Pins on
+launcher `main` between releases have precedent (the current `3f6579f`, main after v0.8.11). The launcher's
+`docs/dev/deck/check_statusbar_drift.py` already treats a copy of toolkit files inside an app that links `cp0_lvgl` as
+drift (exit 1, for the strip files); the engine follows the same principle: one source, no app copies. **Consequence,
+in order:** (1) the engine is merged into launcher `main` (a launcher PR; no launcher release is needed, the launcher
+itself does not use it); (2) an apps PR moves `LAUNCHER_REF` to that commit (the apps' "pin move" PR; the strip's
+drawing does not change, so other apps move at their next rebuild, as with the 0.8.6 readers, V); (3) the map app 0.1
+is built at that pin. Every later engine change repeats (1) and (2) before an app can use it, and Mesh Hop (0.4) needs
+its own rebuild at a pin that has the engine.
+
+**Public interface (sketch only: names, types and threading to be settled in 0.1; no implementation).**
+
+```c
+/* cp0_map.h: the map engine. Every call on the LVGL thread unless noted. */
+typedef struct cp0_map_store cp0_map_store_t;     /* the shared tile store + source records (2.7, 6.2) */
+typedef struct cp0_map_layer cp0_map_layer_t;
+
+typedef struct {
+    const char *store_dir;        /* NULL: $XDG_DATA_HOME/cyberdeckzero/maps/ */
+    const char *sources_dir;      /* NULL: <store_dir>/sources/ ; extra records an app ships */
+    const char *user_agent;       /* "<app-id>/<version> (+https://github.com/OSRdesign/cyberdeck-zero-apps)" */
+    size_t      ram_cache_bytes;  /* 0: from board.state ram_mb (3.2) */
+    int         read_only;        /* 1: never writes a cache store (a second app, 6.2 "one writer per file") */
+    int         network;          /* 0: store and imported archives only, no fetching */
+} cp0_map_store_cfg_t;
+
+cp0_map_store_t *cp0_map_store_open(const cp0_map_store_cfg_t *cfg);
+void  cp0_map_store_close(cp0_map_store_t *s);
+int   cp0_map_store_sources(cp0_map_store_t *s, cp0_map_source_info_t *out, int max); /* records + archives */
+int   cp0_map_store_cache_stats(cp0_map_store_t *s, cp0_map_cache_stats_t *out); /* RAM tiles, hits, misses, disk bytes, cap */
+int   cp0_map_store_set_cap(cp0_map_store_t *s, uint64_t bytes);                   /* eviction (D10) */
+/* 0.2: area download; refused without bulk_ok, capped by max_bulk_tiles / daily_cap; progress via callback */
+int   cp0_map_store_download(cp0_map_store_t *s, const char *source_id, const cp0_map_bbox_t *box,
+                             int zmin, int zmax, cp0_map_progress_cb cb, void *user);
+
+lv_obj_t *cp0_map_create(lv_obj_t *parent, cp0_map_store_t *s);
+void  cp0_map_set_source(lv_obj_t *map, const char *source_id);
+void  cp0_map_set_center(lv_obj_t *map, double lat, double lon);
+void  cp0_map_get_center(lv_obj_t *map, double *lat, double *lon);
+void  cp0_map_set_zoom(lv_obj_t *map, int zoom);
+void  cp0_map_set_scale(lv_obj_t *map, float scale);           /* display scale; 0 = automatic (D5) */
+void  cp0_map_pan_px(lv_obj_t *map, int dx, int dy);
+void  cp0_map_set_position(lv_obj_t *map, const cp0_map_fix_t *fix); /* dot, accuracy circle, heading; NULL hides */
+
+cp0_map_layer_t *cp0_map_add_markers(lv_obj_t *map, const char *name); /* nodes, waypoints, APs */
+int   cp0_map_markers_set(cp0_map_layer_t *l, const cp0_map_marker_t *m, int n); /* lat, lon, kind, label */
+cp0_map_layer_t *cp0_map_add_track(lv_obj_t *map, const char *name);
+void  cp0_map_track_append(cp0_map_layer_t *l, double lat, double lon);
+void  cp0_map_layer_show(cp0_map_layer_t *l, int on);
+
+/* tile events: loaded, missing, refused by the source policy, error; delivered on the LVGL thread */
+typedef void (*cp0_map_tile_cb)(void *user, const cp0_map_tile_event_t *ev);
+void  cp0_map_on_tile(lv_obj_t *map, cp0_map_tile_cb cb, void *user);
+
+/* projection helpers, no LVGL, usable from any thread */
+void   cp0_map_latlon_to_world_px(double lat, double lon, int zoom, double *x, double *y);
+double cp0_map_metres_per_px(double lat, int zoom, float scale);
+```
+
+What stays outside the engine, per app: the GPS reader (4.2, the map app owns the receiver), pages and menus,
+"Download this area" UI, tracks files, wardriving, the `position.state` writer and reader (a small plain-C reader may
+sit in `cp0_lvgl` beside `cp0_app_board_read()`, or in each app: a choice for 0.2/0.4, I). The layout and look of the
+widget's own controls (buttons, attribution corner, scale bar) are a design pass (7.2).
 
 ## 4. GPS (question 3)
 
@@ -473,7 +568,7 @@ a threshold (I).
   (S [WiGLE-CSV]).
 - A clear "Recording" indicator while logging; logs in the user's home only.
 
-## 6. Mesh Hop link and a shared contract (question 5; later phase, sketch)
+## 6. Mesh Hop reuses the map engine, and a shared contract (question 5; later phase, sketch)
 
 ### 6.1 What Mesh Hop has today (V)
 
@@ -498,11 +593,26 @@ $XDG_DATA_HOME/cyberdeckzero/maps/        (default ~/.local/share/cyberdeckzero/
 
 `overlays/mesh-hop.csv` would carry `id, name, kind (node|repeater|room|waypoint), lat, lon, time_utc, source`; the
 map app watches the folder (inotify) and draws each file as a layer. Readers open MBTiles read-only; one writer per
-file. This is documented in APP-GUIDELINES (apps repo), not in the launcher contract, unless the launcher writes it.
+file. This is documented in APP-GUIDELINES (apps repo), not in the launcher contract, unless the launcher writes it;
+the engine's interface page (`docs/cp0_lvgl.en.md`, 3.7) points to the same layout, since the engine reads it.
 
-Two ways for Mesh Hop to "share the map": (a) its nodes appear in the map app through `overlays/mesh-hop.csv`
-(cheap, proposed for 0.4); (b) Mesh Hop's own empty Map tab draws the shared tile store with a copy of the map app's
-widget and tile readers (more code in a second app; later, if the owner wants a map inside Mesh Hop).
+How Mesh Hop "shares the map" (updated for the owner decision of 2026-11-05):
+
+- **Proposed for 0.4: engine reuse.** Mesh Hop links the toolkit's map engine (3.7) at a pin that has it. Its own
+  empty Map tab (6.1) opens the shared store **read-only** (`read_only=1`: it shows what the map app imported, cached or
+  downloaded; it writes no cache store, so "one writer per file" holds), draws its nodes, repeaters and rooms from its
+  model as a marker layer, the deck's position from `position.state` as the dot, and `geo:` waypoints as another marker
+  layer. Whether Mesh Hop may also fetch tiles online itself (with its own User-Agent, through the same source policy)
+  is left open (I; proposal: not in 0.4). No widget or reader code is copied into Mesh Hop.
+- **Kept as the minimal fallback and the interop path: (a) overlay file only.** Mesh Hop also writes
+  `overlays/mesh-hop.csv`, so its nodes appear in the map app (and in any other reader) without either app linking
+  anything more. If the engine cannot be linked into Mesh Hop for a measured reason (RAM or binary size on the deck,
+  P0), 0.4 falls back to (a) alone.
+- The earlier option "(b) a copy of the map app's widget and tile readers inside Mesh Hop" is dropped: two copies would
+  drift (the reason `check_statusbar_drift.py` exists, 3.7).
+
+The data contracts stay independent of the engine: the folder layout above, `position.state` (6.3), the overlay files
+and `geo:` waypoints (6.4) can be read by any app, in any language, without linking `cp0_lvgl`'s map module.
 
 ### 6.3 `position.state` (draft)
 
@@ -542,8 +652,8 @@ Proposal: **D**. Mesh Hop reads `position.state` from 0.4 ("Use the deck's GPS" 
 on a 50 m move and at most every 5 min, I); viz1090 can switch from its own watcher to the file later.
 
 **Over the mesh:** only positions and waypoints. Proposal for a waypoint: a text message carrying a `geo:` URI
-(RFC 5870, `geo:48.8566,2.3522`) that Mesh Hop shows with an "On the map" action writing the point to its overlay
-file. Tiles never go over LoRa (a city tile set is tens of MB; LoRa carries a few hundred bytes per packet).
+(RFC 5870, `geo:48.8566,2.3522`) that Mesh Hop shows with an "On the map" action: the point is drawn on Mesh Hop's own
+Map tab (the engine's waypoint layer) and written to its overlay file, so the map app shows it too. Tiles never go over LoRa (a city tile set is tens of MB; LoRa carries a few hundred bytes per packet).
 
 ## 7. App shape (question 6)
 
@@ -601,7 +711,11 @@ Text input is rare (a source URL, an API key, a waypoint name): the shared on-sc
   wardriving continue while hidden; the app stops drawing and stops scans that are not recording while hidden).
 - `app.json`: `arch: ["arm64", "amd64"]`; `depends`: the base (`libfreetype6, libinput10, libxkbcommon0`) plus
   `curl, ca-certificates` (downloads through the `curl` program as RSS Reader does, V) and `libsqlite3-0` (or
-  `dlopen` it, the Home Assistant pattern, to avoid touching the shared build, V); `recommends`:
+  `dlopen` it, the Home Assistant pattern, to avoid touching the shared build, V). With the engine in `cp0_lvgl`
+  (3.7) this choice is made once in the toolkit: either the engine `dlopen`s `libsqlite3.so.0` (no build change for
+  any app; every app that uses the engine lists `libsqlite3-0` in `depends`) or the toolkit links `-lsqlite3` behind
+  `CONFIG_CP0_LVGL_MAP` (the apps' SCons build, `apps/_common/scons/main.SConstruct`, and the cross sysroot then need
+  the SQLite development files for arm64 and amd64). Proposal: `dlopen`, decided in P0; `recommends`:
   `network-manager, bluez, iw`; `permissions`: `network`, `additional_hardware`.
 - Data: `~/.config/<id>/` settings; `~/.local/share/<id>/` tracks and wardrive logs; the shared maps folder (6.2).
 - Group: `dialout` for the GPS (documented, with the fix in the message).
@@ -610,9 +724,10 @@ Text input is rare (a source URL, an API key, a waypoint name): the shared on-sc
 
 | Component | Licence | Use |
 |---|---|---|
-| Our code | MIT | everything |
-| stb_image | public domain / MIT (V) | PNG/JPEG decode; its zlib inflater could also open PMTiles' gzip directories (I) |
-| SQLite (system `libsqlite3-0`) | public domain | MBTiles |
+| Our code | MIT | everything: the app, and the map engine in `cp0_lvgl` (the toolkit is MIT, SPDX headers, V) |
+| stb_image | public domain / MIT (V) | PNG/JPEG decode, inside the engine; its zlib inflater could also open PMTiles' gzip directories (I) |
+| lodepng (already in LVGL, `LV_USE_LODEPNG`, V) | zlib (I) | an alternative PNG decoder P0 may compare; no new licence |
+| SQLite (system `libsqlite3-0`) | public domain | MBTiles, used by the engine (`dlopen` or linked, 7.4) |
 | PMTiles spec / reference C++ | CC0 / BSD-3 (S) | our reader, or the header |
 | LVGL 9.5, ThorVG | MIT (in the toolkit) | drawing |
 | vtzero, protozero (later, vector) | BSD-2 (S) | MVT decode |
@@ -640,17 +755,20 @@ Text input is rare (a source URL, an API key, a waypoint name): the shared on-sc
 
 | Phase | Worker | Content | Cost (ws) | Owner test |
 |---|---|---|---|---|
-| P0 spike | savvy-medium | decode timing and RSS for 256/512 px PNG/JPEG tiles (host + an arm64 probe for the deck); MBTiles and PMTiles readers on generated fixtures; NMEA fixture replay with the viz1090 parser extended; fake tile server; `iw scan dump` as a normal user; vector tile sizes with `pmtiles extract --dry-run`; from the addendum (12.4): 8-bit palette PNG vs RGB PNG vs JPEG decode on the same tiles, PMTiles read through `mmap` vs `pread`, a blocked-tile fixture | 0.5-0.75 | 5 min: run the probe on the deck (ms per tile, VmRSS) and `iw ... scan dump` |
-| 0.1 viewer | savvy-heavy | map widget, Web Mercator, RAM LRU, display scale, imported MBTiles/PMTiles raster, on-demand cache store with source policy flags (OpenTopoMap, Thunderforest key, own server), GPS reader + status page + dot, scale bar, attribution, keys/touch/pointer, scenes at 640x480, 800x480, 720x720, 1280x800, 480x640, 480x800, BOARD-TESTS, README, icon, amd64 | 2-2.5 | 15 min: plug the GPS outdoors on the deck and the Pi 3A+; pan/zoom by keys and touch; Wi-Fi off: cached tiles still show; unplug/replug the GPS |
-| 0.2 downloads + tracks | savvy-medium | area download (count, size, rate limit, resume), cache cap and eviction, tracks (record, list, GPX export), `position.state` writer, "Set the clock from GPS" | 1.25-1.75 | 10 min: download a small area from the owner's server, a 10 min walk recorded, GPX opened on the PC |
-| 0.3 wardrive | savvy-medium | nmcli scan loop (Net Toolbox port), optional `iw` dump, BLE (Net Toolbox port, off by default on the deck), WiGLE CSV with GPS time, AP table, overlay and list, export | 1.25-1.75 | 15 min walk: log, overlay, export; the deck's BT keyboard with BLE off and on |
-| 0.4 Mesh Hop link | savvy-medium | shared folder docs, Mesh Hop overlay file and `position.state` reader ("Use the deck's GPS"), `geo:` waypoint action | 0.75-1.25 | 10 min with a MeshCore node |
+| P0 spike | savvy-medium | decode timing and RSS for 256/512 px PNG/JPEG tiles (host + an arm64 probe for the deck); MBTiles and PMTiles readers on generated fixtures; NMEA fixture replay with the viz1090 parser extended; fake tile server; `iw scan dump` as a normal user; vector tile sizes with `pmtiles extract --dry-run`; from the addendum (12.4): 8-bit palette PNG vs RGB PNG vs JPEG decode on the same tiles, PMTiles read through `mmap` vs `pread`, a blocked-tile fixture; **for the engine (2026-11-05):** the weight of SQLite + PNG/JPEG decode in a second app on the 415 MB deck (binary size, VmRSS of a stub built like Mesh Hop with the engine linked and a 3-4 MB tile cache vs 6-8 MB), `dlopen` vs link for SQLite (7.4), whether unused toolkit objects stay out of apps that do not enable `CONFIG_CP0_LVGL_MAP`, a symbol check for stb_image (`STB_IMAGE_STATIC`, so an app with its own copy, such as RSS Reader, cannot clash) | 0.75-1 | 5 min: run the probe on the deck (ms per tile, VmRSS, the second-app stub) and `iw ... scan dump` |
+| 0.1 engine + viewer | savvy-heavy | **engine in `cp0_lvgl`** (launcher PR, 3.7): map widget, Web Mercator, RAM LRU, display scale, imported MBTiles/PMTiles raster, on-demand cache store with source policy flags (OpenTopoMap, Thunderforest key, own server), marker/track/position layers, tile callbacks and cache stats, the Kconfig switch, toolkit tests, `docs/cp0_lvgl.en.md`; **apps pin move PR** (`LAUNCHER_REF`); **the map app 0.1** at that pin: GPS reader + status page + dot, scale bar, attribution, keys/touch/pointer, scenes at 640x480, 800x480, 720x720, 1280x800, 480x640, 480x800, BOARD-TESTS, README, icon, amd64 | 2.5-3.25 (was 2-2.5: +0.5-0.75 for the clean interface, toolkit packaging and tests, the two extra PRs) | 15 min: plug the GPS outdoors on the deck and the Pi 3A+; pan/zoom by keys and touch; Wi-Fi off: cached tiles still show; unplug/replug the GPS |
+| 0.2 downloads + tracks | savvy-medium | area download (count, size, rate limit, resume) and cache cap and eviction in the engine (one more launcher PR + pin move), its UI in the app; tracks (record, list, GPX export), `position.state` writer, "Set the clock from GPS" | 1.5-2 (was 1.25-1.75: +0.25 for the engine round) | 10 min: download a small area from the owner's server, a 10 min walk recorded, GPX opened on the PC |
+| 0.3 wardrive | savvy-medium | nmcli scan loop (Net Toolbox port), optional `iw` dump, BLE (Net Toolbox port, off by default on the deck), WiGLE CSV with GPS time, AP table, overlay (an engine marker layer) and list, export | 1.25-1.75 | 15 min walk: log, overlay, export; the deck's BT keyboard with BLE off and on |
+| 0.4 Mesh Hop shows the map and its nodes with the engine | savvy-heavy | Mesh Hop rebuilt at a pin with the engine (both architectures); its Map tab shown: the shared store read-only, nodes/repeaters/rooms as a marker layer, the deck's position from a `position.state` reader ("Use the deck's GPS" for the advert position too), `geo:` waypoint action (Map tab + overlay file), Mesh Hop's overlay file for the map app; scenes at Mesh Hop's sizes, VmRSS check on the deck; shared folder docs. Fallback if P0 says the engine is too heavy for Mesh Hop: overlay file + reader only (the old sketch, 0.75-1.25) | 1.5-2.25 (was 0.75-1.25 for the file-only link; bigger because Mesh Hop gains a map page, smaller than a copy because the engine exists) | 10 min with a MeshCore node: nodes on the Map tab over cached tiles, a `geo:` message shown on both maps |
 | Docs | docs-writer | README rows, app page, data licences, APP-GUIDELINES shared-folder paragraph | 0.25 | - |
 | Optional V | savvy-heavy | vector spike 0.5, then an MVT renderer with a fixed style and labels | 3-4.5 | per phase |
 | Optional L | launcher-dev | launcher-owned GPS (6.4 B), Settings > GPS, release | 1.5-2.5 + release | per release |
 
-**Totals:** MVP (P0 + 0.1 + docs) 2.75-3.5 ws, about 1.1-1.4 M tokens; through 0.3: 5.25-7 ws, about 2.1-2.8 M
-tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's design pass and reviews are extra.
+**Totals (estimates, I; recomputed 2026-11-05 for the engine in the toolkit):** MVP (P0 + 0.1 + docs) 3.5-4.5 ws,
+about 1.4-1.8 M tokens (was 2.75-3.5 ws, 1.1-1.4 M); through 0.3: 6.25-8.25 ws, about 2.5-3.3 M tokens (was 5.25-7 ws,
+2.1-2.8 M); through 0.4: 7.75-10.5 ws, about 3.1-4.2 M tokens (was 6-8.25 ws, 2.4-3.3 M). With the 0.4 fallback (overlay
+file only) the last total is 7-9.5 ws. Each engine change after 0.2 that an app needs costs about 0.25 ws more for the
+launcher PR and the pin move (I). The orchestrator's design pass and reviews are extra.
 
 ### 8.2 Tests (most on the PC)
 
@@ -666,7 +784,8 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
 - **Wardrive:** Net Toolbox's recorded `nmcli` and `bluetoothctl` outputs (V); a golden WiGLE CSV; a scripted walk
   that joins scans and fixes.
 - **Units:** projection on known points, scale bar steps, LRU and cap, policy flags, CSV escaping (SSIDs with commas,
-  quotes, UTF-8, empty hidden SSIDs).
+  quotes, UTF-8, empty hidden SSIDs). The engine's units (projection, LRU, cap, policy flags, readers) live in
+  `ext_components/cp0_lvgl/tests` and run with the toolkit's tests; the apps keep their own.
 - **Headless scenes** (`_common/headless`): every page by touch and by keys at the sizes of phase 0.1, plus a
   `lifecycle` scene for `X-Background=run`.
 - **Board tests:** short owner protocols (quality bar: the main path works), one per phase, as in the table.
@@ -682,6 +801,21 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
 - **Serial port conflicts:** never probe ports held by other apps or known LoRa boards (4.2).
 - **Bluetooth keyboard:** BLE scanning on the deck (D8).
 - **Power:** GPS + scans + display on a Zero 2 W (4.5).
+- **Engine in a second app (from the 2026-11-05 decision):** SQLite + PNG/JPEG decode + a tile cache in Mesh Hop on
+  the deck (about 414 MB usable, VmRSS rule 25 MB): RAM and binary size measured in P0; Mesh Hop gets a smaller tile
+  cache (`ram_cache_bytes`), and falls back to the overlay file only if it does not fit (6.2).
+- **Toolkit pin and version coupling:** the map app and Mesh Hop use the engine only at a `LAUNCHER_REF` that has it;
+  every engine change is a launcher PR plus an apps pin move before an app sees it, and the two apps may sit at
+  different pins for a while (each app compiles the toolkit statically, so they never break each other at run time).
+- **API stability:** two apps call the engine; an interface change means changing both at the next pin move. Rule
+  proposed: keep the 3.7 interface small, add calls rather than change them, document it in `docs/cp0_lvgl.en.md`, and
+  cover it with toolkit tests. There is no shared library, so no binary ABI to keep stable across apps (static link,
+  V); only the store's on-disk format and the state files must stay compatible between apps at different pins
+  (versioned keys: `v=1` in `position.state`, an extra table in MBTiles).
+- **Build changes:** linking SQLite into the toolkit would touch the shared SCons build and the cross sysroots (arm64,
+  amd64); `dlopen` avoids it (7.4). Licences stay permissive: SQLite public domain, stb_image public domain/MIT,
+  lodepng zlib (I), our engine MIT; no GPL code goes into the toolkit or the apps (NavBoxLib and the others in 12 are
+  references only).
 - **Non-goals:** routing and turn-by-turn, address search (needs a geocoding index), satellite imagery, monitor mode,
   packet capture, any upload, OSMF tile servers.
 
@@ -694,13 +828,20 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
 - Vector tile sizes per area and an MVT render time on the deck.
 - Thunderforest `@2x` URLs and their caching headers; OpenTopoMap headers.
 - The deck's power margin with a USB GPS plugged in.
+- The engine's weight in a second app (binary size, VmRSS of Mesh Hop with the engine), `dlopen` vs link for SQLite,
+  and whether apps that do not enable the map module stay unchanged in size (P0).
 - From the addendum: the items listed in 12.5. (Kismet's licence text, listed here before, was read for the
   addendum: GPL-2.0 unless a file says otherwise, 12.2.)
 
 ## 11. Questions for the owner
 
-1. **Scope and order (D1, D2):** one app, phases 0.1 viewer, 0.2 downloads + tracks, 0.3 wardrive, 0.4 Mesh Hop?
-   *Default: yes.*
+1. **Scope and order (D1, D2):** one app, phases 0.1 map engine in the toolkit + viewer, 0.2 downloads + tracks,
+   0.3 wardrive, 0.4 Mesh Hop shows the map and its nodes with the engine? *Default (first draft): yes, with Mesh Hop
+   linked by an overlay file.* **Decided 2026-11-05 (owner):** the map app must not embed Mesh Hop; the map engine is
+   built once as a reusable MIT component of `cp0_lvgl` with a small public interface (3.7); the map app is its first
+   user and Mesh Hop, in 0.4, its second (its own Map tab shows the shared tile store and its nodes, no copy of the
+   widget code); the data contracts (shared folder, `position.state`, overlay files, `geo:` waypoints) stay so any app
+   can read positions without linking the engine.
 2. **Name (7.1):** pick one, or give your own. *No default.*
 3. **Tile sources (D3):** no OSMF servers at all; import files and your own LAN server as the main way; OpenTopoMap
    (viewing cache) and Thunderforest (your own free key) as opt-in viewing caches; Geoapify (your own free key) as an
@@ -724,7 +865,8 @@ tokens; through 0.4: 6-8.25 ws, about 2.4-3.3 M tokens. The orchestrator's desig
 12. **Clock (D12):** offer "Set the clock from GPS" (sudo prompt) when the clock is unsynced, never automatic?
     *Default: yes.*
 13. **Prior art (12, added by the addendum):** NavBoxLib and the other GPL/AGPL map apps (Meshtastic device-ui, Trail
-    Mate, IceNav) used as design references only, nothing copied, and our own MIT map widget as planned? *Default: yes.*
+    Mate, IceNav) used as design references only, nothing copied, and our own MIT map engine in `cp0_lvgl` as planned
+    (3.7)? *Default: yes.*
 
 ## 12. Prior art (addendum)
 
@@ -866,7 +1008,7 @@ tiles" and "lvgl openstreetmap", one web search, 2026-11-05); the only LVGL map 
 | Storage (D10, 2.7, 6.2) | **no change.** Added: convert `z/x/y` folders on the PC; exFAT sticks (FAT32's 4 GB per-file limit). |
 | GPS reader (4.2) | **no change.** Prior art agrees: Kismet has its own serial NMEA driver, a listen-only NMEA mode, and warns that only one process can hold a serial port; NavBoxESP probes its UARTs for NMEA like viz1090's watcher; Trail Mate runs GPS as a resident service, our option B for later (6.4). |
 | Licences (7.5) | **no change in substance:** no code from NavBoxLib, Meshtastic device-ui, Trail Mate, IceNav, osm-gps-map or Viking (GPL/AGPL); 0015's MIT code may be adapted with attribution if it helps (I). |
-| Phases and cost (8.1) | **no change.** |
+| Phases and cost (8.1) | **no change** from the addendum. (Later, the owner decision of 2026-11-05 on question 1 moved the map engine into `cp0_lvgl` and changed 0.1, 0.2, 0.4 and the totals: see sections 0, 3.7 and 8.1.) |
 
 **Owner questions (section 11):** question 3 now includes Geoapify; question 4 lists lighter server choices, QGIS at a
 higher DPI and the community bundles; question 13 is new (NavBoxLib and the other GPL/AGPL apps as references only).
