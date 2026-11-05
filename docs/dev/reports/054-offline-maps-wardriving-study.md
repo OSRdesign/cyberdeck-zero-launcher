@@ -550,8 +550,8 @@ file. Tiles never go over LoRa (a city tile set is tens of MB; LoRa carries a fe
 ### 7.1 Name candidates
 
 Neutral words, no trademarks (checked against nothing formal: the owner picks): **Waymark**, **Trail Atlas**,
-**Deck Atlas**, **Offline Map**, **Field Atlas**, **Map Walker**. Avoid "CardputerZero", "Graffiti",
-"Minesweeper", and known product names ("Field Maps" is a GIS product, "Pathfinder", "Wayfinder" are widely used).
+**Deck Atlas**, **Offline Map**, **Field Atlas**, **Map Walker**. Avoid the upstream device name and trademarked product names,
+and known product names ("Field Maps" is a GIS product, "Pathfinder", "Wayfinder" are widely used).
 App id follows the name (`waymark`, `trail-atlas`, ...).
 
 ### 7.2 Screens (proposals; layout is a design pass)
