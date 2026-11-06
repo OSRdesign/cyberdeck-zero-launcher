@@ -790,3 +790,43 @@ fi
     "$root/src/cp0_keyboard_queue.c" \
     "$root/tests/test_osk_inject.c" -o "$binary"
 "$binary"
+
+# Report 054 3.7 (Deck Atlas 0.1, task 1): the map engine of src/map (include/cp0_map*.h; in a build only with
+# CONFIG_CP0_LVGL_MAP). Web Mercator, the scale bar and the display scale; PNG / JPEG decode, the 2x / 1.5x scalers
+# against their reference, the RAM tile cache (again under ThreadSanitizer for its threads, and once without sanitizers
+# to compare VmRSS with the budget); the MBTiles / PMTiles readers on generated and reference fixtures
+# (tests/fixtures/map), truncated and mutated files, "archive missing"; the store and its imports (folders converted
+# into one MBTiles, a resumed conversion); MBTiles on a system without SQLite. ASan + UBSan when the compiler has them
+# (mt_san above). The readers load libsqlite3.so.0 at run time (apt: libsqlite3-0): without it the archive and store
+# tests SKIP, unless CI=1 or REQUIRE_SQLITE=1.
+map_build() { # map_build TEST [FLAGS...]: tests/TEST.c with the map engine into $binary
+    map_test=$1
+    shift
+    "${CC:-cc}" -std=c11 -g -O2 -Wall -Wextra -Werror -pthread "$@" \
+        -I"$root/include" -I"$root/src/map" \
+        -DMAP_FIXTURES="\"$root/tests/fixtures/map\"" \
+        "$root"/src/map/*.c \
+        "$root/src/cp0_app_contract.c" \
+        "$root/src/cp0_ui_metrics.c" \
+        "$root/tests/$map_test.c" -ldl -lm -o "$binary"
+}
+map_build test_map_geo $mt_san
+"$binary"
+map_build test_map_tile $mt_san
+"$binary"
+map_build test_map_tile -DMAP_TILE_RSS=1
+"$binary"
+map_build test_map_tile -fsanitize=thread
+"$binary"
+printf '#include <dlfcn.h>\nint main(void) { return dlopen("libsqlite3.so.0", RTLD_NOW) ? 0 : 1; }\n' |
+    "${CC:-cc}" -x c - -ldl -o "$binary"
+if "$binary" || [ "${CI:-}" = 1 ] || [ "${REQUIRE_SQLITE:-}" = 1 ]; then
+    map_build test_map_archive $mt_san
+    "$binary"
+    map_build test_map_store $mt_san
+    "$binary"
+else
+    echo "SKIP test_map_archive, test_map_store (libsqlite3.so.0 missing: sudo apt install libsqlite3-0)"
+fi
+map_build test_map_nosqlite $mt_san
+"$binary"
