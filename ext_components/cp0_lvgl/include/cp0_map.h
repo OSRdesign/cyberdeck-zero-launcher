@@ -11,8 +11,10 @@
  *   cp0_map_archive.h  one MBTiles (SQLite, loaded at run time) or PMTiles v3 (pread) archive, "archive missing"
  *   cp0_map_store.h    the shared store: imports (MBTiles, PMTiles, z/x/y folders converted into one MBTiles),
  *                      records, tile lookup across archives
+ *   cp0_map_overlay.h  the plain data of the widget's overlays: position fix, markers, layer limits, tile events
  *
- * The LVGL widget (cp0_map_widget.h) is task 2; online sources, the viewing cache and its cap are task 3.
+ * The LVGL widget is cp0_map_widget.h (include it separately; it needs LVGL). Online sources, the viewing cache and
+ * its cap are task 3.
  * Third-party code inside: stb_image 2.30 (public domain or MIT, Sean Barrett), built STB_IMAGE_STATIC.
  */
 #ifndef CP0_MAP_H
@@ -23,5 +25,6 @@
 #include "cp0_map_tile.h"
 #include "cp0_map_archive.h"
 #include "cp0_map_store.h"
+#include "cp0_map_overlay.h"
 
 #endif /* CP0_MAP_H */
