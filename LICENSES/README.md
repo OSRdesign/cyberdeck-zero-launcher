@@ -17,6 +17,7 @@ selection inventory is in [OPEN_SOURCE_COMPONENTS.md](../docs/OPEN_SOURCE_COMPON
 | tinyalsa-BSD-3-Clause.txt | SDK/github_source/tinyalsa/NOTICE; its LICENSE file refers to NOTICE |
 | SimpleBLE-BUSL-1.1.md | SDK/github_source/SimpleBLE/LICENSE.md; cached source, not established as linked |
 | nlohmann-json-MIT.txt | Standard MIT text with 2013–2023 Niels Lohmann attribution from the emulator's vendor/nlohmann/json.hpp |
+| stb_image-MIT-or-Unlicense.txt | The licence section at the end of ext_components/cp0_lvgl/third_party/stb/stb_image.h (v2.30; MIT or public domain) |
 | libv4l-host-copyright.txt | /usr/share/doc/libv4l-0t64/copyright on the audit host; reference only, not claimed to match CameraApp's target package version |
 | libv4l-1.32.0-copyright.txt | usr/share/doc/libv4l-0t64/copyright from Ubuntu libv4l-0t64_1.32.0-2ubuntu1_arm64.deb, matching CameraApp's libv4l-dev package version |
 | GPL-2.0.txt, LGPL-2.0.txt, LGPL-2.1.txt | Full standard texts from /usr/share/common-licenses/GPL-2, LGPL-2 and LGPL-2.1, referenced by the v4l-utils copyright record |
