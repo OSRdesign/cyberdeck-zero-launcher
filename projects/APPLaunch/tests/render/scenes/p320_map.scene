@@ -1,0 +1,55 @@
+# The map widget (cp0_map_widget.h, Deck Atlas 0.1 task 2) at the narrow portrait 320x480 (profile p320: zero8's 3.5"
+# 480x320 panel upright, 79x49 mm = 6.3 px/mm, so the automatic display scale is 1.5x): the page bar at the top, the
+# map, an app's tab strip at the bottom; the widget's controls (zoom pair, locate, scale bar, attribution) inside its
+# own rectangle, never over the bar or the strip. Synthetic tiles only (harness_map.cpp). Automatic scale (1.5x) with
+# the position, markers and a track; 1x and 2x; over-zoom; 512 px tiles at 0.75x; the USB stick's archive missing.
+# Golden at 320x480 only.
+title p320 map
+sizes 320x480
+profile p320
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+mapdemo open
+mapdemo scale auto
+mapdemo fix 150 -80 150 2 45
+mapdemo markers
+mapdemo track
+mapdemo wait
+shot p320_map_auto
+mapdemo scale 1x
+mapdemo wait
+shot p320_map_1x
+mapdemo scale 2x
+mapdemo wait
+shot p320_map_2x
+mapdemo scale auto
+mapdemo zoom 15
+mapdemo wait
+shot p320_map_overzoom
+mapdemo source hd
+mapdemo zoom 14
+mapdemo wait
+shot p320_map_hd_075x
+mapdemo source usb
+mapdemo zoom 12
+mapdemo usb out
+mapdemo source usb
+mapdemo wait
+shot p320_map_usb_missing
+mapdemo usb in
+mapdemo source usb
+mapdemo wait
+# Task 3: an online source with the network off (its saved tiles, the amber state strip), then one that needs a key
+mapdemo source online
+mapdemo scale auto
+mapdemo zoom 14
+mapdemo offset 0 0
+mapdemo wait
+shot p320_map_online_offline
+mapdemo source online-key
+mapdemo wait
+shot p320_map_online_nokey

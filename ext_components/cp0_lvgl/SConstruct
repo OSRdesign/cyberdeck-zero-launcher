@@ -74,6 +74,12 @@ if "CONFIG_CP0_LVGL_COMPONENT_ENABLED" in os.environ or "CONFIG_SIGSLOT_COMPONEN
     SRCS += Glob('src/*.c*')
     # the Strokes recogniser of the PDA writing zone (report 041): plain C99, no LVGL; tools/strokes builds the same files
     SRCS += Glob('src/strokes/*.c')
+    # the map engine (report 054 3.7; include/cp0_map.h): plain C, no LVGL, only for an app whose configuration sets
+    # CONFIG_CP0_LVGL_MAP=y (Kconfig, default n). SQLite and libcurl are loaded at run time (dlopen), stb_image is inside.
+    if 'CONFIG_CP0_LVGL_MAP' in os.environ:
+        SRCS += Glob('src/map/*.c')
+        DEFINITIONS += ['-DCONFIG_CP0_LVGL_MAP=1']
+        REQUIREMENTS += ['dl', 'm']
     if 'CONFIG_V9_5_LV_USE_SDL' in os.environ:
         DEFINITIONS += ['-DHAL_PLATFORM_SDL=1']
         DEFINITIONS += pkg_config_cflags('sdl2')

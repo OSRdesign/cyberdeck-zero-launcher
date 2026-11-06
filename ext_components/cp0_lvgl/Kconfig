@@ -16,6 +16,15 @@ config CP0_LVGL_USE_ZMQ_RPC
     bool "Enable cp0 lvgl local ZMQ automation RPC"
     default n
 
+config CP0_LVGL_MAP
+    bool "Map engine (include/cp0_map.h: Web Mercator, MBTiles / PMTiles, tile store, RAM tile cache)"
+    default n
+    help
+      Compiles src/map into the toolkit (report 054 section 3.7). Off by default: the launcher and the
+      apps that draw no map carry none of it. MBTiles and the viewing caches use libsqlite3.so.0, online
+      sources libcurl.so.4, both loaded at run time, so an app that enables this lists libsqlite3-0 (and
+      libcurl4t64, ca-certificates for online sources) in its package depends.
+
 menu "Optional runtime services"
 
 config CP0_LVGL_INIT_FILESYSTEM

@@ -46,6 +46,7 @@
 #include "native_screensaver.hpp"
 #include "native_ui.hpp"
 #include "cp0_ui_widgets.hpp"
+#include "cp0_map_widget.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -1155,6 +1156,7 @@ uint32_t key_code(const std::string &name)
         {"8", KEY_8},         {"9", KEY_9},         {"MINUS", KEY_MINUS},         {"EQUAL", KEY_EQUAL},
         {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH}, {"DELETE", KEY_DELETE},
         {"F1", KEY_F1},       {"HOME", KEY_HOME},   {"END", KEY_END},
+        {"PAGEUP", KEY_PAGEUP}, {"PAGEDOWN", KEY_PAGEDOWN},
     };
     const auto found = keys.find(name);
     return found == keys.end() ? 0 : found->second;
@@ -2384,8 +2386,9 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         if (w.size() < 2 || w.size() > 3) return fail(scene, line, "usage: key [CTRL+]NAME [press|release|tap]");
         /* CTRL+NAME: the key with KBD_MOD_CTRL, as a physical keyboard or the pointer's held click (Ctrl+O) sends it */
         const bool ctrl = w[1].compare(0, 5, "CTRL+") == 0;
-        const std::string name = ctrl ? w[1].substr(5) : w[1];
-        const uint32_t mods = ctrl ? KBD_MOD_CTRL : 0;
+        const bool shift = w[1].compare(0, 6, "SHIFT+") == 0; /* SHIFT+NAME: the key with KBD_MOD_SHIFT (the map's big pan) */
+        const std::string name = ctrl ? w[1].substr(5) : shift ? w[1].substr(6) : w[1];
+        const uint32_t mods = ctrl ? KBD_MOD_CTRL : shift ? KBD_MOD_SHIFT : 0;
         static const uint32_t letters[26] = {KEY_A, KEY_B, KEY_C, KEY_D, KEY_E, KEY_F, KEY_G, KEY_H, KEY_I,
                                              KEY_J, KEY_K, KEY_L, KEY_M, KEY_N, KEY_O, KEY_P, KEY_Q, KEY_R,
                                              KEY_S, KEY_T, KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z};
@@ -2549,6 +2552,32 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         if (!g_list_demo.page) return fail(scene, line, "listtitle needs a list page (listdemo compact N first)");
         g_list_demo.page->set_title(std::vector<std::string>(w.begin() + 1, w.end()));
         settle(200);
+    } else if (cmd == "mapdemo" && w.size() == 3 && w[1] == "tapctl") {
+        /* mapdemo tapctl zoomin|zoomout|locate: a tap through the touch path on the centre of the map's control */
+        lv_obj_t *map = static_cast<lv_obj_t *>(harness::map_demo_widget());
+        const cp0_map_control_t c = w[2] == "zoomin" ? CP0_MAP_CONTROL_ZOOM_IN
+                                    : w[2] == "zoomout" ? CP0_MAP_CONTROL_ZOOM_OUT : CP0_MAP_CONTROL_LOCATE;
+        lv_area_t a;
+        if (!map || cp0_map_control_area(map, c, &a) != CP0_MAP_OK) return fail(scene, line, "no map control " + w[2]);
+        const int x = (a.x1 + a.x2) / 2, y = (a.y1 + a.y2) / 2;
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(300);
+    } else if (cmd == "mapdemo" && w.size() == 4 && w[1] == "doubletap") {
+        /* mapdemo doubletap X Y: two quick taps (within the widget's 350 ms) at a screen point */
+        const int x = to_int(w[2]), y = to_int(w[3]);
+        for (int k = 0; k < 2; k++) {
+            touch_at(run, 1, x, y);
+            settle(40);
+            touch_at(run, 0, x, y);
+            settle(k ? 300 : 100);
+        }
+    } else if (cmd == "mapdemo") {
+        /* mapdemo open|wait|source|center|offset|zoom|scale|fix|markers|track|usb|units (harness_map.cpp) */
+        std::string err;
+        if (!harness::map_demo(w, runtime_path(run, "maps"), &err)) return fail(scene, line, err);
+        settle(100);
     } else if (cmd == "listdemo") {
         /* listdemo compact|comfortable ROWS [readonly] [separators] [wrap] [empty TEXT...]: a CompactList page;
          * listdemo update: refresh the values in place (a live list's set_rows) */

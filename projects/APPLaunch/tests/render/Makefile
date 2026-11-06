@@ -105,7 +105,8 @@ CP0_SRCS := \
     $(CP0)/src/cp0_zone.c \
     $(CP0)/src/cp0_zone_ui.cpp \
     $(CP0)/src/cp0_zone_host.cpp \
-    $(wildcard $(CP0)/src/strokes/strokes_*.c)
+    $(wildcard $(CP0)/src/strokes/strokes_*.c) \
+    $(wildcard $(CP0)/src/map/*.c) # the map engine and its widget (the mapdemo scenes; not in the launcher itself)
 
 # The display manager: compiled unchanged, then its open/ioctl/mmap references are renamed to the
 # harness fake devices (src/harness_fb.c) with objcopy. Nothing else in the binary is affected.
@@ -162,7 +163,7 @@ ALL_OBJS     := $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(call obj_
 all: $(BIN)
 
 $(BIN): $(LVGL_OBJS) $(CP0_OBJS) $(APP_OBJS) $(HARNESS_OBJS) $(DPI_OBJ) $(TOUCH_OBJ) $(APPS_JOBS_OBJ)
-	$(CXX) -o $@ $^ -Wl,--gc-sections -static-libstdc++ -Wl,--wrap=pthread_create $(FT_LIBS) $(PNG_LIBS) -lpthread -lm
+	$(CXX) -o $@ $^ -Wl,--gc-sections -static-libstdc++ -Wl,--wrap=pthread_create $(FT_LIBS) $(PNG_LIBS) -lpthread -lm -ldl
 
 $(DPI_OBJ): $(call obj_of,$(DPI_SRC))
 	objcopy --redefine-sym open=harness_fb_open --redefine-sym ioctl=harness_fb_ioctl \

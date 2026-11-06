@@ -468,6 +468,191 @@ import and "Download this area" UI, tracks files, the clock offer, the `position
 sit in `cp0_lvgl` beside `cp0_app_board_read()`, or in each app: a choice for 0.2/0.4, I). The layout and look of the
 widget's own controls (buttons, attribution corner, scale bar) are a design pass (7.2).
 
+#### 3.7.1 As built: the non-LVGL core (0.1 task 1, 2026-11-06, branch `map-engine`)
+
+The engine's core is in `ext_components/cp0_lvgl/src/map/` with the public headers `include/cp0_map.h` (it includes
+`cp0_map_common.h`, `cp0_map_geo.h`, `cp0_map_tile.h`, `cp0_map_archive.h`, `cp0_map_store.h`), behind
+`CONFIG_CP0_LVGL_MAP` (Kconfig, default n). The interface reference is the "Map engine" section of
+`docs/cp0_lvgl.en.md`; the headers carry the exact rules. What it has: Web Mercator and tile maths, the 1-2-5 scale
+bar (metric, imperial), the display scale (the table of `cp0_map_geo.h`: zero8 1.5x, every other board 2x), PNG / JPEG
+decode (stb_image 2.30, `STB_IMAGE_STATIC`, a 24 MiB per-decode ceiling), the 2x nearest and fixed-phase 1.5x RGB565
+scalers (any destination rectangle, no allocation), a mutex-guarded RAM tile LRU with pins and a byte budget from
+`board.state` `ram_mb`, MBTiles (SQLite through `dlopen`) and PMTiles v3 (`pread`, gzip directories through stb's
+inflater) readers with "archive missing", and the store: records, imports (MBTiles / PMTiles copied or in place, `z/x/y`
+folders converted into one MBTiles, resumable), lookup across archives, removal, read-only mode. Tests:
+`tests/test_map_{geo,tile,archive,store,nosqlite}.c` in `tests/run_tests.sh` (ASan + UBSan, ThreadSanitizer for the
+cache, a VmRSS check of the 8 MiB budget, 6,300 mutated tiles and archives with fixed seeds).
+
+Measured on the branch (PC host, i5-12450H, WSL2): an arm64 build of all `src/map` objects at `-O2` (the apps' flags
+for `cp0_lvgl`) is **95.4 KB** of text + data (stb_image 37 KB, the importer 13.5 KB, the store 10.6 KB); a stripped
+arm64 stub that calls every part links 129 KB more than an empty one, of which 34 KB are `cp0_app_contract.c` and
+`cp0_ui_metrics.c` that every app already has; no `NEEDED` entry beyond libc and libm (glibc 2.34 and later hold
+`dlopen`). That is above report 055's 50 KB stub (stb_image and a few SQLite reads only) and far under a static SQLite
+(+0.71 to +1.04 MB), so **`dlopen` stays** (055 recommendation 5); boards without `libsqlite3-0` get
+`CP0_MAP_E_SQLITE_MISSING` for MBTiles and keep PMTiles. With the switch off (the default) the launcher's arm64 binary
+is byte-identical to the one built from `github/main` 1b3a45a1 (clean build, `cmp`); built with the switch on, the
+launcher (which calls no `cp0_map_*`) still holds none of it: the toolkit is a static library, so unused objects stay
+out (the question 055 3.5 left open). The folder conversion ran at about 19,000 tiles/s on the PC on a warm 2,000-tile
+folder of 6 KB tiles (055: 5,570 tiles/s cold here, 784 on the deck); the 1.5x scaler takes 0.33 ms per 256 px tile on
+the PC (055: 0.32 ms here, 6.3 ms on the deck).
+
+Differences from the sketch above, and why:
+- `cp0_map_store_open(cfg, &out)` returns a result code (the sketch returned the handle): errors as codes everywhere,
+  with `cp0_map_strerror()`. `cp0_map_store_import()` keeps the sketch's shape; `cp0_map_store_import_ex()` adds the id,
+  title, attribution, TMS / XYZ choice, batch size, cancel flag and the resulting id.
+- `cp0_map_store_get_tile(store, id, z, x, y, buf, meta)` is new: `id` NULL picks the first archive (in id order) whose
+  zooms and bounds cover the tile and that has it; `meta` tells which archive answered and the format.
+- Imported archives live in `archives/` with one `archives/<id>.conf` record each, not in `tiles/` with an `index.json`
+  (6.2): the evictable viewing caches of task 3 (`tiles/<source>.mbtiles`) and the never-evicted imports are apart by
+  construction, and each importing app writes only its own record file atomically (no shared index to merge).
+- `cp0_map_store_set_cap()`, `cp0_map_store_download()` and the widget calls are not declared yet (tasks 3 and 2): only
+  implemented calls are in the headers.
+- `cp0_map_choose_scale()` takes the density as px/mm x 100 (`APPLAUNCH_SCREEN_PPMM`'s unit) and returns a float;
+  `cp0_map_scale_x2()` gives the scalers' half-steps (2, 3, 4).
+- Folder conversion resumes an interrupted import (the brief of task 1) instead of 055's "delete and start again".
+- `cfg.sources_dir` is read as extra, read-only source records an app ships; the store's own `sources/` wins on the
+  same id.
+
+For task 2 (the widget): decode on a tile-load thread (`cp0_map_decode_tile()` is synchronous and thread-safe), put into
+`cp0_map_store_ram_cache()` and draw from pinned `cp0_map_cache_get()` results, releasing them after the frame; key the
+cache with `cp0_map_source_hash(id)` and `cp0_map_tile_variant(scale_x2, pixfmt)`; a tile put may fail with
+`CP0_MAP_E_FULL` when the visible tiles pin the whole budget (draw a placeholder). Tiles come as 256 or 512 px
+(`tile_px` in the info and records): a 512 px archive at display scale 2 is drawn 1:1, at 1.5 it needs a 0.75x
+downscale that the engine does not have yet (show it at 1:1 or add the path). RGB565 output composites transparency over
+white; the night dimming of 3.4 is not in yet. Each store call takes the store's mutex: one tile-load thread is enough
+(the archive handles are not used concurrently). Attribution: `attribution` of each archive (may hold HTML from
+MBTiles metadata), "© OpenStreetMap contributors" for a converted folder without one.
+
+#### 3.7.2 As built: the widget (0.1 task 2, 2026-11-06, branch `map-engine`)
+
+`include/cp0_map_widget.h` (LVGL) and `include/cp0_map_overlay.h` (plain data: fix, markers, limits, tile events), in
+`src/map/`: `cp0_map_widget.c` (LVGL drawing and input), `cp0_map_view.c` (the pure core: view maths, tiles in load
+order, the controls' layout and hit test, Douglas-Peucker, label placement, attribution text) and
+`cp0_map_loader.c` (the tile-load thread and the store fetch, no LVGL). The sketch's calls are all there:
+`cp0_map_create`, `set_source`, `set_center` / `get_center`, `set_zoom`, `set_scale` (0 = automatic from
+`cp0_ui_metrics_get()->ppmm_x100`), `pan_px`, `set_position`, `add_markers` / `markers_set`, `add_track` /
+`track_append`, `layer_show`, `on_tile`; added: `get_zoom`, `get_zoom_range`, `get_scale`, `set_units`,
+`center_on_position`, `markers_select`, `markers_label_zoom`, `track_clear`, `handle_key`, `is_map`, and for scripted
+tests `wait_idle` and `control_area`. `cp0_map_resample_rgb565()` (cp0_map_tile.h) adds the 0.5x and 0.75x
+fixed-phase downscales that 512 px tiles need at display scale 1 and 1.5 (area-weighted taps 1/4, 1/2, 3/4; exact
+against a reference in the unit test).
+
+Thread model: one tile-load thread per widget; the LVGL thread computes the view's tiles (visible ones first, nearest
+the centre first, then a ring of one tile), drops those cached or known absent, and replaces the loader's queue with
+the rest at every view change; the worker reads (`cp0_map_store_get_tile`, the store's mutex), decodes and scales
+each tile to the view's tile size (256 px tiles x1 / 1.5 / 2, 512 px tiles x0.5 / 0.75 / 1, an over-zoom tile from
+its parent's quadrant x2 / 3 / 4) and puts it into the store's RAM cache; a 40 ms LVGL timer (1 s when idle) collects
+the results, invalidates only the loaded tiles' areas and calls the tile callbacks. Drawing pins the visible images
+(`cp0_map_cache_get`) and releases the previous draw's pins after the next draw has pinned its own, so an image is
+never freed while LVGL renders it; `CP0_MAP_E_FULL` from the cache shows the placeholder.
+
+Differences from the controller's design, and why: (1) the 15 % rule applies to the drawn button plates, the touch
+squares stay TARGET (79 px on the deck, 44 px on the 3.5" panels): 15 % of a 480x320 page body (236 px high) is 35 px,
+under the 44 px floor; (2) no mouse-wheel zoom: a mouse reaches cp0_lvgl apps as arrow keys (pointer navigation), so
+the wheel pans; (3) no pinch: the toolkit hands LVGL one touch point; (4) the parent placeholder is drawn with LVGL's
+image scaling (bilinear, transient), everything else is a 1:1 blit; (5) the attribution moves a row up left of the
+buttons and is cut with dots when it does not fit beside the scale bar, and "(C)" replaces "©" (no glyph in the
+builtin fonts). Scenes: `projects/APPLaunch/tests/render/scenes/map_widget.scene` (640x480, 480x320),
+`p320_map.scene` (320x480), `pda_map.scene` (480x800), with goldens.
+
+#### 3.7.3 As built: online sources, the fetch pool and the persistent viewing cache (0.1 task 3, 2026-11-06, branch `map-engine-sources`)
+
+Built on `map-engine` (tasks 1-2), behind the same `CONFIG_CP0_LVGL_MAP`. The interface reference is the "Online
+sources and the persistent viewing cache" part of the "Map engine" section of `docs/cp0_lvgl.en.md`, with the shipped
+records' URLs, terms, flags and "unverified" marks; the headers carry the exact rules. Owner decisions applied: the
+OSMF servers never (the URL checks refuse `openstreetmap.org` / `osm.org` and every subdomain, in templates and in
+redirects, whatever a record says); OpenTopoMap, Thunderforest (own key) and Geoapify (own key) opt-in and off by
+default; no LAN server work; the viewing cache persistent, LRU at the cap, only tiles viewed (the widget never asks for
+its ring); the cap the smaller of 512 MiB and 10 % of free space, cache only; one MBTiles per source, batched, rollback
+journal; one writer per file.
+
+New files: `include/cp0_map_source.h` (the policy record, `cp0_map_source_check_url()`, `cp0_map_source_osmf_host()`,
+`cp0_map_user_agent()` / `_ok()`), `include/cp0_map_fetch.h` (clients of the fetch pool), `src/map/cp0_map_source.c`
+(shipped records, the record rules, URL checks and filling, key files, the engine's clock and log with key redaction),
+`cp0_map_http.c` (libcurl at run time), `cp0_map_vcache.c` (the viewing caches, the cache-writer thread, eviction),
+`cp0_map_fetch.c` (the pool, the provider state, the three guards, clients), `cp0_map_online.h` (private). Additions:
+`cp0_map_store.h` (`cfg.cache_cap_bytes`, `cfg.log`; the listing's source fields; `cp0_map_tile_meta_t.stale` /
+`.expires`; `cp0_map_source_set_key()` / `_clear_key()` / `_set_enabled()` / `_set_daily_cap()`,
+`cp0_map_store_set_network()`, `_set_cap()`, `_default_cap()`, `_clear_cache()`, `_flush()`, `_download()`; the
+statistics struct), `cp0_map_overlay.h` (the event's `kind`: LOADED / FETCHED / REFUSED / FETCH_FAILED, and `stale`),
+`cp0_map_common.h` (codes -18 to -30: `_REFUSED`, `_NETWORK`, `_CURL_MISSING`, `_BLOCKED`, `_CAP_REACHED`, `_NO_KEY`,
+`_DISABLED`, `_OFFLINE`, `_BACKOFF`, `_NOT_IN_VERSION`, `_CACHE_FULL`, `_HTTP`, `_NO_USER_AGENT`), the pure core
+(`cp0_map_view_fetch_tiles()`: the visible slots only) and the widget (its fetch client, the state strip).
+
+**HTTP and TLS.** libcurl opened with `dlopen("libcurl.so.4")`, the Home Assistant app's way (apps repo
+`src/core/curl_api.cpp`, `depends: libcurl4t64`): one handle per worker keeps connections alive, the response headers
+(Cache-Control, Expires, ETag, Retry-After) come straight to the engine, nothing new is linked and the shared SCons
+build is untouched; the boards have the library (Home Assistant's dependency; the `curl` package RSS Reader depends on
+pulls it in) and TLS is the system's libcurl with `ca-certificates`. RSS Reader's way (the `curl` command) was not
+taken: a process per tile, and headers through files. Without the library every source says `CP0_MAP_E_CURL_MISSING`
+("network unavailable: library missing (install libcurl4t64)"). The libcurl constants are declared without its header
+(the build box has no `curl/curl.h`, so no compile-time ABI check like Home Assistant's was possible here); every
+`curl_easy_setopt` result is checked and each option's effect is exercised by `test_map_fetch` (User-Agent, request
+headers, protocols, timeouts, the size cap, the cancel callback).
+
+**Size** (arm64, `-O2`, text + data, measured on the branch): the online part adds about 61 KB (`cp0_map_vcache.o`
+21.0 KB, `cp0_map_fetch.o` 17.0 KB, `cp0_map_source.o` 14.9 KB of which most is the shipped records' strings,
+`cp0_map_http.o` 7.8 KB) and 3.6 KB to the store; all of `src/map` without the widget is now 174 KB. No new `NEEDED`
+entry (libcurl and SQLite are opened at run time); the fetch pool's threads exist only while the network is on, the
+cache-writer thread only in a read-write store.
+
+**Differences from the brief and the sketch, and why.**
+1. `cp0_map_store_cache_stats()` now fills a `cp0_map_store_stats_t` (the RAM figures in `.ram`, then disk, cap, state
+   and per source): the brief named that call for all of them; its only caller was the store test (tasks 1-2 are not
+   on `main` yet), so `CP0_MAP_API_VERSION` stays 1.
+2. The shipped records are a table in code and are always listed (an empty store lists 3 sources): nothing to install,
+   nothing a user can edit.
+3. A store file now overlays an app's `cfg.sources_dir` record of the same id (its keys win) instead of hiding it, so
+   `cp0_map_source_set_enabled()` can write `enabled=` without losing the app record's URL.
+4. A source's state is the listing's existing `state` field (a `CP0_MAP_E_*` code) plus `until`.
+5. User records on a shipped provider's host share its key, daily count and pauses ("groups"): one provider, one account.
+6. A source whose cache another app writes is read from that cache and never fetched (`CP0_MAP_E_READ_ONLY`): the daily
+   count and the guards keep one owner. The writer locks (`tiles/<id>.lock`) are taken when the store opens.
+7. The daily cap counts every request sent (200, 304, 404, errors) and turns at local midnight (2.7 assumed UTC; the
+   brief says local).
+8. Freshness floor 1 h, ceiling 30 days, 7 days without headers; a stale tile is always shown (2.7 said "only if the
+   source allows offline use"; all three shipped terms allow keeping tiles, and the brief says serve stale offline).
+9. A request on the wire for a tile no client wants any more is aborted at libcurl's next progress call (about a
+   second); it still counts in the daily cap. libcurl itself retries once when a reused connection is dead.
+10. Eviction measures the cache files on disk (deletes, then `PRAGMA incremental_vacuum`), not only tile bytes.
+11. The widget's state strip reuses the missing-archive strip in amber (the missing archive stays red); the texts are in
+    `docs/cp0_lvgl.en.md`.
+
+**Tests** (host, `ext_components/cp0_lvgl/tests/run_tests.sh`; no test or script contacts any real server):
+`test_map_source.c` (no network: HTTPS-only validator, OSMF hosts in every spelling, placeholders, filling and
+redaction, the User-Agent rule, shipped records and the record rules, keys 0600 under umask 0 and never listed,
+switches, area download refused / not in this version, HTTP dates and freshness, the cap rule, the local day),
+`test_map_vcache.c` (batched commits, LRU across caches, cap shrink, the default rule, imported archives untouched,
+one writer per file in-process and across `fork`, a writer aborted mid-commit and SIGKILLed three times: integrity
+`ok`, whole batches only, cache full), `test_map_fetch.c` against `tests/fake_tile_server.py` (Python stdlib, 127.0.0.1;
+every request logged with its headers and the concurrency): User-Agent, only the tiles asked, valid MBTiles, restart,
+statistics, parallel caps (2 per source, 4 in all), the interval, cancel, de-duplication, revalidation (304), stale
+offline and on errors, no-store, Expires, 429 / 503, the error pause, no fast retry, 404 / 410 for 24 h across a
+restart, the blocked picture (pause kept across a restart, copies removed, key never logged; open sea is no block),
+the daily cap across a restart and a new day, redirects (OSMF and plain http refused, loops stopped), size and type
+checks, a dropped connection, no User-Agent, libcurl missing, a second app; `test_map_view.c` gained the fetch list
+(never the ring, at the four canvases and three scales), `test_map_store.c` and `test_map_nosqlite.c` the shipped
+records. ASan + UBSan for all; ThreadSanitizer for `test_map_vcache` (without its fork parts) and `test_map_fetch`.
+Render scenes `map_widget`, `p320_map`, `pda_map` end with an online source offline and one without its key (new
+goldens at 640x480, 480x320, 320x480, 480x800).
+
+**For task 5 (Deck Atlas: Layers / Settings for sources, keys, cache size, offline mode).** Open the store read-write
+with `cfg.user_agent` from `cp0_map_user_agent("deck-atlas", version)`, `cfg.network` from the app's offline switch
+(`cp0_map_store_set_network()` at run time) and `cfg.cache_cap_bytes` from Settings (0 = Auto); add
+`libcurl4t64, ca-certificates, libsqlite3-0` to `depends`. List sources with `cp0_map_store_sources()` (kind SOURCE):
+show `title`, `attribution`, `licence`, `note` (the "unverified: check before enabling" marks belong next to the
+switch), `state` + `until` as words (the widget's strip texts are a model), `has_key`, `policy.needs_key`,
+`fetches_today` / `policy.daily_cap`, `cache_tiles`. Switch with `cp0_map_source_set_enabled()`; a key field calls
+`cp0_map_source_set_key()` (8-127 characters of `[A-Za-z0-9._~-]`, `CP0_MAP_E_INVALID` otherwise; never echo the key
+back, the listing only says `has_key`) and `_clear_key()`; an optional "daily limit" can only lower
+(`cp0_map_source_set_daily_cap()` returns the cap in force). Cache: `cp0_map_store_cache_stats()` (call it off the
+LVGL thread or every few seconds: it counts stale tiles in the files) for size, cap and per-source counts;
+`cp0_map_store_set_cap()`; "Clear saved tiles" per source or all with `cp0_map_store_clear_cache()` (never touches
+imported archives); call `cp0_map_store_flush()` on the app's shutdown path. The map widget fetches by itself for an
+online source (`cp0_map_set_source(map, "opentopomap")`) and shows the source's attribution and state; `cp0_map_on_tile()`
+now also delivers fetch events (`kind`). A second app (Mesh Hop) opens the store `read_only` and only reads the caches.
+Open item for the design pass: whether the app shows the providers' terms page before the first switch-on.
+
 ## 4. GPS (question 3)
 
 ### 4.1 Receivers

@@ -1,0 +1,112 @@
+# The map widget of cp0_lvgl (include/cp0_map_widget.h; report 054 3.7, Deck Atlas 0.1 task 2) on a page of its own:
+# under the page header, over a tab strip one row high (the room an app gives it), over synthetic tiles only (an
+# imaginary town at 48.60 N 2.00 E, each tile's z/x/y in its corner; harness_map.cpp). Controls drawn by the widget:
+# zoom + / - at the right edge, the locate button above them while a position fix is set, the scale bar at the bottom
+# left, the attribution at the bottom right; nothing may reach the header or the tab strip.
+#   1x, 1.5x, 2x with the position dot (accuracy circle, heading arrow), markers with labels and a track;
+#   a selected marker's label below the label zoom; missing tiles drawn from their parent (one zoom up, magnified) and
+#   the grid outside the archive; over-zoom (marked); 512 px "@2x" tiles at 0.5x / 0.75x / 1x; the USB stick's
+#   archive pulled out (the message strip) and back; keys (Shift+arrows pan by half the view, PageUp zooms), a drag,
+#   a double tap, the zoom buttons tapped. Goldens at 640x480 and 480x320.
+title map widget
+sizes 640x480 480x320
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+mapdemo open
+mapdemo scale 1x
+mapdemo wait
+shot map_plain_1x
+mapdemo fix 150 -80 150 2 45
+mapdemo markers
+mapdemo track
+mapdemo wait
+shot map_overlays_1x
+mapdemo scale 1.5x
+mapdemo wait
+shot map_overlays_15x
+mapdemo scale 2x
+mapdemo wait
+shot map_overlays_2x
+mapdemo scale 1x
+mapdemo zoom 13
+mapdemo markers 4
+mapdemo wait
+shot map_selected_label_z13
+mapdemo markers -1
+mapdemo fix off
+mapdemo offset 3000 1200
+mapdemo zoom 13
+mapdemo wait
+mapdemo zoom 14
+mapdemo wait
+shot map_missing_tiles
+mapdemo zoom 12
+mapdemo offset 0 0
+mapdemo wait
+shot map_outside_archive
+mapdemo zoom 15
+mapdemo wait
+shot map_overzoom
+mapdemo source hd
+mapdemo zoom 14
+mapdemo scale 1x
+mapdemo wait
+shot map_hd_05x
+mapdemo scale 1.5x
+mapdemo wait
+shot map_hd_075x
+mapdemo scale 2x
+mapdemo wait
+shot map_hd_1x
+mapdemo source usb
+mapdemo scale 1x
+mapdemo zoom 12
+mapdemo wait
+shot map_usb_in
+mapdemo usb out
+mapdemo source usb
+mapdemo wait
+shot map_usb_missing
+mapdemo usb in
+mapdemo source usb
+mapdemo wait
+shot map_usb_back
+mapdemo source main
+mapdemo zoom 14
+mapdemo offset 0 0
+mapdemo wait
+key SHIFT+RIGHT
+mapdemo wait
+shot map_key_shift_right
+key PAGEUP
+mapdemo wait
+shot map_key_pageup
+key MINUS
+key LEFT
+mapdemo wait
+shot map_key_minus_left
+@640x480 drag 300 250 200 200
+@480x320 drag 240 170 160 140
+mapdemo wait
+shot map_dragged
+@640x480 mapdemo doubletap 320 240
+@480x320 mapdemo doubletap 240 160
+mapdemo wait
+shot map_doubletap
+mapdemo tapctl zoomout
+mapdemo tapctl zoomout
+mapdemo wait
+shot map_zoomout_buttons
+# Task 3: an online source with the network off (its saved tiles, the amber state strip), then one that needs a key
+mapdemo source online
+mapdemo scale 1x
+mapdemo zoom 14
+mapdemo offset 0 0
+mapdemo wait
+shot map_online_offline
+mapdemo source online-key
+mapdemo wait
+shot map_online_nokey
