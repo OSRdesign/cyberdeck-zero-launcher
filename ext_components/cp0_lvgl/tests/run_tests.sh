@@ -803,6 +803,15 @@ fi
 # track simplification, labels) and its tile-load thread (order, cancellation, the store fetch; under ThreadSanitizer
 # too). The LVGL widget itself (cp0_map_widget.c) is drawn by the render harness's map scenes
 # (projects/APPLaunch/tests/render/scenes/map_widget.scene, p320_map.scene, pda_map.scene).
+# Task 3: online sources. test_map_source (no network at all): HTTPS-only and OSMF-host rules, URL filling, the
+# User-Agent rule, shipped records and the record rules, keys (0600, never listed), switches, area download refused,
+# HTTP header parsing and freshness, the cap rule. test_map_vcache (SQLite): batched commits, LRU eviction across the
+# viewing caches, cap shrink, imported archives never touched, one writer per file, a writer killed mid-commit, cache
+# full (again under ThreadSanitizer, without its fork parts). test_map_fetch: the fetch pool against
+# tests/fake_tile_server.py on 127.0.0.1 (Python stdlib, plain http: the local-host exception; no real server is ever
+# contacted): User-Agent, parallel caps, the view only, cancel, de-duplication, caching and revalidation, stale tiles
+# offline, back-off, the three guards, keys never logged, redirects, libcurl missing (again under ThreadSanitizer).
+# It needs python3 and libcurl.so.4 (apt: libcurl4t64): without them it SKIPs, unless CI=1 or REQUIRE_CURL=1.
 map_srcs=""
 for map_src in "$root"/src/map/*.c; do
     case $map_src in */cp0_map_widget.c) ;; *) map_srcs="$map_srcs $map_src" ;; esac
@@ -813,6 +822,7 @@ map_build() { # map_build TEST [FLAGS...]: tests/TEST.c with the map engine (wit
     "${CC:-cc}" -std=c11 -g -O2 -Wall -Wextra -Werror -pthread "$@" \
         -I"$root/include" -I"$root/src/map" \
         -DMAP_FIXTURES="\"$root/tests/fixtures/map\"" \
+        -DMAP_FAKE_SERVER="\"$root/tests/fake_tile_server.py\"" \
         $map_srcs \
         "$root/src/cp0_app_contract.c" \
         "$root/src/cp0_ui_metrics.c" \
@@ -839,8 +849,24 @@ if "$binary" || [ "${CI:-}" = 1 ] || [ "${REQUIRE_SQLITE:-}" = 1 ]; then
     "$binary"
     map_build test_map_loader -fsanitize=thread
     "$binary"
+    map_build test_map_vcache $mt_san
+    "$binary"
+    map_build test_map_vcache -fsanitize=thread
+    "$binary"
+    printf '#include <dlfcn.h>\nint main(void) { return dlopen("libcurl.so.4", RTLD_NOW) ? 0 : 1; }\n' |
+        "${CC:-cc}" -x c - -ldl -o "$binary"
+    if { "$binary" && command -v python3 >/dev/null 2>&1; } || [ "${CI:-}" = 1 ] || [ "${REQUIRE_CURL:-}" = 1 ]; then
+        map_build test_map_fetch $mt_san
+        "$binary"
+        map_build test_map_fetch -fsanitize=thread
+        "$binary"
+    else
+        echo "SKIP test_map_fetch (libcurl.so.4 or python3 missing: sudo apt install libcurl4t64 python3)"
+    fi
 else
-    echo "SKIP test_map_archive, test_map_store (libsqlite3.so.0 missing: sudo apt install libsqlite3-0)"
+    echo "SKIP test_map_archive, test_map_store, test_map_vcache, test_map_fetch (libsqlite3.so.0 missing: sudo apt install libsqlite3-0)"
 fi
 map_build test_map_nosqlite $mt_san
+"$binary"
+map_build test_map_source $mt_san
 "$binary"

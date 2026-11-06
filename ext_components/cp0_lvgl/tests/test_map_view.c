@@ -180,6 +180,65 @@ static void test_tiles(void)
            "zoom 0 repeats\n");
 }
 
+static int need_even(void *user, const cp0_map_slot_t *s)
+{
+    (void)user;
+    return (s->x + s->y) % 2 == 0;
+}
+
+/* task 3: what an online source's fetch pool is asked for: the visible tiles only, never the ring */
+static void test_fetch_tiles(void)
+{
+    cp0_map_view_t v;
+    cp0_map_slot_t s[CP0_MAP_VIEW_MAX_TILES];
+    cp0_map_tile_id_t t[CP0_MAP_VIEW_MAX_TILES];
+    static const int sizes[][2] = {{640, 480}, {480, 320}, {320, 480}, {480, 800}};
+    for (size_t k = 0; k < sizeof sizes / sizeof sizes[0]; k++) {
+        for (int scale = 2; scale <= 4; scale++) {
+            cp0_map_view_init(&v, sizes[k][0], sizes[k][1]);
+            cp0_map_view_set_limits(&v, 0, 13, 1);
+            cp0_map_view_set_scale(&v, scale);
+            cp0_map_view_set_zoom(&v, 13);
+            cp0_map_view_set_center(&v, 48.6, 2.0);
+            const int n = cp0_map_view_tiles(&v, 1, s, CP0_MAP_VIEW_MAX_TILES);
+            int nvis = 0;
+            for (int i = 0; i < n; i++) nvis += s[i].visible;
+            CHECK(nvis > 0 && n > nvis); /* there is a ring */
+            const int m = cp0_map_view_fetch_tiles(s, n, NULL, NULL, t, CP0_MAP_VIEW_MAX_TILES);
+            CHECK(m == nvis);
+            for (int i = 0; i < m; i++) {
+                int visible = 0;
+                for (int j = 0; j < n && !visible; j++)
+                    visible = s[j].visible && s[j].z == t[i].z && s[j].x == t[i].x && s[j].y == t[i].y;
+                CHECK(visible); /* never a ring tile */
+            }
+            CHECK(t[0].x == s[0].x && t[0].y == s[0].y); /* the centre first */
+            /* only the slots the caller needs (absent or stale), still never the ring */
+            const int e = cp0_map_view_fetch_tiles(s, n, need_even, NULL, t, CP0_MAP_VIEW_MAX_TILES);
+            int want = 0;
+            for (int i = 0; i < n; i++) want += s[i].visible && need_even(NULL, &s[i]);
+            CHECK(e == want);
+            CHECK(cp0_map_view_fetch_tiles(s, n, NULL, NULL, t, 2) == 2);
+        }
+    }
+    /* over-zoom: the parents, each once */
+    cp0_map_view_init(&v, 640, 480);
+    cp0_map_view_set_limits(&v, 0, 13, 1);
+    cp0_map_view_set_zoom(&v, 14);
+    cp0_map_view_set_center(&v, 48.6, 2.0);
+    const int n = cp0_map_view_tiles(&v, 1, s, CP0_MAP_VIEW_MAX_TILES);
+    const int m = cp0_map_view_fetch_tiles(s, n, NULL, NULL, t, CP0_MAP_VIEW_MAX_TILES);
+    int nvis = 0;
+    for (int i = 0; i < n; i++) nvis += s[i].visible;
+    CHECK(m > 0 && m < nvis);
+    for (int i = 0; i < m; i++) {
+        CHECK(t[i].z == 13);
+        for (int j = 0; j < i; j++) CHECK(t[j].x != t[i].x || t[j].y != t[i].y);
+    }
+    CHECK(cp0_map_view_fetch_tiles(NULL, 3, NULL, NULL, t, 3) == 0);
+    printf("map view: the fetch list holds the visible tiles only (never the ring), centre first, parents once\n");
+}
+
 static void layout_case(const char *name, int canvas_w, int canvas_h, int ppmm, int attribution_w, int locate)
 {
     cp0_ui_metrics_t mt;
@@ -425,6 +484,7 @@ int main(void)
 {
     test_view();
     test_tiles();
+    test_fetch_tiles();
     test_layout();
     test_simplify();
     test_labels();
