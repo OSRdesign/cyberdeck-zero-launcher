@@ -240,16 +240,88 @@ static void scale15(const uint16_t *src, int sw, int sh, int src_stride, int dx,
     }
 }
 
+/* the two taps of a downscaled column / row: 0.5x X -> (2X, 2X+1, 1/2); 0.75x X = 3j+r -> (4j+r, 4j+r+1, w[r]) with the
+ * weight of the second tap w = 1/4, 1/2, 3/4 (64, 128, 192 of 256): the area each output pixel covers (cp0_map_tile.h) */
+static inline void down_taps(int x4, int X, int *a, unsigned *w)
+{
+    if (x4 == 2) {
+        *a = 2 * X;
+        *w = 128u;
+    } else {
+        static const unsigned wt[3] = {64u, 128u, 192u};
+        const int j = X / 3, r = X % 3;
+        *a = 4 * j + r;
+        *w = wt[r];
+    }
+}
+
+static void hrow_down(const uint16_t *p, int x4, int x0, int n, uint16_t *o)
+{
+    for (int k = 0; k < n; k++) {
+        int a;
+        unsigned w;
+        down_taps(x4, x0 + k, &a, &w);
+        o[k] = mix565(p[a], p[a + 1], w);
+    }
+}
+
+static void scale_down(const uint16_t *src, int src_stride, int x4, int dx, int dy, int dw, int dh, uint16_t *dst,
+                       int dst_stride)
+{
+    uint16_t rows[3][CHUNK];
+    for (int cx = 0; cx < dw; cx += CHUNK) {
+        const int n = dw - cx < CHUNK ? dw - cx : CHUNK;
+        int tag[3] = {-1, -1, -1};
+        for (int yy = 0; yy < dh; yy++) {
+            int a;
+            unsigned wv;
+            down_taps(x4, dy + yy, &a, &wv);
+            const int need[2] = {a, a + 1};
+            const uint16_t *h[2] = {NULL, NULL};
+            for (int q = 0; q < 2; q++) {
+                int slot = -1;
+                for (int s = 0; s < 3; s++)
+                    if (tag[s] == need[q]) slot = s;
+                if (slot < 0) {
+                    for (int s = 0; s < 3; s++) {
+                        if (q == 1 && tag[s] == need[0]) continue;
+                        if (slot < 0 || tag[s] < tag[slot]) slot = s;
+                    }
+                    hrow_down((const uint16_t *)((const uint8_t *)src + (size_t)need[q] * (size_t)src_stride), x4,
+                              dx + cx, n, rows[slot]);
+                    tag[slot] = need[q];
+                }
+                h[q] = rows[slot];
+            }
+            uint16_t *o = (uint16_t *)((uint8_t *)dst + (size_t)yy * (size_t)dst_stride) + cx;
+            for (int x = 0; x < n; x++) o[x] = mix565(h[0][x], h[1][x], wv);
+        }
+    }
+}
+
 int cp0_map_scale_rgb565(const uint16_t *src, int sw, int sh, int src_stride, int scale_x2, int dx, int dy, int dw,
                          int dh, uint16_t *dst, int dst_stride)
 {
+    if (scale_x2 < 2 || scale_x2 > 4) return CP0_MAP_E_INVALID;
+    return cp0_map_resample_rgb565(src, sw, sh, src_stride, 2 * scale_x2, dx, dy, dw, dh, dst, dst_stride);
+}
+
+int cp0_map_resample_rgb565(const uint16_t *src, int sw, int sh, int src_stride, int scale_x4, int dx, int dy, int dw,
+                            int dh, uint16_t *dst, int dst_stride)
+{
     if (!src || !dst || sw <= 0 || sh <= 0 || sw > CP0_MAP_DECODE_MAX_PX || sh > CP0_MAP_DECODE_MAX_PX ||
-        src_stride < sw * 2 || scale_x2 < 2 || scale_x2 > 4 || dw <= 0 || dh <= 0 || dst_stride < dw * 2 || dx < 0 ||
-        dy < 0)
+        src_stride < sw * 2 || dw <= 0 || dh <= 0 || dst_stride < dw * 2 || dx < 0 || dy < 0)
         return CP0_MAP_E_INVALID;
-    if (scale_x2 == 3 && ((sw & 1) || (sh & 1))) return CP0_MAP_E_INVALID;
-    const int mw = sw * scale_x2 / 2, mh = sh * scale_x2 / 2;
+    if (scale_x4 != 2 && scale_x4 != 3 && scale_x4 != 4 && scale_x4 != 6 && scale_x4 != 8) return CP0_MAP_E_INVALID;
+    if ((scale_x4 == 2 || scale_x4 == 6) && ((sw & 1) || (sh & 1))) return CP0_MAP_E_INVALID;
+    if (scale_x4 == 3 && ((sw & 3) || (sh & 3))) return CP0_MAP_E_INVALID;
+    const int mw = sw * scale_x4 / 4, mh = sh * scale_x4 / 4;
     if (dx > mw - dw || dy > mh - dh) return CP0_MAP_E_INVALID;
+    if (scale_x4 < 4) {
+        scale_down(src, src_stride, scale_x4, dx, dy, dw, dh, dst, dst_stride);
+        return CP0_MAP_OK;
+    }
+    const int scale_x2 = scale_x4 / 2;
     if (scale_x2 == 2) {
         for (int yy = 0; yy < dh; yy++)
             memcpy((uint8_t *)dst + (size_t)yy * (size_t)dst_stride,

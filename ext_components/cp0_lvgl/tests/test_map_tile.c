@@ -305,6 +305,99 @@ static void check_rect(const uint16_t *src, int sw, int sh, int s, int dx, int d
     free(dst);
 }
 
+/* the downscales of cp0_map_resample_rgb565 (cp0_map_tile.h), one pixel at a time */
+static void ref_taps(int x4, int X, int *a, unsigned *w)
+{
+    if (x4 == 2) {
+        *a = 2 * X;
+        *w = 128;
+        return;
+    }
+    static const unsigned wt[3] = {64, 128, 192};
+    *a = 4 * (X / 3) + X % 3;
+    *w = wt[X % 3];
+}
+
+static uint16_t ref_down(const uint16_t *src, int sw, int x4, int X, int Y)
+{
+    int ax, ay;
+    unsigned wx, wy;
+    ref_taps(x4, X, &ax, &wx);
+    ref_taps(x4, Y, &ay, &wy);
+    const uint16_t *r0 = src + (size_t)ay * sw, *r1 = r0 + sw;
+    return ref_mix565(ref_mix565(r0[ax], r0[ax + 1], wx), ref_mix565(r1[ax], r1[ax + 1], wx), wy);
+}
+
+static void check_rect_x4(const uint16_t *src, int sw, int sh, int x4, int dx, int dy, int dw, int dh)
+{
+    const int stride = dw + 2;
+    uint16_t *dst = (uint16_t *)malloc((size_t)stride * (size_t)dh * 2);
+    for (int i = 0; i < stride * dh; i++) dst[i] = 0xbeef;
+    CHECK_RC(cp0_map_resample_rgb565(src, sw, sh, sw * 2, x4, dx, dy, dw, dh, dst, stride * 2), CP0_MAP_OK);
+    for (int y = 0; y < dh; y++) {
+        for (int x = 0; x < dw; x++) {
+            const uint16_t want = x4 < 4 ? ref_down(src, sw, x4, dx + x, dy + y) : ref_px(src, sw, sh, x4 / 2, dx + x, dy + y);
+            if (dst[(size_t)y * stride + x] != want) {
+                fprintf(stderr, "resample x4 %d src %dx%d rect %d,%d %dx%d: pixel %d,%d differs\n", x4, sw, sh, dx, dy,
+                        dw, dh, x, y);
+                CHECK(0);
+            }
+        }
+        for (int x = dw; x < stride; x++) CHECK(dst[(size_t)y * stride + x] == 0xbeef);
+    }
+    g_checks += (long)dw * dh;
+    free(dst);
+}
+
+static void test_downscalers(void)
+{
+    const int sizes[][2] = {{4, 4}, {8, 12}, {16, 16}, {256, 256}, {512, 512}};
+    long rects = 0;
+    rng_seed(4321);
+    for (size_t si = 0; si < sizeof sizes / sizeof sizes[0]; si++) {
+        const int sw = sizes[si][0], sh = sizes[si][1];
+        uint16_t *src = (uint16_t *)malloc((size_t)sw * sh * 2);
+        for (int i = 0; i < sw * sh; i++) src[i] = (uint16_t)rng();
+        static const int x4s[] = {2, 3, 4, 6, 8};
+        for (size_t k = 0; k < sizeof x4s / sizeof x4s[0]; k++) {
+            const int x4 = x4s[k], mw = sw * x4 / 4, mh = sh * x4 / 4;
+            check_rect_x4(src, sw, sh, x4, 0, 0, mw, mh);
+            rects++;
+            for (int t = 0; t < (sw >= 256 ? 10 : 30); t++) {
+                const int dx = (int)(rng() % (unsigned)mw), dy = (int)(rng() % (unsigned)mh);
+                const int dw = 1 + (int)(rng() % (unsigned)(mw - dx)), dh = 1 + (int)(rng() % (unsigned)(mh - dy));
+                check_rect_x4(src, sw, sh, x4, dx, dy, dw, dh);
+                rects++;
+            }
+        }
+        free(src);
+    }
+    /* 512 px at 1.5x (0.75x) and at 1x (0.5x) of a constant tile stay constant; a 2 x 2 checker averages to grey */
+    uint16_t flat[16 * 16], out[16 * 16];
+    for (int i = 0; i < 256; i++) flat[i] = 0x7bef;
+    CHECK_RC(cp0_map_resample_rgb565(flat, 16, 16, 32, 3, 0, 0, 12, 12, out, 24), CP0_MAP_OK);
+    for (int i = 0; i < 144; i++) CHECK(out[i] == 0x7bef);
+    for (int y = 0; y < 16; y++)
+        for (int x = 0; x < 16; x++) flat[y * 16 + x] = ((x + y) & 1) ? 0xffff : 0x0000;
+    CHECK_RC(cp0_map_resample_rgb565(flat, 16, 16, 32, 2, 0, 0, 8, 8, out, 16), CP0_MAP_OK);
+    for (int i = 0; i < 64; i++) CHECK(out[i] == ((16u << 11) | (32u << 5) | 16u)); /* 31/2 rounds to 16, 63/2 to 32 */
+    /* refusals: 0.75x needs multiples of 4, 0.5x even sides, a bad step */
+    CHECK_RC(cp0_map_resample_rgb565(flat, 14, 16, 28, 3, 0, 0, 9, 12, out, 24), CP0_MAP_E_INVALID);
+    CHECK_RC(cp0_map_resample_rgb565(flat, 15, 16, 30, 2, 0, 0, 7, 8, out, 16), CP0_MAP_E_INVALID);
+    CHECK_RC(cp0_map_resample_rgb565(flat, 16, 16, 32, 5, 0, 0, 4, 4, out, 16), CP0_MAP_E_INVALID);
+    CHECK_RC(cp0_map_resample_rgb565(flat, 16, 16, 32, 3, 0, 0, 13, 12, out, 26), CP0_MAP_E_INVALID);
+    uint16_t *big = (uint16_t *)malloc(512 * 512 * 2), *small = (uint16_t *)malloc(384 * 384 * 2);
+    for (int i = 0; i < 512 * 512; i++) big[i] = (uint16_t)rng();
+    double t0 = now_ms();
+    for (int k = 0; k < 30; k++) cp0_map_resample_rgb565(big, 512, 512, 1024, 3, 0, 0, 384, 384, small, 768);
+    const double t075 = (now_ms() - t0) / 30;
+    free(big);
+    free(small);
+    printf("map tile: downscalers exact against the reference on %ld rectangles (0.5x, 0.75x and the magnifiers through "
+           "resample); 512 px tile at 0.75x here: %.3f ms\n",
+           rects, t075);
+}
+
 static void test_scalers(void)
 {
     const int sizes[][2] = {{2, 2}, {4, 6}, {8, 8}, {16, 10}, {256, 256}, {512, 512}};
@@ -623,6 +716,7 @@ int main(void)
     test_decode_generated();
     test_decode_refusals();
     test_scalers();
+    test_downscalers();
     test_cache_lru();
     test_cache_budgets();
     test_cache_threads();

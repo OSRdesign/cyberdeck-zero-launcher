@@ -93,6 +93,18 @@ int cp0_map_decode_tile(const uint8_t *data, size_t len, cp0_map_pixfmt_t pixfmt
 int cp0_map_scale_rgb565(const uint16_t *src, int sw, int sh, int src_stride, int scale_x2, int dx, int dy, int dw,
                          int dh, uint16_t *dst, int dst_stride);
 
+/* The same with the scale in quarter steps, adding the two downscales that 512 px ("@2x") tiles need:
+ *   scale_x4 2 = 0.5x  (512 px tile at display scale 1): dst(X, Y) averages the 2 x 2 source pixels at (2X, 2Y):
+ *                      mix(p[2X], p[2X+1], 128) per row, then the same mix of the two rows;
+ *   scale_x4 3 = 0.75x (512 px tile at display scale 1.5): every 4 source pixels give 3, each output pixel the area it
+ *                      covers: X = 3j+r -> mix(p[4j+r], p[4j+r+1], w) with w = 64, 128, 192 for r = 0, 1, 2 (the
+ *                      weight of the second tap: 1/4, 1/2, 3/4); rows alike, horizontal first;
+ *   scale_x4 4 = 1x, 6 = 1.5x, 8 = 2x: as cp0_map_scale_rgb565() (scale_x2 2, 3, 4).
+ * mix() is the rounded one above. 0.5x and 1.5x need even sides, 0.75x sides that are multiples of 4. No allocation;
+ * 0 or CP0_MAP_E_INVALID. */
+int cp0_map_resample_rgb565(const uint16_t *src, int sw, int sh, int src_stride, int scale_x4, int dx, int dy, int dw,
+                            int dh, uint16_t *dst, int dst_stride);
+
 /* ------------------------------------------------------------------------------------------------- RAM cache */
 
 typedef struct cp0_map_cache cp0_map_cache_t;
