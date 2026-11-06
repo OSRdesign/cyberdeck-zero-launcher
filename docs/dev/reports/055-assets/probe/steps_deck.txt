@@ -1,0 +1,31 @@
+sh $B/one.sh 600 $B/p0probe decode $T/pal256.pmtiles --passes 2
+sh $B/one.sh 600 $B/p0probe decode $T/png256.pmtiles --passes 2
+sh $B/one.sh 600 $B/p0probe decode $T/jpg256.pmtiles --passes 2
+sh $B/one.sh 300 $B/p0probe decode $T/png512.pmtiles --max 200 --passes 2
+sh $B/one.sh 600 $B/p0probe decode $T/png512.pmtiles --passes 2
+sh $B/one.sh 600 $B/p0probe decode $T/pal512.pmtiles --passes 2
+sh $B/one.sh 600 $B/p0probe decode $T/jpg512.pmtiles --passes 2
+sh $B/one.sh 300 $B/p0probe_neon decode $T/jpg256.pmtiles --passes 2
+sh $B/one.sh 300 $B/p0probe decode $T/pal256.pmtiles --lib lodepng --passes 1 --max 600
+sh $B/one.sh 300 $B/p0probe decode $T/png256.pmtiles --lib lodepng --passes 1 --max 600
+sh $B/one.sh 300 $B/p0probe decode $T/pal256.pmtiles --passes 1 --max 600
+sh $B/one.sh 300 $B/p0probe view $T/pal256.pmtiles --w 640 --h 480 --scale 2 --cold 1
+sh $B/one.sh 300 $B/p0probe view $T/pal256.pmtiles --w 640 --h 480 --scale 1 --cold 1
+sh $B/one.sh 300 $B/p0probe view $T/png256.pmtiles --w 640 --h 480 --scale 2 --cold 1
+sh $B/one.sh 300 $B/p0probe view $T/pal256.pmtiles --w 480 --h 320 --scale 1.5 --cold 1
+sh $B/one.sh 300 $B/p0probe view $T/pal256.pmtiles --w 320 --h 480 --scale 1.5 --cold 1
+sh $B/one.sh 300 $B/p0probe view $T/pal512.pmtiles --w 640 --h 480 --scale 1 --cold 1
+sh $B/one.sh 300 $B/p0probe read --method pread $T/pal256.pmtiles
+sh $B/one.sh 300 $B/p0probe read --method sqlite $T/pal256.mbtiles
+sh $B/one.sh 300 $B/p0probe read --method mmap $T/pal256.pmtiles
+sh $B/one.sh 300 $B/p0probe lru $T/pal256.pmtiles --slots 64 --bpp 2 --scale 1 --cycle 1000
+sh $B/one.sh 300 $B/p0probe lru $T/pal256.pmtiles --slots 16 --bpp 2 --scale 2 --cycle 1000
+sh $B/one.sh 300 $B/p0probe lru $T/pal256.pmtiles --slots 128 --bpp 2 --scale 1 --cycle 1000
+sh $B/one.sh 300 $B/p0probe lru $T/pal256.pmtiles --slots 64 --bpp 4 --scale 1 --cycle 1000
+sh $B/one.sh 300 $B/p0probe convert $T/pal256 $W/conv.mbtiles --batch 256 --journal WAL; rm -f $W/conv.mbtiles*
+sh $B/one.sh 300 $B/p0probe convert $T/pal256 $W/conv.mbtiles --batch 256 --journal DELETE; rm -f $W/conv.mbtiles*
+sh $B/one.sh 120 $B/stub_empty $T/pal256.mbtiles 4
+sh $B/one.sh 120 $B/stub_static $T/pal256.mbtiles 4
+sh $B/one.sh 120 $B/stub_static_trim $T/pal256.mbtiles 4
+sh $B/one.sh 120 $B/stub_dlopen $T/pal256.mbtiles 4
+sh $B/one.sh 120 $B/stub_dlopen $T/pal256.mbtiles 3
