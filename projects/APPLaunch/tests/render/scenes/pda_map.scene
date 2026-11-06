@@ -30,3 +30,13 @@ mapdemo source hd
 mapdemo scale 2x
 mapdemo wait
 shot pda_map_hd_1x
+# Task 3: an online source with the network off (its saved tiles, the amber state strip), then one that needs a key
+mapdemo source online
+mapdemo scale auto
+mapdemo zoom 14
+mapdemo offset 0 0
+mapdemo wait
+shot pda_map_online_offline
+mapdemo source online-key
+mapdemo wait
+shot pda_map_online_nokey

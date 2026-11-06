@@ -100,3 +100,13 @@ mapdemo tapctl zoomout
 mapdemo tapctl zoomout
 mapdemo wait
 shot map_zoomout_buttons
+# Task 3: an online source with the network off (its saved tiles, the amber state strip), then one that needs a key
+mapdemo source online
+mapdemo scale 1x
+mapdemo zoom 14
+mapdemo offset 0 0
+mapdemo wait
+shot map_online_offline
+mapdemo source online-key
+mapdemo wait
+shot map_online_nokey

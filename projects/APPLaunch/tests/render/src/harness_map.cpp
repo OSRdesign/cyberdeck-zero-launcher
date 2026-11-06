@@ -8,6 +8,9 @@
  *   main   256 px tiles, zoom 8-14 around 48.60 N 2.00 E, three z14 tiles left out (the missing-tile placeholder)
  *   hd     512 px ("@2x") tiles, zoom 12-14 (drawn at 0.5x / 0.75x / 1x by the display scale)
  *   usb    256 px tiles, zoom 8-13, registered in place from a folder that "mapdemo usb out" moves away
+ *   online, online-key   two online source records (task 3) whose viewing caches hold the main town's tiles; the store
+ *          is opened with the network off, so the widget shows their state strip ("Offline: saved tiles only", and
+ *          "This source needs an API key" for the one whose URL has {key}); nothing is ever fetched
  * The widget's tile-load thread is not one of the harness's tracked workers (it lives as long as the page): scenes call
  * "mapdemo wait" before a shot, which blocks until every tile of the view is in (cp0_map_wait_idle).
  */
@@ -173,6 +176,36 @@ bool make_folder(const std::string &dir, int zmin, int zmax, int px, bool holes)
     return true;
 }
 
+/* the online demo sources: a record each, and a viewing cache made from the converted main archive */
+void online_sources(const std::string &store_dir)
+{
+    struct stat st;
+    mkdirs(store_dir + "/sources");
+    mkdirs(store_dir + "/tiles");
+    static const struct {
+        const char *id, *title, *url;
+    } recs[] = {{"online", "Online demo", "http://127.0.0.1:1/{z}/{x}/{y}.png"},
+                {"online-key", "Online demo with a key", "http://127.0.0.1:1/{z}/{x}/{y}.png?key={key}"}};
+    for (const auto &r : recs) {
+        const std::string conf = store_dir + "/sources/" + r.id + ".conf";
+        if (FILE *f = std::fopen(conf.c_str(), "w")) {
+            std::fprintf(f, "v=1\ntitle=%s\nurl=%s\nenabled=1\nminzoom=8\nmaxzoom=14\n"
+                            "attribution=\xc2\xa9 OpenStreetMap contributors (synthetic online demo)\n",
+                         r.title, r.url);
+            std::fclose(f);
+        }
+        const std::string cache = store_dir + "/tiles/" + r.id + ".mbtiles";
+        if (::stat(cache.c_str(), &st) == 0) continue;
+        FILE *in = std::fopen((store_dir + "/archives/main.mbtiles").c_str(), "rb");
+        FILE *out = in ? std::fopen(cache.c_str(), "wb") : nullptr;
+        char buf[65536];
+        size_t n;
+        while (in && out && (n = std::fread(buf, 1, sizeof buf, in)) > 0) std::fwrite(buf, 1, n, out);
+        if (out) std::fclose(out);
+        if (in) std::fclose(in);
+    }
+}
+
 bool open_store(const std::string &dir, std::string *err)
 {
     struct stat st;
@@ -206,8 +239,9 @@ bool open_store(const std::string &dir, std::string *err)
     }
     cp0_map_store_cfg_t cfg{};
     const std::string store_dir = dir + "/store";
+    if (!fresh) online_sources(store_dir);
     cfg.store_dir = store_dir.c_str();
-    cfg.ram_cache_bytes = 24u << 20;
+    cfg.ram_cache_bytes = 24u << 20; /* network off: online sources show their saved tiles only, nothing is fetched */
     int rc = cp0_map_store_open(&cfg, &g_map.store);
     if (rc) {
         *err = std::string("mapdemo: store: ") + cp0_map_strerror(rc);
@@ -229,6 +263,11 @@ bool open_store(const std::string &dir, std::string *err)
                 *err = std::string("mapdemo: import ") + im.id + ": " + cp0_map_strerror(rc);
                 return false;
             }
+        }
+        online_sources(store_dir);
+        if ((rc = cp0_map_store_refresh(g_map.store)) != CP0_MAP_OK) {
+            *err = std::string("mapdemo: refresh: ") + cp0_map_strerror(rc);
+            return false;
         }
     }
     return true;

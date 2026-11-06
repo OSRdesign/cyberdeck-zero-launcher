@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: MIT
  *
  * Map engine: the LVGL map widget (see cp0_map_widget.h). The view maths, the control layout, track simplification and
- * label placement are the pure core (cp0_map_view.c); the tile-load thread is cp0_map_loader.c.
+ * label placement are the pure core (cp0_map_view.c); the tile-load thread is cp0_map_loader.c; an online source's
+ * missing tiles come from the store's fetch pool (cp0_map_fetch.h, task 3).
  */
 #include "cp0_map_widget.h"
 
@@ -46,6 +47,12 @@
 enum { LAYER_MARKERS = 1, LAYER_TRACK = 2 };
 
 typedef struct map map_t;
+
+/* a small set of tile keys (absent, stale, not fetchable); the oldest is replaced when full */
+typedef struct {
+    cp0_map_tile_key_t k[ABSENT_MAX];
+    int n, next;
+} keyset_t;
 
 struct cp0_map_layer {
     map_t *map;
@@ -108,13 +115,21 @@ struct map {
     cp0_map_layout_t layout;
     int layout_ok;
     /* loading */
-    cp0_map_tile_key_t absent[ABSENT_MAX];
-    int nabsent, absent_next;
+    keyset_t absent;
     lv_timer_t *timer;
     int timer_period;
     int view_dirty;
     cp0_map_req_t reqs[CP0_MAP_LOADER_QUEUE];
     cp0_map_done_t done[64];
+    /* an online source (task 3): the visible tiles the loader did not find, or found stale, go to the fetch pool */
+    int online;
+    cp0_map_client_t *client;
+    keyset_t stale, nofetch, refresh;
+    cp0_map_tile_id_t want[CP0_MAP_CLIENT_TILES_MAX];
+    cp0_map_tile_event_t fev[32];
+    int fetch_dirty;
+    int src_state;               /* CP0_MAP_OK, or why the source does not fetch (the state strip) */
+    char state_text[96];
     /* labels (scratch, no per-frame allocation) */
     int lsx[LABEL_CAND], lsy[LABEL_CAND], llw[LABEL_CAND], llh[LABEL_CAND], llx[LABEL_CAND], lly[LABEL_CAND];
     const char *ltext[LABEL_CAND];
@@ -166,21 +181,80 @@ static int key_eq(const cp0_map_tile_key_t *a, const cp0_map_tile_key_t *b)
     return a->source == b->source && a->x == b->x && a->y == b->y && a->z == b->z && a->variant == b->variant;
 }
 
+static int ks_has(const keyset_t *s, const cp0_map_tile_key_t *k)
+{
+    for (int i = 0; i < s->n; i++)
+        if (key_eq(&s->k[i], k)) return 1;
+    return 0;
+}
+
+static void ks_add(keyset_t *s, const cp0_map_tile_key_t *k)
+{
+    if (ks_has(s, k)) return;
+    if (s->n < ABSENT_MAX) s->k[s->n++] = *k;
+    else {
+        s->k[s->next] = *k;
+        s->next = (s->next + 1) % ABSENT_MAX;
+    }
+}
+
+static void ks_del(keyset_t *s, const cp0_map_tile_key_t *k)
+{
+    for (int i = 0; i < s->n; i++)
+        if (key_eq(&s->k[i], k)) {
+            s->k[i] = s->k[--s->n];
+            s->next = 0;
+            return;
+        }
+}
+
+static void ks_clear(keyset_t *s)
+{
+    s->n = s->next = 0;
+}
+
 static int is_absent(const map_t *m, const cp0_map_tile_key_t *k)
 {
-    for (int i = 0; i < m->nabsent; i++)
-        if (key_eq(&m->absent[i], k)) return 1;
-    return 0;
+    return ks_has(&m->absent, k);
 }
 
 static void add_absent(map_t *m, const cp0_map_tile_key_t *k)
 {
-    if (is_absent(m, k)) return;
-    if (m->nabsent < ABSENT_MAX) m->absent[m->nabsent++] = *k;
-    else {
-        m->absent[m->absent_next] = *k;
-        m->absent_next = (m->absent_next + 1) % ABSENT_MAX;
+    ks_add(&m->absent, k);
+}
+
+/* the tile the fetch pool is asked for: the slot's own, or the parent an over-zoom slot is drawn from */
+static void fetch_tile_of(const cp0_map_slot_t *s, cp0_map_tile_id_t *t)
+{
+    t->z = s->over ? s->z - 1 : s->z;
+    t->x = s->over ? s->x >> 1 : s->x;
+    t->y = s->over ? s->y >> 1 : s->y;
+}
+
+/* a visible slot the loader found absent or stale, and the server did not answer 404 for */
+static int needs_fetch(void *user, const cp0_map_slot_t *s)
+{
+    map_t *m = (map_t *)user;
+    const cp0_map_tile_key_t k = key_of(m, s->z, s->x, s->y, s->over);
+    if (!is_absent(m, &k) && !ks_has(&m->stale, &k)) return 0;
+    cp0_map_tile_id_t t;
+    fetch_tile_of(s, &t);
+    const cp0_map_tile_key_t fk = key_of(m, t.z, t.x, t.y, 0);
+    return !ks_has(&m->nofetch, &fk);
+}
+
+/* an online source: the visible tiles the loader found absent or stale, centre first, to the fetch pool (never the
+ * ring around the view: cp0_map_view_fetch_tiles leaves it out) */
+static void push_fetch(map_t *m)
+{
+    m->fetch_dirty = 0;
+    if (!m->online || !m->client) return;
+    int nw = 0;
+    if (!m->missing) {
+        const int n = cp0_map_view_tiles(&m->view, 0, m->slots, CP0_MAP_VIEW_MAX_TILES);
+        nw = cp0_map_view_fetch_tiles(m->slots, n, needs_fetch, m, m->want, CP0_MAP_CLIENT_TILES_MAX);
     }
+    cp0_map_client_view(m->client, m->source, m->want, nw);
 }
 
 static void set_timer(map_t *m, int period)
@@ -206,7 +280,7 @@ static void submit(map_t *m)
         for (int i = 0; i < n && nr < CP0_MAP_LOADER_QUEUE; i++) {
             const cp0_map_slot_t *s = &m->slots[i];
             const cp0_map_tile_key_t k = key_of(m, s->z, s->x, s->y, s->over);
-            if (cp0_map_cache_contains(m->cache, &k) || is_absent(m, &k)) continue;
+            if ((cp0_map_cache_contains(m->cache, &k) && !ks_has(&m->refresh, &k)) || is_absent(m, &k)) continue;
             int dup = 0;
             for (int j = 0; j < nr && !dup; j++) dup = key_eq(&m->reqs[j].key, &k);
             if (dup) continue;
@@ -217,11 +291,17 @@ static void submit(map_t *m)
             r->x = s->x;
             r->y = s->y;
             r->over = s->over;
+            r->visible = s->visible;
+            if (ks_has(&m->refresh, &k)) {
+                r->force = 1; /* the fetch pool stored a newer tile: decode it again over the cached one */
+                ks_del(&m->refresh, &k);
+            }
             r->out_px = cp0_map_view_tile_px(&m->view);
             cp0_map__copy_str(r->source, sizeof r->source, m->source, 0);
         }
     }
     cp0_map_loader_submit(m->loader, m->reqs, nr);
+    push_fetch(m);
 }
 
 static void update_attribution(map_t *m)
@@ -296,7 +376,7 @@ static void ensure_layout(map_t *m)
     in.text_h = lv_font_get_line_height(caption_font());
     in.attribution_w = text_w(m->attribution);
     in.badge_w = text_w("overzoom");
-    in.strip_w = text_w(m->missing_text);
+    in.strip_w = text_w(m->missing ? m->missing_text : m->state_text);
     in.locate = locate;
     cp0_map_layout(&in, &m->layout);
     fit_text(m->attribution, m->layout.attribution_text_w, m->attr_draw, sizeof m->attr_draw);
@@ -337,8 +417,15 @@ static void collect(map_t *m)
             if (d->result == CP0_MAP_OK) {
                 note_archive(m, d->archive_id);
                 invalidate_slot(m, &d->req);
+                if (d->stale && m->online) {
+                    ks_add(&m->stale, &d->req.key); /* shown, and revalidated while it is on screen */
+                    if (d->req.visible) m->fetch_dirty = 1;
+                } else {
+                    ks_del(&m->stale, &d->req.key);
+                }
             } else if (d->result == CP0_MAP_E_NO_TILE) {
                 add_absent(m, &d->req.key);
+                if (m->online && d->req.visible) m->fetch_dirty = 1;
             } else if (d->result == CP0_MAP_E_ARCHIVE_MISSING && m->source[0] && d->req.key.source == m->source_hash) {
                 if (!m->missing) {
                     m->missing = 1;
@@ -354,6 +441,8 @@ static void collect(map_t *m)
                 ev.y = d->req.y;
                 ev.result = d->result;
                 memcpy(ev.archive_id, d->archive_id, sizeof ev.archive_id);
+                ev.kind = CP0_MAP_TILE_LOADED;
+                ev.stale = d->stale;
                 m->on_tile(m->on_tile_user, &ev);
             }
         }
@@ -362,23 +451,107 @@ static void collect(map_t *m)
     if (overflow) lv_obj_invalidate(m->obj);
 }
 
+static const char *state_message(int code)
+{
+    switch (code) {
+    case CP0_MAP_E_OFFLINE: return "Offline: saved tiles only";
+    case CP0_MAP_E_CAP_REACHED: return "Daily tile limit reached: saved tiles only";
+    case CP0_MAP_E_BLOCKED: return "Source paused by the server: saved tiles only";
+    case CP0_MAP_E_BACKOFF: return "Server busy: retrying later";
+    case CP0_MAP_E_NETWORK: return "No connection: saved tiles only";
+    case CP0_MAP_E_NO_KEY: return "This source needs an API key";
+    case CP0_MAP_E_DISABLED: return "Source switched off: saved tiles only";
+    case CP0_MAP_E_CURL_MISSING: return "Network library missing (libcurl4t64)";
+    case CP0_MAP_E_READ_ONLY: return "Another app updates this map: saved tiles only";
+    case CP0_MAP_E_CACHE_FULL: return "Map cache full: saved tiles only";
+    case CP0_MAP_E_NO_USER_AGENT: return "Online tiles off: no User-Agent";
+    case CP0_MAP_E_REFUSED: return "Source refused by the tile rules";
+    default: return cp0_map_strerror(code);
+    }
+}
+
+/* the source's state for the strip (an online source only) */
+static void set_src_state(map_t *m, int code)
+{
+    if (!m->online) code = CP0_MAP_OK;
+    if (code == m->src_state) return;
+    m->src_state = code;
+    cp0_map__copy_str(m->state_text, sizeof m->state_text, code == CP0_MAP_OK ? "" : state_message(code), 0);
+    m->layout_ok = 0;
+    lv_obj_invalidate(m->obj);
+}
+
+static int strip_shown(const map_t *m)
+{
+    return m->missing || (m->online && m->src_state != CP0_MAP_OK);
+}
+
+/* a fetched tile: the slots drawn from it load again (their old image stays until the new one is in) */
+static void refetched(map_t *m, const cp0_map_tile_event_t *ev)
+{
+    const int n = cp0_map_view_tiles(&m->view, 1, m->slots, CP0_MAP_VIEW_MAX_TILES);
+    for (int i = 0; i < n; i++) {
+        cp0_map_tile_id_t t;
+        fetch_tile_of(&m->slots[i], &t);
+        if (t.z != ev->z || t.x != ev->x || t.y != ev->y) continue;
+        const cp0_map_tile_key_t k = key_of(m, m->slots[i].z, m->slots[i].x, m->slots[i].y, m->slots[i].over);
+        ks_del(&m->absent, &k);
+        ks_del(&m->stale, &k);
+        ks_add(&m->refresh, &k);
+    }
+    view_changed(m);
+}
+
+static void collect_fetches(map_t *m)
+{
+    if (!m->client) return;
+    int n;
+    while ((n = cp0_map_client_poll(m->client, m->fev, (int)(sizeof m->fev / sizeof m->fev[0]))) > 0) {
+        for (int i = 0; i < n; i++) {
+            const cp0_map_tile_event_t *ev = &m->fev[i];
+            if (ev->kind == CP0_MAP_TILE_FETCHED) {
+                refetched(m, ev);
+            } else if (ev->kind == CP0_MAP_TILE_FETCH_FAILED && ev->result == CP0_MAP_E_NO_TILE) {
+                const cp0_map_tile_key_t fk = key_of(m, ev->z, ev->x, ev->y, 0);
+                ks_add(&m->nofetch, &fk); /* not on the server: not asked again by this view */
+            } else if (ev->kind == CP0_MAP_TILE_REFUSED) {
+                set_src_state(m, ev->result);
+            }
+            if (m->on_tile) m->on_tile(m->on_tile_user, ev);
+        }
+    }
+}
+
 static void timer_cb(lv_timer_t *t)
 {
     map_t *m = (map_t *)lv_timer_get_user_data(t);
     collect(m);
+    collect_fetches(m);
     if (m->view_dirty) {
         m->view_dirty = 0;
         ensure_layout(m);
         submit(m);
         lv_obj_invalidate(m->obj);
+    } else if (m->fetch_dirty) {
+        push_fetch(m);
     }
-    if (m->missing && lv_tick_elaps(m->missing_checked) >= MISSING_CHECK_MS) {
+    if ((m->missing || m->online) && lv_tick_elaps(m->missing_checked) >= MISSING_CHECK_MS) {
         m->missing_checked = lv_tick_get();
         cp0_map_source_info_t info;
-        if (cp0_map_store_find(m->store, m->source, &info) == CP0_MAP_OK && info.state == CP0_MAP_OK) {
-            m->missing = 0;
-            m->nabsent = 0;
-            view_changed(m);
+        if (cp0_map_store_find(m->store, m->source, &info) == CP0_MAP_OK) {
+            if (m->missing && info.state == CP0_MAP_OK) {
+                m->missing = 0;
+                ks_clear(&m->absent);
+                view_changed(m);
+            }
+            if (m->online) {
+                const int was = m->src_state;
+                set_src_state(m, info.state);
+                if (was != CP0_MAP_OK && info.state == CP0_MAP_OK) {
+                    ks_clear(&m->nofetch);
+                    m->fetch_dirty = 1;
+                }
+            }
         }
     }
     if (m->has_fix) {
@@ -389,7 +562,9 @@ static void timer_cb(lv_timer_t *t)
             lv_obj_invalidate(m->obj);
         }
     }
-    set_timer(m, (m->view_dirty || !cp0_map_loader_idle(m->loader)) ? FAST_MS : SLOW_MS); /* a missing archive: checked every 2 s */
+    const int fetching = m->client && cp0_map_client_pending(m->client) > 0;
+    set_timer(m, (m->view_dirty || fetching || !cp0_map_loader_idle(m->loader)) ? FAST_MS : SLOW_MS); /* a missing
+                                                                       archive, a source's state: checked every 2 s */
 }
 
 /* ------------------------------------------------------------------------------------------------------ drawing */
@@ -744,12 +919,13 @@ static void draw_controls(map_t *m, lv_layer_t *layer, const lv_area_t *o)
         const int tw = text_w(m->attr_draw);
         text(layer, m->attr_draw, a.x2 - L->pad - tw + 1, a.y1 + L->pad, tw + 1, C_TEXT);
     }
-    if (m->missing) {
+    if (strip_shown(m)) {
+        /* the missing archive (red), or why an online source shows only saved tiles (amber), in the same strip */
         const lv_area_t a = area_of(o, &L->strip);
         fill(layer, &a, C_PLATE, LV_OPA_90, radius);
         char cut[160];
-        fit_text(m->missing_text, L->strip.w - 2 * L->pad, cut, sizeof cut);
-        text(layer, cut, a.x1 + L->pad, a.y1 + L->pad, L->strip.w - 2 * L->pad, C_BAD);
+        fit_text(m->missing ? m->missing_text : m->state_text, L->strip.w - 2 * L->pad, cut, sizeof cut);
+        text(layer, cut, a.x1 + L->pad, a.y1 + L->pad, L->strip.w - 2 * L->pad, m->missing ? C_BAD : C_WARN);
     } else if (cp0_map_view_overzoom(&m->view)) {
         const lv_area_t a = area_of(o, &L->badge);
         fill(layer, &a, C_PLATE, LV_OPA_80, radius);
@@ -784,7 +960,7 @@ static void draw(map_t *m, lv_layer_t *layer)
         const cp0_map_layout_t *L = &m->layout;
         const cp0_map_rect_t avoid[7] = {L->plates[1], L->plates[2], L->plates[3], L->scalebar, L->attribution,
                                          cp0_map_view_overzoom(&m->view) ? L->badge : (cp0_map_rect_t){0, 0, 0, 0},
-                                         m->missing ? L->strip : (cp0_map_rect_t){0, 0, 0, 0}};
+                                         strip_shown(m) ? L->strip : (cp0_map_rect_t){0, 0, 0, 0}};
         cp0_map_labels_place(m->lsx, m->lsy, m->llw, m->llh, nlab, r + r / 2, m->view.w, m->view.h, avoid, 7, m->llx,
                              m->lly);
         for (int k = 0; k < nlab; k++) {
@@ -945,6 +1121,7 @@ static void event_cb(lv_event_t *e)
     case LV_EVENT_DELETE: {
         if (m->timer) lv_timer_delete(m->timer);
         if (m->screen && LV_EVENT_KEYBOARD) lv_obj_remove_event_cb_with_user_data(m->screen, keyboard_cb, m);
+        cp0_map_client_free(m->client);
         cp0_map_loader_free(m->loader);
         cp0_map_store_fetch_done(&m->fetch);
         for (int i = 0; i < m->npins; i++) cp0_map_cache_release(m->cache, m->pins[i]);
@@ -1001,13 +1178,15 @@ int cp0_map_set_source(lv_obj_t *obj, const char *id)
     if (!m) return CP0_MAP_E_INVALID;
     int dmin = 0, dmax = 18;
     char missing_title[128] = "";
-    int missing = 0;
+    int missing = 0, online = 0, state = CP0_MAP_OK;
     if (id) {
         cp0_map_source_info_t info;
         if (cp0_map_store_find(m->store, id, &info) != CP0_MAP_OK) return CP0_MAP_E_NOT_FOUND;
         if (info.minzoom >= 0) dmin = info.minzoom;
         if (info.maxzoom >= 0) dmax = info.maxzoom;
         missing = info.state == CP0_MAP_E_ARCHIVE_MISSING;
+        online = info.kind == CP0_MAP_ENTRY_SOURCE;
+        state = online ? info.state : CP0_MAP_OK;
         cp0_map__copy_str(missing_title, sizeof missing_title, info.title, 0);
     } else {
         int n = cp0_map_store_sources(m->store, NULL, 0);
@@ -1032,7 +1211,16 @@ int cp0_map_set_source(lv_obj_t *obj, const char *id)
     m->missing = missing;
     m->missing_checked = lv_tick_get();
     snprintf(m->missing_text, sizeof m->missing_text, "Map archive missing: %s", missing_title[0] ? missing_title : m->source);
-    m->nabsent = 0;
+    ks_clear(&m->absent);
+    ks_clear(&m->stale);
+    ks_clear(&m->nofetch);
+    ks_clear(&m->refresh);
+    if (m->client) cp0_map_client_view(m->client, NULL, NULL, 0); /* the old source's wishes go */
+    m->online = online;
+    if (online && !m->client && cp0_map_client_new(m->store, &m->client) != CP0_MAP_OK) m->client = NULL;
+    m->src_state = CP0_MAP_OK;
+    m->state_text[0] = '\0';
+    set_src_state(m, state);
     m->attr_ids[0][0] = m->attr_ids[1][0] = '\0';
     cp0_map_view_set_limits(&m->view, dmin, dmax, 1);
     update_attribution(m);
