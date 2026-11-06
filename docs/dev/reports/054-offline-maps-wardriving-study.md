@@ -468,6 +468,61 @@ import and "Download this area" UI, tracks files, the clock offer, the `position
 sit in `cp0_lvgl` beside `cp0_app_board_read()`, or in each app: a choice for 0.2/0.4, I). The layout and look of the
 widget's own controls (buttons, attribution corner, scale bar) are a design pass (7.2).
 
+#### 3.7.1 As built: the non-LVGL core (0.1 task 1, 2026-11-06, branch `map-engine`)
+
+The engine's core is in `ext_components/cp0_lvgl/src/map/` with the public headers `include/cp0_map.h` (it includes
+`cp0_map_common.h`, `cp0_map_geo.h`, `cp0_map_tile.h`, `cp0_map_archive.h`, `cp0_map_store.h`), behind
+`CONFIG_CP0_LVGL_MAP` (Kconfig, default n). The interface reference is the "Map engine" section of
+`docs/cp0_lvgl.en.md`; the headers carry the exact rules. What it has: Web Mercator and tile maths, the 1-2-5 scale
+bar (metric, imperial), the display scale (the table of `cp0_map_geo.h`: zero8 1.5x, every other board 2x), PNG / JPEG
+decode (stb_image 2.30, `STB_IMAGE_STATIC`, a 24 MiB per-decode ceiling), the 2x nearest and fixed-phase 1.5x RGB565
+scalers (any destination rectangle, no allocation), a mutex-guarded RAM tile LRU with pins and a byte budget from
+`board.state` `ram_mb`, MBTiles (SQLite through `dlopen`) and PMTiles v3 (`pread`, gzip directories through stb's
+inflater) readers with "archive missing", and the store: records, imports (MBTiles / PMTiles copied or in place, `z/x/y`
+folders converted into one MBTiles, resumable), lookup across archives, removal, read-only mode. Tests:
+`tests/test_map_{geo,tile,archive,store,nosqlite}.c` in `tests/run_tests.sh` (ASan + UBSan, ThreadSanitizer for the
+cache, a VmRSS check of the 8 MiB budget, 6,300 mutated tiles and archives with fixed seeds).
+
+Measured on the branch (PC host, i5-12450H, WSL2): an arm64 build of all `src/map` objects at `-O2` (the apps' flags
+for `cp0_lvgl`) is **95.4 KB** of text + data (stb_image 37 KB, the importer 13.5 KB, the store 10.6 KB); a stripped
+arm64 stub that calls every part links 129 KB more than an empty one, of which 34 KB are `cp0_app_contract.c` and
+`cp0_ui_metrics.c` that every app already has; no `NEEDED` entry beyond libc and libm (glibc 2.34 and later hold
+`dlopen`). That is above report 055's 50 KB stub (stb_image and a few SQLite reads only) and far under a static SQLite
+(+0.71 to +1.04 MB), so **`dlopen` stays** (055 recommendation 5); boards without `libsqlite3-0` get
+`CP0_MAP_E_SQLITE_MISSING` for MBTiles and keep PMTiles. With the switch off (the default) the launcher's arm64 binary
+is byte-identical to the one built from `github/main` 1b3a45a1 (clean build, `cmp`); built with the switch on, the
+launcher (which calls no `cp0_map_*`) still holds none of it: the toolkit is a static library, so unused objects stay
+out (the question 055 3.5 left open). The folder conversion ran at about 19,000 tiles/s on the PC on a warm 2,000-tile
+folder of 6 KB tiles (055: 5,570 tiles/s cold here, 784 on the deck); the 1.5x scaler takes 0.33 ms per 256 px tile on
+the PC (055: 0.32 ms here, 6.3 ms on the deck).
+
+Differences from the sketch above, and why:
+- `cp0_map_store_open(cfg, &out)` returns a result code (the sketch returned the handle): errors as codes everywhere,
+  with `cp0_map_strerror()`. `cp0_map_store_import()` keeps the sketch's shape; `cp0_map_store_import_ex()` adds the id,
+  title, attribution, TMS / XYZ choice, batch size, cancel flag and the resulting id.
+- `cp0_map_store_get_tile(store, id, z, x, y, buf, meta)` is new: `id` NULL picks the first archive (in id order) whose
+  zooms and bounds cover the tile and that has it; `meta` tells which archive answered and the format.
+- Imported archives live in `archives/` with one `archives/<id>.conf` record each, not in `tiles/` with an `index.json`
+  (6.2): the evictable viewing caches of task 3 (`tiles/<source>.mbtiles`) and the never-evicted imports are apart by
+  construction, and each importing app writes only its own record file atomically (no shared index to merge).
+- `cp0_map_store_set_cap()`, `cp0_map_store_download()` and the widget calls are not declared yet (tasks 3 and 2): only
+  implemented calls are in the headers.
+- `cp0_map_choose_scale()` takes the density as px/mm x 100 (`APPLAUNCH_SCREEN_PPMM`'s unit) and returns a float;
+  `cp0_map_scale_x2()` gives the scalers' half-steps (2, 3, 4).
+- Folder conversion resumes an interrupted import (the brief of task 1) instead of 055's "delete and start again".
+- `cfg.sources_dir` is read as extra, read-only source records an app ships; the store's own `sources/` wins on the
+  same id.
+
+For task 2 (the widget): decode on a tile-load thread (`cp0_map_decode_tile()` is synchronous and thread-safe), put into
+`cp0_map_store_ram_cache()` and draw from pinned `cp0_map_cache_get()` results, releasing them after the frame; key the
+cache with `cp0_map_source_hash(id)` and `cp0_map_tile_variant(scale_x2, pixfmt)`; a tile put may fail with
+`CP0_MAP_E_FULL` when the visible tiles pin the whole budget (draw a placeholder). Tiles come as 256 or 512 px
+(`tile_px` in the info and records): a 512 px archive at display scale 2 is drawn 1:1, at 1.5 it needs a 0.75x
+downscale that the engine does not have yet (show it at 1:1 or add the path). RGB565 output composites transparency over
+white; the night dimming of 3.4 is not in yet. Each store call takes the store's mutex: one tile-load thread is enough
+(the archive handles are not used concurrently). Attribution: `attribution` of each archive (may hold HTML from
+MBTiles metadata), "© OpenStreetMap contributors" for a converted folder without one.
+
 ## 4. GPS (question 3)
 
 ### 4.1 Receivers

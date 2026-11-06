@@ -21,6 +21,7 @@ Paths in the evidence column are relative to the repository root.
 | libhv | AppStore `main/SConstruct` requirement `hv` | [BSD-3-Clause](../LICENSES/libhv-BSD-3-Clause.txt) |
 | fmt | `SDK/components/utilities/SConstruct`, `party/fmt` | [MIT with optional compiled-object exception](../LICENSES/fmt-MIT.txt) |
 | nlohmann/json 3.11.3 | the Store (`projects/AppStore`, credited on the Licenses page) | [MIT](../LICENSES/nlohmann-json-MIT.txt), Niels Lohmann; original SPDX preserved |
+| stb_image 2.30 | `ext_components/cp0_lvgl/third_party/stb/stb_image.h` (unmodified, provenance in its `README.md`), compiled only into the map engine (`src/map/cp0_map_stb.c`, `CONFIG_CP0_LVGL_MAP`, off by default; the launcher does not use it): PNG / JPEG tiles, the zlib inflater for PMTiles directories; built `STB_IMAGE_STATIC` | [public domain (Unlicense) or MIT](../LICENSES/stb_image-MIT-or-Unlicense.txt), Sean Barrett, at the user's choice |
 | JetBrains Mono | `projects/APPLaunch/APPLaunch/share/font` | [OFL-1.1](../projects/APPLaunch/APPLaunch/share/font/JetBrainsMono-OFL.txt) |
 
 ## Fonts, images and sounds of the launcher (`projects/APPLaunch/APPLaunch/share`)
@@ -76,6 +77,9 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | MeshCore protocol and firmware (data format only) | Mesh Hop app (apps repo): talks the MeshCore companion protocol over USB serial; written from the protocol docs and meshcore_py as a reference, radio presets from `api.meshcore.nz`; no launcher code involved | MeshCore: MIT (Scott Powell / rippleradios.com); meshcore_py: MIT (Florent de Lamotte); GPL clients (wadamesh, Meshy) not used as code; credited in the package's `copyright` file |
 | FreeType; Montserrat Medium, Font Awesome 5 Free (fonts) | Status bar of the Pi port (cp0_statusbar), shared with full-screen apps | FreeType FTL/GPL-2.0; fonts SIL OFL 1.1; Font Awesome icons CC BY 4.0 |
 | libcrypt, libc, libstdc++ | Account setup and runtime | Package-specific LGPL/GPL with runtime exceptions |
+| SQLite (`libsqlite3.so.0`, Debian package `libsqlite3-0`) | MBTiles tile archives in the map engine of cp0_lvgl (`CONFIG_CP0_LVGL_MAP`, off by default): loaded at run time with `dlopen`, never linked, no header needed to build (`src/map/cp0_map_sqlite.c`); apps that enable the engine list `libsqlite3-0` in their `depends` | Public domain (<https://sqlite.org/copyright.html>) |
+| PMTiles v3 specification (format only) | The map engine's own PMTiles reader, written from the specification (no reference code used); the tests' fixtures `tests/fixtures/map/ref_*.pmtiles` were written with the reference `pmtiles` Python package (BSD-3-Clause, Protomaps), which is not shipped | Specification CC0; reference implementations BSD-3-Clause |
+| MBTiles 1.3 specification (format only) | The map engine's MBTiles reader and folder converter | Specification text CC BY 3.0 US, "use in products and code is entirely free" (Mapbox) |
 
 Packaging must preserve notices for the selected configuration, including static libraries, fonts and audio. SimpleBLE restrictions must be checked against the shipped artifact; this source inventory does not resolve that release-specific question (libv4l, which this sentence also named, went with CameraApp on 2026-10-22: no build of ours links it). The Settings menu tree used the GPL-3.0-only `tree.hh` (Kasper Peeters) until 2026-10-13; it is now the project's own MIT `ext_components/cp0_lvgl/include/cp0_tree.hpp`.
 

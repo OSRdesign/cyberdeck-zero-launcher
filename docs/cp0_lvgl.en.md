@@ -282,6 +282,61 @@ int cp0_app_toast(const char *text);    /* shown on the launcher's toast when th
 
 Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).
 
+### Map engine (`include/cp0_map.h`; `CONFIG_CP0_LVGL_MAP`; report 054 section 3.7, report 055)
+
+The non-LVGL core of the map engine that Deck Atlas and, later, Mesh Hop link (task 1 of Deck Atlas 0.1). Compiled from `src/map/` only when the app's configuration sets `CONFIG_CP0_LVGL_MAP=y` (Kconfig, default `n`; the SConstruct then adds `-DCONFIG_CP0_LVGL_MAP=1` and links `-ldl -lm`): the launcher and apps that draw no map carry none of it. Plain C11 + POSIX, no LVGL, no global state, C++-compatible headers, opaque handles. Every call that can fail returns `CP0_MAP_OK` (0) or a negative `CP0_MAP_E_*` code; `cp0_map_strerror(code)` gives a short English text. `CP0_MAP_E_NO_TILE` is the normal answer for a tile an archive does not have; `CP0_MAP_E_ARCHIVE_MISSING` means the archive file is gone (a USB stick pulled) and the next call tries again; `CP0_MAP_E_SQLITE_MISSING` ("SQLite library missing (install libsqlite3-0)") means `libsqlite3.so.0` could not be loaded, so MBTiles do not work while PMTiles still do. Headers: `cp0_map_common.h` (codes, formats, boxes, byte buffers, progress), `cp0_map_geo.h`, `cp0_map_tile.h`, `cp0_map_archive.h`, `cp0_map_store.h`; `cp0_map.h` includes them all.
+
+```c
+/* geometry: pure, any thread (world pixels of 256 px web tiles; XYZ tiles; MBTiles rows are TMS) */
+void   cp0_map_latlon_to_world_px(double lat, double lon, int zoom, double *x, double *y);
+void   cp0_map_world_px_to_latlon(double x, double y, int zoom, double *lat, double *lon);
+double cp0_map_metres_per_px(double lat, int zoom, float scale);   /* ground metres per screen px at display scale */
+int    cp0_map_latlon_to_tile(double lat, double lon, int zoom, uint32_t *x, uint32_t *y);
+int    cp0_map_tile_bbox(int zoom, uint32_t x, uint32_t y, cp0_map_bbox_t *out);
+uint32_t cp0_map_tms_row(int zoom, uint32_t y);                     /* 2^z - 1 - y, both ways */
+int    cp0_map_scalebar(double metres_per_px, int max_px, cp0_map_units_t units, cp0_map_scalebar_t *out); /* 1-2-5 */
+float  cp0_map_choose_scale(int ppmm_x100);                         /* 1, 1.5 or 2 from the panel density */
+float  cp0_map_resolve_scale(float requested, int ppmm_x100);       /* 0 = Auto, else snapped */
+
+/* decoded tiles: thread-safe decode, RGB565 (default) or ARGB8888; scalers without allocation; a mutex-guarded LRU */
+int  cp0_map_decode_tile(const uint8_t *data, size_t len, cp0_map_pixfmt_t pixfmt, int scale_x2, cp0_map_image_t **out);
+int  cp0_map_scale_rgb565(const uint16_t *src, int sw, int sh, int src_stride, int scale_x2,
+                          int dx, int dy, int dw, int dh, uint16_t *dst, int dst_stride);
+cp0_map_cache_t *cp0_map_cache_new(size_t budget_bytes);            /* 0: from board.state ram_mb */
+const cp0_map_image_t *cp0_map_cache_get(cp0_map_cache_t *c, const cp0_map_tile_key_t *key);   /* pinned */
+int  cp0_map_cache_put(cp0_map_cache_t *c, const cp0_map_tile_key_t *key, cp0_map_image_t *img,
+                       const cp0_map_image_t **pinned);
+void cp0_map_cache_release(cp0_map_cache_t *c, const cp0_map_image_t *img);
+
+/* one archive, read-only: MBTiles (SQLite loaded at run time) or PMTiles v3 (pread, gzip directories) */
+int  cp0_map_archive_open(const char *path, cp0_map_archive_t **out);
+int  cp0_map_archive_info(const cp0_map_archive_t *a, cp0_map_archive_info_t *out);
+int  cp0_map_archive_get_tile(cp0_map_archive_t *a, int z, uint32_t x, uint32_t y, cp0_map_buf_t *out,
+                              cp0_map_format_t *fmt);
+void cp0_map_archive_close(cp0_map_archive_t *a);
+
+/* the shared store ($XDG_DATA_HOME/cyberdeckzero/maps/): records, imports, lookup across archives */
+int  cp0_map_store_open(const cp0_map_store_cfg_t *cfg, cp0_map_store_t **out);
+int  cp0_map_store_sources(cp0_map_store_t *s, cp0_map_source_info_t *out, int max);    /* archives, then sources */
+int  cp0_map_store_import_ex(cp0_map_store_t *s, const char *path, const cp0_map_import_opts_t *opts);
+int  cp0_map_store_import(cp0_map_store_t *s, const char *path, int copy, cp0_map_progress_cb cb, void *user);
+int  cp0_map_store_remove(cp0_map_store_t *s, const char *archive_id);
+int  cp0_map_store_get_tile(cp0_map_store_t *s, const char *id, int z, uint32_t x, uint32_t y, cp0_map_buf_t *out,
+                            cp0_map_tile_meta_t *meta);                  /* id NULL: the first archive that has it */
+cp0_map_cache_t *cp0_map_store_ram_cache(cp0_map_store_t *s);
+void cp0_map_store_close(cp0_map_store_t *s);
+```
+
+**Display scale.** Web tiles are drawn for about 3.8 px/mm; `cp0_map_choose_scale()` takes the panel density (`APPLAUNCH_SCREEN_PPMM`, `screen.state` `ppmm`) and returns the nearest of 1x / 1.5x / 2x to `ppmm / 3.8` (below 4.75 px/mm 1x, below 6.65 px/mm 1.5x, else 2x): zero8 and the Pi 3A+ 3.5" panel (6.3 px/mm) 1.5x, every other board 2x (the table is in `cp0_map_geo.h`). The Settings override is `0` (Auto), 1, 1.5 or 2 (`cp0_map_scale_parse()` / `cp0_map_scale_name()`: "auto", "1x", "1.5x", "2x"). The scalers take the scale as half-steps (`cp0_map_scale_x2()`: 2, 3, 4): 2x is nearest; 1.5x is the fixed-phase path (every 2 source pixels give 3, weights 1/3 and 2/3 as 85 and 171 of 256, rounded, horizontal then vertical; the exact rule is in `cp0_map_tile.h`); both write any destination rectangle of the magnified tile and allocate nothing.
+
+**Decode and the RAM cache.** `cp0_map_decode_tile()` uses the engine's own stb_image 2.30 (PNG + JPEG, built `STB_IMAGE_STATIC`: no `stbi_*` symbol leaves the engine), refuses sides over 1024 px and stops a decode past 24 MiB of its own buffers; RGB565 output composites transparency over white. The cache counts pixel bytes against its budget and never holds more: a hit is returned pinned and stays valid until `cp0_map_cache_release()` even if evicted; a put that cannot fit because everything else is pinned returns `CP0_MAP_E_FULL` and the caller keeps its image. Default budget from `board.state` `ram_mb` (`cp0_app_board_read()`; without a live launcher, `sysconf`): 8 MiB below 768 MB (64 tiles of 256 px RGB565, the 25 MB rule on the Zero 2 W), 24 MiB below 3 GB, 48 MiB above. Mesh Hop passes its own (3 MiB) as `ram_cache_bytes`.
+
+**Archives.** MBTiles 1.3 (a `tiles` table or mbutil's view, TMS rows flipped to XYZ) are opened read-only with a 256 KiB SQLite page cache and no mmap; SQLite is `dlopen("libsqlite3.so.0")` once per process (`$CP0_MAP_SQLITE_LIB` names another file, for tests), so an app that enables the engine lists `libsqlite3-0` in its `depends`. PMTiles v3 are read with `pread()` only (report 055: mmap counts the archive in VmRSS), directories with no or gzip compression, leaves, run lengths. Each `get_tile` checks that the path still names the opened file: when it is gone the answer is `CP0_MAP_E_ARCHIVE_MISSING` and the handle closes; the next call reopens it when it is back (and a replaced file is reopened). One archive handle is used from one thread at a time.
+
+**Store.** Layout, record keys and import rules are in `cp0_map_store.h`: `archives/<id>.conf` (one key=value record per imported archive, with the note "user supplied: terms are the importer's responsibility"), `archives/<id>.mbtiles|.pmtiles` (copies and converted folders), `sources/<id>.conf` (source records, listed; their policy is task 3) and `tiles/<id>.mbtiles` (a source's viewing cache, read when present; task 3 writes it). `cp0_map_store_import_ex()` copies an MBTiles / PMTiles file into the store (progress in bytes) or registers it in place (a USB stick: listed with state `CP0_MAP_E_ARCHIVE_MISSING` while the stick is out), and converts a `z/x/y` tile folder (`.png`, `.jpg`, `.jpeg`, `.png.tile` and extensionless names; formats from the bytes; TMS folders with a `tilemapresource.xml` flipped; `metadata.json` name and attribution used) into one new MBTiles: rollback journal, 256 tiles per transaction, a `cancel` flag, and a resume that skips the rows of an interrupted conversion of the same folder. Imported archives are never evicted; `cp0_map_store_remove()` deletes the record and the store's own file, never an in-place file. Vector and WebP archives are refused (`CP0_MAP_E_UNSUPPORTED`). `cfg.read_only = 1` (a second app) lists and reads but never writes. Every store call is thread-safe; an import holds the store's lock only to register its result, so run it on a worker and keep drawing.
+
+**Extension points.** Task 2 adds the LVGL widget (`cp0_map_widget.h`: `cp0_map_create()`, center / zoom / scale, pan, markers, track, position, tile events) with a tile-load thread over `cp0_map_store_get_tile()` + `cp0_map_decode_tile()` + the store's RAM cache. Task 3 adds online sources: the source records' policy flags, the persistent viewing cache in `tiles/`, its cap (the smaller of 512 MB and 10 % of free space) and eviction, `cp0_map_store_download()`, the User-Agent (`cfg.user_agent`) and `cfg.network`. Tests: `tests/test_map_*.c` in `tests/run_tests.sh` (fixtures and their generator in `tests/fixtures/map/`).
+
 ## Complete `cp0_signal_*` Usage
 
 All `args` below are `std::list<std::string>` with the command at element zero. Request callbacks use `void(int code, std::string data)` unless a different signature is shown.
