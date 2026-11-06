@@ -555,6 +555,104 @@ buttons and is cut with dots when it does not fit beside the scale bar, and "(C)
 builtin fonts). Scenes: `projects/APPLaunch/tests/render/scenes/map_widget.scene` (640x480, 480x320),
 `p320_map.scene` (320x480), `pda_map.scene` (480x800), with goldens.
 
+#### 3.7.3 As built: online sources, the fetch pool and the persistent viewing cache (0.1 task 3, 2026-11-06, branch `map-engine-sources`)
+
+Built on `map-engine` (tasks 1-2), behind the same `CONFIG_CP0_LVGL_MAP`. The interface reference is the "Online
+sources and the persistent viewing cache" part of the "Map engine" section of `docs/cp0_lvgl.en.md`, with the shipped
+records' URLs, terms, flags and "unverified" marks; the headers carry the exact rules. Owner decisions applied: the
+OSMF servers never (the URL checks refuse `openstreetmap.org` / `osm.org` and every subdomain, in templates and in
+redirects, whatever a record says); OpenTopoMap, Thunderforest (own key) and Geoapify (own key) opt-in and off by
+default; no LAN server work; the viewing cache persistent, LRU at the cap, only tiles viewed (the widget never asks for
+its ring); the cap the smaller of 512 MiB and 10 % of free space, cache only; one MBTiles per source, batched, rollback
+journal; one writer per file.
+
+New files: `include/cp0_map_source.h` (the policy record, `cp0_map_source_check_url()`, `cp0_map_source_osmf_host()`,
+`cp0_map_user_agent()` / `_ok()`), `include/cp0_map_fetch.h` (clients of the fetch pool), `src/map/cp0_map_source.c`
+(shipped records, the record rules, URL checks and filling, key files, the engine's clock and log with key redaction),
+`cp0_map_http.c` (libcurl at run time), `cp0_map_vcache.c` (the viewing caches, the cache-writer thread, eviction),
+`cp0_map_fetch.c` (the pool, the provider state, the three guards, clients), `cp0_map_online.h` (private). Additions:
+`cp0_map_store.h` (`cfg.cache_cap_bytes`, `cfg.log`; the listing's source fields; `cp0_map_tile_meta_t.stale` /
+`.expires`; `cp0_map_source_set_key()` / `_clear_key()` / `_set_enabled()` / `_set_daily_cap()`,
+`cp0_map_store_set_network()`, `_set_cap()`, `_default_cap()`, `_clear_cache()`, `_flush()`, `_download()`; the
+statistics struct), `cp0_map_overlay.h` (the event's `kind`: LOADED / FETCHED / REFUSED / FETCH_FAILED, and `stale`),
+`cp0_map_common.h` (codes -18 to -30: `_REFUSED`, `_NETWORK`, `_CURL_MISSING`, `_BLOCKED`, `_CAP_REACHED`, `_NO_KEY`,
+`_DISABLED`, `_OFFLINE`, `_BACKOFF`, `_NOT_IN_VERSION`, `_CACHE_FULL`, `_HTTP`, `_NO_USER_AGENT`), the pure core
+(`cp0_map_view_fetch_tiles()`: the visible slots only) and the widget (its fetch client, the state strip).
+
+**HTTP and TLS.** libcurl opened with `dlopen("libcurl.so.4")`, the Home Assistant app's way (apps repo
+`src/core/curl_api.cpp`, `depends: libcurl4t64`): one handle per worker keeps connections alive, the response headers
+(Cache-Control, Expires, ETag, Retry-After) come straight to the engine, nothing new is linked and the shared SCons
+build is untouched; the boards have the library (Home Assistant's dependency; the `curl` package RSS Reader depends on
+pulls it in) and TLS is the system's libcurl with `ca-certificates`. RSS Reader's way (the `curl` command) was not
+taken: a process per tile, and headers through files. Without the library every source says `CP0_MAP_E_CURL_MISSING`
+("network unavailable: library missing (install libcurl4t64)"). The libcurl constants are declared without its header
+(the build box has no `curl/curl.h`, so no compile-time ABI check like Home Assistant's was possible here); every
+`curl_easy_setopt` result is checked and each option's effect is exercised by `test_map_fetch` (User-Agent, request
+headers, protocols, timeouts, the size cap, the cancel callback).
+
+**Size** (arm64, `-O2`, text + data, measured on the branch): the online part adds about 61 KB (`cp0_map_vcache.o`
+21.0 KB, `cp0_map_fetch.o` 17.0 KB, `cp0_map_source.o` 14.9 KB of which most is the shipped records' strings,
+`cp0_map_http.o` 7.8 KB) and 3.6 KB to the store; all of `src/map` without the widget is now 174 KB. No new `NEEDED`
+entry (libcurl and SQLite are opened at run time); the fetch pool's threads exist only while the network is on, the
+cache-writer thread only in a read-write store.
+
+**Differences from the brief and the sketch, and why.**
+1. `cp0_map_store_cache_stats()` now fills a `cp0_map_store_stats_t` (the RAM figures in `.ram`, then disk, cap, state
+   and per source): the brief named that call for all of them; its only caller was the store test (tasks 1-2 are not
+   on `main` yet), so `CP0_MAP_API_VERSION` stays 1.
+2. The shipped records are a table in code and are always listed (an empty store lists 3 sources): nothing to install,
+   nothing a user can edit.
+3. A store file now overlays an app's `cfg.sources_dir` record of the same id (its keys win) instead of hiding it, so
+   `cp0_map_source_set_enabled()` can write `enabled=` without losing the app record's URL.
+4. A source's state is the listing's existing `state` field (a `CP0_MAP_E_*` code) plus `until`.
+5. User records on a shipped provider's host share its key, daily count and pauses ("groups"): one provider, one account.
+6. A source whose cache another app writes is read from that cache and never fetched (`CP0_MAP_E_READ_ONLY`): the daily
+   count and the guards keep one owner. The writer locks (`tiles/<id>.lock`) are taken when the store opens.
+7. The daily cap counts every request sent (200, 304, 404, errors) and turns at local midnight (2.7 assumed UTC; the
+   brief says local).
+8. Freshness floor 1 h, ceiling 30 days, 7 days without headers; a stale tile is always shown (2.7 said "only if the
+   source allows offline use"; all three shipped terms allow keeping tiles, and the brief says serve stale offline).
+9. A request on the wire for a tile no client wants any more is aborted at libcurl's next progress call (about a
+   second); it still counts in the daily cap. libcurl itself retries once when a reused connection is dead.
+10. Eviction measures the cache files on disk (deletes, then `PRAGMA incremental_vacuum`), not only tile bytes.
+11. The widget's state strip reuses the missing-archive strip in amber (the missing archive stays red); the texts are in
+    `docs/cp0_lvgl.en.md`.
+
+**Tests** (host, `ext_components/cp0_lvgl/tests/run_tests.sh`; no test or script contacts any real server):
+`test_map_source.c` (no network: HTTPS-only validator, OSMF hosts in every spelling, placeholders, filling and
+redaction, the User-Agent rule, shipped records and the record rules, keys 0600 under umask 0 and never listed,
+switches, area download refused / not in this version, HTTP dates and freshness, the cap rule, the local day),
+`test_map_vcache.c` (batched commits, LRU across caches, cap shrink, the default rule, imported archives untouched,
+one writer per file in-process and across `fork`, a writer aborted mid-commit and SIGKILLed three times: integrity
+`ok`, whole batches only, cache full), `test_map_fetch.c` against `tests/fake_tile_server.py` (Python stdlib, 127.0.0.1;
+every request logged with its headers and the concurrency): User-Agent, only the tiles asked, valid MBTiles, restart,
+statistics, parallel caps (2 per source, 4 in all), the interval, cancel, de-duplication, revalidation (304), stale
+offline and on errors, no-store, Expires, 429 / 503, the error pause, no fast retry, 404 / 410 for 24 h across a
+restart, the blocked picture (pause kept across a restart, copies removed, key never logged; open sea is no block),
+the daily cap across a restart and a new day, redirects (OSMF and plain http refused, loops stopped), size and type
+checks, a dropped connection, no User-Agent, libcurl missing, a second app; `test_map_view.c` gained the fetch list
+(never the ring, at the four canvases and three scales), `test_map_store.c` and `test_map_nosqlite.c` the shipped
+records. ASan + UBSan for all; ThreadSanitizer for `test_map_vcache` (without its fork parts) and `test_map_fetch`.
+Render scenes `map_widget`, `p320_map`, `pda_map` end with an online source offline and one without its key (new
+goldens at 640x480, 480x320, 320x480, 480x800).
+
+**For task 5 (Deck Atlas: Layers / Settings for sources, keys, cache size, offline mode).** Open the store read-write
+with `cfg.user_agent` from `cp0_map_user_agent("deck-atlas", version)`, `cfg.network` from the app's offline switch
+(`cp0_map_store_set_network()` at run time) and `cfg.cache_cap_bytes` from Settings (0 = Auto); add
+`libcurl4t64, ca-certificates, libsqlite3-0` to `depends`. List sources with `cp0_map_store_sources()` (kind SOURCE):
+show `title`, `attribution`, `licence`, `note` (the "unverified: check before enabling" marks belong next to the
+switch), `state` + `until` as words (the widget's strip texts are a model), `has_key`, `policy.needs_key`,
+`fetches_today` / `policy.daily_cap`, `cache_tiles`. Switch with `cp0_map_source_set_enabled()`; a key field calls
+`cp0_map_source_set_key()` (8-127 characters of `[A-Za-z0-9._~-]`, `CP0_MAP_E_INVALID` otherwise; never echo the key
+back, the listing only says `has_key`) and `_clear_key()`; an optional "daily limit" can only lower
+(`cp0_map_source_set_daily_cap()` returns the cap in force). Cache: `cp0_map_store_cache_stats()` (call it off the
+LVGL thread or every few seconds: it counts stale tiles in the files) for size, cap and per-source counts;
+`cp0_map_store_set_cap()`; "Clear saved tiles" per source or all with `cp0_map_store_clear_cache()` (never touches
+imported archives); call `cp0_map_store_flush()` on the app's shutdown path. The map widget fetches by itself for an
+online source (`cp0_map_set_source(map, "opentopomap")`) and shows the source's attribution and state; `cp0_map_on_tile()`
+now also delivers fetch events (`kind`). A second app (Mesh Hop) opens the store `read_only` and only reads the caches.
+Open item for the design pass: whether the app shows the providers' terms page before the first switch-on.
+
 ## 4. GPS (question 3)
 
 ### 4.1 Receivers
