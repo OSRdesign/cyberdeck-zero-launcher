@@ -799,17 +799,27 @@ fi
 # into one MBTiles, a resumed conversion); MBTiles on a system without SQLite. ASan + UBSan when the compiler has them
 # (mt_san above). The readers load libsqlite3.so.0 at run time (apt: libsqlite3-0): without it the archive and store
 # tests SKIP, unless CI=1 or REQUIRE_SQLITE=1.
-map_build() { # map_build TEST [FLAGS...]: tests/TEST.c with the map engine into $binary
+# Task 2: the widget's pure core (view, tiles in load order, the controls' layout and hit test at the target canvases,
+# track simplification, labels) and its tile-load thread (order, cancellation, the store fetch; under ThreadSanitizer
+# too). The LVGL widget itself (cp0_map_widget.c) is drawn by the render harness's map scenes
+# (projects/APPLaunch/tests/render/scenes/map_widget.scene, p320_map.scene, pda_map.scene).
+map_srcs=""
+for map_src in "$root"/src/map/*.c; do
+    case $map_src in */cp0_map_widget.c) ;; *) map_srcs="$map_srcs $map_src" ;; esac
+done
+map_build() { # map_build TEST [FLAGS...]: tests/TEST.c with the map engine (without the LVGL widget) into $binary
     map_test=$1
     shift
     "${CC:-cc}" -std=c11 -g -O2 -Wall -Wextra -Werror -pthread "$@" \
         -I"$root/include" -I"$root/src/map" \
         -DMAP_FIXTURES="\"$root/tests/fixtures/map\"" \
-        "$root"/src/map/*.c \
+        $map_srcs \
         "$root/src/cp0_app_contract.c" \
         "$root/src/cp0_ui_metrics.c" \
         "$root/tests/$map_test.c" -ldl -lm -o "$binary"
 }
+map_build test_map_view $mt_san
+"$binary"
 map_build test_map_geo $mt_san
 "$binary"
 map_build test_map_tile $mt_san
@@ -824,6 +834,10 @@ if "$binary" || [ "${CI:-}" = 1 ] || [ "${REQUIRE_SQLITE:-}" = 1 ]; then
     map_build test_map_archive $mt_san
     "$binary"
     map_build test_map_store $mt_san
+    "$binary"
+    map_build test_map_loader $mt_san
+    "$binary"
+    map_build test_map_loader -fsanitize=thread
     "$binary"
 else
     echo "SKIP test_map_archive, test_map_store (libsqlite3.so.0 missing: sudo apt install libsqlite3-0)"

@@ -523,6 +523,38 @@ white; the night dimming of 3.4 is not in yet. Each store call takes the store's
 (the archive handles are not used concurrently). Attribution: `attribution` of each archive (may hold HTML from
 MBTiles metadata), "© OpenStreetMap contributors" for a converted folder without one.
 
+#### 3.7.2 As built: the widget (0.1 task 2, 2026-11-06, branch `map-engine`)
+
+`include/cp0_map_widget.h` (LVGL) and `include/cp0_map_overlay.h` (plain data: fix, markers, limits, tile events), in
+`src/map/`: `cp0_map_widget.c` (LVGL drawing and input), `cp0_map_view.c` (the pure core: view maths, tiles in load
+order, the controls' layout and hit test, Douglas-Peucker, label placement, attribution text) and
+`cp0_map_loader.c` (the tile-load thread and the store fetch, no LVGL). The sketch's calls are all there:
+`cp0_map_create`, `set_source`, `set_center` / `get_center`, `set_zoom`, `set_scale` (0 = automatic from
+`cp0_ui_metrics_get()->ppmm_x100`), `pan_px`, `set_position`, `add_markers` / `markers_set`, `add_track` /
+`track_append`, `layer_show`, `on_tile`; added: `get_zoom`, `get_zoom_range`, `get_scale`, `set_units`,
+`center_on_position`, `markers_select`, `markers_label_zoom`, `track_clear`, `handle_key`, `is_map`, and for scripted
+tests `wait_idle` and `control_area`. `cp0_map_resample_rgb565()` (cp0_map_tile.h) adds the 0.5x and 0.75x
+fixed-phase downscales that 512 px tiles need at display scale 1 and 1.5 (area-weighted taps 1/4, 1/2, 3/4; exact
+against a reference in the unit test).
+
+Thread model: one tile-load thread per widget; the LVGL thread computes the view's tiles (visible ones first, nearest
+the centre first, then a ring of one tile), drops those cached or known absent, and replaces the loader's queue with
+the rest at every view change; the worker reads (`cp0_map_store_get_tile`, the store's mutex), decodes and scales
+each tile to the view's tile size (256 px tiles x1 / 1.5 / 2, 512 px tiles x0.5 / 0.75 / 1, an over-zoom tile from
+its parent's quadrant x2 / 3 / 4) and puts it into the store's RAM cache; a 40 ms LVGL timer (1 s when idle) collects
+the results, invalidates only the loaded tiles' areas and calls the tile callbacks. Drawing pins the visible images
+(`cp0_map_cache_get`) and releases the previous draw's pins after the next draw has pinned its own, so an image is
+never freed while LVGL renders it; `CP0_MAP_E_FULL` from the cache shows the placeholder.
+
+Differences from the controller's design, and why: (1) the 15 % rule applies to the drawn button plates, the touch
+squares stay TARGET (79 px on the deck, 44 px on the 3.5" panels): 15 % of a 480x320 page body (236 px high) is 35 px,
+under the 44 px floor; (2) no mouse-wheel zoom: a mouse reaches cp0_lvgl apps as arrow keys (pointer navigation), so
+the wheel pans; (3) no pinch: the toolkit hands LVGL one touch point; (4) the parent placeholder is drawn with LVGL's
+image scaling (bilinear, transient), everything else is a 1:1 blit; (5) the attribution moves a row up left of the
+buttons and is cut with dots when it does not fit beside the scale bar, and "(C)" replaces "©" (no glyph in the
+builtin fonts). Scenes: `projects/APPLaunch/tests/render/scenes/map_widget.scene` (640x480, 480x320),
+`p320_map.scene` (320x480), `pda_map.scene` (480x800), with goldens.
+
 ## 4. GPS (question 3)
 
 ### 4.1 Receivers
