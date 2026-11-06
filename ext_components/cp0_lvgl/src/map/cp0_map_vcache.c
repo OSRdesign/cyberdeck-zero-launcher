@@ -87,6 +87,7 @@ struct cp0_map_vcache {
     uint64_t tiles, tile_bytes;
     int counted;
     uint64_t hits, misses;
+    uint64_t tiles_seen;         /* the last count handed out (atomic): for callers that must not wait */
 };
 
 struct cp0_map_vcset {
@@ -1111,6 +1112,21 @@ void cp0_map__vcache_usage(cp0_map_vcache_t *vc, int count_stale, cp0_map_vusage
     u->hits = vc->hits;
     u->misses = vc->misses;
     u->writer = vc->writer;
+    __atomic_store_n(&vc->tiles_seen, u->tiles, __ATOMIC_RELAXED);
     pthread_mutex_unlock(&vc->mu);
     u->full = vc->writer && cp0_map__vcset_full(vc->set);
+}
+
+uint64_t cp0_map__vcache_tiles_nowait(cp0_map_vcache_t *vc)
+{
+    if (!vc) return 0;
+    if (pthread_mutex_trylock(&vc->mu) != 0) return __atomic_load_n(&vc->tiles_seen, __ATOMIC_RELAXED); /* a commit */
+    uint64_t n = 0;
+    if (db_open(vc, 0) == CP0_MAP_OK) {
+        if (!vc->counted) count_rows(vc);
+        n = vc->tiles;
+    }
+    __atomic_store_n(&vc->tiles_seen, n, __ATOMIC_RELAXED);
+    pthread_mutex_unlock(&vc->mu);
+    return n;
 }

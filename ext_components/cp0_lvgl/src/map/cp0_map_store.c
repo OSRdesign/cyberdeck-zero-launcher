@@ -524,10 +524,10 @@ int cp0_map_store_get_tile(cp0_map_store_t *s, const char *id, int z, uint32_t x
     if (id) {
         cp0_map_rec_t *r = find_rec(s, id);
         if (r && r->info.kind == CP0_MAP_ENTRY_SOURCE) {
-            /* an online source: its viewing cache (uncommitted tiles included), never the network */
-            rc = cp0_map__fetcher_get_tile(s->fetcher, id, z, x, y, out, meta);
+            /* an online source: its viewing cache (uncommitted tiles included), never the network; read without the
+             * store's mutex, so a listing on the LVGL thread never waits behind a cache commit */
             pthread_mutex_unlock(&s->mu);
-            return rc;
+            return cp0_map__fetcher_get_tile(s->fetcher, id, z, x, y, out, meta);
         }
         rc = r ? rec_get(r, z, x, y, out, &fmt) : CP0_MAP_E_NOT_FOUND;
         if (rc == CP0_MAP_OK && meta) cp0_map__copy_str(meta->archive_id, sizeof meta->archive_id, r->info.id, 0);

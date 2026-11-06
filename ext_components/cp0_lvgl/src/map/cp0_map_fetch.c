@@ -950,9 +950,7 @@ void cp0_map__fetcher_fill(cp0_map_fetcher_t *f, cp0_map_source_info_t *info)
         info->has_key = key_of(s) != NULL;
         info->fetches_today = s->g ? s->g->count : 0;
         info->policy = s->pol;
-        cp0_map_vusage_t u;
-        cp0_map__vcache_usage(s->vc, 0, &u);
-        info->cache_tiles = u.tiles;
+        info->cache_tiles = cp0_map__vcache_tiles_nowait(s->vc); /* never waits behind a commit */
     }
     pthread_mutex_unlock(&f->mu);
 }
@@ -1075,6 +1073,7 @@ void cp0_map__fetcher_stats(cp0_map_fetcher_t *f, cp0_map_store_stats_t *out)
             list[j - 1] = t;
         }
     out->nsources = n;
+    cp0_map_vcache_t *vcs[CP0_MAP_STATS_SOURCES_MAX];
     for (int i = 0; i < n; i++) {
         src_t *s = list[i];
         cp0_map_source_stats_t *o = &out->sources[i];
@@ -1082,11 +1081,6 @@ void cp0_map__fetcher_stats(cp0_map_fetcher_t *f, cp0_map_store_stats_t *out)
         cp0_map__copy_str(o->id, sizeof o->id, s->id, 0);
         o->state = src_state(f, s, now, &o->until);
         o->writer = owner(f, s);
-        cp0_map_vusage_t u;
-        cp0_map__vcache_usage(s->vc, 1, &u);
-        o->tiles = u.tiles;
-        o->stale = u.stale;
-        o->bytes = u.bytes;
         o->fetches_today = s->g ? s->g->count : 0;
         o->daily_cap = s->pol.daily_cap;
         o->fetched = s->fetched;
@@ -1094,12 +1088,22 @@ void cp0_map__fetcher_stats(cp0_map_fetcher_t *f, cp0_map_store_stats_t *out)
         o->missing = s->missing;
         o->failed = s->failed;
         o->refused = s->refused;
+        vcs[i] = s->vc;
+    }
+    pthread_mutex_unlock(&f->mu);
+    /* the files are counted without the pool's mutex: the workers and the clients never wait for these queries */
+    for (int i = 0; i < n; i++) {
+        cp0_map_source_stats_t *o = &out->sources[i];
+        cp0_map_vusage_t u;
+        cp0_map__vcache_usage(vcs[i], 1, &u);
+        o->tiles = u.tiles;
+        o->stale = u.stale;
+        o->bytes = u.bytes;
         out->disk_hits += u.hits;
         out->disk_misses += u.misses;
         out->tiles += u.tiles;
         out->stale += u.stale;
     }
-    pthread_mutex_unlock(&f->mu);
 }
 
 /* ----------------------------------------------------------------------------------------------- clients */

@@ -220,6 +220,9 @@ CP0_MAP_HIDDEN int cp0_map__vcache_purge_hash(cp0_map_vcache_t *vc, uint64_t has
 CP0_MAP_HIDDEN int cp0_map__vcache_clear(cp0_map_vcache_t *vc);
 /* Counts (stale needs a query: may wait on the disk). */
 CP0_MAP_HIDDEN void cp0_map__vcache_usage(cp0_map_vcache_t *vc, int count_stale, cp0_map_vusage_t *u);
+/* The tile count without waiting for a commit in progress (then the last count seen): for the listing, which the
+ * widget reads on the LVGL thread. */
+CP0_MAP_HIDDEN uint64_t cp0_map__vcache_tiles_nowait(cp0_map_vcache_t *vc);
 
 /* ------------------------------------------------------------------------------------------- fetch pool */
 
