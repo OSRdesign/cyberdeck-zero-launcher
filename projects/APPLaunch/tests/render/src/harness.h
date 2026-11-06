@@ -225,6 +225,11 @@ public:
     BlockedWhile(const BlockedWhile &) = delete;
     BlockedWhile &operator=(const BlockedWhile &) = delete;
 };
+/* ---- the map widget demo (harness_map.cpp): "mapdemo ..." scene commands over synthetic tiles in dir (out/<WxH>/runtime/
+ * maps). False with *err set on a bad command or a failure. */
+bool map_demo(const std::vector<std::string> &words, const std::string &dir, std::string *err);
+/* The demo's map widget, or nullptr (mapdemo tapctl / doubletap in harness_main.cpp tap it through the touch path). */
+void *map_demo_widget(); /* an lv_obj_t * */
 class IgnoreNewThreads {
 public:
     IgnoreNewThreads();

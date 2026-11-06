@@ -1,0 +1,32 @@
+# The map widget (cp0_map_widget.h, Deck Atlas 0.1 task 2) on a large portrait canvas, 480x800 (profile pda: the Pi 3A+
+# 4.3" DSI upright, 8.5 px/mm, automatic scale 2x; the writing zone off, as in the other pda_* scenes): the page header,
+# the map, an app's tab strip. Synthetic tiles only (harness_map.cpp). The position, markers and a track at the
+# automatic 2x and at 1x and 1.5x, a selected marker, 512 px tiles at 1x. Golden at 480x800.
+title pda map
+sizes 480x800
+profile pda
+env APPLAUNCH_PDA 0
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+mapdemo open
+mapdemo scale auto
+mapdemo fix 150 -80 150 2 45
+mapdemo markers
+mapdemo track
+mapdemo wait
+shot pda_map_auto
+mapdemo scale 1x
+mapdemo wait
+shot pda_map_1x
+mapdemo scale 1.5x
+mapdemo markers 2
+mapdemo wait
+shot pda_map_15x_selected
+mapdemo source hd
+mapdemo scale 2x
+mapdemo wait
+shot pda_map_hd_1x
