@@ -47,6 +47,20 @@ enum {
     CP0_MAP_E_NOT_FOUND = -15,       /* no archive or source with that id; an import path that does not exist */
     CP0_MAP_E_CANCELLED = -16,       /* a job stopped by its cancel flag (a folder import can be resumed) */
     CP0_MAP_E_FULL = -17,            /* RAM tile cache: every cached tile is in use, the new one does not fit */
+    /* online sources (cp0_map_source.h, task 3): why a source does not fetch now, or how a fetch ended */
+    CP0_MAP_E_REFUSED = -18,         /* refused by the source policy (an OSMF host, plain http, no area download...) */
+    CP0_MAP_E_NETWORK = -19,         /* no connection, a timeout, a server error: cached tiles only for a while */
+    CP0_MAP_E_CURL_MISSING = -20,    /* network unavailable: libcurl.so.4 (package libcurl4t64) is not installed */
+    CP0_MAP_E_BLOCKED = -21,         /* the server answered with its "blocked" picture: the source is paused */
+    CP0_MAP_E_CAP_REACHED = -22,     /* the source's daily request cap is reached until local midnight */
+    CP0_MAP_E_NO_KEY = -23,          /* the source needs an API key (cp0_map_source_set_key) */
+    CP0_MAP_E_DISABLED = -24,        /* the source is switched off (cp0_map_source_set_enabled) */
+    CP0_MAP_E_OFFLINE = -25,         /* network off (cfg.network = 0, cp0_map_store_set_network): cached tiles only */
+    CP0_MAP_E_BACKOFF = -26,         /* the server asked to slow down (429 / 503, Retry-After): paused for a while */
+    CP0_MAP_E_NOT_IN_VERSION = -27,  /* not in this version of the engine (area download: phase 0.2) */
+    CP0_MAP_E_CACHE_FULL = -28,      /* the viewing cache cannot grow (little free space, a failed write) */
+    CP0_MAP_E_HTTP = -29,            /* an answer the engine does not accept (not an image, too many redirects...) */
+    CP0_MAP_E_NO_USER_AGENT = -30,   /* no usable User-Agent (cfg.user_agent): the engine never fetches without one */
 };
 
 /* A short English text for a CP0_MAP_* code ("SQLite library missing (install libsqlite3-0)"), never NULL. */

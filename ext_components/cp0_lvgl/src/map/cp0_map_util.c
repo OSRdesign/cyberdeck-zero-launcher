@@ -41,6 +41,19 @@ const char *cp0_map_strerror(int code)
     case CP0_MAP_E_NOT_FOUND: return "not found";
     case CP0_MAP_E_CANCELLED: return "cancelled";
     case CP0_MAP_E_FULL: return "tile cache full";
+    case CP0_MAP_E_REFUSED: return "refused by the source policy";
+    case CP0_MAP_E_NETWORK: return "no connection to the tile server";
+    case CP0_MAP_E_CURL_MISSING: return "network unavailable: library missing (install libcurl4t64)";
+    case CP0_MAP_E_BLOCKED: return "source paused: the server refused tiles";
+    case CP0_MAP_E_CAP_REACHED: return "daily tile limit reached until tomorrow";
+    case CP0_MAP_E_NO_KEY: return "this source needs an API key";
+    case CP0_MAP_E_DISABLED: return "source switched off";
+    case CP0_MAP_E_OFFLINE: return "offline: saved tiles only";
+    case CP0_MAP_E_BACKOFF: return "server busy: retrying later";
+    case CP0_MAP_E_NOT_IN_VERSION: return "not in this version";
+    case CP0_MAP_E_CACHE_FULL: return "map cache full";
+    case CP0_MAP_E_HTTP: return "unexpected answer from the tile server";
+    case CP0_MAP_E_NO_USER_AGENT: return "no User-Agent set: fetching refused";
     default: return "unknown error";
     }
 }

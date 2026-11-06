@@ -46,12 +46,28 @@ typedef struct {
     char label[CP0_MAP_LABEL_MAX]; /* "" = no label; UTF-8, drawn in the caption font */
 } cp0_map_marker_t;
 
+/* Where a tile event comes from (task 3 added the fetch kinds). */
+typedef enum {
+    CP0_MAP_TILE_LOADED = 0,       /* the widget's loader read the store: result CP0_MAP_OK, CP0_MAP_E_NO_TILE,
+                                      CP0_MAP_E_ARCHIVE_MISSING, other read errors */
+    CP0_MAP_TILE_FETCHED = 1,      /* an online source's tile was stored (or was already fresh): read it again */
+    CP0_MAP_TILE_REFUSED = 2,      /* the source does not fetch now; result says why (CP0_MAP_E_OFFLINE, _CAP_REACHED,
+                                      _BLOCKED, _BACKOFF, _NETWORK, _NO_KEY, _DISABLED, _CURL_MISSING, _READ_ONLY,
+                                      _CACHE_FULL, _NO_USER_AGENT, _REFUSED); it is fetched when that changes */
+    CP0_MAP_TILE_FETCH_FAILED = 3, /* result CP0_MAP_E_NO_TILE (404 / 410: not asked again for 24 h),
+                                      CP0_MAP_E_NETWORK, CP0_MAP_E_HTTP, CP0_MAP_E_TOO_LARGE (retried later) */
+} cp0_map_tile_event_kind_t;
+
 /* What happened to a tile the widget asked for, delivered on the LVGL thread (cp0_map_on_tile). */
 typedef struct {
     int z;
-    uint32_t x, y;              /* XYZ, the displayed tile (an over-zoom tile is read from its parent) */
+    uint32_t x, y;              /* XYZ, the displayed tile (an over-zoom tile is read from its parent); fetch events
+                                   carry the tile fetched (the parent for an over-zoom view) */
     int result;                 /* CP0_MAP_OK (loaded), CP0_MAP_E_NO_TILE, CP0_MAP_E_ARCHIVE_MISSING, other errors */
-    char archive_id[CP0_MAP_ID_MAX]; /* the archive that answered (loaded tiles) */
+    char archive_id[CP0_MAP_ID_MAX]; /* the archive or source that answered (loaded and fetched tiles) */
+    /* added by task 3 */
+    cp0_map_tile_event_kind_t kind;
+    int stale;                  /* LOADED from a viewing cache past the tile's expiry */
 } cp0_map_tile_event_t;
 
 typedef void (*cp0_map_tile_cb)(void *user, const cp0_map_tile_event_t *ev);

@@ -132,15 +132,19 @@ static int parse_int(const char *s, int lo, int hi, int def)
     return (end == s || *end || v < lo || v > hi) ? def : (int)v;
 }
 
-/* one record file -> r. 0, or -1 (not v=1, no usable id) */
+/* one record file -> r. 0, or -1 (not v=1, no usable id). overlay: r holds a record of the same id read from an
+ * earlier folder (an app's source records) and the keys of this file replace its values */
 static int record_parse(const char *text, const char *stem, cp0_map_entry_kind_t kind, const cp0_map_store_t *s,
-                        cp0_map_rec_t *r)
+                        cp0_map_rec_t *r, int overlay)
 {
-    memset(r, 0, sizeof *r);
-    r->tiles = -1;
     cp0_map_source_info_t *i = &r->info;
-    i->kind = kind;
-    i->minzoom = i->maxzoom = -1;
+    if (!overlay) {
+        memset(r, 0, sizeof *r);
+        r->tiles = -1;
+        i->kind = kind;
+        i->minzoom = i->maxzoom = -1;
+        cp0_map__srcrec_init(&r->src);
+    }
     int v1 = 0;
     char id[CP0_MAP_ID_MAX] = "";
     const char *p = text;
@@ -173,6 +177,7 @@ static int record_parse(const char *text, const char *stem, cp0_map_entry_kind_t
                 else if (!strcmp(k, "bounds")) i->has_bounds = cp0_map_bbox_parse(v, &i->bounds) == CP0_MAP_OK;
                 else if (!strcmp(k, "attribution")) cp0_map__copy_str(i->attribution, sizeof i->attribution, v, 1);
                 else if (!strcmp(k, "tiles")) r->tiles = strtoll(v, NULL, 10);
+                else if (kind == CP0_MAP_ENTRY_SOURCE) cp0_map__srcrec_kv(&r->src, k, v);
             }
         }
         if (!eol) break;
@@ -199,16 +204,17 @@ static int cmp_rec(const void *a, const void *b)
     return strcmp(((const cp0_map_rec_t *)a)->info.id, ((const cp0_map_rec_t *)b)->info.id);
 }
 
-static int has_id(const cp0_map_rec_t *recs, int from, int to, const char *id)
+static int find_id(const cp0_map_rec_t *recs, int from, int to, const char *id)
 {
     for (int k = from; k < to; k++)
-        if (!strcmp(recs[k].info.id, id)) return 1;
-    return 0;
+        if (!strcmp(recs[k].info.id, id)) return k;
+    return -1;
 }
 
-/* appends the records of the .conf files in dir; 0 or CP0_MAP_E_NOMEM */
+/* appends the records of the .conf files in dir; 0 or CP0_MAP_E_NOMEM. An id already read from an earlier folder is
+ * skipped, or with `overlay` this file's keys replace that record's values (the store's own sources/ over an app's) */
 static int load_dir(const cp0_map_store_t *s, const char *dir, cp0_map_entry_kind_t kind, cp0_map_rec_t **recs,
-                    int *n, int *cap, int group_start)
+                    int *n, int *cap, int group_start, int overlay)
 {
     DIR *d = opendir(dir);
     if (!d) return CP0_MAP_OK;
@@ -226,10 +232,22 @@ static int load_dir(const cp0_map_store_t *s, const char *dir, cp0_map_entry_kin
         if (len - 5 >= sizeof stem) continue;
         memcpy(stem, e->d_name, len - 5);
         stem[len - 5] = '\0';
-        if (has_id(*recs, group_start, *n, stem)) continue; /* an earlier folder wins */
+        const int earlier = find_id(*recs, group_start, *n, stem);
+        if (earlier >= 0 && !overlay) continue; /* an earlier folder wins */
         size_t tl;
         if (cp0_map__fmt(path, sizeof path, "%s/%s", dir, e->d_name) || read_small_file(path, text, CP0_MAP_RECORD_MAX, &tl))
             continue;
+        if (earlier >= 0) {
+            cp0_map_rec_t *tmp = (cp0_map_rec_t *)malloc(sizeof *tmp);
+            if (!tmp) {
+                rc = CP0_MAP_E_NOMEM;
+                break;
+            }
+            *tmp = (*recs)[earlier];
+            if (record_parse(text, stem, kind, s, tmp, 1) == 0) (*recs)[earlier] = *tmp;
+            free(tmp);
+            continue;
+        }
         if (*n == *cap) {
             const int nc = *cap ? *cap * 2 : 16;
             cp0_map_rec_t *nr = (cp0_map_rec_t *)realloc(*recs, (size_t)nc * sizeof **recs);
@@ -240,7 +258,7 @@ static int load_dir(const cp0_map_store_t *s, const char *dir, cp0_map_entry_kin
             *recs = nr;
             *cap = nc;
         }
-        if (record_parse(text, stem, kind, s, &(*recs)[*n]) == 0) (*n)++;
+        if (record_parse(text, stem, kind, s, &(*recs)[*n], 0) == 0) (*n)++;
     }
     free(text);
     closedir(d);
@@ -261,14 +279,44 @@ int cp0_map__store_reload_locked(cp0_map_store_t *s)
     int n = 0, cap = 0;
     char dir[CP0_MAP_PATH_MAX];
     int rc = cp0_map__fmt(dir, sizeof dir, "%s/archives", s->dir);
-    if (!rc) rc = load_dir(s, dir, CP0_MAP_ENTRY_ARCHIVE, &recs, &n, &cap, 0);
+    if (!rc) rc = load_dir(s, dir, CP0_MAP_ENTRY_ARCHIVE, &recs, &n, &cap, 0, 0);
     const int narch = n;
+    /* source records: an app's own folder, then the store's sources/ (its keys win), then the shipped records */
+    if (!rc && s->sources_dir[0]) rc = load_dir(s, s->sources_dir, CP0_MAP_ENTRY_SOURCE, &recs, &n, &cap, narch, 0);
     if (!rc) rc = cp0_map__fmt(dir, sizeof dir, "%s/sources", s->dir);
-    if (!rc) rc = load_dir(s, dir, CP0_MAP_ENTRY_SOURCE, &recs, &n, &cap, narch);
-    if (!rc && s->sources_dir[0]) rc = load_dir(s, s->sources_dir, CP0_MAP_ENTRY_SOURCE, &recs, &n, &cap, narch);
+    if (!rc) rc = load_dir(s, dir, CP0_MAP_ENTRY_SOURCE, &recs, &n, &cap, narch, 1);
+    for (int k = 0; !rc && k < cp0_map__shipped_count(); k++) {
+        cp0_map_source_info_t base;
+        cp0_map_srcrec_t bsrc;
+        memset(&base, 0, sizeof base);
+        cp0_map__shipped_fill(k, &base, &bsrc);
+        if (find_id(recs, narch, n, base.id) >= 0) continue;
+        if (n == cap) {
+            const int nc = cap ? cap * 2 : 16;
+            cp0_map_rec_t *nr = (cp0_map_rec_t *)realloc(recs, (size_t)nc * sizeof *recs);
+            if (!nr) {
+                rc = CP0_MAP_E_NOMEM;
+                break;
+            }
+            recs = nr;
+            cap = nc;
+        }
+        /* a shipped record without a user file: parsed from nothing, so it follows the same path */
+        if (record_parse("v=1\n", base.id, CP0_MAP_ENTRY_SOURCE, s, &recs[n], 0) == 0) n++;
+    }
     if (rc) {
         free(recs);
         return rc;
+    }
+    for (int k = narch; k < n; k++) {
+        cp0_map_rec_t *r = &recs[k];
+        cp0_map__source_finish(&r->info, &r->src);
+        r->info.shipped = r->src.shipped;
+        r->info.enabled = r->src.enabled == 1;
+        r->info.policy = r->src.policy;
+        cp0_map__copy_str(r->info.url, sizeof r->info.url, r->src.url, 0);
+        cp0_map__copy_str(r->info.licence, sizeof r->info.licence, r->src.licence, 0);
+        cp0_map__copy_str(r->info.note, sizeof r->info.note, r->src.note, 0);
     }
     if (narch > 1) qsort(recs, (size_t)narch, sizeof *recs, cmp_rec);
     if (n - narch > 1) qsort(recs + narch, (size_t)(n - narch), sizeof *recs, cmp_rec);
@@ -277,6 +325,7 @@ int cp0_map__store_reload_locked(cp0_map_store_t *s)
     s->recs = recs;
     s->nrecs = n;
     s->narchives = narch;
+    cp0_map__fetcher_sync(s->fetcher, recs, narch, n);
     return CP0_MAP_OK;
 }
 
@@ -322,6 +371,11 @@ int cp0_map_store_open(const cp0_map_store_cfg_t *cfg, cp0_map_store_t **out)
         return CP0_MAP_E_NOMEM;
     }
     pthread_mutex_init(&s->import_mu, NULL);
+    s->fetcher = cp0_map__fetcher_new(s->dir, cfg);
+    if (!s->fetcher) {
+        cp0_map_store_close(s);
+        return CP0_MAP_E_NOMEM;
+    }
     pthread_mutex_lock(&s->mu);
     rc = cp0_map__store_reload_locked(s);
     pthread_mutex_unlock(&s->mu);
@@ -336,6 +390,8 @@ int cp0_map_store_open(const cp0_map_store_cfg_t *cfg, cp0_map_store_t **out)
 void cp0_map_store_close(cp0_map_store_t *s)
 {
     if (!s) return;
+    cp0_map__fetcher_free(s->fetcher); /* stops the fetch pool, commits and closes the viewing caches */
+    s->fetcher = NULL;
     pthread_mutex_lock(&s->mu);
     close_archives(s);
     free(s->recs);
@@ -367,16 +423,23 @@ cp0_map_cache_t *cp0_map_store_ram_cache(cp0_map_store_t *s)
     return s ? s->ram : NULL;
 }
 
-int cp0_map_store_cache_stats(cp0_map_store_t *s, cp0_map_cache_stats_t *out)
+cp0_map_fetcher_t *cp0_map__store_fetcher(cp0_map_store_t *s)
+{
+    return s ? s->fetcher : NULL;
+}
+
+int cp0_map_store_cache_stats(cp0_map_store_t *s, cp0_map_store_stats_t *out)
 {
     if (!s || !out) return CP0_MAP_E_INVALID;
-    cp0_map_cache_get_stats(s->ram, out);
+    memset(out, 0, sizeof *out);
+    cp0_map_cache_get_stats(s->ram, &out->ram);
+    cp0_map__fetcher_stats(s->fetcher, out);
     return CP0_MAP_OK;
 }
 
 /* ------------------------------------------------------------------------------------------------------ listing */
 
-static void fill_state(cp0_map_rec_t *r)
+static void fill_state(cp0_map_store_t *s, cp0_map_rec_t *r)
 {
     struct stat st;
     if (stat(r->info.path, &st) == 0 && S_ISREG(st.st_mode)) {
@@ -387,6 +450,7 @@ static void fill_state(cp0_map_rec_t *r)
         r->info.state = r->info.kind == CP0_MAP_ENTRY_SOURCE ? CP0_MAP_OK : CP0_MAP_E_ARCHIVE_MISSING;
         r->info.bytes = 0;
     }
+    if (r->info.kind == CP0_MAP_ENTRY_SOURCE) cp0_map__fetcher_fill(s->fetcher, &r->info); /* why it fetches or not */
 }
 
 int cp0_map_store_sources(cp0_map_store_t *s, cp0_map_source_info_t *out, int max)
@@ -394,7 +458,7 @@ int cp0_map_store_sources(cp0_map_store_t *s, cp0_map_source_info_t *out, int ma
     if (!s || max < 0 || (max > 0 && !out)) return CP0_MAP_E_INVALID;
     pthread_mutex_lock(&s->mu);
     for (int k = 0; k < s->nrecs; k++) {
-        fill_state(&s->recs[k]);
+        fill_state(s, &s->recs[k]);
         if (k < max) out[k] = s->recs[k].info;
     }
     const int n = s->nrecs;
@@ -415,7 +479,7 @@ int cp0_map_store_find(cp0_map_store_t *s, const char *id, cp0_map_source_info_t
     pthread_mutex_lock(&s->mu);
     cp0_map_rec_t *r = find_rec(s, id);
     if (r) {
-        fill_state(r);
+        fill_state(s, r);
         *out = r->info;
     }
     pthread_mutex_unlock(&s->mu);
@@ -459,6 +523,12 @@ int cp0_map_store_get_tile(cp0_map_store_t *s, const char *id, int z, uint32_t x
     pthread_mutex_lock(&s->mu);
     if (id) {
         cp0_map_rec_t *r = find_rec(s, id);
+        if (r && r->info.kind == CP0_MAP_ENTRY_SOURCE) {
+            /* an online source: its viewing cache (uncommitted tiles included), never the network */
+            rc = cp0_map__fetcher_get_tile(s->fetcher, id, z, x, y, out, meta);
+            pthread_mutex_unlock(&s->mu);
+            return rc;
+        }
         rc = r ? rec_get(r, z, x, y, out, &fmt) : CP0_MAP_E_NOT_FOUND;
         if (rc == CP0_MAP_OK && meta) cp0_map__copy_str(meta->archive_id, sizeof meta->archive_id, r->info.id, 0);
     } else {
@@ -528,4 +598,122 @@ int cp0_map_store_remove(cp0_map_store_t *s, const char *id)
     if (rc) return rc;
     if (!found) return CP0_MAP_E_NOT_FOUND;
     return rl;
+}
+
+/* ------------------------------------------------------------------------------------- online sources (task 3) */
+
+/* 1 when id names an online source record of the store */
+static int is_source(cp0_map_store_t *s, const char *id)
+{
+    pthread_mutex_lock(&s->mu);
+    const cp0_map_rec_t *r = find_rec(s, id);
+    const int yes = r && r->info.kind == CP0_MAP_ENTRY_SOURCE;
+    pthread_mutex_unlock(&s->mu);
+    return yes;
+}
+
+static int source_check(cp0_map_store_t *s, const char *id)
+{
+    if (!s || !id) return CP0_MAP_E_INVALID;
+    if (!cp0_map__id_valid(id) || !is_source(s, id)) return CP0_MAP_E_NOT_FOUND;
+    if (s->read_only) return CP0_MAP_E_READ_ONLY;
+    return CP0_MAP_OK;
+}
+
+int cp0_map_source_set_key(cp0_map_store_t *s, const char *id, const char *key)
+{
+    int rc = source_check(s, id);
+    if (rc) return rc;
+    if (!cp0_map__key_valid(key)) return CP0_MAP_E_INVALID;
+    rc = cp0_map__key_write(s->dir, id, key);
+    if (rc) return rc;
+    return cp0_map__fetcher_key_changed(s->fetcher, id);
+}
+
+int cp0_map_source_clear_key(cp0_map_store_t *s, const char *id)
+{
+    int rc = source_check(s, id);
+    if (rc) return rc;
+    rc = cp0_map__key_remove(s->dir, id);
+    if (rc) return rc;
+    return cp0_map__fetcher_key_changed(s->fetcher, id);
+}
+
+static int set_record_key(cp0_map_store_t *s, const char *id, const char *key, const char *value)
+{
+    char path[CP0_MAP_PATH_MAX];
+    if (cp0_map__fmt(path, sizeof path, "%s/sources/%s.conf", s->dir, id)) return CP0_MAP_E_INVALID;
+    pthread_mutex_lock(&s->import_mu);
+    int rc = cp0_map__conf_set(path, key, value);
+    pthread_mutex_unlock(&s->import_mu);
+    if (!rc) rc = cp0_map_store_refresh(s);
+    return rc;
+}
+
+int cp0_map_source_set_enabled(cp0_map_store_t *s, const char *id, int on)
+{
+    const int rc = source_check(s, id);
+    return rc ? rc : set_record_key(s, id, "enabled", on ? "1" : "0");
+}
+
+int cp0_map_source_set_daily_cap(cp0_map_store_t *s, const char *id, uint32_t cap)
+{
+    int rc = source_check(s, id);
+    if (rc) return rc;
+    char num[16];
+    snprintf(num, sizeof num, "%u", cap > 10000000u ? 10000000u : cap);
+    rc = set_record_key(s, id, "daily_cap", num);
+    if (rc) return rc;
+    cp0_map_source_info_t info;
+    rc = cp0_map_store_find(s, id, &info);
+    return rc ? rc : (int)info.policy.daily_cap;
+}
+
+int cp0_map_store_set_network(cp0_map_store_t *s, int on)
+{
+    if (!s) return CP0_MAP_E_INVALID;
+    return cp0_map__fetcher_set_network(s->fetcher, on);
+}
+
+int cp0_map_store_set_cap(cp0_map_store_t *s, uint64_t bytes)
+{
+    if (!s) return CP0_MAP_E_INVALID;
+    if (s->read_only) return CP0_MAP_E_READ_ONLY;
+    cp0_map__vcset_set_cap(cp0_map__fetcher_vcset(s->fetcher), bytes);
+    return CP0_MAP_OK;
+}
+
+int cp0_map_store_clear_cache(cp0_map_store_t *s, const char *id)
+{
+    if (!s) return CP0_MAP_E_INVALID;
+    if (id && (!cp0_map__id_valid(id) || !is_source(s, id))) return CP0_MAP_E_NOT_FOUND;
+    if (s->read_only) return CP0_MAP_E_READ_ONLY;
+    uint32_t hashes[64];
+    const int n = cp0_map__fetcher_clear(s->fetcher, id, hashes, 64);
+    if (n < 0) return n;
+    for (int i = 0; i < n && i < 64; i++) cp0_map_cache_drop(s->ram, hashes[i]);
+    return CP0_MAP_OK;
+}
+
+int cp0_map_store_flush(cp0_map_store_t *s)
+{
+    if (!s) return CP0_MAP_E_INVALID;
+    return cp0_map__fetcher_flush(s->fetcher);
+}
+
+int cp0_map_store_download(cp0_map_store_t *s, const char *id, const cp0_map_bbox_t *box, int zmin, int zmax,
+                           cp0_map_progress_cb cb, void *user)
+{
+    (void)cb;
+    (void)user;
+    if (!s || !id || !box || zmin < 0 || zmax < zmin || zmax > CP0_MAP_MAX_ZOOM || box->west > box->east ||
+        box->south > box->north)
+        return CP0_MAP_E_INVALID;
+    pthread_mutex_lock(&s->mu);
+    const cp0_map_rec_t *r = find_rec(s, id);
+    int rc = CP0_MAP_E_REFUSED;
+    if (r && r->info.kind == CP0_MAP_ENTRY_SOURCE && r->src.valid == CP0_MAP_OK && r->src.policy.bulk_ok)
+        rc = CP0_MAP_E_NOT_IN_VERSION; /* phase 0.2: count, size, rate limit, resume, daily cap */
+    pthread_mutex_unlock(&s->mu);
+    return rc;
 }

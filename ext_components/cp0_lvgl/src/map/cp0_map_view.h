@@ -69,6 +69,13 @@ typedef struct {
  * count (at most max). */
 int cp0_map_view_tiles(const cp0_map_view_t *v, int ring, cp0_map_slot_t *out, int max);
 
+/* The tiles to ask an online source's fetch pool for (task 3): of slots[0..n), only the VISIBLE ones (never the ring
+ * that cp0_map_view_tiles(v, 1, ...) adds: the sources' terms allow only the tiles a user looks at) for which
+ * need(user, slot) answers 1 (NULL: all), each as the tile to fetch (an over-zoom slot: its parent), each once, in slot
+ * order (the centre first). Returns the count (at most max). */
+int cp0_map_view_fetch_tiles(const cp0_map_slot_t *slots, int n, int (*need)(void *user, const cp0_map_slot_t *slot),
+                             void *user, cp0_map_tile_id_t *out, int max);
+
 /* ------------------------------------------------------------------------------------------------------ controls */
 
 typedef enum {

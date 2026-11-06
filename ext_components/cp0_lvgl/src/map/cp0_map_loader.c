@@ -34,13 +34,14 @@ static void *worker(void *arg)
         while (!l->stop && l->qhead >= l->qn) pthread_cond_wait(&l->cv, &l->mu);
         if (l->stop) break;
         const cp0_map_req_t req = l->queue[l->qhead++];
-        if (cp0_map_cache_contains(l->cache, &req.key)) continue; /* drawn already: nothing to tell */
+        if (!req.force && cp0_map_cache_contains(l->cache, &req.key)) continue; /* drawn already: nothing to tell */
         l->busy = 1;
         pthread_mutex_unlock(&l->mu);
 
         cp0_map_image_t *img = NULL;
         char archive[CP0_MAP_ID_MAX] = "";
-        int rc = l->fetch(l->user, &req, &img, archive);
+        int stale = 0;
+        int rc = l->fetch(l->user, &req, &img, archive, &stale);
         if (rc == CP0_MAP_OK) {
             if (!img) rc = CP0_MAP_E_DECODE;
             else if ((rc = cp0_map_cache_put(l->cache, &req.key, img, NULL)) != CP0_MAP_OK) cp0_map_image_free(img);
@@ -53,6 +54,7 @@ static void *worker(void *arg)
             cp0_map_done_t *d = &l->done[l->dn++];
             d->req = req;
             d->result = rc;
+            d->stale = stale;
             memcpy(d->archive_id, archive, sizeof d->archive_id);
         } else {
             l->overflow = 1;
@@ -191,16 +193,18 @@ cp0_map_image_t *cp0_map_scale_to(const uint16_t *src, int w, int h, int stride,
     return nearest(src, w, h, stride, out_px);
 }
 
-int cp0_map_store_fetch(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id)
+int cp0_map_store_fetch(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id, int *stale)
 {
     cp0_map_store_fetch_t *f = (cp0_map_store_fetch_t *)user;
     *out = NULL;
+    if (stale) *stale = 0;
     const int z = req->over ? req->z - 1 : req->z;
     const uint32_t x = req->over ? req->x >> 1 : req->x, y = req->over ? req->y >> 1 : req->y;
     cp0_map_tile_meta_t meta;
     int rc = cp0_map_store_get_tile(f->store, req->source[0] ? req->source : NULL, z, x, y, &f->buf, &meta);
     if (rc) return rc;
     cp0_map__copy_str(archive_id, CP0_MAP_ID_MAX, meta.archive_id, 0);
+    if (stale) *stale = meta.stale;
     cp0_map_image_t *img;
     rc = cp0_map_decode_tile(f->buf.data, f->buf.len, CP0_MAP_PIX_RGB565, 2, &img);
     if (rc) return rc;

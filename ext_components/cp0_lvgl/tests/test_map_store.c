@@ -121,7 +121,7 @@ static void test_default_dir(void)
     CHECK(!strcmp(cp0_map_store_dir(s), want));
     snprintf(want, sizeof want, "%s/.local/share/cyberdeckzero/maps/archives", home);
     CHECK(file_exists(want));
-    CHECK_RC(cp0_map_store_sources(s, NULL, 0), 0);
+    CHECK_RC(cp0_map_store_sources(s, NULL, 0), 3); /* no archive: the three shipped source records (task 3) */
     cp0_map_store_close(s);
     printf("map store: default folder ($XDG_DATA_HOME, ~/.local/share), created on open\n");
 }
@@ -254,7 +254,7 @@ static void test_import_archives(const char *store)
         mbw_close(&m);
     }
     CHECK_RC(cp0_map_store_import(s, p, 0, NULL, NULL), CP0_MAP_E_NO_TILE);
-    CHECK_RC(cp0_map_store_sources(s, NULL, 0), 0);
+    CHECK_RC(cp0_map_store_sources(s, NULL, 0), 3); /* no archive left: the shipped source records only */
     cp0_map_buf_free(&b);
     tiles_free(&ts);
     cp0_map_store_close(s);
@@ -481,7 +481,8 @@ static void test_resume(const char *store)
 
 static void test_sources_readonly(const char *store)
 {
-    /* source records: the store's folder and an app's own folder (the store's wins on the same id) */
+    /* source records: the store's folder and an app's own folder (the store's keys win on the same id), merged with
+     * the shipped records (task 3: a file for a shipped id only switches and tightens it) */
     char p[700], appsrc[600];
     const char *rec = "v=1\ntitle=OpenTopoMap\nattribution=Kartendaten: OSM\nminzoom=0\nmaxzoom=17\nfuture_key=1\n";
     snprintf(p, sizeof p, "%s/sources/opentopomap.conf", store);
@@ -508,9 +509,10 @@ static void test_sources_readonly(const char *store)
     int na = 0;
     while (na < n && list[na].kind == CP0_MAP_ENTRY_ARCHIVE) na++;
     for (int i = 1; i < na; i++) CHECK(strcmp(list[i - 1].id, list[i].id) < 0); /* archives sorted */
-    CHECK(n - na == 2 && !strcmp(list[na].id, "opentopomap") && !strcmp(list[na].title, "OpenTopoMap"));
-    CHECK(!strcmp(list[na + 1].id, "thunderforest") && !strcmp(list[na + 1].title, "Thunderforest"));
-    CHECK(list[na].state == CP0_MAP_OK && list[na].maxzoom == 17 && list[na].bytes == 0);
+    CHECK(n - na == 3 && !strcmp(list[na].id, "geoapify"));
+    CHECK(!strcmp(list[na + 1].id, "opentopomap") && !strcmp(list[na + 1].title, "OpenTopoMap"));
+    CHECK(!strcmp(list[na + 2].id, "thunderforest") && !strcmp(list[na + 2].title, "Thunderforest Outdoors"));
+    CHECK(list[na + 1].state == CP0_MAP_E_DISABLED && list[na + 1].maxzoom == 17 && list[na + 1].bytes == 0);
     cp0_map_buf_t b = {0};
     CHECK_RC(cp0_map_store_get_tile(s, "opentopomap", 1, 0, 0, &b, NULL), CP0_MAP_E_NO_TILE); /* no cache yet */
     /* a viewing cache appears (task 3 will write it): its tiles are read */
@@ -527,15 +529,15 @@ static void test_sources_readonly(const char *store)
     }
     check_tiles_in(s, "opentopomap", &ts);
     tiles_free(&ts);
-    cp0_map_cache_stats_t st;
+    cp0_map_store_stats_t st;
     CHECK_RC(cp0_map_store_cache_stats(s, &st), CP0_MAP_OK);
-    CHECK(cp0_map_store_ram_cache(s) != NULL && st.budget > 0);
+    CHECK(cp0_map_store_ram_cache(s) != NULL && st.ram.budget > 0);
 
     /* a second app, read-only: lists and reads, never writes */
     cp0_map_store_t *ro = open_store(store, 1);
-    CHECK_RC(cp0_map_store_sources(ro, NULL, 0), n - 1); /* without the app's own folder */
+    CHECK_RC(cp0_map_store_sources(ro, NULL, 0), n); /* without the app's own folder (its id is a shipped one) */
     CHECK_RC(cp0_map_store_cache_stats(ro, &st), CP0_MAP_OK);
-    CHECK(st.budget == 1u << 20);
+    CHECK(st.ram.budget == 1u << 20 && st.state == CP0_MAP_E_READ_ONLY);
     CHECK_RC(cp0_map_store_import(ro, p, 1, NULL, NULL), CP0_MAP_E_READ_ONLY);
     CHECK_RC(cp0_map_store_remove(ro, "resume"), CP0_MAP_E_READ_ONLY);
     CHECK_RC(cp0_map_store_get_tile(ro, "resume", 2, 1, 1, &b, NULL), CP0_MAP_OK);
@@ -555,7 +557,7 @@ static void test_sources_readonly(const char *store)
     char none[600];
     tpath(none, sizeof none, "no-store-here");
     ro = open_store(none, 1);
-    CHECK_RC(cp0_map_store_sources(ro, NULL, 0), 0);
+    CHECK_RC(cp0_map_store_sources(ro, NULL, 0), 3); /* the shipped records only */
     CHECK(!file_exists(none));
     cp0_map_store_close(ro);
     cp0_map_buf_free(&b);

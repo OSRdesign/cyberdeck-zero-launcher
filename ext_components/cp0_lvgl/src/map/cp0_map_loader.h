@@ -24,6 +24,8 @@ typedef struct {
     int z;
     uint32_t x, y;               /* the displayed tile */
     uint8_t over;                /* over-zoom: read (z - 1, x / 2, y / 2) and magnify its quadrant */
+    uint8_t visible;             /* on screen (0: the ring around the view, read ahead from the store only) */
+    uint8_t force;               /* load even when the key is cached (a newer tile was fetched) */
     int out_px;                  /* side of the image to produce (the view's tile_px: 256, 384, 512) */
     char source[CP0_MAP_ID_MAX]; /* "" = the first archive of the store that has it */
 } cp0_map_req_t;
@@ -32,11 +34,14 @@ typedef struct {
     cp0_map_req_t req;
     int result;                  /* CP0_MAP_OK (in the cache now), CP0_MAP_E_NO_TILE, CP0_MAP_E_ARCHIVE_MISSING, ... */
     char archive_id[CP0_MAP_ID_MAX];
+    int stale;                   /* a viewing-cache tile past its expiry */
 } cp0_map_done_t;
 
 /* Produces the image of one request (worker thread). 0 with *out set (the loader puts it into the cache), or an error;
- * archive_id (CP0_MAP_ID_MAX bytes) receives the archive that answered. */
-typedef int (*cp0_map_fetch_fn)(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id);
+ * archive_id (CP0_MAP_ID_MAX bytes) receives the archive that answered, *stale 1 for a viewing-cache tile past its
+ * expiry. It reads the store only: the network is the fetch pool's (cp0_map_fetch.h). */
+typedef int (*cp0_map_fetch_fn)(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id,
+                                int *stale);
 
 typedef struct cp0_map_loader cp0_map_loader_t;
 
@@ -45,7 +50,7 @@ cp0_map_loader_t *cp0_map_loader_new(cp0_map_cache_t *cache, cp0_map_fetch_fn fe
 /* Stops the worker (after the tile in progress) and frees everything. NULL is ignored. */
 void cp0_map_loader_free(cp0_map_loader_t *l);
 /* Replaces the queue with reqs[0..n) (first = loaded first; n is cut to CP0_MAP_LOADER_QUEUE). A request whose key is
- * already cached is skipped by the worker without a completion. */
+ * already cached is skipped by the worker without a completion, unless it has `force`. */
 void cp0_map_loader_submit(cp0_map_loader_t *l, const cp0_map_req_t *reqs, int n);
 /* Moves up to max completions into out; returns the count. *overflow (may be NULL) is set to 1 when completions were
  * dropped since the last poll (the caller then redraws everything). */
@@ -63,7 +68,7 @@ typedef struct {
     cp0_map_buf_t buf;           /* the worker's read buffer (freed by cp0_map_store_fetch_done) */
 } cp0_map_store_fetch_t;
 
-int cp0_map_store_fetch(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id);
+int cp0_map_store_fetch(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id, int *stale);
 void cp0_map_store_fetch_done(cp0_map_store_fetch_t *f);
 /* Scales a w x h RGB565 picture (src_stride bytes per row) to an out_px square: the exact steps above when the ratio
  * is one of them, else nearest. A new image, or NULL. Exposed for the tests. */

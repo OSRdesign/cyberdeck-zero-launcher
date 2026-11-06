@@ -38,7 +38,14 @@ int main(void)
     free(png);
     tpath(dir, sizeof dir, "folder");
     CHECK_RC(cp0_map_store_import(s, dir, 1, NULL, NULL), CP0_MAP_E_SQLITE_MISSING);
-    CHECK_RC(cp0_map_store_sources(s, NULL, 0), 0);
+    CHECK_RC(cp0_map_store_sources(s, NULL, 0), 3); /* no archive: the shipped source records only */
+    /* an online source's viewing cache needs SQLite to be read: its tiles answer "missing library" or "no tile" */
+    {
+        cp0_map_buf_t vb = {0};
+        const int rc = cp0_map_store_get_tile(s, "opentopomap", 1, 0, 0, &vb, NULL);
+        CHECK(rc == CP0_MAP_E_NO_TILE || rc == CP0_MAP_E_SQLITE_MISSING);
+        cp0_map_buf_free(&vb);
+    }
     /* PMTiles need no SQLite */
     snprintf(p, sizeof p, "%s/ref_gzip.pmtiles", MAP_FIXTURES);
     CHECK_RC(cp0_map_archive_open(p, &a), CP0_MAP_OK);

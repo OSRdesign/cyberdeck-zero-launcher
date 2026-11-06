@@ -24,9 +24,10 @@ typedef struct {
     int fail_every;          /* every Nth x answers NO_TILE (0: never) */
 } fake_t;
 
-static int fake_fetch(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id)
+static int fake_fetch(void *user, const cp0_map_req_t *req, cp0_map_image_t **out, char *archive_id, int *stale)
 {
     fake_t *f = (fake_t *)user;
+    (void)stale;
     pthread_mutex_lock(&f->mu);
     if (f->n < 4096) f->order[f->n++] = (int)req->x;
     const int delay = f->delay_us, fail = f->fail_every;
@@ -325,7 +326,7 @@ static void test_store_fetch(void)
         snprintf(r.source, sizeof r.source, "%s", cases[i].id);
         cp0_map_image_t *img = NULL;
         char aid[CP0_MAP_ID_MAX] = "";
-        CHECK_RC(cp0_map_store_fetch(&f, &r, &img, aid), CP0_MAP_OK);
+        CHECK_RC(cp0_map_store_fetch(&f, &r, &img, aid, NULL), CP0_MAP_OK);
         CHECK(img && img->w == cases[i].out_px && img->h == cases[i].out_px);
         CHECK(!strcmp(aid, cases[i].id[0] ? cases[i].id : "t256"));
         const int rz = r.over ? r.z - 1 : r.z;
@@ -345,7 +346,7 @@ static void test_store_fetch(void)
     snprintf(hole.source, sizeof hole.source, "t256");
     cp0_map_image_t *img = NULL;
     char aid[CP0_MAP_ID_MAX];
-    CHECK_RC(cp0_map_store_fetch(&f, &hole, &img, aid), CP0_MAP_E_NO_TILE);
+    CHECK_RC(cp0_map_store_fetch(&f, &hole, &img, aid, NULL), CP0_MAP_E_NO_TILE);
     CHECK(img == NULL);
     /* through the loader with the real fetch */
     cp0_map_loader_t *l = cp0_map_loader_new(cp0_map_store_ram_cache(s), cp0_map_store_fetch, &f);

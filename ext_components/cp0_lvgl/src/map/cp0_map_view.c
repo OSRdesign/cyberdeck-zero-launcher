@@ -550,3 +550,22 @@ int cp0_map_fix_fresh(const cp0_map_fix_t *fix, int64_t now_ms)
     if (fix->mono_ms == 0) return 1;
     return now_ms - fix->mono_ms <= CP0_MAP_FIX_STALE_MS;
 }
+
+int cp0_map_view_fetch_tiles(const cp0_map_slot_t *slots, int n, int (*need)(void *user, const cp0_map_slot_t *slot),
+                             void *user, cp0_map_tile_id_t *out, int max)
+{
+    int k = 0;
+    for (int i = 0; slots && out && i < n && k < max; i++) {
+        const cp0_map_slot_t *s = &slots[i];
+        if (!s->visible) continue; /* the ring is read from the store ahead, never fetched */
+        if (need && !need(user, s)) continue;
+        cp0_map_tile_id_t t;
+        t.z = s->over ? s->z - 1 : s->z;
+        t.x = s->over ? s->x >> 1 : s->x;
+        t.y = s->over ? s->y >> 1 : s->y;
+        int dup = 0;
+        for (int j = 0; j < k && !dup; j++) dup = out[j].z == t.z && out[j].x == t.x && out[j].y == t.y;
+        if (!dup) out[k++] = t;
+    }
+    return k;
+}
