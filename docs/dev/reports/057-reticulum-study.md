@@ -84,7 +84,9 @@ infringing derivatives (6.3).
    `RNodeMultiInterface`, `SerialInterface`, `PipeInterface`, `KISSInterface` and `AX25KISSInterface` (packet radio),
    plus custom interface modules. None is privileged: the apps are transport-agnostic and the bridge's interface manager
    lists, adds, enables and disables interfaces per type, showing only that type's options (4.1, 5.3). **Listen-only is
-   one setting per interface:** `outgoing = False`.
+   one setting per interface, `outgoing = False`, but the PC dry run (8.1) showed it silences announces and path
+   requests only: a message to a destination whose path is already known still went out (D8 must also be enforced by
+   the bridge).**
 8. **RNode settings (V).** On an RNode interface the host sets `frequency`, `bandwidth`, `txpower`, `spreadingfactor` and
    `codingrate` (all required: RNS takes the interface offline without them), optionally `airtime_limit_short` (about
    15 s window) and `airtime_limit_long` (rolling 60 minutes), both in percent and enforced by the RNode firmware,
@@ -362,7 +364,8 @@ RNS 1.6.0 @ `cb1260891d`; manual `interfaces.rst`, "RNode LoRa Interface"):
 | `id_interval` | seconds, integer | with `id_callsign` | no ID beacon | commented out: `600` |
 
 Common interface options that also apply (V, manual "Common Interface Options"): `enabled` (default off), `outgoing`
-(default `True`; `False` = receive only, D8), `mode` (default `full`), `network_name`, `passphrase`, `ifac_size` (8-512
+(default `True`; `False` = no announces and no path requests on that interface, but a packet to an already known
+path is still sent, 8.1; D8), `mode` (default `full`), `network_name`, `passphrase`, `ifac_size` (8-512
 bits), `announce_cap` (default 2 %), `bitrate`, `gravity`, `bootstrap_only`, plus the interface-discovery options
 (`discoverable` and its `discovery_*` fields), which are not for the deck.
 
@@ -491,8 +494,10 @@ types of 4.1 with, for each, the list of that type's options (name, type, range 
 so the status app builds one add/edit form per type from data rather than from code per medium; it validates against
 RNS's own ranges, writes the configuration (backup, atomic write) and brings the interface up or down. New interfaces
 start with `enabled = no` and `outgoing = False` (D8). Status per interface comes from `get_interface_stats()` (3.5).
-Whether RNS 1.6.0 can add or remove an interface at run time without restarting the instance is U; the fallback is a
-restart of the service, a few seconds (I).
+RNS 1.6.0 can add, remove, re-attach and reload an interface at run time without restarting the instance
+(`rnstatus --attach/--detach/--reload <name>`, or `attach_interface`, `detach_interface`, `reload_interface` in the Python
+API, PC dry run 8.1); the interface section must exist in the config file first, so the bridge writes the file and then
+attaches. No service restart is needed.
 
 **Bridge protocol (sketch).** JSON lines, requests with an id and a timeout, plus an event stream: `hello`, `status`,
 `ifaces`, `iface.types` (types and their option lists), `iface.add`, `iface.edit`, `iface.remove`, `iface.enable`,
@@ -641,11 +646,13 @@ effect on power, NomadNet in the terminal page, and the Heltec V4's host link (U
 5. **Treat propagated messages on the Zero 2 W as open.** If P0 confirms minutes per stamp, the deck sends direct and
    opportunistic messages only, and propagation sync runs on the Pi 4B, Pi 5 or tablet.
 
-## 8. Probes (proposed, not run)
+## 8. Probes (dry-run on the PC 2026-11-07; board runs not yet done)
 
 The Pi 4B first (faster), then the deck (zero7), with the owner present for the deck runs. Every run
 has a timeout; nothing touches `~/.reticulum` (a separate configuration folder and `instance_name = probe`); no launcher
-restart; cleanup at the end. The commands are drafts to be checked against the installed versions at probe time.
+restart; cleanup at the end. The commands below are the draft commands as **corrected by the PC dry run of 2026-11-07**
+(WSL Ubuntu 24.04, Python 3.12.3, loopback only, nothing on a board; results and the list of corrections in 8.1). They still
+need a first run on the Pi 4B and the deck.
 
 **P0-a, install (each board; measure: install time, disk use).**
 
@@ -656,7 +663,11 @@ python3 -m venv --system-site-packages ~/rns-probe
 time ~/rns-probe/bin/pip install --no-deps rns==1.6.0 lxmf==1.3.0
 ~/rns-probe/bin/rnsd --version
 du -sh ~/rns-probe
+~/rns-probe/bin/pip check
 ```
+
+On the PC, `--no-deps` with system site packages needed nothing beyond the distribution's `python3-cryptography` (41.0.7)
+and `python3-serial` (3.5); `pip check` was clean and `rnsd` ran. Pin with hashes (8.1).
 
 **P0-b, import and idle daemon (measure: import time cold and warm, time to the "Started rnsd" line, VmRSS and CPU at
 1 and 10 minutes).**
@@ -676,15 +687,24 @@ cat > ~/rns-probe/cfg/config <<'EOF'
     type = AutoInterface
     enabled = no
 EOF
-MALLOC_ARENA_MAX=2 timeout 900 ~/rns-probe/bin/rnsd --config ~/rns-probe/cfg -v > ~/rns-probe/rnsd.log 2>&1 &
-sleep 60;  P=$(pgrep -f 'rnsd --config'); grep -E 'VmRSS|VmHWM' /proc/$P/status; ps -o pcpu,etimes -p $P
-sleep 540; grep -E 'VmRSS|VmHWM' /proc/$P/status; ps -o pcpu,etimes -p $P
+PYTHONUNBUFFERED=1 MALLOC_ARENA_MAX=2 ~/rns-probe/bin/rnsd --config ~/rns-probe/cfg -v > ~/rns-probe/rnsd.log 2>&1 &
+P=$!   # not pgrep: with a `timeout` wrapper pgrep also returns the wrapper's PID
+sleep 60; grep -E 'VmRSS|VmHWM' /proc/$P/status; ps -o pcpu,etimes -p $P
+sleep 540; grep -E 'VmRSS|VmHWM' /proc/$P/status; ps -o pcpu,etimes -p $P; kill $P
 ```
 
+`PYTHONUNBUFFERED=1` is needed: without it the log is block-buffered when redirected to a file and stays empty until the
+process ends. The "Started rnsd version 1.6.0" line is logged at Notice level and appears with `-v`. A start-up time
+is easier to take as the time until the abstract socket `@rns/<instance_name>/rpc` appears in `/proc/net/unix`.
+
 **P0-c, Wi-Fi (measure: peers seen, LXMF delivery deck to PC and back, VmRSS with traffic).** Set `enabled = yes` and
-`devices = wlan0` on the AutoInterface, run `rnsd` or NomadNet on the PC on the same Wi-Fi, check
-`~/rns-probe/bin/rnstatus --config ~/rns-probe/cfg`, and exchange a message with the LXMF repository's
-`docs/example_receiver.py` and `docs/example_sender.py` (V README) run on the deck against the probe instance.
+`devices = wlan0` on the AutoInterface (then `rnstatus --config ~/rns-probe/cfg --attach "Default Interface"` applies it
+without a restart, 8.1), run `rnsd` or NomadNet on the PC on the same Wi-Fi, check
+`~/rns-probe/bin/rnstatus --config ~/rns-probe/cfg`, and exchange a message. The LXMF repository's example sender and
+receiver are not in the wheel; the dry run used our own small two-way script written against the public API
+(`LXMRouter`, `register_delivery_identity`, `register_delivery_callback`, `LXMessage`, `handle_outbound`), which also
+works inside a process that attached to the shared instance. A client must use the same config directory as the
+daemon (8.1).
 
 **P0-d, stamps (Pi 4B first; deck only with the owner present; measure: seconds per cost, temperature, throttling
 flags before and after).**
@@ -705,7 +725,7 @@ vcgencmd measure_temp; vcgencmd get_throttled
 **P0-e, RNode listen-only (the owner's Heltec LoRa32 V4, which already runs RNode firmware; if it needs an update, he
 does it on the PC outside our software with `rnodeconf --update`; measure: device info, received bytes, RSSI, SNR, noise
 floor and channel load every 5 minutes for 30 minutes, VmRSS and CPU).** On the deck: `~/rns-probe/bin/rnodeconf
-/dev/serial/by-id/<the device> -i`, then add to the probe configuration and restart the probe daemon. RNS needs all five
+/dev/serial/by-id/<the device> -i`, then add the section to the probe configuration and run `rnstatus --config ~/rns-probe/cfg --attach "RNode Probe"` (no daemon restart needed, 8.1). RNS needs all five
 radio values even for receiving (4.2): the owner fills in a frequency, bandwidth, spreading factor and coding rate he is
 allowed to use (ideally those of a Reticulum network he wants to hear) and a low TX power; nothing is sent, since
 `outgoing = False`:
@@ -733,8 +753,94 @@ terminal page run `stty size` to read its grid on the deck (640x480) and on zero
 `~/rns-probe/bin/nomadnet --rnsconfig ~/rns-probe/cfg` over SSH with the terminal resized to that grid (`stty cols <c>
 rows <r>`); note whether conversations, the network list and a page are usable.
 
+**P0-d note.** `Stamps.generate_stamp(os.urandom(32), cost)` is the right call and returns `(stamp, value)`; LXMF has
+the same function in `LXMF.LXStamper`. On the PC it ran in one process at cost 8 and 12 and on every core at cost 16, so
+`CPUQuota` matters.
+
 **P0-g, cleanup.** Stop the probe daemon, `rm -rf ~/rns-probe ~/.nomadnetwork` (NomadNet's own folder, created by P0-f
 only).
+
+### 8.1 PC dry run, 2026-11-07 (PC numbers, not Zero 2 W numbers)
+
+Host: WSL2 Ubuntu 24.04, Python 3.12.3, 12 logical cores, 7.8 GB RAM, loopback only, `AutoInterface` disabled, separate
+config folders with their own `instance_name`, nothing under `~/.reticulum`, nothing sent outside 127.0.0.1. Raw logs
+are in `C:\CLAUDE\zero7\reticulum-work\` (not in a repo).
+
+**Versions and hashes (for D4).** PyPI has `rns` 1.6.0 and `lxmf` 1.3.0, and they are also the newest, so there is no
+second version to test. The hashes of `pip download --no-deps` equal the PyPI sha256 values:
+
+| File | sha256 |
+|---|---|
+| `rns-1.6.0-py3-none-any.whl` (681,475 B, uploaded 2026-11-07) | `fcf2d07eebafea7e56a94542bd74646e451b0f33bb3efb5f914bbbba38b39f36` |
+| `lxmf-1.3.0-py3-none-any.whl` (74,764 B, uploaded 2026-11-07) | `bd26a8f7218519365b1a1940dd0fd1d3a4785aa4970d2de85807c3f846acd382` |
+| `rns-1.6.0.tar.gz` | `aa99d550dacd0c895d81cac6d0740fbd8e89bdb3d452c555a51ef2305a6e5e4d` |
+| `lxmf-1.3.0.tar.gz` | `5847534a7e69768425e02ff159096baf385ac99c0919da79e9ed0100e8f46814` |
+
+Dependencies: `rns` requires `cryptography` and `pyserial`, `lxmf` requires `rns`. With `--no-deps` and system site
+packages, `python3-cryptography` 41.0.7 and `python3-serial` 3.5 (Ubuntu apt) were enough (`pip check` clean). NomadNet
+1.5.0 (installed only to import it) pulled `urwid` 5.1.0, `qrcode` 8.2 and `wcwidth` 0.9.4; `import nomadnet` works
+(lower case) and it was not run further.
+
+| Measure (PC) | Result |
+|---|---|
+| Install of both wheels (`--no-deps`, with network) | 1.3 s |
+| Disk: whole venv / `RNS` / `LXMF` | 24 MB (includes pip and setuptools) / 6.7 MB / 0.86 MB; 39 MB with NomadNet |
+| `import RNS, LXMF` (3 runs; no cold-cache run possible) | 0.10-0.11 s, max RSS 34 MB |
+| `rnsd` start until its sockets exist | 0.12-0.16 s |
+| `rnsd` idle VmRSS (no interface, share_instance on, 10 threads) | 39.6-41.6 MB at 2 s and 1 min; at 10 min 40.2 MB (default malloc) and 41.5 MB (`MALLOC_ARENA_MAX=2`); VmHWM equal to VmRSS |
+| `rnsd` idle CPU | 0.1-0.3 % average over 10 min (0 s CPU time shown) |
+| `MALLOC_ARENA_MAX=2` | no measurable gain on the PC (and that instance also served the attach tests) |
+| Two LXMF nodes on loopback TCP (one process each, in-process `Reticulum`) | VmRSS 40.5-43.3 MB, VmHWM 43.1-45.2 MB after four messages |
+| `RNS.Reticulum()` constructor | 0.03-0.06 s (imports not included) |
+| LXMF delivery, both directions, opportunistic | 8-27 ms to the receiver, delivery proof back in 11-26 ms |
+| LXMF delivery, both directions, direct (link set up included) | 5-24 ms to the receiver, proof 7-21 ms |
+| Stamp `generate_stamp`, cost 8 | 0.26 s, 1 core |
+| Stamp, cost 12 | 8.3 s, 1 core (one sample) |
+| Stamp, cost 16 (3 samples) | 1.2, 4.5, 1.7 s wall; 12.5, 50.4, 18.8 CPU-seconds; 10.5-11.3 cores of 12 |
+
+Stamp reading: cost 16 is about 12-50 CPU-seconds on this PC (about 27 on average over three samples), spread over all
+cores. A Zero 2 W has 4 slower cores, so the estimate of "minutes of full CPU" (section 0, item 5) is not contradicted;
+the real figure still comes from P0-d.
+
+**Listen-only (`outgoing = False`), tested on the client end of a loopback TCP link.** The interface still receives
+(the server's announce was heard and a path learned once the server announced again). Its own announces and path
+requests are not sent: the peer never learned a path to the listener, and a node that started listening after the
+peer's announce could not get a path at all (it cannot send a path request). **But an LXMF opportunistic message to a
+destination with a known path was transmitted and delivered with the interface set to `outgoing = False`**; the direct
+(link) message failed after about 57 s. So the flag stops what Reticulum sends by itself, not what an app asks it to
+send. The bridge must therefore refuse send requests while an interface is receive-only (D8). Not tested: the same flag
+on `RNodeInterface` (needs hardware).
+
+**Run-time interface changes (answer: yes).** With `rnsd` running and `share_instance = Yes`: `rnstatus --config <dir>
+--attach <name>` brought up an interface that was `enabled = no` in the file after the file was edited to `yes`;
+`--detach` closed its listening port at once and `--attach` reopened it; a section added to the file while running
+attached; changing a port and `--reload` rebound it. Each is logged at Notice level ("Interface X was attached"). The
+same works from a Python client of the shared instance through `RNS.Reticulum.attach_interface(name)` and
+`detach_interface(name)` (both returned `True`); `reload_interface(name)` exists. Interface sections are read from the
+config file, so the bridge edits the file first. `SIGHUP` is not a reload: it killed `rnsd`. No restart is needed.
+
+**What the shared instance exposes.** On Linux (default `shared_instance_type`): two abstract Unix sockets,
+`@rns/<instance_name>` (the data socket, used by `LocalClientInterface`) and `@rns/<instance_name>/rpc` (control:
+interface stats, path table, attach and detach); abstract sockets have no file permissions, so any local process can
+reach the data socket. The RPC is authenticated by a key tied to the config folder (`storage/transport_identity`, 64
+bytes). A second process that calls `RNS.Reticulum(configdir)` with the **same** config folder becomes a client at once
+(0.035 s, own VmRSS 39 MB, `is_connected_to_shared_instance` True; `get_interface_stats()`, `get_path_table()`, announce
+and an in-process LXMF router all worked). A client with a **different** config folder but the same `instance_name`
+attached to the data socket but the RPC refused it ("digest sent was rejected") and it logged a database error: the
+instance name alone is not enough. `rnstatus`, `rnpath` and `rnodeconf --help` run. For the bridge: every client process
+still carries the full RNS stack (about 40 MB each), so native apps should talk to the bridge, not attach to the
+instance; and the bridge's config folder is the credential. A TCP variant of the shared instance is listed in the manual
+and was not tested here.
+
+**Draft commands that were wrong or needed adjusting.**
+
+1. `P=$(pgrep -f 'rnsd --config')` returned two or more PIDs (the `timeout` wrapper too, 1 MB RSS): use `$!`.
+2. `rnsd -v > file` stayed empty (stdout block-buffered): set `PYTHONUNBUFFERED=1`; "Started rnsd" is a Notice line.
+3. P0-c: the LXMF `docs/example_*.py` files are not in the wheel, and a client must share the daemon's config folder; our own script was used.
+4. P0-e: no daemon restart is needed, use `rnstatus --attach`.
+5. P0-a lacked `pip check`; P0-d's call `generate_stamp(os.urandom(32), cost)` was right.
+6. `import NomadNet` is `import nomadnet`.
+7. PC tooling only: `wsl.exe -- bash -c '...$VAR...'` from Windows loses `$VAR`; use script files.
 
 ## 9. Risks, ranked
 
@@ -757,7 +863,8 @@ following the rules where they transmit (4.2).
 
 ## 10. Not verified
 
-- Memory, CPU and start time of RNS (and of the bridge) on the Zero 2 W; the 1.6.0 memory claims on our boards.
+- Memory, CPU and start time of RNS (and of the bridge) on the Zero 2 W; the 1.6.0 memory claims on our boards. (PC numbers
+  exist, 8.1: about 40 MB idle, 0.15 s start; they say nothing about the Zero 2 W.)
 - Stamp time on the Zero 2 W (my 2-5 minutes for cost 16 is an estimate); SHA-256 throughput per core; whether the
   BCM2710A1 lacks the ARMv8 crypto extensions (widely reported, not checked).
 - The default destination-stamp cost from RNS 1.6.1 and its one-time CPU.
@@ -771,8 +878,9 @@ following the rules where they transmit (4.2).
   host link over Wi-Fi works; how the firmware maps a requested `txpower` through the PA (28 dBm maximum) and whether
   the read-back value matches what RNS sent.
 - Which other boards of the owner's can run RNode (community forks not checked); the Wio-SX1262 antenna connector.
-- Whether RNS 1.6.0 can add, change or remove an interface at run time without restarting the instance (the interface
-  manager's fallback is a service restart); what the undocumented `WeaveInterface` is.
+- What the undocumented `WeaveInterface` is. (Verified on the PC, 8.1: run-time attach, detach and reload of interfaces; the
+  shared-instance sockets and attach rules; stamp costs 8, 12, 16 on the PC. Still open: the same on the Zero 2 W, and
+  `outgoing = False` on an `RNodeInterface`.)
 - Whether the RNode firmware clamps a `txpower` above the radio's maximum (RNS would then see a mismatch and take the
   interface offline, V `validateRadioState`), and whether it accepts spreading factors 5 and 6, which RNS 1.6.0 allows
   but the manual does not list.
