@@ -88,7 +88,7 @@ static int register_archive(cp0_map_store_t *s, const cp0_map_rec_t *r)
     int rc = cp0_map__record_write(s, r);
     if (rc) return rc;
     pthread_mutex_lock(&s->mu);
-    cp0_map_cache_drop(s->ram, cp0_map_source_hash(r->info.id));
+    cp0_map__archives_changed_locked(s, r->info.id);
     rc = cp0_map__store_reload_locked(s);
     pthread_mutex_unlock(&s->mu);
     return rc;
@@ -338,10 +338,7 @@ static int list_numbered(const char *dir, int want_dir, long max, num_entry_t **
     return CP0_MAP_OK;
 }
 
-typedef struct {
-    int present;
-    uint32_t x0, x1, y0, y1;     /* XYZ extents of the tiles at this zoom */
-} zoom_extent_t;
+typedef cp0_map_zext_t zoom_extent_t; /* XYZ extents of the tiles at one zoom */
 
 /* pass 1: count the tile files and the extent of each zoom */
 static int scan_folder(const char *dir, int tms, const cp0_map_import_opts_t *o, uint64_t *total, zoom_extent_t *ext,
@@ -743,16 +740,20 @@ static int import_folder(cp0_map_store_t *s, const char *path, const cp0_map_imp
             if (minz < 0) minz = z;
             maxz = z;
         }
+    /* bounds: the union of the tile extents of EVERY zoom (the shallow levels of a folder often cover far more than
+     * its deepest one; before 2026-11-07 only the deepest zoom was used, which hid them from lookups across all
+     * archives) */
     cp0_map_bbox_t box = {0, 0, 0, 0};
     int has_box = 0;
-    if (maxz >= 0 && maxz <= CP0_MAP_MAX_ZOOM) {
+    for (int z = 0; z <= 30 && z <= CP0_MAP_MAX_ZOOM; z++) {
         cp0_map_bbox_t a, b;
-        if (cp0_map_tile_bbox(maxz, ext[maxz].x0, ext[maxz].y0, &a) == CP0_MAP_OK &&
-            cp0_map_tile_bbox(maxz, ext[maxz].x1, ext[maxz].y1, &b) == CP0_MAP_OK) {
-            box = a;
-            cp0_map_bbox_union(&box, &b);
-            has_box = 1;
-        }
+        if (!ext[z].present || cp0_map_tile_bbox(z, ext[z].x0, ext[z].y0, &a) != CP0_MAP_OK ||
+            cp0_map_tile_bbox(z, ext[z].x1, ext[z].y1, &b) != CP0_MAP_OK)
+            continue;
+        cp0_map_bbox_union(&a, &b);
+        if (has_box) cp0_map_bbox_union(&box, &a);
+        else box = a;
+        has_box = 1;
     }
     const long long rows = count_rows(&c);
     cp0_map_format_t fmt = cs.jpg > cs.png ? CP0_MAP_FMT_JPEG : CP0_MAP_FMT_PNG;
@@ -803,6 +804,8 @@ static int import_folder(cp0_map_store_t *s, const char *path, const cp0_map_imp
     cp0_map_archive_close(a);
     if (!ai.tile_px) ai.tile_px = cs.tile_px;
     r.tiles = rows;
+    memcpy(r.zext, ext, sizeof r.zext); /* the record keeps each zoom's rectangle (per-zoom lookups) */
+    r.info.has_zoom_extents = 1;
     r.info.mode = CP0_MAP_MODE_CONVERTED;
     cp0_map__copy_str(r.info.path, sizeof r.info.path, dest, 0);
     cp0_map__copy_str(r.source_path, sizeof r.source_path, abs, 0);

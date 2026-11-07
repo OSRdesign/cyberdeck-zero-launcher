@@ -87,6 +87,15 @@ void cp0_map_layer_show(cp0_map_layer_t *layer, int on);
 /* Tile events (loaded, no tile, archive missing, errors), on the LVGL thread. One callback per widget; NULL removes. */
 void cp0_map_on_tile(lv_obj_t *map, cp0_map_tile_cb cb, void *user);
 
+/* The view moved: called on the LVGL thread when the centre or the zoom differs from the last call (or, for the first
+ * call, from the view when the callback was set), after a pan, a drag, a key, a zoom, an animation step, a set_center
+ * / set_zoom / set_source / center_on_position. At most once per LVGL timer tick of the widget (40 ms while the view
+ * moves), however many changes happened in between; never for a change of the display scale, the widget's size, or
+ * a tile arriving. lat / lon is the centre. The widget allocates nothing for it. The callback may call this widget's
+ * setters (the next tick compares again). One callback per widget; NULL removes it. */
+typedef void (*cp0_map_view_cb)(void *user, double lat, double lon, int zoom);
+void cp0_map_on_view_change(lv_obj_t *map, cp0_map_view_cb cb, void *user);
+
 /* A key for the map: key_code an evdev KEY_* (input_keys.h), mods KBD_MOD_* (keyboard_input.h). 1 when it used it. */
 int cp0_map_handle_key(lv_obj_t *map, uint32_t key_code, uint32_t mods);
 

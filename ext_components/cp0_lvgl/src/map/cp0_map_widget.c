@@ -100,6 +100,11 @@ struct map {
     /* events */
     cp0_map_tile_cb on_tile;
     void *on_tile_user;
+    cp0_map_view_cb on_view;
+    void *on_view_user;
+    double notified_cx, notified_cy;   /* the view the last cp0_map_view_cb call (or its registration) saw */
+    int notified_z;
+    uint32_t store_gen;                /* cp0_map__store_generation() at the last look */
     /* input */
     int pressing, moved;
     lv_point_t press, last;
@@ -522,16 +527,44 @@ static void collect_fetches(map_t *m)
     }
 }
 
+/* the app's view callback, once per change of centre or zoom since the last call */
+static void notify_view(map_t *m)
+{
+    if (!m->on_view) return;
+    const cp0_map_view_t *v = &m->view;
+    if (v->cx == m->notified_cx && v->cy == m->notified_cy && v->z == m->notified_z) return;
+    m->notified_cx = v->cx;
+    m->notified_cy = v->cy;
+    m->notified_z = v->z;
+    double lat, lon;
+    cp0_map_view_center(v, &lat, &lon);
+    m->on_view(m->on_view_user, lat, lon, v->z); /* last: it may call the setters */
+}
+
+/* an archive was imported, replaced or removed in this store (cp0_map__store_generation): what the widget knows about
+ * missing tiles and holds cached for its source is out of date; the view is loaded again */
+static void check_store_generation(map_t *m)
+{
+    const uint32_t g = cp0_map__store_generation(m->store);
+    if (g == m->store_gen) return;
+    m->store_gen = g;
+    cp0_map_cache_drop(m->cache, m->source_hash); /* a loader result in flight can still add one tile: the next change drops it */
+    ks_clear(&m->absent);
+    view_changed(m);
+}
+
 static void timer_cb(lv_timer_t *t)
 {
     map_t *m = (map_t *)lv_timer_get_user_data(t);
     collect(m);
     collect_fetches(m);
+    check_store_generation(m);
     if (m->view_dirty) {
         m->view_dirty = 0;
         ensure_layout(m);
         submit(m);
         lv_obj_invalidate(m->obj);
+        notify_view(m);
     } else if (m->fetch_dirty) {
         push_fetch(m);
     }
@@ -1144,6 +1177,7 @@ lv_obj_t *cp0_map_create(lv_obj_t *parent, cp0_map_store_t *store)
     m->magic = MAP_MAGIC;
     m->store = store;
     m->cache = cp0_map_store_ram_cache(store);
+    m->store_gen = cp0_map__store_generation(store);
     m->fetch.store = store;
     m->loader = cp0_map_loader_new(m->cache, cp0_map_store_fetch, &m->fetch);
     if (!m->loader) {
@@ -1429,6 +1463,17 @@ void cp0_map_layer_show(cp0_map_layer_t *l, int on)
     lv_obj_invalidate(l->map->obj);
 }
 
+void cp0_map_on_view_change(lv_obj_t *obj, cp0_map_view_cb cb, void *user)
+{
+    map_t *m = map_of(obj);
+    if (!m) return;
+    m->on_view = cb;
+    m->on_view_user = user;
+    m->notified_cx = m->view.cx; /* no call for the view as it is now */
+    m->notified_cy = m->view.cy;
+    m->notified_z = m->view.z;
+}
+
 void cp0_map_on_tile(lv_obj_t *obj, cp0_map_tile_cb cb, void *user)
 {
     map_t *m = map_of(obj);
@@ -1454,11 +1499,13 @@ int cp0_map_wait_idle(lv_obj_t *obj, int timeout_ms)
 {
     map_t *m = map_of(obj);
     if (!m) return CP0_MAP_E_INVALID;
+    check_store_generation(m);
     if (m->view_dirty) {
         m->view_dirty = 0;
         ensure_layout(m);
         submit(m);
         lv_obj_invalidate(obj);
+        notify_view(m);
     }
     const int64_t until = cp0_map_monotonic_ms() + timeout_ms;
     int rc = CP0_MAP_OK;

@@ -110,3 +110,26 @@ shot map_online_offline
 mapdemo source online-key
 mapdemo wait
 shot map_online_nokey
+# The view-change callback (cp0_map_on_view_change): once per change of centre or zoom, none for a change of the scale,
+# one call for a burst of changes inside a tick, never for a tile arriving
+mapdemo source main
+mapdemo zoom 14
+mapdemo offset 0 0
+mapdemo wait
+mapdemo viewcb reset
+mapdemo viewcb expect 0
+mapdemo offset 400 0
+mapdemo wait
+mapdemo viewcb expect 1
+mapdemo zoom 13
+mapdemo wait
+mapdemo viewcb expect 2
+mapdemo scale 1.5x
+mapdemo wait
+mapdemo viewcb expect 2
+mapdemo zoom 13
+mapdemo wait
+mapdemo viewcb expect 2
+mapdemo viewcb burst
+mapdemo wait
+mapdemo viewcb expect 3

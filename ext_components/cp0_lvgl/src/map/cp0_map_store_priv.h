@@ -15,10 +15,19 @@
 #define CP0_MAP_FOLDER_ATTRIBUTION "\xc2\xa9 OpenStreetMap contributors" /* 054 2.7: an imported folder, source unknown */
 #define CP0_MAP_RECORD_MAX (16 * 1024)
 
+#define CP0_MAP_ZEXT_N 31        /* zooms 0..30 */
+
+/* The tiles an archive has at one zoom, as an XYZ rectangle (a converted folder's record keeps one per zoom). */
+typedef struct {
+    int present;
+    uint32_t x0, x1, y0, y1;
+} cp0_map_zext_t;
+
 typedef struct {
     cp0_map_source_info_t info;  /* what the listing shows (state and bytes refreshed when listed) */
     char source_path[CP0_MAP_PATH_MAX];
     long long tiles;             /* converted folders: tiles written; -1 unknown */
+    cp0_map_zext_t zext[CP0_MAP_ZEXT_N]; /* per-zoom tile rectangles (record lines zoom_extent=); info.has_zoom_extents */
     cp0_map_archive_t *archive;  /* opened on the first tile read */
     cp0_map_srcrec_t src;        /* online sources: URL, policy, the user's switches (task 3) */
 } cp0_map_rec_t;
@@ -33,6 +42,7 @@ struct cp0_map_store {
     int nrecs, narchives;
     cp0_map_cache_t *ram;
     cp0_map_fetcher_t *fetcher;  /* online sources: the fetch pool and the viewing caches (task 3) */
+    uint32_t generation;         /* bumped (atomically) whenever an archive is imported, replaced or removed */
 };
 
 /* <store>/archives/<id><suffix> into buf. 0 or CP0_MAP_E_INVALID. */
@@ -44,6 +54,10 @@ CP0_MAP_HIDDEN int cp0_map__record_write(const cp0_map_store_t *s, const cp0_map
 CP0_MAP_HIDDEN int cp0_map__store_reload_locked(cp0_map_store_t *s);
 /* 1 when an archive record with this id exists (a .conf file); s->mu not needed (looks at the disk). */
 CP0_MAP_HIDDEN int cp0_map__record_exists(const cp0_map_store_t *s, const char *id);
+
+/* Drops the RAM-cache tiles an archive change can have made stale: the archive's own and every "all archives" one
+ * (source hash of "*"), and bumps the store's generation. Call with s->mu held, after the change. */
+CP0_MAP_HIDDEN void cp0_map__archives_changed_locked(cp0_map_store_t *s, const char *archive_id);
 
 /* The store's fetch pool (cp0_map_fetch.h clients), or NULL. */
 CP0_MAP_HIDDEN cp0_map_fetcher_t *cp0_map__store_fetcher(cp0_map_store_t *s);
