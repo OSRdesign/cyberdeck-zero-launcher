@@ -1,6 +1,6 @@
 # 057 - Reticulum on the cyberdeck (study)
 
-Date 2026-11-07. Research and design only: no product code, no app, no board touched, nothing installed or run on a
+Date 2026-11-07. **Status: the owner accepted all decisions D1-D19 on 2026-11-07 (section 1); the next step is probe P0 (section 8), dry-run on the PC first, then on the Pi 4B and the deck with the owner present, using the owner's Heltec V4 with RNode firmware as the radio.** Research and design only: no product code, no app, no board touched, nothing installed or run on a
 board. The question: can the cyberdeck boards join Reticulum networks (RNS, LXMF messaging, NomadNet pages) through the
 owner's LoRa boards flashed with RNode firmware and through Wi-Fi, and what would it cost. This report gives the facts,
 the options and my recommendations; design and visual decisions stay with the controller and the owner.
@@ -107,7 +107,7 @@ infringing derivatives (6.3).
     Atlas (e) and file transfer (f) all share the bridge. Wrapping NomadNet's terminal UI (d) is cheap but likely
     awkward on our terminal page (U); wrapping Sideband is not practical (Kivy GUI, 68.6 MB wheel, CC BY-NC-SA) (5).
 
-**Recommendation (mine, not a rule).** Run probe P0 on the Pi 4B and then the deck, over Wi-Fi and with the owner's
+**Recommendation (accepted by the owner, 2026-11-07).** Run probe P0 on the Pi 4B and then the deck, over Wi-Fi and with the owner's
 Heltec V4 RNode receiving only; decide on the numbers. If they pass: P1 a `reticulum` service package with the interface
 manager and a listen-first status app, P2 the messenger, P3 the NomadNet browser, P4 positions with Deck Atlas. **MVP (P0 + P1 + docs) 4.5-6 ws
 (1.8-2.4 M tokens); with the messenger 8.25-11.25 ws; everything listed 13.75-19.5 ws (5.5-7.8 M tokens)** (7).
@@ -121,29 +121,29 @@ project whose code is written with AI assistance (9).
 
 ## 1. Decisions for the owner
 
-All open. The recommendation column is mine; the choice is the owner's (design case by case).
+**Owner decisions, 2026-11-07.** The owner accepted all recommendations D1-D19 of this report, "as we revised the plans". For each row below the recommendation column is therefore the decision (text kept as written; the Status column marks it Accepted). Next step: probe P0 (section 8). P0 is first dry-run on the PC (no board, loopback only, to validate the commands and versions); then it runs on the Pi 4B and on the deck with the owner present, with the owner's Heltec V4 (RNode firmware) as the radio. The budget in D2 and the "if P0 confirms" conditions in D13 and D15 still apply: P0's numbers decide whether the build starts.
 
-| # | Decision | Options | Recommendation (not a rule) |
-|---|---|---|---|
-| D1 | Start at all | run probe P0 now; park the topic | run P0 (one evening: about 1-1.5 h of the owner's time, section 8) before any build |
-| D2 | A long-running Python process | keep guideline 6 ("no Python for long-running parts"): no Reticulum; an exception for this one service; an exception for any app | an exception for this one service only, and only if P0 meets a budget the owner sets. My proposal: on the deck, VmRSS at most 60 MB idle, idle CPU at most 3 %, ready within 20 s of start |
-| D3 | Architecture | A: our Python bridge is the shared instance, native apps talk JSON to it; B: upstream `rnsd` as the service, the bridge as one of its clients; C: a native C++ RNS and LXMF in our apps; D: an alternative implementation (Go, Rust, C++); E: only wrap NomadNet's terminal UI | A (it behaves as B by itself when the user already runs an `rnsd`: 3.5); not C; D only if P0 fails and a later look finds a mature one; E only as an optional stopgap (D15) |
-| D4 | Packaging | pinned wheels vendored in our `.deb` (Mesh Hop's precedent); the user runs `pip`/`pipx`; a `.deb` that runs `pip` at install | vendored and pinned (`rns`, `lxmf`), with Debian's `python3-cryptography` and `python3-serial` as `depends` and `python3-bleak` as `recommends`; a new package with each upstream release while 1.6.x settles |
-| D5 | Names | package and unit `reticulum`; `rns-bridge`; `deck-rns` | the owner's choice; `reticulum` reads well in Settings > Apps but must not be mistaken for an upstream package (the README says it is ours) |
-| D6 | Service lifetime | always on from boot; started by an app and stopped with the last one; a switch | started on demand by our apps, plus a "Keep running (receive while no app is open)" switch in the status app, off by default |
-| D7 | Transport (routing for other nodes) | off; on | off on every board of ours (the manual reserves it for stationary, always-on systems: 2.2) |
-| D8 | What may transmit | everything the config enables; nothing until the owner switches it on | nothing transmits until the owner switches it on, per interface (`outgoing = False` as the default); no announce, path request or message without the owner's action |
-| D9 | Default interfaces | upstream default (AutoInterface on every network); AutoInterface only on a named device after opt-in; an Internet entrypoint preconfigured | no interface on at first start; the user adds and enables each one in the interface manager (D19): AutoInterface on `wlan0`, Ethernet or a chosen USB adapter, TCP entrypoints only when typed or picked by the user, an RNode only when added |
-| D10 | RNode settings page: contents and defaults | the `RNodeInterface` options only (4.2); add region presets or frequency lists; prefill upstream's example values (867.2 MHz, 125 kHz, 7 dBm, SF8, CR 5) | the `RNodeInterface` options only, no region presets, no frequency allowlist, no hard-coded plan; the radio fields start empty and the owner/user must fill them (RNS itself refuses an RNode interface without them, 4.2); `airtime_limit_long` and `airtime_limit_short` always visible, empty by default (empty = no limit, as upstream), the owner/user fills them; transmitting stays off until the user switches an interface on (D8) |
-| D11 | Which board is the RNode (context only, optional) | any compatible board with RNode firmware (4.3) | the owner's choice outside the app; he already runs RNode firmware on a Heltec LoRa32 V4 (official list, USB and BLE), which P0 uses; compatibility notes only: the XIAO S3 WIO is also supported, the XIAO nRF52840 is not and can stay on MeshCore for Mesh Hop |
-| D12 | Identity and announces | one LXMF identity per deck; one per app; announce policy | one identity per deck in the service's data folder (mode 0600); export only on the owner's action; announce only after the owner has set a display name and pressed Announce; automatic re-announce off, at most every 6 h when on |
-| D13 | Propagation node | none; picked from heard announces; sync policy | none by default; the owner picks one; sync by hand, or on a timer only while on Wi-Fi; the app warns that sending through it costs minutes of CPU on a Zero 2 W (if P0 confirms) |
-| D14 | First app | status app with interface manager and announce monitor; messenger | the status app: listen-first, no transmit needed, holds the interface manager (D19) and shows each interface's facts |
-| D15 | NomadNet terminal wrapper | build as a stopgap; skip | only if P0 shows it usable in the launcher's terminal page (U) |
-| D16 | Provenance rule for this feature | as for other apps; strict | strict: workers use only the public Python API of RNS and LXMF and documented formats; they never read upstream source in order to write protocol, crypto or markup-parser code; the README states AI assistance (6.3) |
-| D17 | AI account data use | check; ignore | check that the sessions used for this work are not used for model training (6.2: the licence's AI-training condition) |
-| D18 | Mesh Hop guard | none; skip ports held by any other process | a small Mesh Hop task: treat a port held by any other process as busy (`/proc` check), and name an RNode as "used by Reticulum" (4.4) |
-| D19 | Transport model | LoRa-first apps around an RNode; transport-agnostic apps over any Reticulum interface | transport-agnostic (owner's statement, 2026-11-07): an interface manager in the bridge and the status app lists, adds, edits, enables and disables interfaces of every documented type (4.1), each with only its own options and per-interface status (online, rx/tx bytes, bitrate, errors); D8 applies per interface; hardware-neutral wording ("interface", not "radio"); the other apps never ask which medium is in use |
+| # | Decision | Options | Recommendation (not a rule) | Status |
+|---|---|---|---|---|
+| D1 | Start at all | run probe P0 now; park the topic | run P0 (one evening: about 1-1.5 h of the owner's time, section 8) before any build | Accepted (2026-11-07) |
+| D2 | A long-running Python process | keep guideline 6 ("no Python for long-running parts"): no Reticulum; an exception for this one service; an exception for any app | an exception for this one service only, and only if P0 meets a budget the owner sets. My proposal: on the deck, VmRSS at most 60 MB idle, idle CPU at most 3 %, ready within 20 s of start | Accepted (2026-11-07) |
+| D3 | Architecture | A: our Python bridge is the shared instance, native apps talk JSON to it; B: upstream `rnsd` as the service, the bridge as one of its clients; C: a native C++ RNS and LXMF in our apps; D: an alternative implementation (Go, Rust, C++); E: only wrap NomadNet's terminal UI | A (it behaves as B by itself when the user already runs an `rnsd`: 3.5); not C; D only if P0 fails and a later look finds a mature one; E only as an optional stopgap (D15) | Accepted (2026-11-07) |
+| D4 | Packaging | pinned wheels vendored in our `.deb` (Mesh Hop's precedent); the user runs `pip`/`pipx`; a `.deb` that runs `pip` at install | vendored and pinned (`rns`, `lxmf`), with Debian's `python3-cryptography` and `python3-serial` as `depends` and `python3-bleak` as `recommends`; a new package with each upstream release while 1.6.x settles | Accepted (2026-11-07) |
+| D5 | Names | package and unit `reticulum`; `rns-bridge`; `deck-rns` | the owner's choice; `reticulum` reads well in Settings > Apps but must not be mistaken for an upstream package (the README says it is ours) | Accepted (2026-11-07) |
+| D6 | Service lifetime | always on from boot; started by an app and stopped with the last one; a switch | started on demand by our apps, plus a "Keep running (receive while no app is open)" switch in the status app, off by default | Accepted (2026-11-07) |
+| D7 | Transport (routing for other nodes) | off; on | off on every board of ours (the manual reserves it for stationary, always-on systems: 2.2) | Accepted (2026-11-07) |
+| D8 | What may transmit | everything the config enables; nothing until the owner switches it on | nothing transmits until the owner switches it on, per interface (`outgoing = False` as the default); no announce, path request or message without the owner's action | Accepted (2026-11-07) |
+| D9 | Default interfaces | upstream default (AutoInterface on every network); AutoInterface only on a named device after opt-in; an Internet entrypoint preconfigured | no interface on at first start; the user adds and enables each one in the interface manager (D19): AutoInterface on `wlan0`, Ethernet or a chosen USB adapter, TCP entrypoints only when typed or picked by the user, an RNode only when added | Accepted (2026-11-07) |
+| D10 | RNode settings page: contents and defaults | the `RNodeInterface` options only (4.2); add region presets or frequency lists; prefill upstream's example values (867.2 MHz, 125 kHz, 7 dBm, SF8, CR 5) | the `RNodeInterface` options only, no region presets, no frequency allowlist, no hard-coded plan; the radio fields start empty and the owner/user must fill them (RNS itself refuses an RNode interface without them, 4.2); `airtime_limit_long` and `airtime_limit_short` always visible, empty by default (empty = no limit, as upstream), the owner/user fills them; transmitting stays off until the user switches an interface on (D8) | Accepted (2026-11-07) |
+| D11 | Which board is the RNode (context only, optional) | any compatible board with RNode firmware (4.3) | the owner's choice outside the app; he already runs RNode firmware on a Heltec LoRa32 V4 (official list, USB and BLE), which P0 uses; compatibility notes only: the XIAO S3 WIO is also supported, the XIAO nRF52840 is not and can stay on MeshCore for Mesh Hop | Accepted (2026-11-07) |
+| D12 | Identity and announces | one LXMF identity per deck; one per app; announce policy | one identity per deck in the service's data folder (mode 0600); export only on the owner's action; announce only after the owner has set a display name and pressed Announce; automatic re-announce off, at most every 6 h when on | Accepted (2026-11-07) |
+| D13 | Propagation node | none; picked from heard announces; sync policy | none by default; the owner picks one; sync by hand, or on a timer only while on Wi-Fi; the app warns that sending through it costs minutes of CPU on a Zero 2 W (if P0 confirms) | Accepted (2026-11-07) |
+| D14 | First app | status app with interface manager and announce monitor; messenger | the status app: listen-first, no transmit needed, holds the interface manager (D19) and shows each interface's facts | Accepted (2026-11-07) |
+| D15 | NomadNet terminal wrapper | build as a stopgap; skip | only if P0 shows it usable in the launcher's terminal page (U) | Accepted (2026-11-07) |
+| D16 | Provenance rule for this feature | as for other apps; strict | strict: workers use only the public Python API of RNS and LXMF and documented formats; they never read upstream source in order to write protocol, crypto or markup-parser code; the README states AI assistance (6.3) | Accepted (2026-11-07) |
+| D17 | AI account data use | check; ignore | check that the sessions used for this work are not used for model training (6.2: the licence's AI-training condition) | Accepted (2026-11-07) |
+| D18 | Mesh Hop guard | none; skip ports held by any other process | a small Mesh Hop task: treat a port held by any other process as busy (`/proc` check), and name an RNode as "used by Reticulum" (4.4) | Accepted (2026-11-07) |
+| D19 | Transport model | LoRa-first apps around an RNode; transport-agnostic apps over any Reticulum interface | transport-agnostic (owner's statement, 2026-11-07): an interface manager in the bridge and the status app lists, adds, edits, enables and disables interfaces of every documented type (4.1), each with only its own options and per-interface status (online, rx/tx bytes, bitrate, errors); D8 applies per interface; hardware-neutral wording ("interface", not "radio"); the other apps never ask which medium is in use | Accepted (2026-11-07) |
 
 ## 2. Reticulum and its parts (question 1)
 
@@ -590,7 +590,7 @@ C) would be the exact pattern the manual attacks.
 ### 6.4 What the owner must decide
 
 D4 (vendoring), D16 (provenance rule), D17 (AI data use), and whether to accept a package carrying the Reticulum
-License at all.
+License at all. All accepted by the owner on 2026-11-07 (section 1); D17 still needs the owner's check of the account setting.
 
 ## 7. Effort, phases, tests (question 6)
 
@@ -785,6 +785,8 @@ following the rules where they transmit (4.2).
 - MeshChat and MeshChatX resource use.
 
 ## 11. Questions for the owner
+
+D1-D19 are accepted (section 1). The questions below are the details the owner still has to supply for P0 or later phases; where a question restates a decision, the accepted recommendation is the default.
 
 1. **The RNode for P0 (D11, context only):** the Heltec V4: which RNode firmware version does it run (`rnodeconf -i`),
    and which values (frequency, bandwidth, spreading factor, coding rate) will you enter for the probe?
