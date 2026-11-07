@@ -69,9 +69,9 @@ infringing derivatives (6.3).
    by upstream (3.1).
 5. **Resources (U).** No published RAM or CPU figure for RNS on a Zero 2 W was found. Known: a Zero 2 W running RNS
    idles at about 400 mW (V, community table); the LXMF propagation-node index ran at 3,867 messages/s on a Zero 2 W
-   (V). Not known: resident memory, start time, and the cost of stamps. A message sent through a propagation node needs
-   a cost-16 stamp, on average 65,536 SHA-256 passes over a 768 KB block, spread over all cores (V, source); my estimate
-   on a Zero 2 W is a few minutes of full CPU per message (I): a heavy load for a Zero 2 W, which has not been tried (owner,
+   (V). Not known on the Zero 2 W: resident memory, start time, and the cost of stamps (Pi 4B, 8.2: about 38 MB idle, 0.45 s start, and a cost-16 stamp did not finish in 8.5 minutes at 2 cores). A message sent through a propagation node needs
+   a cost-16 stamp, on average 65,536 SHA-256 passes over a 768 KB block, spread over all cores (V, source); my first estimate
+   on a Zero 2 W was a few minutes of full CPU per message (I); the Pi 4B run (8.2) suggests much more: a heavy load for a Zero 2 W, which has not been tried (owner,
    2026-11-07: every earlier reset of the board was an accidental reboot or unplugging, not load).
 6. **How an app talks to it (V).** Programs share one *shared instance* through a local socket, but each client still
    runs the full RNS protocol (crypto, links, announces) in its own process; the side channel is Python's
@@ -646,7 +646,7 @@ effect on power, NomadNet in the terminal page, and the Heltec V4's host link (U
 5. **Treat propagated messages on the Zero 2 W as open.** If P0 confirms minutes per stamp, the deck sends direct and
    opportunistic messages only, and propagation sync runs on the Pi 4B, Pi 5 or tablet.
 
-## 8. Probes (dry-run on the PC 2026-11-07; board runs not yet done)
+## 8. Probes (dry-run on the PC 2026-11-07; Pi 4B run 2026-11-07, 8.2; deck run not yet done)
 
 The Pi 4B first (faster), then the deck (zero7), with the owner present for the deck runs. Every run
 has a timeout; nothing touches `~/.reticulum` (a separate configuration folder and `instance_name = probe`); no launcher
@@ -842,9 +842,77 @@ and was not tested here.
 6. `import NomadNet` is `import nomadnet`.
 7. PC tooling only: `wsl.exe -- bash -c '...$VAR...'` from Windows loses `$VAR`; use script files.
 
+### 8.2 Measured on the Pi 4B, 2026-11-07 / 08 (Pi 4B numbers, not Zero 2 W numbers)
+
+Board: Raspberry Pi 4 Model B Rev 1.5 (Cortex-A72, 4 cores, 1.8 GHz, governor `ondemand`), 905 MB RAM, zram swap 904 MB
+(0 used throughout), Debian 13 (trixie), kernel 6.18.50+rpt-rpi-v8, Python 3.13.5, `python3-cryptography` 43.0.0, Wi-Fi
+(`wlan0`) only. Everything lived under `~/rns-probe` (venv with `--system-site-packages`); nothing under `~/.reticulum`,
+no launcher file or unit touched; `AutoInterface` disabled throughout; no public testnet, no external host, nothing on a
+radio. Raw logs and the scripts: `C:\CLAUDE\zero7\reticulum-work\pi4b\` (not in a repo). It is a 1 GB model: a fair
+stand-in for memory (same aarch64 Python), not for CPU.
+
+**Deviations from the draft commands.** (1) `python3-serial` was missing and was installed with `apt` (the only apt
+change: `python3-serial` 3.5-2, 469 kB); `python3-venv` and `python3-cryptography` were already there. (2) The wheels were
+`pip download`ed and their sha256 checked against 8.1 (both matched) before `pip install --no-deps --no-index` from the
+local files. (3) `/usr/bin/time` and `bc` are not on the image, so timings use Python's clock. (4) A first idle run
+measured the `timeout` wrapper's PID instead of the daemon (the `$!` advice of 8.1 holds only without `timeout`); it
+was repeated without the wrapper. (5) `pip check` prints unrelated complaints about system packages (`types-*`,
+`apt-listchanges`); none about `rns` or `lxmf`. (6) P0-d stopped at the temperature rule (below), so cost 16 and the 100 %
+run have no result. (7) `CPUQuota` worked from `systemd-run --user --scope` (user systemd running, the `cpu` controller
+delegated).
+
+| Measure | Pi 4B (this section) | PC (8.1, for reference) |
+|---|---|---|
+| Install of both wheels, local files, `--no-deps` | 3.4 s (download 1.8 s) | 1.3 s with network |
+| Disk: venv / `RNS` / `LXMF` | 22 MB / 6.8 MB / 0.86 MB | 24 / 6.7 / 0.86 MB |
+| `import RNS, LXMF`, cold (after `drop_caches`) | 0.95 s wall, 0.55 s CPU | no cold run |
+| `import RNS, LXMF`, warm (3 runs) | 0.49-0.50 s wall (0.49 CPU), max RSS 36.5 MB | 0.10-0.11 s, 34 MB |
+| `rnsd` start until its sockets exist | 0.45 s (both runs); the "Started rnsd" line has the same second as "Configuration loaded" | 0.12-0.16 s |
+| `rnsd` idle VmRSS, 10 threads | 38.1 MB at 1 min, 38.3 MB at 10 min (VmHWM equal); with `MALLOC_ARENA_MAX=2` 38.1 / 38.3 MB | 39.6-41.6 MB |
+| `MALLOC_ARENA_MAX=2` | no difference | none |
+| `rnsd` idle CPU | 0.1 % at 10 min (1 CPU-second in 10 min); 0.8-1.0 % in the first minute | 0.1-0.3 % |
+| `rnsd` with one TCP peer, four LXMF messages | VmRSS 38.7 MB; the LXMF client (shared instance) 39.1 MB | 40.5-43.3 MB |
+| `rnstatus --attach / --detach / --reload` | work identically (port opens, closes, reopens, rebinds; Notice lines logged) | same |
+| Stamp cost 8 (1 process) | 3.5 s, 1 core | 0.26 s |
+| Stamp cost 12 (1 sample) | 21.7 s, 1 core | 8.3 s (one sample) |
+| Stamp cost 16 (`CPUQuota=200%`, `nice 19`) | **not finished after about 8.5 min**; stopped by the temperature rule at 80.3 C | 1.2-4.5 s wall, 12.5-50.4 CPU-s on 12 cores |
+| Temperature, idle daemons | 46.7 C before, 49.6 C after 10 min | not recorded |
+| `vcgencmd get_throttled` | 0x0 at every sample (177 samples, 3 s apart), also at 80.3 C | not applicable |
+
+**P0-c over the LAN (controlled).** `rnsd` on the Pi with a `TCPServerInterface` bound to `192.168.68.167` only, port 4242,
+`outgoing` at its default; an in-process LXMF node on the PC (WSL2, `TCPClientInterface` to that address, the same pinned
+wheels re-created in `~/rns-probe-pc`; WSL reached the Pi without a workaround); the Pi's LXMF node attached to the
+shared instance of its `rnsd`. Both announced; each heard the other's announce within about a second of its own start.
+Both directions, both methods delivered: the sender's delivery proof arrived after **23-26 ms (opportunistic)** and
+**47-48 ms (direct, link setup included)** in both directions. One-way latency cannot be read from the message timestamps
+(the two clocks differ by an unknown amount under 1 s). The Pi's TCP interface counted 1.4 kB received and 1.3 kB sent for
+the whole exchange. Only the PC (192.168.68.113) connected, for 100 s. At the end the server and node were stopped and
+`ss -ltn` showed port 4242 closed.
+
+**P0-d, stamps, in full.** Both runs used `systemd-run --user --scope -p CPUQuota=200% nice -n 19 timeout 900` with a
+sampler that stops on more than 80 C or any current throttle bit. Cost 8: 3.5 s, one core; cost 12: 21.7 s, one core.
+During the cost-16 run the temperature rose from 49 C to 70 C within 4 minutes and reached 80.3 C at about 8.5 minutes
+(no fan; the case and heatsink were not checked), where the sampler stopped it. The firmware never throttled (`0x0`
+throughout). The stop killed the parent only: its four worker processes ran on for about 40 s until I killed them by PID,
+and the temperature peaked at 81.8 C in that time. **Lesson for the bridge: a stamp generator is a process group; stop it
+as a group (a cgroup scope, `systemctl --user stop`), not by one PID.** The cost-16 run has no completion time: one
+unfinished sample says only that on a Pi 4B at a 200 % quota it took more than about 8.5 minutes (the PC needed 12-50
+CPU-s, the cost-8 ratio Pi 4B to PC is 13.6, so 160-700 CPU-s were expected; a long tail is possible). The 100 % quota
+run was not made (stop and report).
+
+**What this implies for the Zero 2 W (estimate, labelled as such).** Memory carries over best: the same 64-bit Python and
+RNS should idle near 38-40 MB with 10 threads, on a board with 512 MB (I). For CPU I have no benchmark: a Zero 2 W's four
+Cortex-A53 cores at 1.0 GHz are, by general knowledge of the two cores and their clocks, probably 2.5-3.5 times slower
+than the Pi 4B's A72 cores at 1.8 GHz (I, not measured, to be measured on the deck). On that ratio: import 1.2-1.7 s warm
+and a few seconds cold, `rnsd` start about 1.5 s, cost 8 about 10 s, cost 12 about 1 minute, and cost 16 more than 20
+minutes at 2 cores, with a heat problem as well. **So a cost-16 stamp is not a task for the deck: only the Pi 4B (or the
+PC) should generate propagation stamps, or the deck should not send through propagation nodes (I).** Plain messages
+(opportunistic, direct) cost milliseconds of CPU on the Pi 4B, so they should be cheap on the deck too. `outgoing = False`
+on a radio (P0-e) and NomadNet's page (P0-f) were not run, as agreed.
+
 ## 9. Risks, ranked
 
-1. **Zero 2 W resources.** Python's memory is unknown; a cost-16 stamp may take minutes of full CPU (I) on a board where no
+1. **Zero 2 W resources.** Python's memory is probably about 40 MB (Pi 4B, 8.2); a cost-16 stamp did not finish in 8.5 minutes on a Pi 4B at 2 cores and heated it to 80 C, so on the deck it is probably out of reach (I), on a board where no
    heavy Python load has been run yet (the owner's earlier resets were accidents, not load). Mitigation: P0; `Nice`, `CPUQuota`; no propagation sync on the deck if
    slow; the Pi 4B as the home node.
 2. **Upstream churn and governance.** Stamp enforcement in 1.6.2 cuts off nodes that did not update; releases are
@@ -864,8 +932,8 @@ following the rules where they transmit (4.2).
 ## 10. Not verified
 
 - Memory, CPU and start time of RNS (and of the bridge) on the Zero 2 W; the 1.6.0 memory claims on our boards. (PC numbers
-  exist, 8.1: about 40 MB idle, 0.15 s start; they say nothing about the Zero 2 W.)
-- Stamp time on the Zero 2 W (my 2-5 minutes for cost 16 is an estimate); SHA-256 throughput per core; whether the
+  exist, 8.1, and Pi 4B numbers, 8.2: about 38-40 MB idle, 0.15 s and 0.45 s start; they say nothing certain about the Zero 2 W.)
+- Stamp time on the Zero 2 W (my 2-5 minutes for cost 16 is an estimate that the Pi 4B run, 8.2, contradicts: no completion in 8.5 minutes; the completion time of a cost-16 stamp is still unmeasured on every board, and so are costs 10 and 14); SHA-256 throughput per core; whether the
   BCM2710A1 lacks the ARMv8 crypto extensions (widely reported, not checked).
 - The default destination-stamp cost from RNS 1.6.1 and its one-time CPU.
 - How often LXMF users (Sideband, MeshChatX, Columba) set an inbound stamp cost, which makes direct messages cost CPU
@@ -878,7 +946,7 @@ following the rules where they transmit (4.2).
   host link over Wi-Fi works; how the firmware maps a requested `txpower` through the PA (28 dBm maximum) and whether
   the read-back value matches what RNS sent.
 - Which other boards of the owner's can run RNode (community forks not checked); the Wio-SX1262 antenna connector.
-- What the undocumented `WeaveInterface` is. (Verified on the PC, 8.1: run-time attach, detach and reload of interfaces; the
+- What the undocumented `WeaveInterface` is. (Verified on the PC, 8.1, and on the Pi 4B for attach, detach and reload, 8.2: run-time attach, detach and reload of interfaces; the
   shared-instance sockets and attach rules; stamp costs 8, 12, 16 on the PC. Still open: the same on the Zero 2 W, and
   `outgoing = False` on an `RNodeInterface`.)
 - Whether the RNode firmware clamps a `txpower` above the radio's maximum (RNS would then see a mismatch and take the
