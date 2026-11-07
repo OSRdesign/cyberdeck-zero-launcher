@@ -63,8 +63,8 @@ infringing derivatives (6.3).
    idles at about 400 mW (V, community table); the LXMF propagation-node index ran at 3,867 messages/s on a Zero 2 W
    (V). Not known: resident memory, start time, and the cost of stamps. A message sent through a propagation node needs
    a cost-16 stamp, on average 65,536 SHA-256 passes over a 768 KB block, spread over all cores (V, source); my estimate
-   on a Zero 2 W is a few minutes of full CPU per message (I): the kind of load during which the deck hard-reset
-   before, cause not known (guidelines section 14).
+   on a Zero 2 W is a few minutes of full CPU per message (I): a heavy load for a Zero 2 W, which has not been tried (owner,
+   2026-11-07: every earlier reset of the board was an accidental reboot or unplugging, not load).
 6. **How an app talks to it (V).** Programs share one *shared instance* through a local socket, but each client still
    runs the full RNS protocol (crypto, links, announces) in its own process; the side channel is Python's
    `multiprocessing.connection` with msgpack. A native app therefore either reimplements RNS or talks to a Python
@@ -96,7 +96,7 @@ RNode and receiving only; decide on the numbers. If they pass: P1 a `reticulum` 
 status app, P2 the messenger, P3 the NomadNet browser, P4 positions with Deck Atlas. **MVP (P0 + P1 + docs) 3.75-5 ws
 (1.5-2 M tokens); with the messenger 7.5-10.25 ws; everything listed 13-18.5 ws (5.2-7.4 M tokens)** (7).
 
-**Top three risks.** (1) Python RNS memory and CPU, and stamp proof-of-work, on the Zero 2 W (the deck has reset under heavy load before);
+**Top three risks.** (1) Python RNS memory and CPU, and stamp proof-of-work, on the Zero 2 W (no load problem has been seen on the deck; owner: the earlier resets were accidental unplugging or reboots);
 (2) upstream churn (stamp enforcement in 1.6.2) with a single maintainer who takes no issues; (3) licence and
 provenance: a non-standard licence with use conditions, and upstream's stance on AI-generated reimplementations, in a
 project whose code is written with AI assistance (9).
@@ -234,7 +234,7 @@ for the goal", V manual) but the licence allows redistribution.
 | A cost-16 stamp | on average 2^16 = 65,536 attempts; each attempt is one SHA-256 of a 768 KB workblock (3,000 HKDF chunks of 256 bytes) plus 32 bytes; one worker process per core | V (`Stamps.py`) |
 | Its time on a Zero 2 W | about 50 GB hashed per stamp; at an assumed 60-120 MB/s of SHA-256 per Cortex-A53 core without the ARMv8 crypto extensions, 2-5 minutes on all 4 cores | I (the throughput and the missing extensions are U) |
 | RNS 1.6.1 destination stamps | generated once per destination, "relatively high default target values", "Expect some CPU usage" | V; the cost U |
-| Our rules | native app VmRSS under 25 MB; "no Python for long-running parts"; idle CPU a few percent; the deck reset twice while CPU-heavy Python work ran at hardware connect (Mesh Hop 0.6.0 and 0.7.0; power, USB or both: not known) | V (guidelines 6, 14) |
+| Our rules | native app VmRSS under 25 MB; "no Python for long-running parts"; idle CPU a few percent; Mesh Hop's earlier deck resets were put down to CPU-heavy Python work, but the owner says they were accidental reboots or unplugging, so there is no load evidence either way | V (guidelines 6, 14) |
 
 Mitigations to try in P0 (I): run the service with `Nice=10`, `IOSchedulingClass=idle` and `CPUQuota=200%` in its
 systemd unit (the stamp workers then share two cores' worth of time: slower but cooler), keep the manual's
@@ -577,7 +577,7 @@ effect on power, NomadNet in the terminal page, and the owner's other LoRa board
 
 ## 8. Probes (proposed, not run)
 
-The Pi 4B first (faster, no reset history), then the deck (zero7), with the owner present for the deck runs. Every run
+The Pi 4B first (faster), then the deck (zero7), with the owner present for the deck runs. Every run
 has a timeout; nothing touches `~/.reticulum` (a separate configuration folder and `instance_name = probe`); no launcher
 restart; cleanup at the end. The commands are drafts to be checked against the installed versions at probe time.
 
@@ -671,8 +671,8 @@ only).
 
 ## 9. Risks, ranked
 
-1. **Zero 2 W resources.** Python's memory is unknown; a cost-16 stamp may take minutes of full CPU (I) on a board that
-   reset during heavy Python load before, cause not known (V). Mitigation: P0; `Nice`, `CPUQuota`; no propagation sync on the deck if
+1. **Zero 2 W resources.** Python's memory is unknown; a cost-16 stamp may take minutes of full CPU (I) on a board where no
+   heavy Python load has been run yet (the owner's earlier resets were accidents, not load). Mitigation: P0; `Nice`, `CPUQuota`; no propagation sync on the deck if
    slow; the Pi 4B as the home node.
 2. **Upstream churn and governance.** Stamp enforcement in 1.6.2 cuts off nodes that did not update; releases are
    frequent; no issue tracker; one maintainer who stepped back from public interaction (V). Mitigation: a release of our
