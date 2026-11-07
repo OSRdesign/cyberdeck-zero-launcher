@@ -40,6 +40,16 @@
  *   v=1  id=  title=  kind=mbtiles|pmtiles  mode=copy|inplace|converted  path=<the archive file, absolute>
  *   source_path=<what was imported>  format=png|jpg  tile_px=256|512  minzoom=  maxzoom=  bounds=w,s,e,n
  *   attribution=  licence=user supplied: terms are the importer's responsibility  bytes=  tiles=  imported=<UTC>
+ *   zoom_extent=z,x0,y0,x1,y1   (a converted folder: one line per zoom that has tiles; the XYZ tile rectangle there)
+ * BOUNDS AND PER-ZOOM COVERAGE. `bounds` / `minzoom` / `maxzoom` of a converted folder are the union over ALL its
+ * zooms (the MBTiles metadata says the same, as the standard wants). A lookup across all archives (get_tile with id
+ * NULL) skips an archive that cannot have the tile: with `zoom_extent=` lines each zoom is tested against its own
+ * rectangle (a folder whose shallow levels cover the world and whose deepest covers a town is found at every zoom);
+ * without them (a copied or in-place MBTiles / PMTiles, whose bounds the file declares, or a folder converted before
+ * 2026-11-07, whose record says bounds of the deepest zoom only) the declared zooms and bounds apply as they always
+ * did. Such an old folder record is recognisable (mode converted, has_zoom_extents 0, minzoom < maxzoom); the engine
+ * does not repair it: importing the folder again does (remove the archive first). A damaged zoom_extent line makes
+ * the engine ignore all of them. Readers ignore unknown keys, so older toolkits still read these records.
  * An in-place archive (a file on a USB stick) keeps only its record: its path points at the stick, and while the stick
  * is out the archive is listed with state CP0_MAP_E_ARCHIVE_MISSING and its tiles answer that code.
  *
@@ -171,6 +181,14 @@ typedef struct {
     char attribution[256];
     char path[CP0_MAP_PATH_MAX];  /* the archive file (sources: their viewing cache file, which may not exist) */
     uint64_t bytes;               /* the archive's size on disk (0 while missing) */
+    /* archives only (added 2026-11-07; for sources: tiles -1, imported 0, source_path "", has_zoom_extents 0) */
+    int64_t tiles;                /* tiles the archive held when it was imported; -1 unknown (no `tiles=` in its record) */
+    int64_t imported;             /* the import's date, seconds since the Unix epoch; 0 unknown */
+    char source_path[CP0_MAP_PATH_MAX]; /* what was imported (the original file or folder); "" unknown */
+    int has_zoom_extents;         /* 1: the record keeps the tile rectangle of every zoom (a folder converted since
+                                     2026-11-07), so a lookup across all archives tests each zoom on its own. 0: only
+                                     the declared bounds are known (a copied or in-place archive, or a folder converted
+                                     before: see BOUNDS in the layout comment) */
     /* online sources only (added by task 3; zero for archives) */
     int shipped;                  /* 1: a toolkit record (the user file can only make it stricter) */
     int enabled;                  /* the user's switch (shipped records start off) */
@@ -222,7 +240,10 @@ int cp0_map_store_import_ex(cp0_map_store_t *store, const char *path, const cp0_
 /* The 3.7 sketch's shape: import_ex with only copy, progress and user set. */
 int cp0_map_store_import(cp0_map_store_t *store, const char *path, int copy, cp0_map_progress_cb cb, void *user);
 /* Removes an archive: its record, and its file when the store owns it (copy / converted; an in-place file is never
- * deleted), plus a leftover partial conversion or copy. Its tiles leave the RAM cache. 0, CP0_MAP_E_READ_ONLY,
+ * deleted), plus a leftover partial conversion or copy. Its tiles leave the RAM cache, and so do the tiles of the
+ * "all archives" view (they cannot be told apart), as after every import into this store; an open map widget notices
+ * and loads its view again. A second app's RAM cache is not touched (it reads the archives anew at its own
+ * cp0_map_store_refresh() and keeps the tiles it has until they are evicted). 0, CP0_MAP_E_READ_ONLY,
  * CP0_MAP_E_NOT_FOUND, CP0_MAP_E_IO. */
 int cp0_map_store_remove(cp0_map_store_t *store, const char *archive_id);
 

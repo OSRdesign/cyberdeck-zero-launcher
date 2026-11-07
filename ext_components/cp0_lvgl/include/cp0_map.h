@@ -17,6 +17,12 @@
  *   cp0_map_fetch.h    the fetch pool's clients: the visible tiles a viewer lacks, fetch events
  *
  * The LVGL widget is cp0_map_widget.h (include it separately; it needs LVGL).
+ *
+ * 2026-11-07 (report 054 3.7.3, additive; CP0_MAP_API_VERSION stays 1): a converted folder's bounds / minzoom /
+ * maxzoom cover ALL its zooms and its record keeps a tile rectangle per zoom, so the lookup across all archives
+ * decides per zoom (archives imported before keep the declared-bounds rule); remove and import drop the RAM-cached
+ * tiles of the "all archives" view too; cp0_map_source_info_t gains tiles, imported, source_path and
+ * has_zoom_extents; the widget gains cp0_map_on_view_change() (cp0_map_widget.h).
  * Third-party code inside: stb_image 2.30 (public domain or MIT, Sean Barrett), built STB_IMAGE_STATIC. Loaded at run
  * time when present: SQLite (libsqlite3.so.0, public domain), libcurl (libcurl.so.4, curl licence, MIT-style).
  */

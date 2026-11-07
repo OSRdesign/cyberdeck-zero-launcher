@@ -32,6 +32,9 @@ CP0_MAP_HIDDEN int cp0_map__gunzip(const uint8_t *in, size_t len, size_t max_out
 
 /* ---- small file helpers (cp0_map_util.c) */
 /* pread until len bytes or EOF: 0 (all read), CP0_MAP_E_CORRUPT (short: past the end), CP0_MAP_E_IO (errno). */
+/* The store's archive generation: changes whenever an archive of this store handle is imported, replaced or removed
+ * (the widget reloads its view when it sees a new one). Any thread. */
+CP0_MAP_HIDDEN uint32_t cp0_map__store_generation(const cp0_map_store_t *store);
 CP0_MAP_HIDDEN int cp0_map__pread_all(int fd, void *buf, size_t len, uint64_t off);
 /* Writes `data` to `path` atomically (temporary file, fsync, rename). 0 or CP0_MAP_E_IO. */
 CP0_MAP_HIDDEN int cp0_map__write_atomic(const char *path, const char *data, size_t len);

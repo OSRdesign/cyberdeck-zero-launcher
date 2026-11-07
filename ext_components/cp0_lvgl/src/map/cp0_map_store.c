@@ -99,6 +99,12 @@ int cp0_map__record_write(const cp0_map_store_t *s, const cp0_map_rec_t *r)
         snprintf(num, sizeof num, "%lld", r->tiles);
         bad = bad || put_kv(buf, sizeof buf, &len, "tiles", num);
     }
+    for (int z = 0; z < CP0_MAP_ZEXT_N; z++) {
+        const cp0_map_zext_t *e = &r->zext[z];
+        if (!e->present) continue;
+        snprintf(num, sizeof num, "%d,%u,%u,%u,%u", z, e->x0, e->y0, e->x1, e->y1);
+        bad = bad || put_kv(buf, sizeof buf, &len, "zoom_extent", num);
+    }
     const time_t now = time(NULL);
     struct tm tm;
     if (gmtime_r(&now, &tm) && strftime(num, sizeof num, "%Y-%m-%dT%H:%M:%SZ", &tm))
@@ -125,6 +131,38 @@ static int read_small_file(const char *path, char *buf, size_t size, size_t *len
     return 0;
 }
 
+static int parse_zext(const char *v, cp0_map_zext_t *zext)
+{
+    int z;
+    unsigned x0, y0, x1, y1;
+    char tail;
+    if (sscanf(v, "%d,%u,%u,%u,%u%c", &z, &x0, &y0, &x1, &y1, &tail) != 5) return -1;
+    if (z < 0 || z >= CP0_MAP_ZEXT_N || x0 > x1 || y0 > y1 || zext[z].present) return -1;
+    if ((uint64_t)x1 >= (1ull << z) || (uint64_t)y1 >= (1ull << z)) return -1;
+    zext[z] = (cp0_map_zext_t){1, x0, x1, y0, y1};
+    return 0;
+}
+
+/* "2026-11-07T12:00:00Z" -> seconds since the epoch; 0 when it does not parse */
+static int64_t parse_utc(const char *v)
+{
+    struct tm tm;
+    memset(&tm, 0, sizeof tm);
+    int Y, M, D, h, m, sec;
+    char tail;
+    if (sscanf(v, "%d-%d-%dT%d:%d:%dZ%c", &Y, &M, &D, &h, &m, &sec, &tail) != 6) return 0;
+    if (Y < 1970 || Y > 9999 || M < 1 || M > 12 || D < 1 || D > 31 || h < 0 || h > 23 || m < 0 || m > 59 || sec < 0 ||
+        sec > 60)
+        return 0;
+    tm.tm_year = Y - 1900;
+    tm.tm_mon = M - 1;
+    tm.tm_mday = D;
+    tm.tm_hour = h;
+    tm.tm_min = m;
+    tm.tm_sec = sec;
+    return (int64_t)timegm(&tm);
+}
+
 static int parse_int(const char *s, int lo, int hi, int def)
 {
     char *end;
@@ -145,7 +183,7 @@ static int record_parse(const char *text, const char *stem, cp0_map_entry_kind_t
         i->minzoom = i->maxzoom = -1;
         cp0_map__srcrec_init(&r->src);
     }
-    int v1 = 0;
+    int v1 = 0, zext_bad = 0;
     char id[CP0_MAP_ID_MAX] = "";
     const char *p = text;
     while (*p) {
@@ -177,6 +215,11 @@ static int record_parse(const char *text, const char *stem, cp0_map_entry_kind_t
                 else if (!strcmp(k, "bounds")) i->has_bounds = cp0_map_bbox_parse(v, &i->bounds) == CP0_MAP_OK;
                 else if (!strcmp(k, "attribution")) cp0_map__copy_str(i->attribution, sizeof i->attribution, v, 1);
                 else if (!strcmp(k, "tiles")) r->tiles = strtoll(v, NULL, 10);
+                else if (!strcmp(k, "imported")) i->imported = parse_utc(v);
+                else if (!strcmp(k, "zoom_extent")) {
+                    if (parse_zext(v, r->zext) != 0) zext_bad = 1;
+                    else i->has_zoom_extents = 1;
+                }
                 else if (kind == CP0_MAP_ENTRY_SOURCE) cp0_map__srcrec_kv(&r->src, k, v);
             }
         }
@@ -184,6 +227,12 @@ static int record_parse(const char *text, const char *stem, cp0_map_entry_kind_t
         p = eol + 1;
     }
     if (!v1) return -1;
+    if (zext_bad) { /* one unreadable rectangle: trust none of them (the declared bounds still apply) */
+        memset(r->zext, 0, sizeof r->zext);
+        i->has_zoom_extents = 0;
+    }
+    i->tiles = r->tiles;
+    cp0_map__copy_str(i->source_path, sizeof i->source_path, r->source_path, 0);
     /* the file name is the id; an id key that disagrees is ignored */
     if (!cp0_map__id_valid(stem)) return -1;
     (void)id;
@@ -418,6 +467,20 @@ int cp0_map_store_refresh(cp0_map_store_t *s)
     return rc;
 }
 
+void cp0_map__archives_changed_locked(cp0_map_store_t *s, const char *archive_id)
+{
+    /* the widget's "all archives" tiles are cached under hash("*"): any of them can come from the archive that
+     * changed, so they all go (a few hundred tiles at most; the next draw reloads what is still there) */
+    if (archive_id) cp0_map_cache_drop(s->ram, cp0_map_source_hash(archive_id));
+    cp0_map_cache_drop(s->ram, cp0_map_source_hash("*"));
+    __atomic_add_fetch(&s->generation, 1, __ATOMIC_RELEASE);
+}
+
+uint32_t cp0_map__store_generation(const cp0_map_store_t *s)
+{
+    return s ? __atomic_load_n(&s->generation, __ATOMIC_ACQUIRE) : 0;
+}
+
 cp0_map_cache_t *cp0_map_store_ram_cache(cp0_map_store_t *s)
 {
     return s ? s->ram : NULL;
@@ -501,10 +564,18 @@ static int rec_get(cp0_map_rec_t *r, int z, uint32_t x, uint32_t y, cp0_map_buf_
     return cp0_map_archive_get_tile(r->archive, z, x, y, out, fmt);
 }
 
+/* 0 when the archive cannot have tile z/x/y. It is only a filter (the archive may still say NO_TILE). With the
+ * record's per-zoom rectangles each zoom decides on its own; without them (copied or in-place archives, folders
+ * converted before 2026-11-07) the declared zooms and bounds apply, as they always did. */
 static int covers(const cp0_map_rec_t *r, int z, uint32_t x, uint32_t y)
 {
     if (r->info.minzoom >= 0 && z < r->info.minzoom) return 0;
     if (r->info.maxzoom >= 0 && z > r->info.maxzoom) return 0;
+    if (r->info.has_zoom_extents) {
+        if (z < 0 || z >= CP0_MAP_ZEXT_N || !r->zext[z].present) return 0;
+        const cp0_map_zext_t *e = &r->zext[z];
+        return x >= e->x0 && x <= e->x1 && y >= e->y0 && y <= e->y1;
+    }
     if (r->info.has_bounds && z <= CP0_MAP_MAX_ZOOM) {
         cp0_map_bbox_t t;
         if (cp0_map_tile_bbox(z, x, y, &t) == CP0_MAP_OK && !cp0_map_bbox_intersects(&t, &r->info.bounds)) return 0;
@@ -591,7 +662,7 @@ int cp0_map_store_remove(cp0_map_store_t *s, const char *id)
     static const char *const copies[] = {".mbtiles.copy", ".pmtiles.copy"};
     for (size_t k = 0; k < sizeof copies / sizeof copies[0]; k++)
         if (cp0_map__archive_file(s, id, copies[k], part, sizeof part) == 0 && unlink(part) == 0) found = 1;
-    cp0_map_cache_drop(s->ram, cp0_map_source_hash(id));
+    cp0_map__archives_changed_locked(s, id);
     const int rl = cp0_map__store_reload_locked(s);
     pthread_mutex_unlock(&s->mu);
     pthread_mutex_unlock(&s->import_mu);

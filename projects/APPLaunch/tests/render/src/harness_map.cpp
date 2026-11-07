@@ -51,6 +51,21 @@ struct MapDemo {
 };
 MapDemo g_map;
 
+/* cp0_map_on_view_change(): how often it fired and what it last said ("mapdemo viewcb reset|expect N|burst") */
+struct ViewCb {
+    int calls = 0, zoom = -1;
+    double lat = 0, lon = 0;
+};
+ViewCb g_view;
+
+void on_view(void *, double lat, double lon, int zoom)
+{
+    g_view.calls++;
+    g_view.lat = lat;
+    g_view.lon = lon;
+    g_view.zoom = zoom;
+}
+
 /* ---------------------------------------------------------------------------------------------- synthetic tiles */
 
 double m_per_world0()
@@ -334,6 +349,7 @@ bool open_page(const std::string &dir, std::string *err)
     cp0_map_set_source(d.map, "main");
     cp0_map_set_zoom(d.map, 14);
     cp0_map_set_center(d.map, kLat0, kLon0);
+    cp0_map_on_view_change(d.map, on_view, nullptr); /* the view as it is now is the baseline: no call for it */
     d.group = lv_group_create();
     lv_group_add_obj(d.group, d.map);
     lv_group_focus_obj(d.map);
@@ -471,12 +487,42 @@ bool map_demo(const std::vector<std::string> &w, const std::string &dir, std::st
         }
         return true;
     }
+    if (sub == "viewcb") { /* viewcb reset | expect N | burst (the view-change callback, once per change) */
+        const std::string what = w.size() > 2 ? w[2] : "";
+        if (what == "reset") {
+            cp0_map_wait_idle(g_map.map, 20000); /* a pending change is reported first */
+            g_view = ViewCb{};
+            return true;
+        }
+        if (what == "burst") { /* five pans and a zoom within one LVGL tick: one call */
+            for (int i = 0; i < 5; i++) cp0_map_pan_px(g_map.map, 7, -3);
+            cp0_map_set_zoom(g_map.map, cp0_map_get_zoom(g_map.map) - 1);
+            return true;
+        }
+        if (what == "expect" && w.size() == 4) {
+            const int want = std::atoi(w[3].c_str());
+            if (g_view.calls != want) {
+                *err = "mapdemo viewcb expect " + w[3] + ": the callback fired " + std::to_string(g_view.calls) + " times";
+                return false;
+            }
+            double lat = 0, lon = 0;
+            cp0_map_get_center(g_map.map, &lat, &lon);
+            if (want > 0 && (g_view.lat != lat || g_view.lon != lon || g_view.zoom != cp0_map_get_zoom(g_map.map))) {
+                *err = "mapdemo viewcb: the callback's view is not the widget's";
+                return false;
+            }
+            std::printf("viewcb ok: %d call(s), zoom %d\n", g_view.calls, g_view.zoom);
+            return true;
+        }
+        *err = "usage: mapdemo viewcb reset|burst|expect N";
+        return false;
+    }
     if (sub == "units" && w.size() == 3) {
         cp0_map_set_units(g_map.map, w[2] == "imperial" ? CP0_MAP_UNITS_IMPERIAL : CP0_MAP_UNITS_METRIC);
         return true;
     }
     *err = "usage: mapdemo open|close|wait|source ID|all|center LAT LON|offset E N|zoom Z|scale S|fix ...|markers [SEL]|"
-           "track|usb out|in|units metric|imperial";
+           "track|usb out|in|units metric|imperial|viewcb reset|burst|expect N";
     return false;
 }
 

@@ -653,6 +653,47 @@ online source (`cp0_map_set_source(map, "opentopomap")`) and shows the source's 
 now also delivers fetch events (`kind`). A second app (Mesh Hop) opens the store `read_only` and only reads the caches.
 Open item for the design pass: whether the app shows the providers' terms page before the first switch-on.
 
+**Fixes and additions after the first Deck Atlas run on a real MapTileDl folder (2026-11-07, branch `map-engine-fixes`).**
+Deck Atlas imported a z/x/y folder of zooms 1 to 17 (shallow levels over the world or a wide region, the deepest over a
+small area around 48.9 N 2.2 E) and its "All map files" view showed "no map here" when zoomed out although the MBTiles had
+those tiles. Two engine bugs, two small API additions the app asked for (additive only; `CP0_MAP_API_VERSION` stays 1):
+1. **Per-zoom coverage (bug).** *Before:* the folder importer wrote the MBTiles `bounds` and the record's `bounds=` as the
+   extent of the DEEPEST zoom only; `covers()` in `cp0_map_store.c`, which filters the lookup across all archives
+   (`cp0_map_store_get_tile(store, NULL, ...)`) by minzoom, maxzoom and bounds, then refused every shallow tile outside that
+   small box. *Now:* the import records the union of the tile extents of ALL zooms as `bounds` (MBTiles metadata and
+   record; `minzoom` / `maxzoom` were already the true first and last zoom), and one line `zoom_extent=z,x0,y0,x1,y1`
+   (XYZ tile rectangle) per zoom in `archives/<id>.conf`. `covers()` tests the tile against its own zoom's rectangle when
+   the record has them, so a zoom with no tiles, or tiles elsewhere, is skipped. The MBTiles file stays standard (nothing
+   engine-specific inside it; the rectangles live only in the record, which older toolkits ignore as an unknown key).
+   Archives without rectangles (a copied or in-place MBTiles / PMTiles, whose declared bounds are the file's own, and
+   folders converted before this change) keep today's rule: declared zooms and bounds. A damaged `zoom_extent=` line makes
+   the engine drop all of them (then the same fallback). Detecting an old converted folder is cheap: mode converted,
+   `has_zoom_extents` 0 and `minzoom < maxzoom` (its bounds describe the deepest zoom only); the engine does not repair
+   it or guess: the folder is imported again (remove the archive first) to get the new record. By id (`get_tile(store,
+   "<id>", ...)`) the tiles were always found; only the lookup across all archives is affected.
+2. **RAM-cache invalidation (bug).** The widget caches the "All map files" view under the source hash of `"*"`, but
+   `cp0_map_store_remove()` and the import only dropped the archive's own hash, so tiles of a removed or replaced file
+   stayed visible. Now both drop every `"*"` tile as well (simplest correct: a `"*"` tile cannot be told from the archive
+   that answered), and bump a store generation counter (`cp0_map__store_generation()`, private); an open map widget sees it
+   on its next timer tick, drops its source's tiles and its "no tile here" memory (an import may now answer tiles that
+   were absent) and loads the view again. A loader result already in flight can still add one tile of the old view; the
+   next change drops it. Another process's RAM cache is not reachable.
+3. **Listing fields (API).** `cp0_map_source_info_t` gains `int64_t tiles` (the record's `tiles=`; -1 unknown, as for a
+   copied archive), `int64_t imported` (the record's `imported=` as Unix time; 0 unknown), `char source_path[512]` (the
+   record's `source_path=`: the original file or folder) and `int has_zoom_extents`. Archives only; sources have -1, 0, ""
+   and 0. The app can stop reading `archives/<id>.conf` itself.
+4. **View-change callback (API).** `typedef void (*cp0_map_view_cb)(void *user, double lat, double lon, int zoom);
+   void cp0_map_on_view_change(lv_obj_t *map, cp0_map_view_cb cb, void *user);` (`cp0_map_widget.h`): called on the LVGL
+   thread from the widget's timer (40 ms while the view moves) when the centre or zoom differs from what the previous
+   call (or the registration) saw: after a drag, key, zoom, `set_center` / `set_zoom` / `set_source` / locate. Several
+   changes inside one tick give one call; a scale or size change, or a tile arriving, none. No allocation. One callback
+   per widget, NULL removes it. Apps no longer need their 250 ms poll.
+Not done, as asked: loading state, key mapping, terms URL. Tests: `test_map_store.c` (pyramid folders of 1,023 and 963
+tiles: union bounds, minzoom / maxzoom in the MBTiles metadata and the record, every tile found across all archives, per-zoom
+rectangles, an archive written the old way still opens and filters as before, damaged line, restart; the `"*"` RAM tiles
+dropped by remove and import and other sources' kept; the new fields) and the render scene `map_widget` (view callback:
+once per change, none for a scale change, one for a burst).
+
 ## 4. GPS (question 3)
 
 ### 4.1 Receivers
