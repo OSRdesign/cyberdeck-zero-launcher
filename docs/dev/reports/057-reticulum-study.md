@@ -15,13 +15,20 @@ the options and my recommendations; design and visual decisions stay with the co
   `src/core/serial_transport.cpp`), Deck Atlas 0.1.0 `README.md`, `tools/make_registry.py` (the `license` field).
 - Upstream, read 2026-11-07 (Sources, with versions and commits): Reticulum `master` @ `cb1260891d` = **RNS 1.6.0,
   released today**: the manual sources (`docs/source/*.rst`), `LICENSE`, `setup.py`, `MIRROR.md`, `RNS/Reticulum.py`,
-  `RNS/Interfaces/RNodeInterface.py`, `RNS/Stamps.py`, `RNS/Storage.py`, `RNS/__init__.py`; LXMF 1.3.0 (`README.md`,
-  `LICENSE`, `setup.py`, `LXMF.py`, `LXMRouter.py`, `LXMessage.py`); NomadNet 1.5.0 (`README.md`, `LICENSE`,
-  `setup.py`, `Guide.py`, `Node.py`); Sideband 2.2.0 (`README.md`, `LICENSE`, `sbapp/sideband/sense.py`); RNode
-  Firmware 1.86 (`README.md`, `LICENSE`, `Boards.h`, `Bluetooth.h`); MeshChat 2.4.0 and MeshChatX; Reticulum-Go,
-  Reticulum-rs, microReticulum, reticulum-kt, Columba and Prns (repository metadata, READMEs, licence files); PyPI JSON
-  and Debian `madison` package indexes; three GitHub discussions with measurements; ERC Recommendation 70-03 (amended
-  2026-10-09).
+  `RNS/Interfaces/RNodeInterface.py`, `RNS/Utilities/rnodeconf.py`, `RNS/_version.py`, `RNS/Stamps.py`,
+  `RNS/Storage.py`, `RNS/__init__.py`; LXMF 1.3.0 (`README.md`, `LICENSE`, `setup.py`, `LXMF.py`, `LXMRouter.py`,
+  `LXMessage.py`); NomadNet 1.5.0 (`README.md`, `LICENSE`, `setup.py`, `Guide.py`, `Node.py`); Sideband 2.2.0
+  (`README.md`, `LICENSE`, `sbapp/sideband/sense.py`); RNode Firmware 1.86 (`README.md`, `LICENSE`, `Boards.h`,
+  `Bluetooth.h`, `Config.h`, `RNode_Firmware.ino`); MeshChat 2.4.0 and MeshChatX; Reticulum-Go, Reticulum-rs,
+  microReticulum, reticulum-kt, Columba and Prns (repository metadata, READMEs, licence files); PyPI JSON and Debian
+  `madison` package indexes; three GitHub discussions with measurements.
+
+**Scope (owner, 2026-11-07).** *Transport-agnostic:* "our app, per Reticulum's advantage, should be able to use any
+compatible hardware: Ethernet, Wi-Fi, Bluetooth, RNode, radio...". The apps never assume LoRa; they work over whichever
+Reticulum interfaces the user enables (4.1), and a deck with only Wi-Fi is a valid Reticulum node. *Worldwide:* an RNode
+is a separate device, any compatible board with RNode firmware (the owner has a Heltec LoRa32 V4 running it, 4.3), not
+our hardware; the app does not flash or own it. For an RNode the app sets only what Reticulum's `RNodeInterface`
+exposes (4.2), including the airtime (duty-cycle) limits; it has no region presets and decides or enforces no region.
 
 **A correction to the brief.** Mesh Hop is a **MeshCore** client, not a Meshtastic client (`apps/mesh-hop/app.json`:
 "MeshCore messenger"). It reaches its companion radio over USB, BLE or TCP. Nothing below depends on the difference,
@@ -36,7 +43,8 @@ source found, or not checkable without a board (collected in section 10). **Cost
 **Verdict: feasible, but only as "the upstream Python implementation in one background service, plus our own native
 LVGL apps that talk to it over a small local socket", and only after a one-board probe answers three unknowns: the RAM
 and CPU of Python Reticulum on a Pi Zero 2 W, the CPU cost of the new proof-of-work stamps, and whether the owner
-accepts a long-running Python process, which today's app guidelines rule out.** A native C++ reimplementation of the
+accepts a long-running Python process, which today's app guidelines rule out.** The service carries an interface
+manager, so the same apps run over Wi-Fi, Ethernet, TCP, an RNode or any other Reticulum interface the user turns on. A native C++ reimplementation of the
 protocol is not recommended: it is the largest option, and upstream treats machine-generated reimplementations as
 infringing derivatives (6.3).
 
@@ -70,31 +78,39 @@ infringing derivatives (6.3).
    `multiprocessing.connection` with msgpack. A native app therefore either reimplements RNS or talks to a Python
    helper. Recommended: one Python **bridge** process that is the shared instance, runs the LXMF router and offers a
    JSON-lines socket to our native apps (5.3).
-7. **Transports (V).** RNode over USB serial is the main radio path; RNode over Bluetooth LE works on Linux through
-   `bleak`; Wi-Fi and Ethernet through `AutoInterface` (zero configuration, IPv6 link-local); TCP or `BackboneInterface`
-   to Internet entrypoints found on `directory.rns.recipes` or `rmap.world`; I2P needs an `i2pd` daemon. **Listen-only
-   is one setting:** `outgoing = False` on an interface (4.1).
-8. **Radio rules (V).** EU and France (ERC/REC 70-03 Annex 1; France implements every 863-870 MHz sub-band): 865-868
-   MHz and 868.0-868.6 MHz allow 25 mW e.r.p. at 1 % duty cycle (or LBT+AFA), 869.4-869.65 MHz allows 500 mW e.r.p. at
-   10 %. RNS enforces airtime with `airtime_limit_long` (rolling 60 minutes) and `airtime_limit_short` (about 15 s).
-   1 % is 36 s on air per hour, about 74 announces at SF8/125 kHz (I, computed in 4.2).
-9. **The owner's hardware (V, U).** The spare Seeed XIAO ESP32S3 + Wio-SX1262 ("XIAO S3 WIO", Mesh Hop's board B) is
-   on the RNode firmware's supported list, with BLE. The XIAO nRF52840 (board A) and the T1000-E are not on the official
-   list (U for community forks). One board runs one firmware: a board flashed as an RNode is no longer a MeshCore node.
+7. **Transports (V).** RNS 1.6.0 documents eleven built-in interface types: `AutoInterface` (Wi-Fi and Ethernet, zero
+   configuration, IPv6 link-local), `BackboneInterface`, `TCPServerInterface`, `TCPClientInterface`, `UDPInterface`,
+   `I2PInterface` (needs an `i2pd` daemon), `RNodeInterface` (USB serial, Bluetooth LE through `bleak`, or TCP),
+   `RNodeMultiInterface`, `SerialInterface`, `PipeInterface`, `KISSInterface` and `AX25KISSInterface` (packet radio),
+   plus custom interface modules. None is privileged: the apps are transport-agnostic and the bridge's interface manager
+   lists, adds, enables and disables interfaces per type, showing only that type's options (4.1, 5.3). **Listen-only is
+   one setting per interface:** `outgoing = False`.
+8. **RNode settings (V).** On an RNode interface the host sets `frequency`, `bandwidth`, `txpower`, `spreadingfactor` and
+   `codingrate` (all required: RNS takes the interface offline without them), optionally `airtime_limit_short` (about
+   15 s window) and `airtime_limit_long` (rolling 60 minutes), both in percent and enforced by the RNode firmware,
+   `flow_control`, and an ID beacon (`id_callsign`, `id_interval`). The interface manager's RNode form is exactly that list plus the
+   common interface options; no region presets (4.2, D10). Every 1 % of `airtime_limit_long` is 36 s on air per hour,
+   about 74 announces at SF8/125 kHz (I, 4.2).
+9. **The owner's hardware (V, U).** The owner already runs RNode firmware on a **Heltec LoRa32 V4**: on the official
+   supported list (RNode Firmware README; `rnodeconf --autoinstall` choice 9, firmware `rnode_firmware_heltec32v4pa.zip`
+   in release 1.86), ESP32-S3 + SX1262 with PA, BLE and Wi-Fi, no Bluetooth Classic (`Boards.h`); `rnodeconf` calls
+   RNode firmware on Heltec boards "experimental". It is the probe's RNode (8). Compatibility notes only: the spare XIAO
+   ESP32S3 + Wio-SX1262 is also supported; the XIAO nRF52840 and the T1000-E are not on the official list. One board
+   runs one firmware.
 10. **Conflict with Mesh Hop (V).** RNS opens an RNode's serial port without `flock` or `TIOCEXCL`, so Mesh Hop's lock
     check would not see that the port is in use. A port rule is needed (4.4).
 11. **Licences (V).** RNS and LXMF: the "Reticulum License" = the MIT text plus two use conditions (no systems designed
     to harm humans; no use in AI, machine-learning or language-model training datasets). NomadNet and the RNode
     firmware: GPL-3.0. Sideband: CC BY-NC-SA 4.0. MeshChat: MIT. RNS and LXMF may be shipped in an app package with
     their notice; nothing enters the launcher (6).
-12. **Apps (I).** A status and announce monitor (c), a messenger (a), a NomadNet browser (b), position sharing with Deck
+12. **Apps (I).** A status app with the interface manager and an announce monitor (c), a messenger (a), a NomadNet browser (b), position sharing with Deck
     Atlas (e) and file transfer (f) all share the bridge. Wrapping NomadNet's terminal UI (d) is cheap but likely
     awkward on our terminal page (U); wrapping Sideband is not practical (Kivy GUI, 68.6 MB wheel, CC BY-NC-SA) (5).
 
-**Recommendation (mine, not a rule).** Run probe P0 on the Pi 4B and then the deck, with the XIAO S3 WIO flashed as an
-RNode and receiving only; decide on the numbers. If they pass: P1 a `reticulum` service package and a listen-first
-status app, P2 the messenger, P3 the NomadNet browser, P4 positions with Deck Atlas. **MVP (P0 + P1 + docs) 3.75-5 ws
-(1.5-2 M tokens); with the messenger 7.5-10.25 ws; everything listed 13-18.5 ws (5.2-7.4 M tokens)** (7).
+**Recommendation (mine, not a rule).** Run probe P0 on the Pi 4B and then the deck, over Wi-Fi and with the owner's
+Heltec V4 RNode receiving only; decide on the numbers. If they pass: P1 a `reticulum` service package with the interface
+manager and a listen-first status app, P2 the messenger, P3 the NomadNet browser, P4 positions with Deck Atlas. **MVP (P0 + P1 + docs) 4.5-6 ws
+(1.8-2.4 M tokens); with the messenger 8.25-11.25 ws; everything listed 13.75-19.5 ws (5.5-7.8 M tokens)** (7).
 
 **Top three risks.** (1) Python RNS memory and CPU, and stamp proof-of-work, on the Zero 2 W (no load problem has been seen on the deck; owner: the earlier resets were accidental unplugging or reboots);
 (2) upstream churn (stamp enforcement in 1.6.2) with a single maintainer who takes no issues; (3) licence and
@@ -117,16 +133,17 @@ All open. The recommendation column is mine; the choice is the owner's (design c
 | D6 | Service lifetime | always on from boot; started by an app and stopped with the last one; a switch | started on demand by our apps, plus a "Keep running (receive while no app is open)" switch in the status app, off by default |
 | D7 | Transport (routing for other nodes) | off; on | off on every board of ours (the manual reserves it for stationary, always-on systems: 2.2) |
 | D8 | What may transmit | everything the config enables; nothing until the owner switches it on | nothing transmits until the owner switches it on, per interface (`outgoing = False` as the default); no announce, path request or message without the owner's action |
-| D9 | Default interfaces | upstream default (AutoInterface on every network); AutoInterface only on a named device after opt-in; an Internet entrypoint preconfigured | no interface on at first start; AutoInterface on `wlan0` or a chosen USB adapter after opt-in; TCP entrypoints only when typed or picked by the owner |
-| D10 | LoRa channel plan | 865-868 MHz (25 mW, 1 %); 869.4-869.65 MHz (500 mW, 10 %); whatever local Reticulum users run | the local plan if one exists (U); otherwise 867.2 MHz, 125 kHz, SF8, CR 4/5 (the manual's example) at no more than 14 dBm e.r.p. with `airtime_limit_long = 1`; stay off 869.525 MHz, where MeshCore (Mesh Hop's EU preset) and Meshtastic users sit |
-| D11 | Which board becomes the RNode | XIAO S3 WIO; one of the "other LoRa boards"; buy one | the XIAO S3 WIO (supported, BLE); keep the XIAO nRF52840 on MeshCore for Mesh Hop |
+| D9 | Default interfaces | upstream default (AutoInterface on every network); AutoInterface only on a named device after opt-in; an Internet entrypoint preconfigured | no interface on at first start; the user adds and enables each one in the interface manager (D19): AutoInterface on `wlan0`, Ethernet or a chosen USB adapter, TCP entrypoints only when typed or picked by the user, an RNode only when added |
+| D10 | RNode settings page: contents and defaults | the `RNodeInterface` options only (4.2); add region presets or frequency lists; prefill upstream's example values (867.2 MHz, 125 kHz, 7 dBm, SF8, CR 5) | the `RNodeInterface` options only, no region presets, no frequency allowlist, no hard-coded plan; the radio fields start empty and the owner/user must fill them (RNS itself refuses an RNode interface without them, 4.2); `airtime_limit_long` and `airtime_limit_short` always visible, empty by default (empty = no limit, as upstream), the owner/user fills them; transmitting stays off until the user switches an interface on (D8) |
+| D11 | Which board is the RNode (context only, optional) | any compatible board with RNode firmware (4.3) | the owner's choice outside the app; he already runs RNode firmware on a Heltec LoRa32 V4 (official list, USB and BLE), which P0 uses; compatibility notes only: the XIAO S3 WIO is also supported, the XIAO nRF52840 is not and can stay on MeshCore for Mesh Hop |
 | D12 | Identity and announces | one LXMF identity per deck; one per app; announce policy | one identity per deck in the service's data folder (mode 0600); export only on the owner's action; announce only after the owner has set a display name and pressed Announce; automatic re-announce off, at most every 6 h when on |
 | D13 | Propagation node | none; picked from heard announces; sync policy | none by default; the owner picks one; sync by hand, or on a timer only while on Wi-Fi; the app warns that sending through it costs minutes of CPU on a Zero 2 W (if P0 confirms) |
-| D14 | First app | status and announce monitor; messenger | the status monitor: listen-first, no transmit needed, shows the radio facts |
+| D14 | First app | status app with interface manager and announce monitor; messenger | the status app: listen-first, no transmit needed, holds the interface manager (D19) and shows each interface's facts |
 | D15 | NomadNet terminal wrapper | build as a stopgap; skip | only if P0 shows it usable in the launcher's terminal page (U) |
 | D16 | Provenance rule for this feature | as for other apps; strict | strict: workers use only the public Python API of RNS and LXMF and documented formats; they never read upstream source in order to write protocol, crypto or markup-parser code; the README states AI assistance (6.3) |
 | D17 | AI account data use | check; ignore | check that the sessions used for this work are not used for model training (6.2: the licence's AI-training condition) |
 | D18 | Mesh Hop guard | none; skip ports held by any other process | a small Mesh Hop task: treat a port held by any other process as busy (`/proc` check), and name an RNode as "used by Reticulum" (4.4) |
+| D19 | Transport model | LoRa-first apps around an RNode; transport-agnostic apps over any Reticulum interface | transport-agnostic (owner's statement, 2026-11-07): an interface manager in the bridge and the status app lists, adds, edits, enables and disables interfaces of every documented type (4.1), each with only its own options and per-interface status (online, rx/tx bytes, bitrate, errors); D8 applies per interface; hardware-neutral wording ("interface", not "radio"); the other apps never ask which medium is in use |
 
 ## 2. Reticulum and its parts (question 1)
 
@@ -287,70 +304,109 @@ ours for either case.
 
 ## 4. Transports and radio (question 3)
 
-### 4.1 Interfaces
+### 4.1 Interfaces (transport-agnostic)
 
-| Interface | Needs | Cost | What the owner has | Notes (V unless marked) |
+**Principle (owner, 2026-11-07).** Reticulum runs over any medium that carries at least 5 bit/s half duplex (2.2); our
+apps take advantage of that and never assume LoRa. They talk only to the bridge (5.3), which hands RNS whatever
+interfaces the user has enabled; a deck with only Wi-Fi, only Ethernet, only a TCP entrypoint or only an RNode is
+equally a Reticulum node. The status app's **interface manager** lists every configured interface with its state and
+offers an add-interface form per type with only that type's options (I, proposal; D19). UI wording stays
+hardware-neutral: "interface" and "network", not "radio", except on an RNode's own page.
+
+Supported interface types, RNS 1.6.0 (V: manual `interfaces.rst` at `cb1260891d` for the types and their options;
+`Reticulum.py` for the types the loader knows). Every type also takes the common options of 4.2 (`enabled`, `outgoing`,
+`mode`, `network_name`, `passphrase`, ...).
+
+| Type | Medium | Type-specific options the add form shows (manual) | What the owner has | Notes (V unless marked) |
 |---|---|---|---|---|
-| `RNodeInterface`, USB serial | an RNode-flashed LoRa board, the `dialout` group, `pyserial` | a board and an 868 MHz antenna | XIAO S3 WIO (supported) | RNS needs RNode firmware 1.52 or later (`REQUIRED_FW_VER`); airtime limits; `outgoing = False` receives only |
-| `RNodeInterface`, BLE (`port = ble://`, `ble://<name>`, `ble://<MAC>`) | an RNode with BLE, paired with the host first; `bleak` | `python3-bleak` | the XIAO S3 has BLE (`Boards.h`: `HAS_BLE true`) | uses the Nordic UART service; the pairing flow on a board without a display is U; the Zero 2 W's combined Wi-Fi/Bluetooth chip also serves the Bluetooth keyboard (guidelines 6) |
-| `RNodeInterface`, TCP (`port = tcp://<host>`) | an RNode with Wi-Fi | none | ESP32 boards (which ones: U) | the radio can sit elsewhere, for example on a mast |
-| Bluetooth Classic (ESP32 boards with `HAS_BLUETOOTH`) | an RFCOMM serial port | none | older ESP32 boards | U on our images |
-| `RNodeMultiInterface` | RNodes with several transceivers | | none | |
-| `AutoInterface` | Wi-Fi or Ethernet on the same layer-2 network, link-local IPv6, UDP 29716 and 42671 | free | built-in Wi-Fi (2.4 GHz only on the Zero 2 W, V report 054), USB Wi-Fi adapters | zero configuration; access points with client isolation block it; `devices = wlan0` pins it; `group_id` separates networks |
-| `TCPClientInterface` / `BackboneInterface` | Internet and an entrypoint `host:port` | free | any network | "TCP connections reveal the IP address of both your instance and the server"; Backbone is Linux and Android only |
-| `TCPServerInterface` | a public IP | | not for a deck | |
-| `UDPInterface` | IP broadcast | free | a LAN | AutoInterface is the better choice on Wi-Fi (manual) |
-| `I2PInterface` | an I2P daemon (`i2pd`) running beside RNS | the daemon's RAM and CPU (U) | | hides both IP addresses; heavy for a Zero 2 W (I) |
-| `KISSInterface`, `AX25KISSInterface` | a packet-radio TNC and radio | a licence for amateur bands | none known | `id_callsign`; the rules for encrypted traffic on amateur bands in France are U and belong to the LoRa APRS study |
-| `SerialInterface` | a transparent serial link | a cable | | lab use |
-| `PipeInterface` | any program on stdin/stdout | | | custom media |
+| `AutoInterface` | Wi-Fi or Ethernet, same layer-2 network, IPv6 link-local multicast | `group_id`, `multicast_address_type`, `devices`, `ignored_devices`, `discovery_scope`, `discovery_port`, `data_port` | built-in Wi-Fi (2.4 GHz only on the Zero 2 W, V report 054), Ethernet on some boards, USB Wi-Fi adapters | zero configuration; UDP 29716 and 42671 by default; client isolation on an access point blocks it; `devices = wlan0` pins it |
+| `BackboneInterface` | TCP over any IP network (Linux and Android only) | `listen_on`, `port`, `device`, `prefer_ipv6`, `remote`, `target_host`, `target_port`, fast-flapping options | any network | the newer high-performance TCP interface |
+| `TCPClientInterface` | TCP to a host | `target_host`, `target_port`, `kiss_framing`, `fixed_mtu`, `i2p_tunneled` | any network | "TCP connections reveal the IP address of both your instance and the server"; also reaches KISS modems over TCP |
+| `TCPServerInterface` | TCP listener | `listen_ip`, `listen_port`, `device`, `prefer_ipv6`, `port`, `i2p_tunneled` | a LAN | a home node or a Pi 4B serving decks on the LAN; a public listener is not for a deck (I) |
+| `UDPInterface` | UDP unicast or broadcast | `listen_ip`, `listen_port`, `forward_ip`, `forward_port`, `device`, `port` | a LAN | AutoInterface is the simpler choice on Wi-Fi (manual) |
+| `I2PInterface` | I2P through a local `i2pd` | `connectable`, `peers` | | hides both IP addresses; the daemon's RAM and CPU on a Zero 2 W are U; heavy (I) |
+| `RNodeInterface` | an RNode over USB serial, BLE (`ble://`, `ble://<name>`, `ble://<MAC>`, needs `bleak` and prior pairing) or TCP (`tcp://<host>`, RNodes with Wi-Fi) | `port`, `frequency`, `bandwidth`, `txpower`, `spreadingfactor`, `codingrate`, `airtime_limit_short`, `airtime_limit_long`, `flow_control`, `id_callsign`, `id_interval` (4.2) | Heltec LoRa32 V4 with RNode firmware (4.3) | RNS needs RNode firmware 1.52 or later (`REQUIRED_FW_VER`); BLE uses the Nordic UART service; the Zero 2 W's combined Wi-Fi/Bluetooth chip also serves the Bluetooth keyboard (guidelines 6) |
+| `RNodeMultiInterface` | an RNode with several transceivers | `port`, ID beacon, then per sub-interface `vport`, `frequency`, `bandwidth`, `txpower`, `spreadingfactor`, `codingrate`, airtime limits | none | same rules as `RNodeInterface` |
+| `SerialInterface` | a transparent serial link (cable, serial radio modem; a Bluetooth Classic RFCOMM port, I) | `port`, `speed`, `databits`, `parity`, `stopbits` | | |
+| `KISSInterface` | a KISS TNC and radio (packet radio) | serial options, `preamble`, `txtail`, `persistence`, `slottime`, `id_callsign`, `id_interval`, `flow_control` | none known | the band and its rules are the user's matter |
+| `AX25KISSInterface` | a KISS TNC with AX.25 framing | serial and KISS options, `callsign`, `ssid` | none known | as above |
+| `PipeInterface` | any program on stdin/stdout | `command`, `respawn_delay` | | custom media |
+| Custom interface modules | user-supplied Python in the configuration's `interfaces` folder | defined by the module | | loaded by RNS (V `Reticulum.py`); the add form can offer them only as raw text (I) |
 
-### 4.2 EU and France rules at 868 MHz
+The loader also knows a `WeaveInterface` that the manual does not document (V `Reticulum.py`; what it is: U); the
+interface manager leaves undocumented types out until upstream documents them.
 
-ERC/REC 70-03 Annex 1 (non-specific short range devices), amended 2026-10-09; Appendix 1 marks France "Y"
-(implemented) for every sub-band below (V):
+### 4.2 RNode settings the host controls (`RNodeInterface`)
 
-| Sub-band | Power | Spectrum access | For Reticulum |
-|---|---|---|---|
-| h1.3 863-865 MHz | 25 mW e.r.p. | 0.1 % duty cycle or LBT+AFA | poor: 3.6 s per hour |
-| h1.4 865-868 MHz | 25 mW e.r.p. | 1 % duty cycle or LBT+AFA | good: the manual's example is 867.2 MHz |
-| h1.5 868.0-868.6 MHz | 25 mW e.r.p. | 1 % duty cycle or LBT+AFA | LoRaWAN's default channels sit here (I) |
-| h1.6 868.7-869.2 MHz | 25 mW e.r.p. | 0.1 % or LBT+AFA | poor |
-| h1.7 869.4-869.65 MHz | 500 mW e.r.p. | 10 % or LBT+AFA | the range band; MeshCore's EU preset (869.525 MHz, Mesh Hop V report 007) and Meshtastic's EU default (I) use it |
-| h1.8 869.7-870 MHz | 5 mW e.r.p. | no requirement | short range |
-| h1.9 869.7-870 MHz | 25 mW e.r.p. | 1 % or LBT+AFA | only 300 kHz wide |
+The RNode keeps no radio settings of its own in normal mode: RNS sends them to the device each time the interface comes
+up (KISS commands for frequency, bandwidth, TX power, spreading factor, coding rate and the two airtime limits, V
+`RNodeInterface.py`), then reads them back and takes the interface offline on a mismatch of frequency (more than 100 Hz),
+bandwidth, TX power, spreading factor or radio state (V, `validateRadioState`). So the deck's configuration is the only
+place where the radio is set, and the app's RNode page is the editor for it.
 
-870-874.4 MHz and 915-919.4 MHz are marked "N" for France in the same table (V).
+Options `RNodeInterface` reads from its configuration section (V: `RNodeInterface.py` lines 150-169 and 308-349,
+RNS 1.6.0 @ `cb1260891d`; manual `interfaces.rst`, "RNode LoRa Interface"):
 
-Notes:
-- RNS's `airtime_limit_long` is enforced "over a rolling 60 minute window" and `airtime_limit_short` in "a window of
-  approximately 15 seconds", both in percent (V manual), which matches an hourly duty cycle (the EN 300 220 definition
-  was not read: U). Set `airtime_limit_long` to the sub-band's figure (1 or 10).
-- e.r.p. includes the antenna: 25 mW is 14 dBm e.r.p.; RNS's `txpower` is the radio's output (I), so `txpower` at most
-  14 dBm minus (antenna gain in dBi minus 2.15) for 25 mW; at most 27 dBm e.r.p. in h1.7, where the SX1262's +22 dBm
-  maximum stays inside the limit with a small antenna (I).
-- The RNode's "interference avoidance" (`rnodeconf -x`) is not a certified LBT+AFA scheme (U), so the duty-cycle route
-  applies.
-- The manual: "It is your responsibility to be aware of any relevant regulation for your location" (V).
+| Option | Unit, type | Accepted by RNS 1.6.0 | If absent | Upstream example (manual) |
+|---|---|---|---|---|
+| `port` | serial path, `ble://[name or MAC]`, `tcp://host` | any; required | `ValueError`, interface offline | `/dev/ttyUSB0` |
+| `frequency` | Hz, integer | 137,000,000 to 3,000,000,000 | 0: invalid, interface offline | `867200000` |
+| `bandwidth` | Hz, integer | 7,800 to 1,625,000 | 0: invalid, interface offline | `125000` |
+| `txpower` | dBm, integer | 0 to 37 | 0: invalid, interface offline | `7` ("7 dBm (5 mW)") |
+| `spreadingfactor` | integer | 5 to 12 (the manual's comment says 7 to 12) | 0: invalid, interface offline | `8` |
+| `codingrate` | integer, 5 = 4/5 ... 8 = 4/8 | 5 to 8 | 0: invalid, interface offline | `5` |
+| `airtime_limit_short` | percent, float, window of about 15 s | 0 to 100 | no limit sent | commented out: `33` |
+| `airtime_limit_long` | percent, float, rolling 60 minutes | 0 to 100 | no limit sent | commented out: `1.5` |
+| `flow_control` | boolean | | `False` | commented out: `False` ("for certain homebrew RNode interfaces with low amounts of RAM") |
+| `id_callsign` | text, at most 32 bytes UTF-8 | both needed, else ignored | no ID beacon | commented out: `MYCALL-0` |
+| `id_interval` | seconds, integer | with `id_callsign` | no ID beacon | commented out: `600` |
+
+Common interface options that also apply (V, manual "Common Interface Options"): `enabled` (default off), `outgoing`
+(default `True`; `False` = receive only, D8), `mode` (default `full`), `network_name`, `passphrase`, `ifac_size` (8-512
+bits), `announce_cap` (default 2 %), `bitrate`, `gravity`, `bootstrap_only`, plus the interface-discovery options
+(`discoverable` and its `discovery_*` fields), which are not for the deck.
+
+Facts on the device side (V, RNode Firmware 1.86, `master` @ `56775c51b6`):
+- The airtime limits are enforced **in the firmware**: RNS sends the percentage times 100 (`CMD_ST_ALOCK`,
+  `CMD_LT_ALOCK`); the firmware stops transmitting while the short- or long-term airtime is above its limit
+  (`airtime_lock` in `RNode_Firmware.ino`); a value of 100 % or more means no limit; both default to 0 = no limit
+  (`Config.h`).
+- Interference avoidance (CSMA, on by default: `avoid_interference = true` in `Config.h`) is a device setting changed
+  with `rnodeconf -x` / `-X`, not an `RNodeInterface` option.
+- `rnodeconf --freq/--bw/--txp/--sf/--cr` store radio settings in the device "for TNC mode" (V `rnodeconf.py` help),
+  the stand-alone KISS mode; they do not apply when RNS drives the RNode (I, since RNS sets every value at start).
+
+What the app shows (proposal, D10): the interface manager's RNode form (add and edit) with exactly the options above (the ID beacon and
+`flow_control` under "Advanced"); the radio fields start empty, the airtime fields are always visible and start empty
+(no limit, as upstream); no region preset, frequency list or plan. The app validates only RNS's own ranges, so the user
+sees the error before RNS logs it. Radio rules differ by country: frequency, bandwidth, spreading factor, TX power and
+airtime (duty cycle) are the user's choice, the app does not decide or enforce a region, and the user is responsible for
+the rules where they transmit (not legal advice).
 
 Airtime of typical packets (I: Semtech's LoRa formula, 8-symbol preamble, explicit header, CRC on; the RNode's own
 preamble may be longer):
 
-| Setting | Bit rate | Path request, 51 B | Announce, 167 B | 500 B packet | Link set-up (83+115+99 B) | Announces per hour at 1 % |
+| Setting | Bit rate | Path request, 51 B | Announce, 167 B | 500 B packet | Link set-up (83+115+99 B) | Announces per hour per 1 % of `airtime_limit_long` |
 |---|---|---|---|---|---|---|
 | SF8, 125 kHz, CR 4/5 | 3.1 kbit/s | 0.19 s | 0.48 s | 1.33 s | about 0.9 s | about 74 |
 | SF10, 125 kHz | 0.98 kbit/s | 0.62 s | 1.56 s | 4.30 s | about 3 s | about 23 |
 | SF7, 250 kHz | 10.9 kbit/s | 0.05 s | 0.14 s | 0.38 s | about 0.25 s | about 260 |
 
-A 10 KB file over LoRa at SF8 is about 30 s of airtime before overheads (I), almost the whole hour's budget at 1 %.
+A 10 KB file over LoRa at SF8 is about 30 s of airtime before overheads (I), almost all of a 1 % hourly limit; the
+status app can show it from the RNode's reported airtime and channel load (3.5).
 
-Antennas (I): an antenna tuned for 868 MHz on the RNode; never transmit without one; a higher-gain antenna needs a lower
-`txpower` for the same e.r.p. The Wio-SX1262 module's antenna connector type is U.
+Antennas (I): an antenna matched to the chosen band on the RNode; never transmit without one. The Wio-SX1262 module's
+antenna connector type is U.
 
-### 4.3 What the owner's hardware can do
+### 4.3 The owner's boards (compatibility note)
+
+Any compatible board with RNode firmware can be the RNode (owner, 2026-11-07); it is the owner's own board, and the app
+does not flash, update or own it. This table only records the owner's hardware and which boards upstream supports (V RNode Firmware 1.86 README: any SX1276, SX1278, SX1262, SX1268 or SX1280 module with
+SPI and the DIO pins); it is not a purchase recommendation (D11).
 
 | Board | RNode? | Notes |
 |---|---|---|
+| **Heltec LoRa32 V4** (the owner's, RNode firmware installed) | **yes, official**: "Heltec LoRa32 v4 devices" (V RNode README); `BOARD_HELTEC32_V4 0x3F` (V `Boards.h`); in `rnodeconf` as product "Heltec LoRa32 v4" (`PRODUCT_H32_V4 0xC3`), model `0xC8` (with PA), hardware range 860-930 MHz, 28 dBm maximum, firmware `rnode_firmware_heltec32v4pa.zip`, which release 1.86 (2026-04-24) ships (V `rnodeconf.py`, release assets) | ESP32-S3, SX1262 with TCXO, PA and LNA, display, Wi-Fi, BLE, no Bluetooth Classic (V `Boards.h`); `rnodeconf`'s installer: RNode firmware on Heltec devices "should currently be considered experimental"; host links: USB serial (V for RNodes in general; whether the V4 shows as native USB CDC or through a USB-UART chip, and its `/dev` name: U), BLE (V `HAS_BLE`), and TCP over Wi-Fi (U for this board); the firmware version on the owner's board: U (read with `rnodeconf -i`) |
 | XIAO ESP32S3 + Wio-SX1262 (Mesh Hop's spare board B, MeshCore at last check) | **yes**: "SeeedStudio XIAO ESP32S3 devices (with Wio-SX1262)" (V RNode README) | BLE (V); flash with `rnodeconf --autoinstall` from the PC (V manual) or a web flasher (V README: Liam Cottle's, RNS Moscow, Aetherlab); it stops being a MeshCore node until reflashed (I) |
 | Seeed XIAO nRF52840 (board A, Mesh Hop's main node) | not on the official list (V) | keep it on MeshCore |
 | Seeed T1000-E | not on the official list (V) | forks U |
@@ -377,7 +433,7 @@ Proposed rule:
 3. **The bridge also locks.** Before RNS opens a configured RNode, the bridge opens the same device and takes `flock`
    on it for as long as the interface is up; Mesh Hop's existing check then sees it as busy (I: `flock` on a device node
    is advisory and per inode, so it works between cooperating programs).
-4. **Say who has it.** The status app shows "RNode on ttyACM0 (XIAO S3), used by Reticulum"; Mesh Hop's node list says
+4. **Say who has it.** The status app shows "RNode on ttyACM0 (Heltec V4), used by Reticulum"; Mesh Hop's node list says
    "used by Reticulum". An RNode answers the KISS detect command (`CMD_DETECT 0x08`, `DETECT_REQ 0x73`, V), so Serial
    Console could identify one, but only on request, since it writes to the port.
 5. **BLE.** One central per RNode; scans short and only from the status app, as Mesh Hop does.
@@ -390,10 +446,10 @@ Proposed rule:
 |---|---|---|---|---|
 | a | **Native LVGL messenger** | bridge: LXMF send/receive with delivery states (outbound, sent, delivered, failed), contacts from heard announces or typed/pasted addresses, propagation node choice and sync, identity export; UI: contacts, conversations, compose with the shared on-screen keyboard rule, a Settings page | L, 3.5-5 | Mesh Hop's chat pages are the house pattern (V); 640x480 first, 480x320 and 320x480 by decision; launcher toasts and beeps for new messages through `launcher.sock` (V guidelines 3) |
 | b | **NomadNet page browser** | bridge: a link to the node's `nomadnetwork.node` destination and a request for `/page/index.mu` (V `Node.py`), responses as micron text; a micron renderer: formatting, 3-hex-digit colours, alignment, headings and sections, dividers, links, anchors, tables, input fields, checkboxes, radio groups, request links, partials (with refresh), literals, comments, page colour and cache headers, images in WebP only (V `Guide.py` sections) | M-L, 2.5-4 | micron is written for terminal columns; on 640x480 at a readable size about 50-60 columns (I); stb_image (already in the repo) has no WebP decoder (I), so images start as their alt text |
-| c | **Interface, network status and announce monitor** | bridge: interface statistics (for RNodes RSSI, SNR, noise floor, airtime, channel load, battery), heard announces with hops and interface, paths, the per-interface transmit switch | M, 1.5-2 (part of P1) | read-only and listen-first; fits every size; the natural first app |
+| c | **Status app: interface manager, network status and announce monitor** | bridge: the interface manager (list, add, edit, enable, disable; one form per type with that type's options, 4.1 and 4.2), per-interface status (online, rx/tx bytes, bitrate, errors; for RNodes also RSSI, SNR, noise floor, airtime, channel load, battery), heard announces with hops and interface, paths, the per-interface transmit switch | M, 2-2.75 (part of P1) | listen-first; fits every size; works on a deck with only Wi-Fi; the natural first app |
 | d | **Wrapping Sideband or the NomadNet TUI** | NomadNet: kind B terminal app, the upstream GPL program unmodified with `urwid>=3.0.5` bundled (Debian's is 2.6.16); Sideband: Kivy needs a display server or an SDL/KMS backend, a 68.6 MB wheel plus numpy and pillow, CC BY-NC-SA | NomadNet S, 0.5-1; Sideband not practical | the terminal page has no status bar, touch only scrolls, no F-keys, about 40 columns at 480 px wide (V guidelines 1 and 2); NomadNet's usability there is U |
 | e | **Positions and telemetry with Deck Atlas** | `position.state` (the draft contract of report 054 6.3; its writer comes with Deck Atlas's next version, V Deck Atlas README); LXMF `FIELD_TELEMETRY` (0x02) in Sideband's packed sensor format: the location sensor packs latitude and longitude as signed 32-bit integers in millionths of a degree, altitude, speed, bearing and accuracy in hundredths, plus a timestamp (V, `sense.py`, read as a format, no code copied); received positions written as an overlay file for Deck Atlas (report 054 6.2). Sideband's plugin system has telemetry, command and service plugins, among them a gpsd location example (V README), so a desktop Sideband can be the collector on the other side | M, 1.25-2 | never automatic: a position goes only to a contact the owner picks, per send or per explicit "share for N minutes" |
-| f | **File transfer** | LXMF `FIELD_FILE_ATTACHMENTS` (0x05), or an RNS Resource (as `rncp`) | S-M, 1-1.5 | fine over Wi-Fi; over LoRa the duty cycle limits it (4.2) |
+| f | **File transfer** | LXMF `FIELD_FILE_ATTACHMENTS` (0x05), or an RNS Resource (as `rncp`) | S-M, 1-1.5 | fine over Wi-Fi; over LoRa the bit rate and any airtime limit the user sets slow it (4.2) |
 | g1 | Paper messages and identity QR codes | LXMF's PAPER method and `lxm://` URIs; a QR encoder exists in the repo (Project Nayuki's MIT encoder in Home Assistant, V guidelines 4) | S, 0.5 | exchanging addresses without announcing (privacy) |
 | g2 | A home transport node | a Pi 4B, always on, with an RNode and Wi-Fi, `enable_transport = Yes` | S (configuration) | the manual's "personal infrastructure" advice; decks reach the mesh through it over Wi-Fi |
 | g3 | Reticulum Relay Chat (live rooms) | the RRC protocol and an `rrcd` hub (V manual) | M | later |
@@ -430,8 +486,17 @@ Reticulum apps depend on it.
 `key=value` state file beside it (pid, versions, up/down, identity hash, LXMF address, interfaces up), in the style of
 `status.state`. An app that finds neither offers "Start Reticulum" (`systemctl --user start <unit>`, I).
 
+**Interface manager (D19).** The bridge owns the `[interfaces]` section of the configuration. It offers the documented
+types of 4.1 with, for each, the list of that type's options (name, type, range or choices, upstream default if any),
+so the status app builds one add/edit form per type from data rather than from code per medium; it validates against
+RNS's own ranges, writes the configuration (backup, atomic write) and brings the interface up or down. New interfaces
+start with `enabled = no` and `outgoing = False` (D8). Status per interface comes from `get_interface_stats()` (3.5).
+Whether RNS 1.6.0 can add or remove an interface at run time without restarting the instance is U; the fallback is a
+restart of the service, a few seconds (I).
+
 **Bridge protocol (sketch).** JSON lines, requests with an id and a timeout, plus an event stream: `hello`, `status`,
-`ifaces`, `iface.outgoing` (the transmit switch), `announces.subscribe`, `paths`, `announce`, `lxmf.send`,
+`ifaces`, `iface.types` (types and their option lists), `iface.add`, `iface.edit`, `iface.remove`, `iface.enable`,
+`iface.outgoing` (the transmit switch), `announces.subscribe`, `paths`, `announce`, `lxmf.send`,
 `lxmf.messages`, LXMF state events, `pn.list`, `pn.set`, `pn.sync`, `page.get`, `identity.info`, `identity.export`,
 `service.stop`. Every verb that transmits is an explicit request (D8); long work (stamps, page loads, syncs) reports
 progress and can be cancelled (guidelines 6).
@@ -536,9 +601,9 @@ extra.
 
 | Phase | Content | Size | Cost (ws) | Owner time on boards | Exit |
 |---|---|---|---|---|---|
-| P0 probe | section 8: venv install on the Pi 4B and the deck, memory, CPU and start time, stamp timings, LXMF between the deck and the PC over Wi-Fi, the XIAO S3 as a listen-only RNode for 30 minutes, NomadNet's TUI at the terminal page's size | S | 0.5-0.75 (probe scripts, reading the logs, a short note) | 60-90 min | go/no-go against the D2 budget |
-| P1a service | the package: vendored `rns` and `lxmf`, the bridge (status, interfaces, announces, transmit switches, announce, identity), the first-run configuration, the user unit with limits, the port lock (4.4), PC tests with two real RNS instances, packages for arm64 and amd64 | M | 1.5-2 | | |
-| P1b status app | native app: service start/stop, interfaces, an RNode radio page, heard announces, paths, transmit switches, identity page; sizes per decision (640x480 first) | M | 1.5-2 | 20 min | |
+| P0 probe | section 8: venv install on the Pi 4B and the deck, memory, CPU and start time, stamp timings, LXMF between the deck and the PC over Wi-Fi, the owner's Heltec V4 RNode listen-only for 30 minutes, NomadNet's TUI at the terminal page's size | S | 0.5-0.75 (probe scripts, reading the logs, a short note) | 60-90 min | go/no-go against the D2 budget |
+| P1a service | the package: vendored `rns` and `lxmf`, the bridge (status, the interface manager with per-type option lists for every documented type, announces, transmit switches, announce, identity), the first-run configuration, the user unit with limits, the port lock (4.4), PC tests with two real RNS instances over TCP and AutoInterface, packages for arm64 and amd64 | M | 1.75-2.25 | | |
+| P1b status app | native app: service start/stop, the interface list with per-interface status, the add/edit form per type (the RNode form per D10, 4.2), heard announces, paths, transmit switches, identity page; sizes per decision (640x480 first) | M | 2-2.75 | 20 min | |
 | Docs (P1) | README rows, app page | | 0.25 | | |
 | P2 messenger | (a) of 5.1 | L | 3.5-5 | 30 min | |
 | Docs (P2) | | | 0.25 | | |
@@ -549,8 +614,8 @@ extra.
 | Docs (P3-P5) | | | 0.5 | | |
 | Optional: NomadNet wrapper | (d), D15 | S | 0.5-1 | 10 min | |
 
-**Totals (I):** MVP (P0 + P1 + docs) **3.75-5 ws (1.5-2 M tokens)**; with the messenger **7.5-10.25 ws**; everything
-except the optional wrapper **13-18.5 ws (5.2-7.4 M tokens)**. Upstream follow-up releases: about 0.1-0.25 ws each.
+**Totals (I):** MVP (P0 + P1 + docs) **4.5-6 ws (1.8-2.4 M tokens)**; with the messenger **8.25-11.25 ws**; everything
+except the optional wrapper **13.75-19.5 ws (5.5-7.8 M tokens)**. Upstream follow-up releases: about 0.1-0.25 ws each.
 
 ### 7.2 What can be tested where
 
@@ -561,13 +626,14 @@ except the optional wrapper **13-18.5 ws (5.2-7.4 M tokens)**. Upstream follow-u
 ### 7.3 Open unknowns
 
 Collected in section 10. The ones that decide the plan: Python memory and start time on the deck, stamp time and its
-effect on power, NomadNet in the terminal page, and the owner's other LoRa boards.
+effect on power, NomadNet in the terminal page, and the Heltec V4's host link (USB device name, BLE pairing).
 
 ### 7.4 Recommendation, with reasons
 
 1. **Run P0 first.** It costs about one evening and settles D2, D13 and D15 with numbers.
-2. **If it passes, architecture A**, status app before messenger: the status app needs no transmit, so it is useful
-   while the owner decides on channel plans and announces, and it exercises the whole service.
+2. **If it passes, architecture A** with the interface manager, status app before messenger: the status app needs no
+   transmit and works over any interface, so it is useful while the owner chooses interfaces, RNode settings and an
+   announce policy, and it exercises the whole service.
 3. **Keep the deck a client.** For a steady LoRa presence, make the Pi 4B a home transport node (configuration only,
    g2) and let the decks reach it over Wi-Fi, as the manual recommends.
 4. **Do not build C or D now.** C is the largest option and the one upstream objects to; D is experimental by its own
@@ -636,24 +702,25 @@ EOF
 vcgencmd measure_temp; vcgencmd get_throttled
 ```
 
-**P0-e, RNode listen-only (the owner flashes the XIAO S3 WIO on the PC first: `pip install rns`, then `rnodeconf
---autoinstall`; measure: device info, received bytes, RSSI, SNR, noise floor and channel load every 5 minutes for 30
-minutes, VmRSS and CPU).** On the deck: `~/rns-probe/bin/rnodeconf /dev/serial/by-id/<the device> -i`, then add to the
-probe configuration and restart the probe daemon:
+**P0-e, RNode listen-only (the owner's Heltec LoRa32 V4, which already runs RNode firmware; if it needs an update, he
+does it on the PC outside our software with `rnodeconf --update`; measure: device info, received bytes, RSSI, SNR, noise
+floor and channel load every 5 minutes for 30 minutes, VmRSS and CPU).** On the deck: `~/rns-probe/bin/rnodeconf
+/dev/serial/by-id/<the device> -i`, then add to the probe configuration and restart the probe daemon. RNS needs all five
+radio values even for receiving (4.2): the owner fills in a frequency, bandwidth, spreading factor and coding rate he is
+allowed to use (ideally those of a Reticulum network he wants to hear) and a low TX power; nothing is sent, since
+`outgoing = False`:
 
 ```ini
-  [[RNode XIAO]]
+  [[RNode Probe]]
     type = RNodeInterface
     enabled = yes
     port = /dev/serial/by-id/<the device>
-    frequency = 867200000
-    bandwidth = 125000
-    txpower = 7
-    spreadingfactor = 8
-    codingrate = 5
+    frequency = <Hz, the owner's choice>
+    bandwidth = <Hz, the owner's choice>
+    txpower = <dBm, low>
+    spreadingfactor = <7-12>
+    codingrate = <5-8>
     outgoing = False
-    airtime_limit_long = 1
-    airtime_limit_short = 33
 ```
 
 ```sh
@@ -682,11 +749,11 @@ only).
 4. **Port conflicts** with Mesh Hop and Serial Console, since RNS takes no lock (V). Mitigation: 4.4.
 5. **Privacy.** Announces broadcast a name and presence; telemetry can reveal location; AutoInterface on public Wi-Fi
    shows the deck on the LAN (I). Mitigation: the rules of 5.3.
-6. **Radio legality** rests on correct settings (frequency, power, airtime). Mitigation: the status app sets
-   `airtime_limit_long` from the chosen sub-band and refuses a power above the sub-band's e.r.p. for a declared antenna
-   gain (I).
-7. **A precedent.** An exception to "no Python for long-running parts" may invite others (I). Mitigation: scope the
+6. **A precedent.** An exception to "no Python for long-running parts" may invite others (I). Mitigation: scope the
    exception to this service by name.
+
+User responsibility (not a risk we mitigate): the radio settings, including airtime limits, are the user's, and so is
+following the rules where they transmit (4.2).
 
 ## 10. Not verified
 
@@ -697,15 +764,19 @@ only).
 - How often LXMF users (Sideband, MeshChatX, Columba) set an inbound stamp cost, which makes direct messages cost CPU
   too.
 - NomadNet's usability in the launcher's terminal page; the page's real column count at 640x480 and 480x320.
-- RNode over BLE on our boards: pairing without a display on the XIAO S3, `bleak` 0.22.3 with RNS 1.6.0.
+- RNode over BLE on our boards: pairing without a display on the owner's RNode, `bleak` 0.22.3 with RNS 1.6.0.
 - RNS's retry behaviour when an RNode port is busy; whether RNode firmware sends anything before it is configured.
-- Which of the owner's boards beyond the XIAO S3 can run RNode (community forks not checked); the Wio-SX1262 antenna
-  connector.
-- Local Reticulum activity and channel plans in France (rmap.world and directory.rns.recipes not read); the current
-  reachability of the old testnet hosts.
-- Meshtastic's EU default channel (869.525 MHz assumed).
-- The EN 300 220 duty-cycle definition; whether RNode's interference avoidance counts as LBT+AFA (assumed not).
-- Amateur-band rules in France for encrypted traffic.
+- Heltec LoRa32 V4: the RNode firmware version on the owner's board; whether it enumerates as native USB CDC or
+  through a USB-UART chip (and so its `/dev/serial/by-id` name); BLE pairing with BlueZ on our boards; whether its TCP
+  host link over Wi-Fi works; how the firmware maps a requested `txpower` through the PA (28 dBm maximum) and whether
+  the read-back value matches what RNS sent.
+- Which other boards of the owner's can run RNode (community forks not checked); the Wio-SX1262 antenna connector.
+- Whether RNS 1.6.0 can add, change or remove an interface at run time without restarting the instance (the interface
+  manager's fallback is a service restart); what the undocumented `WeaveInterface` is.
+- Whether the RNode firmware clamps a `txpower` above the radio's maximum (RNS would then see a mismatch and take the
+  interface offline, V `validateRadioState`), and whether it accepts spreading factors 5 and 6, which RNS 1.6.0 allows
+  but the manual does not list.
+- The current reachability of the old testnet hosts (rmap.world and directory.rns.recipes not read).
 - `i2pd` resource use on a Zero 2 W.
 - Python version, `venv` behaviour and journald persistence on our board images (Debian 13 suggests Python 3.13).
 - Whether Settings > Apps handles a package without a home tile.
@@ -715,17 +786,18 @@ only).
 
 ## 11. Questions for the owner
 
-1. **Your other LoRa boards:** which models (board and LoRa chip)? Any with a screen (useful for BLE pairing)?
+1. **The RNode for P0 (D11, context only):** the Heltec V4: which RNode firmware version does it run (`rnodeconf -i`),
+   and which values (frequency, bandwidth, spreading factor, coding rate) will you enter for the probe?
 2. **Who would you talk to:** people with Sideband, Columba or MeshChatX, a local Reticulum group, or only your own
    devices (then a private network with an IFAC passphrase)?
-3. **Local activity:** do you know of Reticulum users or a channel plan near you?
-4. **The XIAO S3 WIO:** may it be flashed as an RNode (it leaves MeshCore until reflashed)?
-5. **Python service (D2):** acceptable if P0 meets a budget? Which limits (my proposal: 60 MB, 3 % idle CPU, 20 s)?
-6. **Receive in the background (D6):** only while a Reticulum app is open, or a "keep running" switch?
-7. **A home node:** should the Pi 4B become an always-on transport node with an RNode?
-8. **Internet:** never, or only entrypoints you pick (D9)?
-9. **P0:** may it run on the Pi 4B and the deck, with you present for the deck, using the commands of section 8?
-10. **AI data use (D17):** can you confirm the account's setting for model training?
+3. **RNode settings page (D10):** empty radio fields that the user must fill, and the airtime-limit fields always
+   visible and empty by default: agreed?
+4. **Python service (D2):** acceptable if P0 meets a budget? Which limits (my proposal: 60 MB, 3 % idle CPU, 20 s)?
+5. **Receive in the background (D6):** only while a Reticulum app is open, or a "keep running" switch?
+6. **A home node:** should the Pi 4B become an always-on transport node with an RNode?
+7. **Internet:** never, or only entrypoints you pick (D9)?
+8. **P0:** may it run on the Pi 4B and the deck, with you present for the deck, using the commands of section 8?
+9. **AI data use (D17):** can you confirm the account's setting for model training?
 
 ## Sources
 
@@ -734,8 +806,10 @@ All read on 2026-11-07 unless noted.
 - Reticulum (RNS), repository mirror, `master` @ `cb1260891d` (2026-11-07): https://github.com/markqvist/Reticulum ;
   release RNS 1.6.0 (2026-11-07, notes quoted in 0, 3.3, 3.6): https://github.com/markqvist/Reticulum/releases/tag/1.6.0 ;
   `LICENSE`: https://github.com/markqvist/Reticulum/blob/master/LICENSE ; `MIRROR.md` (added 2025-12-27):
-  https://github.com/markqvist/Reticulum/blob/master/MIRROR.md ; `setup.py`, `RNS/Reticulum.py`,
-  `RNS/Interfaces/RNodeInterface.py`, `RNS/Stamps.py`, `RNS/Storage.py`, `RNS/__init__.py` at the same commit.
+  https://github.com/markqvist/Reticulum/blob/master/MIRROR.md ; `setup.py`, `RNS/_version.py` (1.6.0),
+  `RNS/Reticulum.py` (interface loader), `RNS/Interfaces/RNodeInterface.py` (option parsing lines 150-169, validation
+  lines 308-349, `validateRadioState`), `RNS/Utilities/rnodeconf.py` (options, product and model tables, Heltec
+  installers), `RNS/Stamps.py`, `RNS/Storage.py`, `RNS/__init__.py` at the same commit.
 - Reticulum manual (sources at the same commit; web edition https://reticulum.network/manual/): Getting Started Fast
   (`gettingstartedfast.rst`), Understanding Reticulum (`understanding.rst`), Using Reticulum on Your System
   (`using.rst`), Configuring Interfaces (`interfaces.rst`), Communications Hardware (`hardware.rst`), Programs Using
@@ -748,7 +822,8 @@ All read on 2026-11-07 unless noted.
 - Sideband, `main` @ `ef572b58e8`, release 2.2.0 (2026-10-01): https://github.com/markqvist/Sideband (`README.md`,
   `LICENSE`, `sbapp/sideband/sense.py`, read for the telemetry format only).
 - RNode Firmware, `master` @ `56775c51b6`, release 1.86 (2026-04-24): https://github.com/markqvist/RNode_Firmware
-  (`README.md`, `LICENSE`, `Boards.h`, `Bluetooth.h`).
+  (`README.md`, `LICENSE`, `Boards.h` (`BOARD_HELTEC32_V4`), `Bluetooth.h`, `Config.h`, `RNode_Firmware.ino`); release
+  1.86 assets (including `rnode_firmware_heltec32v4pa.zip`): https://github.com/markqvist/RNode_Firmware/releases/tag/1.86
 - LXST 0.5.3 (metadata only): https://github.com/markqvist/LXST
 - MeshChat 2.4.0 (2026-07-06), MIT: https://github.com/liamcottle/reticulum-meshchat ; MeshChatX (0BSD + MIT):
   https://github.com/Quad4-Software/MeshChatX
@@ -769,12 +844,9 @@ All read on 2026-11-07 unless noted.
   https://github.com/markqvist/Reticulum/discussions/684 ; #262 "32 bit raspberry pi limitations" (2023):
   https://github.com/markqvist/Reticulum/discussions/262 ; #963 "Power Usage of devices" (2025-10/11):
   https://github.com/markqvist/Reticulum/discussions/963
-- ERC Recommendation 70-03 "Relating to the use of Short Range Devices", amendments of 9 October 2026, Annex 1 rows
-  h1.0-h1.9 and h2-h3, Appendix 1 (France): https://docdb.cept.org/document/845 (PDF https://docdb.cept.org/download/5013)
 - Our code and documents: apps `origin/main` @ `67e546b` (`docs/APP-GUIDELINES.md`, `README.md`,
   `apps/mesh-hop/app.json`, `apps/mesh-hop/cli/requirements.txt`, `apps/mesh-hop/cli/vendor.py`,
   `apps/mesh-hop/src/core/serial_transport.cpp`, `apps/deck-atlas/README.md`, `tools/make_registry.py`); launcher
   `github/main` @ `28817a50` (`docs/dev/reports/054-offline-maps-wardriving-study.md`,
-  `docs/dev/reports/056-mmwave-sensor-study.md`, `docs/dev/reports/007-handoff.md` (EU 868 preset),
-  `docs/OPEN_SOURCE_COMPONENTS.md`, `docs/dev/decisions.md`, `docs/dev/ref/README.md`,
+  `docs/dev/reports/056-mmwave-sensor-study.md`, `docs/OPEN_SOURCE_COMPONENTS.md`, `docs/dev/decisions.md`, `docs/dev/ref/README.md`,
   `projects/APPLaunch/pizero2w/install.sh`).
