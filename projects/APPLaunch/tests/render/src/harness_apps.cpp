@@ -23,9 +23,11 @@
  * `env HARNESS_SUDO prompt` the responsive prompt opens, harness_stubs.cpp).
  * The check for updates when the page opens (settings_apps_autocheck.hpp): every source's list was saved
  * `env HARNESS_APPS_SYNCED <seconds>` before the scene's clock (default 300: fresh, nothing is re-read), in the backend's
- * own time format; a re-read (--edit-registry, also the sync's) follows the scene command `appsrefresh ok|newer|fail|hold`
- * (harness.h): ok saves a source that was fine at the scene's clock, newer also makes deck-lab/apps offer Field Notes 0.9.3,
- * fail keeps every cached list (the download failed), hold waits until the scene names another mode.
+ * own time format; a re-read (--edit-registry, also the sync's) follows the scene command
+ * `appsrefresh ok|newer|mend|fail|hold` (harness.h): ok saves a source that was fine at the scene's clock, newer also makes
+ * deck-lab/apps offer Field Notes 0.9.3 (field-kit/tools still fails: a partial refresh), mend is newer with field-kit/tools
+ * answering again (every source refreshed), fail keeps every cached list (the download failed), hold waits until the
+ * scene names another mode.
  */
 #include "harness.h"
 #include "settings/apps_backend.hpp"
@@ -287,10 +289,14 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
             source->status = "cached";
             source->error = "download failed: " + source->url;
         }
+        if (mode == "mend" && source->status == "cached") { /* a broken source answers again */
+            source->status = "ok";
+            source->error.clear();
+        }
         const std::string status = source->status == "cached" ? "cached" : "ok";
         if (status == "ok") {
             source->synced = now();
-            if (mode == "newer" && source->url == kDeckLab) g_notes_newer = true;
+            if ((mode == "newer" || mode == "mend") && source->url == kDeckLab) g_notes_newer = true;
         }
         return answer(0, "REGISTRY\tUPDATED\t" + source->url + "\t" + source->url + "\t" + status + "\t" +
                              std::to_string(source->apps) + "\t" + source->name + "\n");

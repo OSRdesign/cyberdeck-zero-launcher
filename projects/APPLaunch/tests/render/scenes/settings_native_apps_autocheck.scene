@@ -1,12 +1,14 @@
 # Settings > Apps checks for app updates when it opens (settings_apps_autocheck.hpp), on the fake catalogue
 # (src/harness_apps.cpp) whose lists were saved an hour before the scene's clock (HARNESS_APPS_SYNCED 3600; a re-read in
-# "newer" mode makes deck-lab/apps offer Field Notes 0.9.3, field-kit/tools keeps failing, old/archive is off).
-# Shots: no default route: the cached lists at once and "Offline: showing the list from 1 h ago", nothing re-read; back to
-# Settings, the route back, Apps again: the stale sources are re-read in the background, "Up to date (just now)", and
-# Installed has Field Notes "0.9.2>0.9.3" in yellow and Update all (3); Apps again a minute later: nothing re-read (tried
-# less than 10 min ago), "Updated 1 min ago", which becomes "Updated 3 min ago" while the page stays open; Sources ends
-# with the setting row "Check for updates when opening Apps" (on), Enter switches it off; Apps again 20 min later: no
-# check, no line (as before the feature); a full config store: switching it on cannot be saved.
+# "newer" mode makes deck-lab/apps offer Field Notes 0.9.3 while field-kit/tools keeps failing: a partial refresh;
+# old/archive is off and never contacted).
+# Shots: no default route: the cached lists at once and "Offline: showing the list from 1 h ago", nothing re-read; back
+# to Settings, the route back, Apps again: the stale sources are re-read in the background, one came back and one did not:
+# "Updated just now (1 failed)", and Installed has Field Notes "0.9.2>0.9.3" in yellow and Update all (3); Apps again a
+# minute later: nothing re-read (tried less than 10 min ago), "Updated 1 min ago (1 failed)", which becomes "Updated 3 min
+# ago (1 failed)" while the page stays open; Sources ends with "Auto-check updates" On (whole, highlighted or not), Enter
+# turns it Off; Apps again 20 min later: no check, no line (as before the feature); a full config store: turning it On
+# cannot be saved. Every status line is checked whole and clear of the roller's chevrons (expect_clear).
 # Review only: no golden.
 title settings native apps autocheck
 review
@@ -36,15 +38,15 @@ key UP
 key ENTER
 wait 3000
 shot autocheck_offline
-expect_text "Offline: showing the list from 1 h ago"
+expect_clear "Offline: showing the list from 1 h ago"
 expect_text "Installed (3)"
 key ESC
 wait 500
 update net on
 key ENTER
 wait 3000
-shot autocheck_fresh
-expect_text "Up to date (just now)"
+shot autocheck_partial
+expect_clear "Updated just now (1 failed)"
 key ENTER
 wait 500
 key DOWN
@@ -53,6 +55,8 @@ shot autocheck_installed
 expect_text "Update all (3)"
 expect_text "0.9.2>0.9.3"
 expect_color "0.9.2>0.9.3" F0B400
+# the highlight on the second row: the up chevron shows beside the status line
+expect_clear "Updated just now (1 failed)"
 key LEFT
 wait 300
 key ESC
@@ -61,12 +65,12 @@ clock 20:31
 key ENTER
 wait 3000
 shot autocheck_again
-expect_text "Updated 1 min ago"
+expect_clear "Updated 1 min ago (1 failed)"
 clock 20:33
 wait 500
 shot autocheck_aging
-expect_text "Updated 3 min ago"
-# Sources: the sources, + Add a GitHub source, Sync my sources, the setting (Up from the first row: the last one)
+expect_clear "Updated 3 min ago (1 failed)"
+# Sources: the sources, + Add a GitHub source, Sync my sources, Auto-check updates (Up from the first row: the last one)
 key DOWN
 key DOWN
 key ENTER
@@ -75,9 +79,19 @@ expect_text "Sync my sources"
 key UP
 wait 300
 shot autocheck_setting_on
+expect_text "Auto-check updates"
+expect_text "On"
+expect_clear "Updated 3 min ago (1 failed)"
+key UP
+wait 300
+expect_text "Auto-check updates"
+key DOWN
+wait 300
 key ENTER
 wait 300
 shot autocheck_setting_off
+expect_text "Auto-check updates"
+expect_text "Off"
 key ESC
 wait 300
 key ESC
@@ -96,5 +110,6 @@ key UP
 key ENTER
 wait 300
 shot autocheck_setting_unsaved
-expect_text "Could not save the setting"
+expect_clear "Could not save the setting"
 expect_color "Could not save the setting" FF6666
+expect_text "Off"

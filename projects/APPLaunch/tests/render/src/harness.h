@@ -184,8 +184,9 @@ struct Fixtures {
     bool apt_cancelled = false;
     /* Settings > Apps, the fake Store backend's re-read of a source (--edit-registry, harness_apps.cpp; scene command
      * "appsrefresh"): "ok" (as before: a source that was fine is fine and saved now), "newer" (also: deck-lab/apps then
-     * offers Field Notes 0.9.3), "fail" (every source keeps its cached list: the download failed), "hold" (the call waits
-     * until the scene names another mode, which it then follows). */
+     * offers Field Notes 0.9.3; the broken field-kit/tools still fails), "mend" (newer, and field-kit/tools answers again),
+     * "fail" (every source keeps its cached list: the download failed), "hold" (the call waits until the scene names
+     * another mode, which it then follows). */
     std::mutex apps_mutex;
     std::string apps_refresh = "ok";
 };
