@@ -45,7 +45,8 @@ Full protocol: [launcher-0.5.0-keyboard-tests.md](launcher-0.5.0-keyboard-tests.
 
 ## G. Settings > Apps checks for app updates when it opens (branch apps-autocheck): built and harness-checked, NOT yet deployed
 Dev build `-autocheck`, one networked board (the Pi 4B). Full protocol: [apps-autocheck-tests.md](apps-autocheck-tests.md)
-(7 steps): the check on opening, no second check within 10 min, offline line, the Sources switch, Sync still forced.
+(7 steps): the check on opening, no second check within 10 min, offline line, Auto-check updates On / Off, Sync still
+forced.
 
 ## D. Environment note
 `deck.py` needs the PIPW environment variable (the deck password) in the Claude Code session; it was missing in the

@@ -96,8 +96,12 @@ the status line under the title says what happened:
 | --- | --- |
 | `Checking for updates...` | the download runs (installs and syncs wait for it; moving around the page works) |
 | `Up to date (just now)` | the lists were downloaded now |
-| `Updated N min ago` | nothing was older than 10 minutes, or it was tried a moment ago: the lists are that old (the line follows the clock while the page stays open) |
+| `Updated just now (N failed)` | some sources were downloaded now, N of them failed (their saved lists stay; Sources shows them `failed` with the reason) |
+| `Updated N min ago` | nothing was older than 10 minutes, or it was tried a moment ago: the lists are that old (the line follows the clock while the page stays open; ` (N failed)` is added while the failed sources of that check have not come back) |
 | `Offline: showing the list from <age> ago` | no network, or every download failed: the saved lists stay (no error box) |
+
+The line wraps when it is long; it keeps clear of the list's up arrow (beside it, or under it when it would need more
+than three lines there, as on a 320 px wide screen).
 
 It happens at most once per opening, never again within 10 minutes of the last try (a failed source is not retried at
 every opening), never when the launcher starts and never on a timer. A source that is switched off is never
@@ -105,8 +109,8 @@ contacted. One download may take up to 20 seconds before it counts as failed. A 
 in Sources with its reason when highlighted, as after a sync. The Store backend has no conditional requests: a check
 downloads each due `registry.json` again in full, and only the icons of new apps.
 
-**The setting.** Sources ends with **Check for updates when opening Apps** (a switch, On by default; Enter or a tap
-flips it, also while a job runs). It is stored in `~/.config/cardputerzero/config.json` as `apps_auto_check` (`0` Off,
+**The setting.** Sources ends with **Auto-check updates**, `On` (the default) or `Off`; Enter or a tap flips it, also
+while a job runs. It is stored in `~/.config/cardputerzero/config.json` as `apps_auto_check` (`0` Off,
 `1` On; absent means On, written only when changed) and applies from the next opening. Off: Settings > Apps never
 downloads by itself and shows no such line, as in earlier versions; Sync my sources is then the only way to fetch.
 
@@ -153,7 +157,7 @@ Esc at the password prompt gives a red `Cancelled`.
 | Up / Down | move the selection |
 | Right | open the selected level (Apps root only) |
 | Left / Esc | back one level (Installed / Available / Sources -> Apps -> Settings), or no in a confirmation |
-| Enter | open a level; an installed app's actions (Installed); an available app's page (Available); on/off (a source, or the Check for updates switch, in Sources); yes in a confirmation |
+| Enter | open a level; an installed app's actions (Installed); an available app's page (Available); on/off (a source, or Auto-check updates, in Sources); yes in a confirmation |
 | `U` | update all (Installed) |
 | `S` | sync, the forced refresh (any list) |
 | `A` | add a source (Sources) |

@@ -166,8 +166,9 @@ keeps its tile where it was on the home grid (the order is stored in `~/.config/
 `app_order`); a new app goes last. Opening Settings > Apps **checks for updates by itself**: it shows the saved
 lists at once and downloads again, in the background, every enabled source whose list is older than 10 minutes, with a
 short line (`Checking for updates...`, `Up to date (just now)`, `Updated 3 min ago` or `Offline: showing the list from
-2 h ago`); the switch **Check for updates when opening Apps** at the end of Sources turns this off (stored as
-`apps_auto_check` in `config.json`). **Sync my sources** (key `S`) stays the forced refresh of every source. A sync
+2 h ago`, or `Updated just now (1 failed)` when one source did not answer); **Auto-check updates** (On / Off) at the
+end of Sources turns this off (stored as `apps_auto_check` in `config.json`). **Sync my sources** (key `S`) stays the
+forced refresh of every source. A sync
 shows each source live (`waiting`, `syncing...`, `done` or a red `failed` with the reason), and installs, updates and
 removals show the step and the seconds taken, then a plain success or failure message. Each app shows its description: a **Description** row on an installed app's list, and a
 page with Description and **Install** before an available app is installed (the text is cut at 500 characters with
