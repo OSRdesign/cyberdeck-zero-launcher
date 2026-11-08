@@ -214,6 +214,32 @@ static void check_page(const expected_page_t *e)
     const int line_h = p.caption_px + p.caption_px / 4;
     CHECK_EQ(cp0_ui_roller_caption_lines(&p, line_h), CP0_UI_ROLLER_CAPTION_MAX_LINES);
     CHECK(p.caption_y + 3 * line_h <= p.body_y + p.edge_pad - p.gap);
+    /* the scroll chevrons: chevron_px wide plus a stroke each side, half as high; the up one centred in the roller column
+     * gap / 2 under the top of the body, in the status line's band */
+    int cw = 0, ch = 0, stroke = 0, cx = 0, cy = 0, bw = 0, bh = 0;
+    cp0_ui_roller_chevron_size(&p, &cw, &ch, &stroke);
+    CHECK_EQ(stroke, p.chevron_px / 8 > 3 ? p.chevron_px / 8 : 3);
+    CHECK_EQ(cw, p.chevron_px + 2 * stroke);
+    CHECK_EQ(ch, p.chevron_px / 2 + 2 * stroke);
+    cp0_ui_roller_up_chevron_box(&p, &cx, &cy, &bw, &bh);
+    CHECK_EQ(bw, cw);
+    CHECK_EQ(bh, ch);
+    CHECK(cx + bw / 2 - (p.roller_x + p.roller_w / 2) <= 1 && (p.roller_x + p.roller_w / 2) - (cx + bw / 2) <= 1);
+    CHECK_EQ(cy, p.body_y + p.gap / 2);
+    CHECK(cy < p.caption_y + line_h && cy + bh > p.caption_y); /* the same band */
+    /* a wrapping status line ends a gap left of it, at every size (its room is never under a third of caption_w here) */
+    const int clear = cp0_ui_roller_caption_clear_w(&p);
+    CHECK(clear <= p.caption_w);
+    CHECK(clear * 3 >= p.caption_w);
+    CHECK(p.caption_x + clear + p.gap <= cx);
+    CHECK_EQ(clear, cx - p.gap - p.caption_x);
+    /* a line too long for that: under the chevron, gap / 2 below its box, and still 2 lines above the highlight bar */
+    const int low = cp0_ui_roller_caption_low_y(&p);
+    CHECK_EQ(low, cy + bh + p.gap / 2);
+    CHECK(low > p.caption_y);
+    cp0_ui_roller_page_t under = p;
+    under.caption_y = low;
+    CHECK(cp0_ui_roller_caption_lines(&under, line_h) >= 2);
 }
 
 static void test_page_layout(void)
@@ -287,6 +313,18 @@ static void test_page_layout(void)
         CHECK_EQ(np.inset, 14);                 /* a text page: 10 + 14 = 24 px from the edge, 272 px lines */
         CHECK_EQ(np.roller_w - 2 * np.inset, 272);
         CHECK_EQ(np.caption_px, 14);
+        /* the up chevron: 24 + 2 x 3 = 30 px wide, 18 high, x 145..174; a wrapping status line ends a gap before it
+         * ("Updated 3 min ago" reached x 158 before) */
+        int ux = 0, uy = 0, uw = 0, uh = 0;
+        cp0_ui_roller_up_chevron_box(&np, &ux, &uy, &uw, &uh);
+        CHECK_EQ(np.chevron_px, 24);
+        CHECK_EQ(uw, 30);
+        CHECK_EQ(uh, 18);
+        CHECK_EQ(ux, 145);
+        CHECK_EQ(uy, 40 + np.gap / 2);
+        CHECK_EQ(cp0_ui_roller_caption_clear_w(&np), 145 - np.gap - np.caption_x);
+        CHECK(cp0_ui_roller_caption_clear_w(&np) < np.caption_w);
+        CHECK_EQ(cp0_ui_roller_caption_low_y(&np), 40 + np.gap / 2 + 18 + np.gap / 2);
         /* the strip is the home grid's: same rectangle */
         CHECK_EQ(np.strip_x, 320 - nm.shell.status_w);
         CHECK_EQ(np.strip_h, 40);
@@ -309,6 +347,18 @@ static void test_page_layout(void)
     cp0_ui_roller_page_t tight = p;
     tight.edge_pad = tight.caption_y - tight.body_y + tight.gap + 2 * 20; /* two lines of 20 px down to the bar */
     CHECK_EQ(cp0_ui_roller_caption_lines(&tight, 20), 2);
+    /* the clear width: caption_w when the chevron is far enough, or when too little room would be left */
+    CHECK_EQ(cp0_ui_roller_caption_clear_w(NULL), 0);
+    CHECK_EQ(cp0_ui_roller_caption_low_y(NULL), 0);
+    cp0_ui_roller_page_t wide = p;
+    wide.caption_w = 100; /* ends long before the chevron */
+    CHECK_EQ(cp0_ui_roller_caption_clear_w(&wide), 100);
+    cp0_ui_roller_page_t crowded = p;
+    crowded.caption_x = p.roller_x + p.roller_w / 2 - 40; /* only a sliver left of the chevron */
+    CHECK_EQ(cp0_ui_roller_caption_clear_w(&crowded), crowded.caption_w);
+    int zero_w = -1, zero_h = -1, zero_s = -1;
+    cp0_ui_roller_chevron_size(NULL, &zero_w, &zero_h, &zero_s);
+    CHECK(zero_w == 0 && zero_h == 0 && zero_s == 0);
 
     CHECK_EQ(cp0_ui_roller_page(NULL, 0, &p), -1);
     CHECK_EQ(cp0_ui_metrics_compute(640, 40, 0, 1130, CP0_UI_DENSITY_PANEL_MM, 0, &m), 0);

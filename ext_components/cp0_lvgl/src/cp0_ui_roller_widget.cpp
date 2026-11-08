@@ -172,9 +172,11 @@ Roller::Roller(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, RollerEvent
     lv_obj_remove_flag(list_, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_event_cb(list_, list_event_cb, LV_EVENT_ALL, this);
 
-    // chevrons: two strokes, chevron_px wide (0.55 x the row), half as high, centred in the roller column
-    const int cw = std::max(8, layout_.chevron_px);
-    const int stroke = std::max(3, cw / 8);
+    // chevrons: two strokes, chevron_px wide (0.55 x the row), half as high, centred in the roller column (the box:
+    // cp0_ui_roller_chevron_size, which the status line keeps clear of)
+    int box_w = 0, box_h = 0, stroke = 0;
+    cp0_ui_roller_chevron_size(&layout_, &box_w, &box_h, &stroke);
+    const int cw = box_w - 2 * stroke;
     const int ch = cw / 2;
     up_points_[0] = {static_cast<lv_value_precise_t>(stroke), static_cast<lv_value_precise_t>(ch + stroke)};
     up_points_[1] = {static_cast<lv_value_precise_t>(cw / 2 + stroke), static_cast<lv_value_precise_t>(stroke)};
@@ -188,7 +190,7 @@ Roller::Roller(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, RollerEvent
     down_ = lv_line_create(body_);
     lv_line_set_points(down_, down_points_, 3);
     for (lv_obj_t *arrow : {up_, down_}) {
-        lv_obj_set_size(arrow, cw + 2 * stroke, ch + 2 * stroke);
+        lv_obj_set_size(arrow, box_w, box_h);
         lv_obj_set_style_line_width(arrow, stroke, 0);
         lv_obj_set_style_line_color(arrow, lv_color_hex(CP0_UI_ROLLER_CHEVRON_RGB), 0);
         lv_obj_set_style_line_rounded(arrow, true, 0);

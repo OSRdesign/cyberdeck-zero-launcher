@@ -22,6 +22,44 @@ int cp0_ui_roller_caption_lines(const cp0_ui_roller_page_t *p, int line_h)
     return imax(1, imin(CP0_UI_ROLLER_CAPTION_MAX_LINES, room / line_h));
 }
 
+void cp0_ui_roller_chevron_size(const cp0_ui_roller_page_t *p, int *w, int *h, int *stroke)
+{
+    const int cw = p ? imax(8, p->chevron_px) : 0;
+    const int s = p ? imax(3, cw / 8) : 0;
+    if (w) *w = p ? cw + 2 * s : 0;
+    if (h) *h = p ? cw / 2 + 2 * s : 0;
+    if (stroke) *stroke = s;
+}
+
+void cp0_ui_roller_up_chevron_box(const cp0_ui_roller_page_t *p, int *x, int *y, int *w, int *h)
+{
+    int cw = 0, ch = 0;
+    cp0_ui_roller_chevron_size(p, &cw, &ch, NULL);
+    if (x) *x = p ? p->roller_x + (p->roller_w - cw) / 2 : 0; /* LV_ALIGN_TOP_MID in the roller's body */
+    if (y) *y = p ? p->body_y + p->gap / 2 : 0;
+    if (w) *w = cw;
+    if (h) *h = ch;
+}
+
+int cp0_ui_roller_caption_clear_w(const cp0_ui_roller_page_t *p)
+{
+    if (!p) return 0;
+    int x = 0;
+    cp0_ui_roller_up_chevron_box(p, &x, NULL, NULL, NULL);
+    const int clear = x - p->gap - p->caption_x;
+    if (clear >= p->caption_w) return p->caption_w;
+    if (clear * 3 < p->caption_w) return p->caption_w; /* too little room: the line keeps its width */
+    return clear;
+}
+
+int cp0_ui_roller_caption_low_y(const cp0_ui_roller_page_t *p)
+{
+    if (!p) return 0;
+    int y = 0, h = 0;
+    cp0_ui_roller_up_chevron_box(p, NULL, &y, NULL, &h);
+    return imax(p->caption_y, y + h + p->gap / 2);
+}
+
 int cp0_ui_roller_font_px(int px)
 {
     if (px < CP0_UI_FONT_MIN_PX) return CP0_UI_FONT_MIN_PX;
@@ -150,8 +188,9 @@ int cp0_ui_roller_page(const cp0_ui_metrics_t *m, int strip_left, cp0_ui_roller_
     p.chevron_px = pct_of(p.row_h, CP0_UI_ROLLER_CHEVRON_PCT);
 
     /* status line: over the top left of the body, the full content width (a margin of title_x on each side). It sits
-     * above the highlight bar (cp0_ui_roller_caption_lines), so it is clear of the centred chevron: a line half as
-     * wide cut "FantaCitron  192.168.68...." at 640x480 (the address is what the line is for). */
+     * above the highlight bar (cp0_ui_roller_caption_lines): a line half as wide cut "FantaCitron  192.168.68...." at
+     * 640x480 (the address is what the line is for). It shares its band with the up scroll chevron: a wrapping line
+     * keeps clear of it (cp0_ui_roller_caption_clear_w). */
     p.caption_px = m->text_px[CP0_TEXT_CAPTION];
     p.caption_x = p.title_x;
     p.caption_y = p.body_y + m->tok[CP0_TOK_SPACE_S];
