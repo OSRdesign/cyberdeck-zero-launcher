@@ -48,14 +48,20 @@ zero8 or the deck, and on the HackBerry). Docs: docs-writer after acceptance.
   (WAV now; FLAC and Opus later cut at frame boundaries), the BWF `bext` and iXML chunks are rewritten for each result (new
   length, the time reference moves with the cut). The result is written to a temporary file, synced, then renamed into place; the
   original is kept unless the user chooses "replace", and a crash at any point leaves either the original or the finished result,
-  never half a file. A peak overview of the take (about 2 values per screen pixel, built once per take and cached next to it)
-  feeds the trim page's waveform. Names: the source take's name plus the next free number for that take (`take_006_20261108-1105.wav` gives `-1.wav` and `-2.wav` for two
-  parts; a trim alone gives `-1`); the number is never reused, the take number in the name is unchanged and the take counter does
+  never half a file. The trim page shows the take as a waveform that scrolls under a fixed play marker (drag, a position stepper in
+  0.1 s steps, keys), with ZOOM from the whole take down to a 2 s window, a thin overview strip of the whole take, IN and OUT handles,
+  and any number of numbered split points (a tap selects one, the SPLIT key becomes REMOVE). So the peak data is a pyramid: a peak
+  overview at several zoom levels (min and max per block, built once per take and cached next to it), read in windows, never the
+  whole file. Names: the source take's name plus the next free number for that take (`take_006_20261108-1105.wav` gives `-1.wav`, `-2.wav`
+  and `-3.wav` for two split points; a trim alone gives `-1`); the number is never reused, the take number in the name is unchanged and the take counter does
   not move (D15 amended). The save box offers "save as new files" (default, the original stays) or "replace original" (the original is deleted
   only after every result is written and synced, after one more confirmation; a trim alone then keeps the original's name).
 - `settings`: per-card remembered level and auto-gain choice, re-applied at every start (the mixer resets at reboot), format,
-  folder, prefix, sync interval, auto-split.
+  folder, prefix, sync interval, auto-split, and the record timer (Off, 3, 10 or 20 s; default Off).
 - `playback`: WAV playback of the app's own takes through ALSA (the card's playback side when it has one, else the default).
+- `timer`: the record countdown (owner request 2026-11-08). With a timer set, REC starts a countdown instead of the take: an overlay on the cassette
+  window shows the number and a ring, the meter stays live, tap, STOP or Esc cancels (nothing is written), at zero the take starts. No sound by
+  default; leaving the app cancels it. Unit-tested on a fake clock.
 `ui/`: the three pages of the canvas (recording, settings, recordings list), the cassette widget (two hubs turning counterclockwise,
 no tape drawn), the LED bar, counter, five keys, the CARD and SOFT steppers. The CARD stepper and the settings rows Input level and
 Auto gain exist only when the card has those controls; without them SOFT takes the full width.
@@ -71,7 +77,7 @@ Tier names are the savvy-flow workers. "Check" is what runs on a PC without a bo
 | T4 | `takes`, `settings`, file naming, rename, delete, list | medium | T1 | naming and `nodate` rules, counter never repeats after delete, per-card settings round trip, folder with a damaged file |
 | T5 | `playback` (WAV, seek, pause), the five-key state machine | medium | T1, T2 | state machine table test (REC, PAUSE, STOP, PLAY, REW from every state), playback of a generated file on a fake sink |
 | T5b | `edit`: trim and split of WAV takes, the peak overview, replace or keep the original, crash-safe write | careful | T1, T4 | unit tests: a trim and a split byte-compared against a reference built from the source samples (sample-exact at the edges), `bext`/iXML rewritten, the 4 GiB boundary, a writer killed at random points leaves the original or the result only, a damaged source is refused, disk-full stops cleanly |
-| T6 | `ui/`: the five screens (recording, settings, list, trim and split, save box), the cassette widget, the CARD/SOFT steppers, scenes at 480x320, 320x480, 640x480, the no-card-control variant | heavy | T3, T4, T5, T5b | headless scenes compared to the canvas boards by the orchestrator; no overlap at either narrow size; animation cost measured on the PC harness and budgeted for the Zero 2 W |
+| T6 | `ui/`: the five screens (recording, settings, list, trim and split, save box), the cassette widget, the CARD/SOFT steppers, scenes at 480x320, 320x480, 640x480, the no-card-control variant | heavy | T3, T4, T5, T5b | headless scenes compared to the canvas boards by the orchestrator; no overlap at either narrow size; the Recordings and Settings buttons beside the counter (keys L and S); the record countdown overlay; animation cost measured on the PC harness and budgeted for the Zero 2 W |
 | T7 | packaging: `app.json`, `.desktop`, icon, `build.sh`, README with scenes, amd64 build | medium | T6 | package files test, arm64 and amd64 builds, `check-branding` |
 | T8 | board test protocol and a board self-check mode | light | T7 | the protocol text, reviewed by the orchestrator |
 
@@ -101,5 +107,5 @@ re-open without leaving the screen; trim and split for FLAC and Opus takes.
    figures in the report (about 345.6 MB per hour at 48 kHz mono)?
 5. Icon: a cassette in the launcher's amber on dark, drawn by the orchestrator, unless the owner wants another idea.
 6. Trim and split: answered by the owner (2026-11-08): the save box offers new files or replace original; split parts keep the original
-   name with `-1`, `-2` added (see `edit` above). Still open: several split points at once (as drawn) or one at a time, and the first-launch
-   behaviour when the app is closed during a save (the temporary file is removed, the original is untouched).
+   name with `-1`, `-2` added (see `edit` above). Also answered: several split points at once, and closing the app during a save removes the temporary file and leaves the original untouched.
+   Still open: moving a split by dragging its flag in 0.1, or only remove and add again.
