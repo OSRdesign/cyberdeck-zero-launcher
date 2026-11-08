@@ -177,7 +177,7 @@ proposed in 2.3. The SD-write test is to repeat with the real two-thread writer.
 | Run | Recorded | Survived | Lost |
 |---|---|---|---|
 | A, plain `arecord` (PCM2902) | about 55 s | 30.4 s | about 25 s (matches the usual 30 s dirty-page flush, I) |
-| B, `arecord` + `sync` every 10 s (UC02) | not logged | 60.3 s | about 6 s (within the sync interval) |
+| B, `arecord` + `sync` every 10 s (UC02) | about 66 s (started 13:35:37, last file update 13:36:42, from the timestamps) | 60.3 s | about 6 s (within the sync interval) |
 
 Both files kept `arecord`'s placeholder header sizes (RIFF `0x80000024`, data `0x80000000`) and ended cleanly; the file
 system came back read-write with no error or recovery message. **So:** sync every 10 s bounds the loss as planned (4.4);
