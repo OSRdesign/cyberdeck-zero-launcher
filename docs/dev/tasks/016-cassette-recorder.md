@@ -49,7 +49,10 @@ zero8 or the deck, and on the HackBerry). Docs: docs-writer after acceptance.
   length, the time reference moves with the cut). The result is written to a temporary file, synced, then renamed into place; the
   original is kept unless the user chooses "replace", and a crash at any point leaves either the original or the finished result,
   never half a file. A peak overview of the take (about 2 values per screen pixel, built once per take and cached next to it)
-  feeds the trim page's waveform. Every result is a new take with its own number (D15).
+  feeds the trim page's waveform. Names: the source take's name plus the next free number for that take (`take_006_20261108-1105.wav` gives `-1.wav` and `-2.wav` for two
+  parts; a trim alone gives `-1`); the number is never reused, the take number in the name is unchanged and the take counter does
+  not move (D15 amended). The save box offers "save as new files" (default, the original stays) or "replace original" (the original is deleted
+  only after every result is written and synced, after one more confirmation; a trim alone then keeps the original's name).
 - `settings`: per-card remembered level and auto-gain choice, re-applied at every start (the mixer resets at reboot), format,
   folder, prefix, sync interval, auto-split.
 - `playback`: WAV playback of the app's own takes through ALSA (the card's playback side when it has one, else the default).
@@ -68,7 +71,7 @@ Tier names are the savvy-flow workers. "Check" is what runs on a PC without a bo
 | T4 | `takes`, `settings`, file naming, rename, delete, list | medium | T1 | naming and `nodate` rules, counter never repeats after delete, per-card settings round trip, folder with a damaged file |
 | T5 | `playback` (WAV, seek, pause), the five-key state machine | medium | T1, T2 | state machine table test (REC, PAUSE, STOP, PLAY, REW from every state), playback of a generated file on a fake sink |
 | T5b | `edit`: trim and split of WAV takes, the peak overview, replace or keep the original, crash-safe write | careful | T1, T4 | unit tests: a trim and a split byte-compared against a reference built from the source samples (sample-exact at the edges), `bext`/iXML rewritten, the 4 GiB boundary, a writer killed at random points leaves the original or the result only, a damaged source is refused, disk-full stops cleanly |
-| T6 | `ui/`: the four pages (recording, settings, list, trim and split), the cassette widget, the CARD/SOFT steppers, scenes at 480x320, 320x480, 640x480, the no-card-control variant | heavy | T3, T4, T5, T5b | headless scenes compared to the canvas boards by the orchestrator; no overlap at either narrow size; animation cost measured on the PC harness and budgeted for the Zero 2 W |
+| T6 | `ui/`: the five screens (recording, settings, list, trim and split, save box), the cassette widget, the CARD/SOFT steppers, scenes at 480x320, 320x480, 640x480, the no-card-control variant | heavy | T3, T4, T5, T5b | headless scenes compared to the canvas boards by the orchestrator; no overlap at either narrow size; animation cost measured on the PC harness and budgeted for the Zero 2 W |
 | T7 | packaging: `app.json`, `.desktop`, icon, `build.sh`, README with scenes, amd64 build | medium | T6 | package files test, arm64 and amd64 builds, `check-branding` |
 | T8 | board test protocol and a board self-check mode | light | T7 | the protocol text, reviewed by the orchestrator |
 
@@ -97,5 +100,6 @@ re-open without leaving the screen; trim and split for FLAC and Opus takes.
 4. Cap: a take is limited by free space only; RF64 past 4 GiB (D3). Is an hours-long take acceptable on the SD card's wear, given the
    figures in the report (about 345.6 MB per hour at 48 kHz mono)?
 5. Icon: a cassette in the launcher's amber on dark, drawn by the orchestrator, unless the owner wants another idea.
-6. Trim and split: the original is kept by default and the result is a new take; "replace" (the result takes the original's place) is a
-   second choice with a confirmation box. Agreed? And a split at several points at once, or one point at a time?
+6. Trim and split: answered by the owner (2026-11-08): the save box offers new files or replace original; split parts keep the original
+   name with `-1`, `-2` added (see `edit` above). Still open: several split points at once (as drawn) or one at a time, and the first-launch
+   behaviour when the app is closed during a save (the temporary file is removed, the original is untouched).
