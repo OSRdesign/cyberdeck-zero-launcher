@@ -90,8 +90,7 @@ Reselect reselect(const std::vector<Row> &before, const std::vector<Row> &after,
     if (requested < 0 && before.size() == after.size()) {
         result.in_place = true;
         for (std::size_t i = 0; result.in_place && i < after.size(); ++i)
-            result.in_place = same_key(before[i], after[i]) && before[i].busy == after[i].busy &&
-                              before[i].toggle == after[i].toggle;
+            result.in_place = same_key(before[i], after[i]) && before[i].busy == after[i].busy;
         if (result.in_place) {
             result.selected = std::max(0, current);
             return result;
@@ -367,8 +366,8 @@ std::vector<Row> Model::list_rows() const
     }
     rows.push_back({RowType::AddSource, {}, "+ Add a GitHub source", {}, false, Tone::Normal});
     rows.push_back({RowType::Sync, {}, "Sync my sources", {}, false, Tone::Normal});
-    rows.push_back({RowType::AutoCheck, {}, "Check for updates when opening Apps", {}, false, Tone::Normal, true,
-                    auto_check_});
+    rows.push_back({RowType::AutoCheck, {}, "Auto-check updates", auto_check_ ? "On" : "Off", false,
+                    auto_check_ ? Tone::Good : Tone::Muted});
     return rows;
 }
 

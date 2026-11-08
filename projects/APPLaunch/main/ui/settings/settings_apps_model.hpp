@@ -13,8 +13,8 @@
  *             enabled sources that is not installed ("v<offered>"). Empty: "Loading..." / "No apps installed" /
  *             "Nothing to install" / "The Store is needed (backend missing)". Sources: every source (name; value:
  *             "off", "waiting", "done", "failed", "<N> apps", "not synced"), "+ Add a GitHub source", "Sync my
- *             sources" (the forced refresh), "Check for updates when opening Apps" (a switch: Enter or a tap flips it,
- *             also while a job runs). The app a package job runs for and the source being synced are busy rows. Values carry the
+ *             sources" (the forced refresh), "Auto-check updates" (value "On" green / "Off" grey: Enter or a tap flips
+ *             it, also while a job runs). The app a package job runs for and the source being synced are busy rows. Values carry the
  *             legacy page's colours as tones (update amber, installed / synced green, failed red, the rest muted).
  *   actions   an installed app's or a source's action list (a level of its own): Update (an update is offered) /
  *             Remove, Cancel; Enable or Disable, Sync (enabled), Remove, Cancel. Installed: Enter or a tap opens the
@@ -55,7 +55,7 @@ enum class RowType {
     Source,      /* key: the source's URL */
     AddSource,   /* "+ Add a GitHub source" */
     Sync,        /* "Sync my sources" (the forced refresh) */
-    AutoCheck,   /* "Check for updates when opening Apps": a switch (settings_apps_autocheck.hpp) */
+    AutoCheck,   /* "Auto-check updates", value On / Off (settings_apps_autocheck.hpp) */
     /* an action list's rows (key: the app's id / the source's URL) */
     Update,
     Install,     /* an Available app's list: the install */
@@ -82,12 +82,10 @@ struct Row {
     std::string value;
     bool busy = false; /* a job runs for it: the label and a spinner */
     Tone tone = Tone::Normal;
-    bool toggle = false; /* a switch (the roller's Toggle row) instead of a value */
-    bool on = false;     /* the switch's state */
 };
 
 /* The highlight after the rows changed (the page's rebuild). in_place: no row was requested and the rows kept their count,
- * types, keys and kinds (busy, switch): they change where they are, the highlight and the scroll stay (a refreshed
+ * types, keys and kinds (busy or not): they change where they are, the highlight and the scroll stay (a refreshed
  * catalogue: "0.1.0>0.2.0" appears on the highlighted app). Otherwise `selected` is the requested row, else the row with
  * the type and key of the highlighted one, else the same index cut to the new list; never below 0. */
 struct Reselect {
@@ -169,7 +167,7 @@ public:
     void set_status(const std::string &text, bool error = false, bool warn = false);
     const std::string &status() const { return status_; }
     bool status_warn() const { return status_warn_; }
-    /* "Check for updates when opening Apps" (Sources): the stored setting (default On). */
+    /* "Auto-check updates" (Sources): the stored setting (default On). */
     void set_auto_check(bool on) { auto_check_ = on; }
     bool auto_check() const { return auto_check_; }
 

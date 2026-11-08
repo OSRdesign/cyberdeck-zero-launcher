@@ -602,12 +602,11 @@ static void model_rows()
     assert(rows[0].tone == Tone::Good && rows[1].tone == Tone::Bad && rows[2].tone == Tone::Muted);
     assert(rows[3].type == RowType::AddSource && rows[3].label == "+ Add a GitHub source");
     assert(rows[4].type == RowType::Sync && rows[4].label == "Sync my sources");
-    // the setting: a switch, On by default, after the forced refresh
-    assert(rows[5].type == RowType::AutoCheck && rows[5].label == "Check for updates when opening Apps");
-    assert(rows[5].toggle && rows[5].on && rows[5].value.empty() && !rows[5].busy);
-    assert(!rows[4].toggle && !rows[0].toggle);
+    // the setting: "Auto-check updates", On (green) by default, after the forced refresh; Off grey
+    assert(rows[5].type == RowType::AutoCheck && rows[5].label == "Auto-check updates");
+    assert(rows[5].value == "On" && rows[5].tone == Tone::Good && !rows[5].busy);
     model.set_auto_check(false);
-    assert(!model.auto_check() && !model.rows()[5].on && model.rows()[5].toggle);
+    assert(!model.auto_check() && model.rows()[5].value == "Off" && model.rows()[5].tone == Tone::Muted);
     model.set_auto_check(true);
     assert(model.find_row(RowType::AutoCheck) == 5);
     // a sync run: waiting, syncing (busy row), done while it runs, failed
@@ -1191,13 +1190,14 @@ static void model_reselect()
     // a requested row wins (a level opens on its first row)
     pick = settings_apps::reselect(before, before, 3, 0);
     assert(!pick.in_place && pick.selected == 0);
-    // Sources: the switch flips in place
+    // Sources: the setting flips in place
     model.set_level(Level::Sources);
     const auto switch_before = model.rows();
     model.set_auto_check(false);
     const auto switch_after = model.rows();
     pick = settings_apps::reselect(switch_before, switch_after, 5);
-    assert(pick.in_place && pick.selected == 5 && switch_after[5].type == RowType::AutoCheck && !switch_after[5].on);
+    assert(pick.in_place && pick.selected == 5 && switch_after[5].type == RowType::AutoCheck);
+    assert(switch_before[5].value == "On" && switch_after[5].value == "Off");
 }
 
 int main()

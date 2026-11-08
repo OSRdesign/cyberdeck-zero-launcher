@@ -81,9 +81,6 @@ cp0::ui::RowSpec spec_of(const Row &row)
     spec.label = row.label;
     if (row.busy) {
         spec.kind = cp0::ui::RowKind::Busy;
-    } else if (row.toggle) { /* a setting: the roller's switch, as the Settings host draws its on/off entries */
-        spec.kind = cp0::ui::RowKind::Toggle;
-        spec.on = row.on;
     } else {
         spec.value = row.value;
         spec.value_rgb = rgb_of(row.tone);
@@ -95,7 +92,7 @@ cp0::ui::RowSpec spec_of(const Row &row)
 bool same_spec(const cp0::ui::RowSpec &a, const cp0::ui::RowSpec &b)
 {
     return a.kind == b.kind && a.label == b.label && a.value == b.value && a.value_rgb == b.value_rgb &&
-           a.chevron == b.chevron && a.on == b.on;
+           a.chevron == b.chevron;
 }
 
 cp0::ui::CaptionTone tone_of(settings_apps::Severity severity)
@@ -117,7 +114,7 @@ public:
     {
         jobs_ = std::make_unique<settings_apps::Jobs>();
         model_.set_backend_missing(!settings_apps::Jobs::available());
-        model_.set_auto_check(settings_apps::auto_check_enabled()); /* the Sources switch (read once, then cached) */
+        model_.set_auto_check(settings_apps::auto_check_enabled()); /* Sources' Auto-check updates (read once, then cached) */
         page_.set_caption_wrap(true); /* a source's failure reason or a step with its counters: never cut */
 
         cp0::ui::RollerEvents events;
