@@ -98,8 +98,12 @@ encode-while-capturing on the zero8; background recording once multitasking is s
 re-open without leaving the screen; trim and split for FLAC and Opus takes.
 
 ## Questions for the owner
-1. On the recording screen, what do the keys do? Proposed: REC starts a take (latched), PAUSE pauses, STOP ends it and keeps the
-   take, PLAY plays the last take, REW rewinds the take being played (hold = faster). The recordings list plays any take, and has RENAME, TRIM (opens the trim and split page) and DELETE.
+1. Keys on the recording screen (answered 2026-11-08, owner): REW, PLAY/PAUSE (one key), FWD, STOP, REC. PLAY/PAUSE plays the last take when idle,
+   pauses and resumes a playing take, and pauses and resumes a recording. REC starts a take (latched; the record timer first, if set). STOP ends it
+   and keeps it. REW and FWD, held while a take plays, keep it playing reversed or forward at 5x with the sound audible (tape-style cue), release
+   returns to normal play; setting "REW / FWD" switches to a 5 s jump per tap (hold repeats). Both are dimmed while recording. The recordings list
+   plays any take, and has RENAME, TRIM (opens the trim and split page) and DELETE. Core: `playback` gets a scan mode (forward by averaging blocks,
+   reverse by reversed blocks; position-accurate, stops at both ends), tested on generated files.
 2. Playback output: the card's own playback side (headset earphones) when it has one, else the default output: agreed?
 3. Rename: the take's name is edited on the list screen with the keyboard policy above (a keyboard if connected, else the fallback
    keyboard). OK?
@@ -108,4 +112,4 @@ re-open without leaving the screen; trim and split for FLAC and Opus takes.
 5. Icon: a cassette in the launcher's amber on dark, drawn by the orchestrator, unless the owner wants another idea.
 6. Trim and split: answered by the owner (2026-11-08): the save box offers new files or replace original; split parts keep the original
    name with `-1`, `-2` added (see `edit` above). Also answered: several split points at once, and closing the app during a save removes the temporary file and leaves the original untouched.
-   Still open: moving a split by dragging its flag in 0.1, or only remove and add again.
+   Answered: flags and handles are never dragged (too small a screen); a split is moved by removing it and adding it again at the marker.
