@@ -5,7 +5,7 @@
  * tests/test_settings_apps_autocheck.cpp). Before it, the page showed the lists the Store backend cached at the last sync
  * until the user ran Sources > Sync my sources (key S); a published update stayed hidden until then.
  *
- *   setting   "Check for updates when opening Apps" (Settings > Apps > Sources), config key kConfigKey: 0 Off, 1 On;
+ *   setting   "Auto-check updates" (Settings > Apps > Sources, value On / Off), config key kConfigKey: 0 Off, 1 On;
  *             absent = On (written only when the user changes it). Off: the page behaves as before (no check, no line).
  *   due       an enabled source whose list is older than kTtlSeconds (the backend's own saved time, the --registries
  *             synced_at field; unknown or unreadable: due), not tried automatically within kTtlSeconds in this launcher
@@ -16,8 +16,9 @@
  *             updates..."); something due and no route -> no network use, "Offline: ...".
  *   forced    Sync my sources, S and a source's own Sync: every enabled source, whatever the setting, the TTL, the
  *             attempts and the route (the sync's own progress and errors, as before).
- *   lines     "Checking for updates...", "Up to date (just now)", "Updated 3 min ago", "Offline: showing the list from
- *             2 h ago" ("Offline: showing the saved list" when the list's age is unknown). The age is the newest saved
+ *   lines     "Checking for updates...", "Up to date (just now)", "Updated 3 min ago", "Updated just now (1 failed)"
+ *             (some sources came back, one did not), "Offline: showing the list from 2 h ago" (none came back, or no
+ *             route; "Offline: showing the saved list" when the list's age is unknown). The age is the newest saved
  *             time of the enabled sources that have a list; the page keeps it current while it stays open.
  *
  * The backend has no conditional requests (If-None-Match / If-Modified-Since): a refresh downloads the registry again
@@ -64,6 +65,7 @@ struct Memory {
     std::map<std::string, long long> attempted; /* url -> wall time of its last automatic refresh */
     Outcome last = Outcome::None;               /* the last automatic refresh's result */
     long long last_at = -1;
+    int last_failed = 0;                        /* sources that failed in it (Fresh: some came back, these did not) */
 };
 
 struct Input {
@@ -90,6 +92,7 @@ enum class Shown { None, Checking, Fresh, Offline };
 struct Plan {
     std::vector<std::string> refresh; /* contact these now; empty: no network use */
     Shown shown = Shown::None;        /* the line meanwhile (Checking) or instead */
+    int failed = 0;                   /* Fresh: sources that failed in this run's last refresh ("(1 failed)") */
 };
 
 /* The opening's decision (forced: the sync's sources, nothing shown). */
@@ -99,12 +102,14 @@ Plan plan(const Input &input, const Memory &memory, bool network_up);
 void record_attempts(Memory &memory, const std::vector<std::string> &urls, long long now);
 /* refreshed: sources that came back with a new list. At least one: Fresh; none: Offline. */
 Outcome outcome(int refreshed);
-void record_outcome(Memory &memory, Outcome result, long long now);
+/* failed: the sources of the refresh that did not come back (shown with a Fresh result) */
+void record_outcome(Memory &memory, Outcome result, long long now, int failed = 0);
 Shown shown_for(Outcome result);
 
 /* "1 min" (under 2 min, at least 1), "59 min", "1 h", "47 h", "2 days". */
 std::string age_text(long long seconds);
-/* The line for `shown`, the list's saved time (-1 unknown) and the clock. */
-std::string status_text(Shown shown, long long list_time, long long now);
+/* The line for `shown`, the list's saved time (-1 unknown) and the clock. Fresh with failed > 0 (some sources came back,
+ * `failed` did not): "Updated just now (1 failed)", "Updated 3 min ago (2 failed)" instead of "Up to date (just now)". */
+std::string status_text(Shown shown, long long list_time, long long now, int failed = 0);
 
 } // namespace apps_autocheck

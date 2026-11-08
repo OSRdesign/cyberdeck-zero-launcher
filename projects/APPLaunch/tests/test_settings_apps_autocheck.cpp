@@ -4,7 +4,7 @@
  * Settings > Apps, the check for app updates when the page opens (settings_apps_autocheck): the setting's stored value,
  * the backend's saved time, which sources are due (cache age against the TTL, setting Off, disabled sources, the
  * attempts of this run, a clock that moved), the opening's plan (offline, nothing due, the last result), the forced
- * sync that ignores all of it, and the status lines.
+ * sync that ignores all of it, the status lines, and a refresh where only some sources came back ("(N failed)").
  */
 
 #include "../main/ui/settings/settings_apps_autocheck.hpp"
@@ -264,6 +264,61 @@ void lines()
     assert(status_text(Shown::Offline, kT, kT + 25 * 60) == "Offline: showing the list from 25 min ago");
     assert(status_text(Shown::Offline, kT, kT + 3 * 86400) == "Offline: showing the list from 3 days ago");
     assert(status_text(Shown::Offline, -1, kT) == "Offline: showing the saved list");
+    /* some sources came back, others did not: never "Up to date" */
+    assert(status_text(Shown::Fresh, kT, kT, 1) == "Updated just now (1 failed)");
+    assert(status_text(Shown::Fresh, kT, kT + 59, 2) == "Updated just now (2 failed)");
+    assert(status_text(Shown::Fresh, -1, kT, 1) == "Updated just now (1 failed)");
+    assert(status_text(Shown::Fresh, kT, kT + 180, 1) == "Updated 3 min ago (1 failed)");
+    assert(status_text(Shown::Fresh, kT, kT + 2 * 3600, 3) == "Updated 2 h ago (3 failed)");
+    assert(status_text(Shown::Fresh, kT, kT, 0) == "Up to date (just now)");
+    assert(status_text(Shown::Fresh, kT, kT, -1) == "Up to date (just now)");
+    /* the count only qualifies a Fresh line */
+    assert(status_text(Shown::Offline, kT, kT + 3600, 2) == "Offline: showing the list from 1 h ago");
+    assert(status_text(Shown::Checking, kT, kT, 1) == "Checking for updates...");
+}
+
+/* A refresh where some sources came back and others did not: the count follows the result to the next openings within
+ * the TTL, until a newer list comes (a sync); none came back: the offline line. */
+void partial()
+{
+    Memory memory;
+    Input input = input_at(kT + 3600, {source("a", kT), source("b", kT), source("c", kT), source("off", kT, false)});
+    Plan p = plan(input, memory, true);
+    assert(p.refresh.size() == 3 && p.shown == Shown::Checking && p.failed == 0);
+    record_attempts(memory, p.refresh, input.now);
+    /* a came back, b and c failed (their saved time stays) */
+    const int refreshed = 1;
+    const int failed = static_cast<int>(p.refresh.size()) - refreshed;
+    record_outcome(memory, outcome(refreshed), input.now, failed);
+    assert(memory.last == Outcome::Fresh && memory.last_failed == 2);
+    input.sources[0].saved = input.now;
+    assert(status_text(shown_for(memory.last), list_time(input.sources), input.now, memory.last_failed) ==
+           "Updated just now (2 failed)");
+    /* opened again two minutes later: nothing tried (all within the TTL), the count is kept */
+    input.now += 120;
+    p = plan(input, memory, true);
+    assert(p.refresh.empty() && p.shown == Shown::Fresh && p.failed == 2);
+    assert(status_text(p.shown, list_time(input.sources), input.now, p.failed) == "Updated 2 min ago (2 failed)");
+    /* a sync brought newer lists since: no count */
+    input.sources[1].saved = input.now - 10;
+    p = plan(input, memory, true);
+    assert(p.shown == Shown::Fresh && p.failed == 0);
+    /* every source failed: Offline, no count */
+    Memory none;
+    record_outcome(none, outcome(0), kT + 3600, 3);
+    input = input_at(kT + 3660, {source("a", kT), source("b", kT)});
+    record_attempts(none, {"a", "b"}, kT + 3600);
+    p = plan(input, none, true);
+    assert(p.refresh.empty() && p.shown == Shown::Offline && p.failed == 0);
+    /* a full success: no count */
+    Memory full;
+    record_outcome(full, outcome(2), kT, 0);
+    record_attempts(full, {"a", "b"}, kT);
+    input = input_at(kT + 60, {source("a", kT), source("b", kT)});
+    p = plan(input, full, true);
+    assert(p.shown == Shown::Fresh && p.failed == 0);
+    record_outcome(full, outcome(1), kT, -3); /* a negative count is none */
+    assert(full.last_failed == 0);
 }
 
 } // namespace
@@ -279,6 +334,7 @@ int main()
     plans();
     outcomes();
     lines();
+    partial();
     std::printf("test_settings_apps_autocheck: all passed\n");
     return 0;
 }

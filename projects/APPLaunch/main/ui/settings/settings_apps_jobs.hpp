@@ -55,7 +55,7 @@ AppUpdates app_updates();
 /* A detached worker re-reads the catalogue (local: no network); a second call while one runs does nothing. */
 void refresh_app_updates();
 
-/* "Check for updates when opening Apps" (settings_apps_autocheck.hpp): the stored setting, read once from the launcher's
+/* "Auto-check updates" (settings_apps_autocheck.hpp): the stored setting, read once from the launcher's
  * config (key apps_autocheck::kConfigKey, absent = On) and cached; set_auto_check_enabled() saves a change (false: it
  * could not be saved, nothing changed). Any thread (the config call is waited for, 3 s at most). */
 bool auto_check_enabled();
@@ -81,7 +81,8 @@ public:
     /* The first list ("Loading..." until it comes; the backend's cached lists, no network), then on the same worker, once
      * per opening, the check for app updates (settings_apps_autocheck.hpp: setting On, a source's list older than the
      * TTL, a default route): "Checking for updates...", the stale sources re-read, the lists again (the rows change in
-     * place), and the line ("Up to date (just now)", "Updated 3 min ago", "Offline: ..."). Busy until it ends. */
+     * place), and the line ("Up to date (just now)", "Updated 3 min ago", "Updated just now (1 failed)" when only some
+     * came back, "Offline: ..."). Busy until it ends. */
     void load();
     /* Each returns false (nothing started) while another job runs. */
     bool package(const std::string &action, const std::string &id, const std::string &name, const std::string &size);

@@ -158,10 +158,14 @@ Plan plan(const Input &input, const Memory &memory, bool network_up)
     }
     const long long newest = list_time(input.sources);
     // the last refresh of this run failed and nothing newer came since (a forced sync would have brought a newer list)
-    if (memory.last == Outcome::Offline && memory.last_at >= 0 && (newest < 0 || memory.last_at >= newest))
+    const bool last_counts = memory.last_at >= 0 && (newest < 0 || memory.last_at >= newest);
+    if (memory.last == Outcome::Offline && last_counts) {
         result.shown = Shown::Offline;
-    else if (newest >= 0)
+    } else if (newest >= 0) {
         result.shown = Shown::Fresh;
+        // the sources that failed in that refresh still did not come back (a newer list would have come from a sync)
+        if (memory.last == Outcome::Fresh && last_counts) result.failed = memory.last_failed;
+    }
     return result;
 }
 
@@ -175,10 +179,11 @@ Outcome outcome(int refreshed)
     return refreshed > 0 ? Outcome::Fresh : Outcome::Offline;
 }
 
-void record_outcome(Memory &memory, Outcome result, long long now)
+void record_outcome(Memory &memory, Outcome result, long long now, int failed)
 {
     memory.last = result;
     memory.last_at = now;
+    memory.last_failed = std::max(0, failed);
 }
 
 Shown shown_for(Outcome result)
@@ -200,16 +205,20 @@ std::string age_text(long long seconds)
     return std::to_string(hours / 24) + " days";
 }
 
-std::string status_text(Shown shown, long long list_time, long long now)
+std::string status_text(Shown shown, long long list_time, long long now, int failed)
 {
     switch (shown) {
     case Shown::None:
         return std::string();
     case Shown::Checking:
         return "Checking for updates...";
-    case Shown::Fresh:
-        if (list_time < 0 || now - list_time < 60) return "Up to date (just now)";
-        return "Updated " + age_text(now - list_time) + " ago";
+    case Shown::Fresh: {
+        const bool just_now = list_time < 0 || now - list_time < 60;
+        if (failed <= 0) return just_now ? "Up to date (just now)" : "Updated " + age_text(now - list_time) + " ago";
+        // some sources did not come back: never "Up to date"
+        return std::string("Updated ") + (just_now ? "just now" : age_text(now - list_time) + " ago") + " (" +
+               std::to_string(failed) + " failed)";
+    }
     case Shown::Offline:
         if (list_time < 0) return "Offline: showing the saved list";
         return "Offline: showing the list from " + age_text(now - list_time) + " ago";

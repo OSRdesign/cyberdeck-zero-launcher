@@ -90,6 +90,7 @@ struct Jobs::Shared {
     // list's age in it current ("Updated 3 min ago" a few minutes later)
     apps_autocheck::Shown check_shown = apps_autocheck::Shown::None;
     long long check_list_time = -1;
+    int check_failed = 0;              // Fresh: sources that did not come back ("(1 failed)")
     bool check_live = false;
 
     // busy ends: the package job leaves the shared busy flag (call with the mutex held)
@@ -120,15 +121,16 @@ struct Jobs::Shared {
         stage.clear();
     }
     // The check's result line ("" for None), plain colour; busy ends
-    void finish_check(apps_autocheck::Shown shown, long long list_time)
+    void finish_check(apps_autocheck::Shown shown, long long list_time, int failed)
     {
         std::lock_guard<std::mutex> lock(mutex);
-        status = apps_autocheck::status_text(shown, list_time, wall_now());
+        status = apps_autocheck::status_text(shown, list_time, wall_now(), failed);
         status_error = false;
         status_warn = false;
         status_dirty = true;
         check_shown = shown;
         check_list_time = list_time;
+        check_failed = failed;
         check_live = shown == apps_autocheck::Shown::Fresh || shown == apps_autocheck::Shown::Offline;
         stage.clear();
         end_busy_locked();
@@ -425,7 +427,7 @@ void task_auto_check(const std::shared_ptr<Shared> &s)
         check::record_attempts(g_check_memory, plan.refresh, input.now);
     }
     if (plan.refresh.empty()) {
-        s->finish_check(plan.shown, check::list_time(input.sources));
+        s->finish_check(plan.shown, check::list_time(input.sources), plan.failed);
         return;
     }
     s->say(check::status_text(check::Shown::Checking, -1, input.now));
@@ -441,16 +443,18 @@ void task_auto_check(const std::shared_ptr<Shared> &s)
     }
     task_refresh(s);
     const check::Outcome result = check::outcome(refreshed);
+    // some came back, these did not: "Updated just now (1 failed)"; none came back: the offline line (no count)
+    const int failed = result == check::Outcome::Fresh ? static_cast<int>(plan.refresh.size()) - refreshed : 0;
     {
         std::lock_guard<std::mutex> lock(g_check_mutex);
-        check::record_outcome(g_check_memory, result, wall_now());
+        check::record_outcome(g_check_memory, result, wall_now(), failed);
     }
     std::vector<check::SourceState> fresh;
     {
         std::lock_guard<std::mutex> lock(s->mutex);
         for (const apps_backend::Source &source : s->sources) fresh.push_back(check::source_state(source));
     }
-    s->finish_check(check::shown_for(result), check::list_time(fresh));
+    s->finish_check(check::shown_for(result), check::list_time(fresh), failed);
 }
 
 void spawn(std::function<void()> work)
@@ -788,7 +792,7 @@ JobsUpdate Jobs::take()
         update.status_text = apps_status::stage_line(s.stage, s.stage_position, s.stage_total, static_cast<long>(seconds));
     } else if (!s.busy && s.check_live) {
         // the check's line keeps the list's age current while nothing else has been said ("Updated 3 min ago")
-        const std::string text = apps_autocheck::status_text(s.check_shown, s.check_list_time, wall_now());
+        const std::string text = apps_autocheck::status_text(s.check_shown, s.check_list_time, wall_now(), s.check_failed);
         if (text != s.status) {
             s.status = text;
             update.status = true;
