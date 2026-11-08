@@ -21,12 +21,18 @@
  * `env HARNESS_APPS_PACKAGE hold` it never answers (the app's row keeps its spinner: updating / installing); with
  * `env HARNESS_APPS_PACKAGE job` it answers a package job, so the page asks for the sudo password (with
  * `env HARNESS_SUDO prompt` the responsive prompt opens, harness_stubs.cpp).
+ * The check for updates when the page opens (settings_apps_autocheck.hpp): every source's list was saved
+ * `env HARNESS_APPS_SYNCED <seconds>` before the scene's clock (default 300: fresh, nothing is re-read), in the backend's
+ * own time format; a re-read (--edit-registry, also the sync's) follows the scene command `appsrefresh ok|newer|fail|hold`
+ * (harness.h): ok saves a source that was fine at the scene's clock, newer also makes deck-lab/apps offer Field Notes 0.9.3,
+ * fail keeps every cached list (the download failed), hold waits until the scene names another mode.
  */
 #include "harness.h"
 #include "settings/apps_backend.hpp"
 
 #include <cstdlib>
 #include <cstdio>
+#include <ctime>
 #include <mutex>
 #include <string>
 #include <unistd.h>
@@ -42,6 +48,7 @@ struct FakeSource {
     std::string error;
     bool enabled;
     bool builtin;
+    long long synced; /* the time its list was saved (the scene's clock: time() is the harness's) */
 };
 
 struct FakeApp {
@@ -66,6 +73,7 @@ const FakeApp kRuler = {"ruler", "Pocket Ruler", "1.0.0", nullptr, "deck-lab/app
 std::mutex g_mutex;
 bool g_ready = false;
 std::vector<FakeSource> g_sources;
+bool g_notes_newer = false; /* a re-read in "newer" mode brought Field Notes 0.9.3 */
 
 std::string fixture_case()
 {
@@ -73,17 +81,48 @@ std::string fixture_case()
     return value && value[0] ? value : "catalogue";
 }
 
+std::string refresh_mode()
+{
+    harness::Fixtures &fx = harness::fixtures();
+    std::lock_guard<std::mutex> lock(fx.apps_mutex);
+    return fx.apps_refresh;
+}
+
+long long now()
+{
+    return static_cast<long long>(std::time(nullptr));
+}
+
+/* When the lists were saved, before the scene's clock (HARNESS_APPS_SYNCED seconds, default 300) */
+long long saved_at()
+{
+    const char *value = std::getenv("HARNESS_APPS_SYNCED");
+    return now() - (value && value[0] ? std::strtoll(value, nullptr, 10) : 300);
+}
+
+/* The backend's own format (now_text: %Y-%m-%dT%H:%M:%S%z); the harness runs in UTC */
+std::string saved_text(long long when)
+{
+    const std::time_t value = static_cast<std::time_t>(when);
+    std::tm tm{};
+    gmtime_r(&value, &tm);
+    char text[40] = {};
+    std::strftime(text, sizeof(text), "%Y-%m-%dT%H:%M:%S+0000", &tm);
+    return text;
+}
+
 void ensure_sources()
 {
     if (g_ready) return;
     g_ready = true;
-    g_sources.push_back({"https://hub.invalid/registry.json", "CardputerZero Hub", "ok", 1, "", true, true});
+    const long long saved = saved_at();
+    g_sources.push_back({"https://hub.invalid/registry.json", "CardputerZero Hub", "ok", 1, "", true, true, saved});
     if (fixture_case() != "catalogue") return;
-    g_sources.push_back({kDeckLab, "deck-lab/apps", "ok", 4, "", true, false});
+    g_sources.push_back({kDeckLab, "deck-lab/apps", "ok", 4, "", true, false, saved});
     g_sources.push_back({"https://raw.githubusercontent.com/field-kit/tools/main/registry.json", "field-kit/tools",
-                         "cached", 1, "registry is not valid: Invalid JSON at line 1", true, false});
+                         "cached", 1, "registry is not valid: Invalid JSON at line 1", true, false, saved});
     g_sources.push_back({"https://raw.githubusercontent.com/old/archive/main/registry.json", "old/archive", "ok", 0, "",
-                         false, false});
+                         false, false, saved});
 }
 
 FakeSource *find_source(const std::string &url)
@@ -145,7 +184,7 @@ std::string app_record(const FakeApp &app)
     fields[0] = "APP";
     fields[1] = app.id;
     fields[2] = app.title;
-    fields[3] = app.version;
+    fields[3] = g_notes_newer && std::string(app.id) == "notes" ? "0.9.3" : app.version;
     fields[4] = "Tools";
     fields[5] = app.installed ? "1" : "0";
     fields[6] = "0";
@@ -162,9 +201,9 @@ std::string app_record(const FakeApp &app)
 
 std::string reg_record(const FakeSource &source)
 {
-    return "REG\t" + source.url + "\t" + source.status + "\t" + std::to_string(source.apps) + "\t2026-10-10 20:00\t" +
-           source.error + "\t" + (source.enabled ? "1" : "0") + "\t" + source.name + "\t" + (source.builtin ? "1" : "0") +
-           "\n";
+    return "REG\t" + source.url + "\t" + source.status + "\t" + std::to_string(source.apps) + "\t" +
+           saved_text(source.synced) + "\t" + source.error + "\t" + (source.enabled ? "1" : "0") + "\t" + source.name +
+           "\t" + (source.builtin ? "1" : "0") + "\n";
 }
 
 apps_backend::Result answer(int rc, std::string out)
@@ -201,6 +240,10 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
             return answer(0, "PACKAGE_JOB\t" + arg(args, 1) + "\t" + arg(args, 2) +
                                  "\t0\t\tharness-1\t/nonexistent/harness-appstore/pending\n");
     }
+    if (command == "--edit-registry" && refresh_mode() == "hold") { /* the re-read waits for the scene */
+        const harness::BlockedWhile held([] { return refresh_mode() == "hold"; });
+        while (refresh_mode() == "hold") usleep(10 * 1000);
+    }
     std::lock_guard<std::mutex> lock(g_mutex);
     ensure_sources();
     if (command == "--summary") {
@@ -223,7 +266,7 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
         const std::string url = arg(args, 1);
         if (find_source(url)) return answer(1, "ERROR\tsource already added\n");
         const std::string name = arg(args, 3);
-        g_sources.push_back({url, name, "ok", url == kDeckLab ? 4 : 0, "", true, false});
+        g_sources.push_back({url, name, "ok", url == kDeckLab ? 4 : 0, "", true, false, now()});
         return answer(0, "REGISTRY\tADDED\t" + url + "\tok\t0\t" + name + "\n");
     }
     if (command == "--remove-registry" || command == "--enable-registry" || command == "--disable-registry") {
@@ -239,7 +282,16 @@ apps_backend::Result run(const std::vector<std::string> &args, int)
     if (command == "--edit-registry") {
         FakeSource *source = find_source(arg(args, 1));
         if (!source) return answer(1, "ERROR\tno such source\n");
+        const std::string mode = refresh_mode();
+        if (mode == "fail" && source->status == "ok") { /* the backend keeps the cached list and says why */
+            source->status = "cached";
+            source->error = "download failed: " + source->url;
+        }
         const std::string status = source->status == "cached" ? "cached" : "ok";
+        if (status == "ok") {
+            source->synced = now();
+            if (mode == "newer" && source->url == kDeckLab) g_notes_newer = true;
+        }
         return answer(0, "REGISTRY\tUPDATED\t" + source->url + "\t" + source->url + "\t" + status + "\t" +
                              std::to_string(source->apps) + "\t" + source->name + "\n");
     }

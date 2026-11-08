@@ -2211,6 +2211,13 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         fx.config_full = w[1] == "on";
         return true;
     }
+    if (cmd == "appsrefresh") { /* what the fake Store backend's re-read of a source does (harness_apps.cpp) */
+        if (w.size() != 2 || (w[1] != "ok" && w[1] != "newer" && w[1] != "fail" && w[1] != "hold"))
+            return fail(scene, line, "usage: appsrefresh ok|newer|fail|hold");
+        std::lock_guard<std::mutex> lock(fx.apps_mutex);
+        fx.apps_refresh = w[1];
+        return true;
+    }
     if (cmd == "update") { /* Settings > Updates' fixtures (harness_update.cpp, report 047 P1, P2) */
         static const char *usage = "usage: update net on|off | clock on|off | answer FILE|pending|ratelimit|error|dns|"
                                    "notjson | build VERSION CHANNEL [ARCH] | state KEY VALUE | cache FILE | download "

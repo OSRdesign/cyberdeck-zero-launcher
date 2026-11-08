@@ -1,0 +1,72 @@
+# Settings > Apps while its check for app updates runs (settings_apps_autocheck.hpp): the fake Store backend's re-read
+# waits (appsrefresh hold, src/harness_apps.cpp), the lists saved an hour ago (HARNESS_APPS_SYNCED 3600) are shown at
+# once with "Checking for updates..." in the status line; Installed opens meanwhile and the highlight moves to Field
+# Notes; the re-read ends (appsrefresh newer): Field Notes shows "0.9.2>0.9.3" in yellow where it was, the highlight
+# stays on it, Update all (3), "Up to date (just now)". Eleven minutes later the re-read fails for every source
+# (appsrefresh fail): "Offline: showing the list from 11 min ago" and deck-lab/apps "failed" in Sources with the
+# backend's reason (as after a sync); S, the forced refresh, still re-reads every enabled source and reports as before
+# (the reason probed with curl: the fake answers HTTP 404).
+# Review only: no golden.
+title settings native apps autocheck checking
+review
+sizes 640x480 480x320 320x480 480x640 480x800 800x480 720x720 1280x720
+@320x480 profile p320
+@480x640,480x800 profile pda
+@480x640,480x800 env APPLAUNCH_PDA 0
+env APPLAUNCH_DEV 0
+env HARNESS_APPS catalogue
+env HARNESS_APPS_SYNCED 3600
+env M5APPSTORE_STATE_DIR /nonexistent/harness-appstore
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+update net on
+appsrefresh hold
+home
+launch Settings
+key UP
+key UP
+key UP
+key UP
+key UP
+key ENTER
+wait 1000
+shot autocheck_checking
+expect_text "Checking for updates..."
+expect_text "Installed (3)"
+# Installed: Update all (2), Field Notes, Packet Radar, Weather Station...; the highlight on Field Notes
+key ENTER
+wait 500
+key DOWN
+wait 300
+shot autocheck_checking_installed
+expect_text "Update all (2)"
+appsrefresh newer
+wait 1000
+shot autocheck_updated_in_place
+expect_text "Up to date (just now)"
+expect_text "Update all (3)"
+expect_color "0.9.2>0.9.3" F0B400
+key LEFT
+wait 300
+key ESC
+wait 500
+clock 20:41
+appsrefresh fail
+key ENTER
+wait 3000
+shot autocheck_offline_after_check
+# (320x480: the line wraps onto two lines, which expect_text takes for a cut label)
+@640x480,480x320,480x640,480x800,800x480,720x720,1280x720 expect_text "Offline: showing the list from 11 min ago"
+key DOWN
+key DOWN
+key ENTER
+wait 500
+shot autocheck_offline_sources
+@640x480,480x320,480x640,480x800,800x480,720x720,1280x720 expect_text "deck-lab/apps: Download failed (cached list)"
+shortcut s
+wait 3000
+shot autocheck_forced_sync
+@640x480,480x320,480x640,480x800,800x480,720x720,1280x720 expect_text "deck-lab/apps: HTTP 404 (cached list)"
