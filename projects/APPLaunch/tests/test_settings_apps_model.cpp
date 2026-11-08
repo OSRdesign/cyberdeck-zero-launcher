@@ -595,13 +595,21 @@ static void model_rows()
     model = catalogue_model();
     model.set_level(Level::Sources);
     rows = model.rows();
-    assert(rows.size() == 5);
+    assert(rows.size() == 6);
     assert(rows[0].type == RowType::Source && rows[0].key == "u1" && rows[0].value == "4 apps");
     assert(rows[1].value == "failed");
     assert(rows[2].value == "off");
     assert(rows[0].tone == Tone::Good && rows[1].tone == Tone::Bad && rows[2].tone == Tone::Muted);
     assert(rows[3].type == RowType::AddSource && rows[3].label == "+ Add a GitHub source");
     assert(rows[4].type == RowType::Sync && rows[4].label == "Sync my sources");
+    // the setting: a switch, On by default, after the forced refresh
+    assert(rows[5].type == RowType::AutoCheck && rows[5].label == "Check for updates when opening Apps");
+    assert(rows[5].toggle && rows[5].on && rows[5].value.empty() && !rows[5].busy);
+    assert(!rows[4].toggle && !rows[0].toggle);
+    model.set_auto_check(false);
+    assert(!model.auto_check() && !model.rows()[5].on && model.rows()[5].toggle);
+    model.set_auto_check(true);
+    assert(model.find_row(RowType::AutoCheck) == 5);
     // a sync run: waiting, syncing (busy row), done while it runs, failed
     apps_status::SyncProgress progress;
     progress.reset({{"u1", "deck-lab/apps"}, {"u2", "field-kit/tools"}});
@@ -714,9 +722,21 @@ static void model_actions()
     assert(action.kind == ActionKind::ToggleSource && action.id == "u3" && action.enable);
     assert(model.activate(3).kind == ActionKind::AddSource && model.add_source().kind == ActionKind::AddSource);
     assert(model.activate(4).kind == ActionKind::Sync);
+    // the setting row flips the setting (Enter or a tap), also while a job runs and without the backend: it starts nothing
+    action = model.activate(5);
+    assert(action.kind == ActionKind::ToggleAutoCheck && !action.enable);
+    assert(model.tap(5).kind == ActionKind::ToggleAutoCheck);
+    model.set_auto_check(false);
+    assert(model.activate(5).kind == ActionKind::ToggleAutoCheck && model.activate(5).enable);
+    model.set_auto_check(true);
+    assert(!model.ask_remove(5) && !model.open_actions(5));
     model.set_busy(true);
     assert(model.add_source().kind == ActionKind::None && model.activate(0).kind == ActionKind::None);
+    assert(model.activate(5).kind == ActionKind::ToggleAutoCheck);
+    assert(model.activate(4).kind == ActionKind::None);          // the forced refresh waits for the running job
     model.set_busy(false);
+    missing.set_level(Level::Sources);
+    assert(missing.activate(static_cast<int>(missing.rows().size()) - 1).kind == ActionKind::ToggleAutoCheck);
 
     // the add-source entry: the backend's address rules
     std::string url, name, error;
@@ -1119,6 +1139,67 @@ static void description_cap()
     assert(model.rows()[0].value == "Summary line");
 }
 
+/* The page's rebuild after a refreshed catalogue (the check when the page opens): the rows change in place, or the
+ * highlight follows its app. */
+static void model_reselect()
+{
+    using settings_apps::Level;
+    using settings_apps::RowType;
+    settings_apps::Model model = catalogue_model();
+    model.set_level(Level::Installed);
+    const auto before = model.rows(); // Update all (2), Packet Radar, Field Notes, Weather Station
+    assert(before[2].key == "notes");
+
+    // the refresh offers Field Notes 0.9.3: same rows, new values: in place, the highlight (Field Notes) stays
+    model.set_lists({make_app("radar", "Packet Radar", "0.3.1", "0.3.0", "2 MB"),
+                     make_app("notes", "Field Notes", "0.9.3", "0.9.2"),
+                     make_app("meter", "Signal Meter", "0.4.0", nullptr),
+                     make_app("weather", "Weather Station", "1.2.0", "1.1.4")},
+                    model.sources());
+    auto after = model.rows();
+    assert(after[0].label == "Update all (3)" && after[2].value == "0.9.2>0.9.3");
+    auto pick = settings_apps::reselect(before, after, 2);
+    assert(pick.in_place && pick.selected == 2);
+
+    // a new installed app sorts before it (the rows shift): rebuilt, the highlight follows Field Notes
+    const auto shifted_before = after;
+    model.set_lists({make_app("atlas", "Deck Atlas", "0.2.0", "0.1.0"),
+                     make_app("radar", "Packet Radar", "0.3.1", "0.3.0", "2 MB"),
+                     make_app("notes", "Field Notes", "0.9.3", "0.9.2"),
+                     make_app("weather", "Weather Station", "1.2.0", "1.1.4")},
+                    model.sources());
+    after = model.rows();
+    assert(after[1].key == "atlas" && after[3].key == "notes");
+    pick = settings_apps::reselect(shifted_before, after, 2);
+    assert(!pick.in_place && pick.selected == 3);
+
+    // the highlighted app went away: the same index, cut to the shorter list
+    const auto gone_before = after;
+    model.set_lists({make_app("radar", "Packet Radar", "0.3.1", "0.3.1")}, model.sources());
+    after = model.rows(); // no Update all row any more: one app
+    assert(after.size() == 1);
+    pick = settings_apps::reselect(gone_before, after, 3);
+    assert(!pick.in_place && pick.selected == 0);
+    pick = settings_apps::reselect(gone_before, {}, 3);
+    assert(pick.selected == 0);
+
+    // a row that turns busy (a job for that app) or a different kind: rebuilt, on the same row
+    auto busy = before;
+    busy[1].busy = true;
+    pick = settings_apps::reselect(before, busy, 1);
+    assert(!pick.in_place && pick.selected == 1);
+    // a requested row wins (a level opens on its first row)
+    pick = settings_apps::reselect(before, before, 3, 0);
+    assert(!pick.in_place && pick.selected == 0);
+    // Sources: the switch flips in place
+    model.set_level(Level::Sources);
+    const auto switch_before = model.rows();
+    model.set_auto_check(false);
+    const auto switch_after = model.rows();
+    pick = settings_apps::reselect(switch_before, switch_after, 5);
+    assert(pick.in_place && pick.selected == 5 && switch_after[5].type == RowType::AutoCheck && !switch_after[5].on);
+}
+
 int main()
 {
     versions();
@@ -1140,5 +1221,6 @@ int main()
     model_confirmations();
     model_action_lists();
     model_caption();
+    model_reselect();
     return 0;
 }

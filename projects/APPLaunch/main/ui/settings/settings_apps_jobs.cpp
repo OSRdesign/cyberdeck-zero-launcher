@@ -4,15 +4,18 @@
  * Settings > Apps, the workers of the native page (see settings_apps_jobs.hpp). The jobs, their messages and the sudo
  * hand-over are the legacy page's (Shared, task_refresh, task_sync, task_package, task_finalize, start_sudo and its
  * callbacks; the legacy page was deleted in P3e), kept as they were; the native page adds only the id of the app a
- * package job is for (its row shows the job) and the sync of one source (a source's action list).
+ * package job is for (its row shows the job) and the sync of one source (a source's action list). The check for app updates
+ * when the page opens (task_auto_check, settings_apps_autocheck.hpp) follows the first list on the same worker.
  */
 
 #include "settings_apps_jobs.hpp"
 
+#include "settings_apps_autocheck.hpp"
 #include "settings_apps_model.hpp"
 #include "settings_apps_registry_mirror.hpp"
 #include "settings_apps_registry_needs.hpp"
 #include "settings_apt_upgrade.hpp"
+#include "settings_update_platform.hpp" /* network_up(): the default route (the harness's "update net") */
 
 #include "cp0_lvgl_app.h"
 #include "hal_lvgl_bsp.h"
@@ -21,6 +24,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <ctime>
 #include <list>
 #include <fstream>
 #include <functional>
@@ -36,6 +40,16 @@ namespace settings_apps {
 namespace {
 // Report 047 P4: the package jobs running now, in every Jobs (the shared busy flag, package_job_running())
 std::atomic<int> g_package_jobs{0};
+// The check when the page opens: what this launcher run remembers between openings (the attempts, the last result) and
+// the cached setting (-1: not read yet)
+std::mutex g_check_mutex;
+apps_autocheck::Memory g_check_memory;
+std::atomic<int> g_auto_check{-1};
+
+long long wall_now()
+{
+    return static_cast<long long>(std::time(nullptr));
+}
 } // namespace
 
 // State shared with the worker threads (which can outlive the page).
@@ -72,6 +86,11 @@ struct Jobs::Shared {
     std::string job_name;
     std::string job_version;
     bool package_job = false;          // a package job counts in g_package_jobs (P4's busy flag) until busy ends
+    // the check's last line (settings_apps_autocheck.hpp): while nothing else has been said since, take() keeps the
+    // list's age in it current ("Updated 3 min ago" a few minutes later)
+    apps_autocheck::Shown check_shown = apps_autocheck::Shown::None;
+    long long check_list_time = -1;
+    bool check_live = false;
 
     // busy ends: the package job leaves the shared busy flag (call with the mutex held)
     void end_busy_locked()
@@ -97,7 +116,22 @@ struct Jobs::Shared {
         status_error = false;
         status_warn = false;
         status_dirty = true;
+        check_live = false;
         stage.clear();
+    }
+    // The check's result line ("" for None), plain colour; busy ends
+    void finish_check(apps_autocheck::Shown shown, long long list_time)
+    {
+        std::lock_guard<std::mutex> lock(mutex);
+        status = apps_autocheck::status_text(shown, list_time, wall_now());
+        status_error = false;
+        status_warn = false;
+        status_dirty = true;
+        check_shown = shown;
+        check_list_time = list_time;
+        check_live = shown == apps_autocheck::Shown::Fresh || shown == apps_autocheck::Shown::Offline;
+        stage.clear();
+        end_busy_locked();
     }
     void set_stage(const std::string &text)
     {
@@ -115,6 +149,7 @@ struct Jobs::Shared {
         status_error = error;
         status_warn = warn;
         status_dirty = true;
+        check_live = false;
         stage.clear();
         end_busy_locked();
         if (error) queue.abort();
@@ -126,6 +161,7 @@ struct Jobs::Shared {
         status_error = false;
         status_warn = false;
         status_dirty = true;
+        check_live = false;
         stage.clear();
         end_busy_locked();
     }
@@ -136,6 +172,7 @@ struct Jobs::Shared {
         status_error = true;
         status_warn = false;
         status_dirty = true;
+        check_live = false;
         message_title = failure.headline;
         message_detail = failure.detail;
         message_pending = true;
@@ -153,6 +190,7 @@ struct Jobs::Shared {
         status_error = over && sync.severity() == 2;
         status_warn = over && sync.severity() == 1;
         status_dirty = true;
+        check_live = false;
     }
 };
 
@@ -342,27 +380,77 @@ void task_refresh(const std::shared_ptr<Shared> &s)
 // the user's own, the project's source is added (the backend fetches it as it adds it: "Adding ..." is the page's
 // normal progress) and the decision is kept, so a source the user removes later is not added back. A source of
 // theirs already there: only the decision is kept. A failed add (no network) leaves the decision open for the next time.
-void task_default_source(const std::shared_ptr<Shared> &s)
+// True when it ended the job with its own message ("Source added", the reason of a failed add); false when it had nothing
+// to say (busy goes on: the check for updates follows).
+bool task_default_source(const std::shared_ptr<Shared> &s)
 {
     const auto plan = registry_sync::reconcile(true);
     if (plan.set_flag) registry_sync::set_flag();
-    if (!plan.add_default) {
-        s->finish("");
-        return;
-    }
+    if (!plan.add_default) return false;
     std::string url, name, error;
-    if (!apps_backend::normalize_source(apps_registry_mirror::kDefaultSource, url, name, error)) {
-        s->finish("");
-        return;
-    }
+    if (!apps_backend::normalize_source(apps_registry_mirror::kDefaultSource, url, name, error)) return false;
     s->say("Adding " + name + "...");
     const auto result = apps_backend::run({"--add-registry", url, "--registry-name", name}, 90);
     // "already exists": the other writer (install.sh) was first; the list has it, which is what matters
     const bool present = result.rc == 0 || result.out.find("registry already exists") != std::string::npos;
     if (present) registry_sync::set_flag();
     task_refresh(s);
-    if (present) s->finish(result.rc == 0 ? "Source added" : "");
+    if (present && result.rc != 0) return false; /* nothing to say */
+    if (present) s->finish("Source added");
     else s->finish(apps_backend::error_text(result.out, "Could not add the default source"), false, true);
+    return true;
+}
+
+// The check for app updates when the page opens (settings_apps_autocheck.hpp), after the cached lists are shown: the
+// stale enabled sources are re-read one by one (the backend's own re-read, as a sync does, with a shorter time limit and
+// no curl probe), the lists are read again (the page changes its rows in place) and the line says how fresh the list
+// is. No per-source progress: the Sources rows stay as they are (a source that failed shows "failed" afterwards, as after
+// a sync). Busy all along: one backend job at a time. Setting Off: today's opening, no line.
+void task_auto_check(const std::shared_ptr<Shared> &s)
+{
+    namespace check = apps_autocheck;
+    check::Input input;
+    input.setting_on = auto_check_enabled();
+    input.now = wall_now();
+    std::vector<apps_backend::Source> sources;
+    {
+        std::lock_guard<std::mutex> lock(s->mutex);
+        sources = s->sources;
+    }
+    for (const apps_backend::Source &source : sources) input.sources.push_back(check::source_state(source));
+    check::Plan plan;
+    {
+        std::lock_guard<std::mutex> lock(g_check_mutex);
+        plan = check::plan(input, g_check_memory, input.setting_on && launcher_update::platform::network_up());
+        check::record_attempts(g_check_memory, plan.refresh, input.now);
+    }
+    if (plan.refresh.empty()) {
+        s->finish_check(plan.shown, check::list_time(input.sources));
+        return;
+    }
+    s->say(check::status_text(check::Shown::Checking, -1, input.now));
+    int refreshed = 0;
+    for (const std::string &url : plan.refresh) {
+        std::string name = url;
+        for (const apps_backend::Source &source : sources)
+            if (source.url == url) name = source.name;
+        const auto result =
+            apps_backend::run({"--edit-registry", url, url, "--registry-name", name}, check::kRefreshTimeoutSeconds);
+        // the backend exits 0 for a source it could not fetch: its "REGISTRY UPDATED ... ok|cached" line tells
+        if (apps_status::decide_sync(result.rc, result.out, std::string(), std::string()).ok) ++refreshed;
+    }
+    task_refresh(s);
+    const check::Outcome result = check::outcome(refreshed);
+    {
+        std::lock_guard<std::mutex> lock(g_check_mutex);
+        check::record_outcome(g_check_memory, result, wall_now());
+    }
+    std::vector<check::SourceState> fresh;
+    {
+        std::lock_guard<std::mutex> lock(s->mutex);
+        for (const apps_backend::Source &source : s->sources) fresh.push_back(check::source_state(source));
+    }
+    s->finish_check(check::shown_for(result), check::list_time(fresh));
 }
 
 void spawn(std::function<void()> work)
@@ -374,12 +462,18 @@ void task_sync(std::shared_ptr<Shared> s, std::string only_url)
 {
     // Re-read only the user's own sources (editing a registry to itself re-syncs just that one). A source that
     // fails is reported with its reason and the others are still synced. only_url: that source alone (the native
-    // page's source action list).
+    // page's source action list). The forced refresh (settings_apps_autocheck.hpp): every enabled source, whatever the
+    // setting, the TTL, the attempts and the route.
     std::vector<apps_backend::Source> mine;
     {
         std::lock_guard<std::mutex> lock(s->mutex);
+        apps_autocheck::Input forced;
+        forced.forced = true;
         for (const auto &source : s->sources)
-            if (source.enabled && (only_url.empty() || source.url == only_url)) mine.push_back(source);
+            if (only_url.empty() || source.url == only_url) forced.sources.push_back(apps_autocheck::source_state(source));
+        const std::vector<std::string> urls = apps_autocheck::due(forced, apps_autocheck::Memory{});
+        for (const auto &source : s->sources)
+            if (std::find(urls.begin(), urls.end(), source.url) != urls.end()) mine.push_back(source);
         std::vector<std::pair<std::string, std::string>> names;
         for (const auto &source : mine) names.emplace_back(source.url, source.name);
         s->sync.reset(names);
@@ -505,6 +599,7 @@ void task_package(std::shared_ptr<Shared> s, std::string action, std::string id,
     s->status_error = false;
     s->status_warn = false;
     s->status_dirty = true;
+    s->check_live = false;
 }
 
 struct SudoContext {
@@ -567,7 +662,8 @@ void Jobs::load()
     shared->say("Loading...");
     spawn([shared] {
         task_refresh(shared);
-        task_default_source(shared);
+        if (task_default_source(shared)) return; /* its message ends the opening (a source just added is fresh) */
+        task_auto_check(shared);
     });
 }
 
@@ -690,6 +786,14 @@ JobsUpdate Jobs::take()
             std::chrono::steady_clock::now() - s.stage_since).count();
         update.status = true;
         update.status_text = apps_status::stage_line(s.stage, s.stage_position, s.stage_total, static_cast<long>(seconds));
+    } else if (!s.busy && s.check_live) {
+        // the check's line keeps the list's age current while nothing else has been said ("Updated 3 min ago")
+        const std::string text = apps_autocheck::status_text(s.check_shown, s.check_list_time, wall_now());
+        if (text != s.status) {
+            s.status = text;
+            update.status = true;
+            update.status_text = text;
+        }
     }
     update.sudo = s.sudo_pending;
     update.busy = s.busy;
@@ -733,6 +837,26 @@ void Jobs::start_sudo()
 bool package_job_running()
 {
     return g_package_jobs.load() > 0;
+}
+
+bool auto_check_enabled()
+{
+    const int cached = g_auto_check.load();
+    if (cached >= 0) return cached != 0;
+    std::string text;
+    bool on = true; /* the default, also when the config cannot be read */
+    if (registry_sync::config_call({"GetInt", apps_autocheck::kConfigKey, "1"}, &text))
+        on = apps_autocheck::parse_setting(text);
+    g_auto_check = on ? 1 : 0;
+    return on;
+}
+
+bool set_auto_check_enabled(bool on)
+{
+    if (on == auto_check_enabled()) return true; /* nothing to write: the key stays absent while it is the default */
+    if (!registry_sync::config_call({"SetManyAndSave", apps_autocheck::kConfigKey, on ? "1" : "0"})) return false;
+    g_auto_check = on ? 1 : 0;
+    return true;
 }
 
 AppUpdates app_updates()
