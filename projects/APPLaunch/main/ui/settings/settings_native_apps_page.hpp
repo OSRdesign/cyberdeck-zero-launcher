@@ -13,7 +13,14 @@
  *             Empty: "Loading..." (spinner), "No apps installed" / "Nothing to install", or "The Store is needed
  *             (backend missing)". The app a job runs for shows a spinner.
  *   Sources   every source ("off", "waiting", a spinner while it syncs, "done", "failed" in red, "<N> apps" in green,
- *             "not synced"), "+ Add a GitHub source", "Sync my sources".
+ *             "not synced"), "+ Add a GitHub source", "Sync my sources" (the forced refresh), "Auto-check updates"
+ *             (On / Off, default On; saved in the launcher's config as apps_auto_check).
+ *   opening   the cached lists at once, then, with the setting On, the sources whose list is older than 10 min are
+ *             re-read in the background when there is a default route (settings_apps_autocheck.hpp); the rows change in
+ *             place (the highlight stays) and the status line says "Checking for updates...", then "Up to date (just
+ *             now)" / "Updated N min ago", "Updated just now (N failed)" when only some sources came back, or "Offline:
+ *             showing the list from <age> ago". Once per opening; not again within 10 min. The wrapping status line
+ *             keeps clear of the roller's up chevron (cp0_ui_roller_caption_clear_w).
  *   actions   an installed app's list (Enter or a tap) or the highlighted source's (a tap) is a level titled with its
  *             name, the Wi-Fi / Bluetooth pattern: Description (when the app has one: its first line, a chevron;
  *             Enter or a tap opens the whole text in a read-only page, plain text, wrapped, scrollable; Esc goes

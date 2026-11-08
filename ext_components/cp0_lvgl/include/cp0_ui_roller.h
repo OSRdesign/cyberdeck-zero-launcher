@@ -92,6 +92,20 @@ int cp0_ui_roller_width(cp0_ui_class_t cls, int screen_w, int margin);
  * highlight bar, a gap (SPACE_M) above it, 1..CP0_UI_ROLLER_CAPTION_MAX_LINES. 1 when p is NULL or line_h <= 0. */
 int cp0_ui_roller_caption_lines(const cp0_ui_roller_page_t *p, int line_h);
 
+/* The roller's two scroll chevrons (two strokes, chevron_px wide, half as high, centred in the roller column; the up one
+ * gap / 2 under the top of the body, the down one gap / 2 over its bottom): the box of each (w, h) and the stroke. Any
+ * pointer may be NULL; zeros when p is NULL. */
+void cp0_ui_roller_chevron_size(const cp0_ui_roller_page_t *p, int *w, int *h, int *stroke);
+/* The up chevron's box in screen coordinates. Zeros when p is NULL. */
+void cp0_ui_roller_up_chevron_box(const cp0_ui_roller_page_t *p, int *x, int *y, int *w, int *h);
+/* The widest box a wrapping status line may take (Page::set_caption_wrap) so that it ends a gap (SPACE_M) left of the up
+ * chevron, which shares its band at the top of the body: on a narrow screen even a short line reached it (320x480).
+ * caption_w when that is narrower already, or when the room left would be under a third of caption_w. */
+int cp0_ui_roller_caption_clear_w(const cp0_ui_roller_page_t *p);
+/* Where a wrapping status line goes when it does not fit beside the up chevron in CP0_UI_ROLLER_CAPTION_MAX_LINES lines
+ * (Page::set_caption: then at the full caption_w): gap / 2 under the chevron's box (caption_y when p is NULL: 0). */
+int cp0_ui_roller_caption_low_y(const cp0_ui_roller_page_t *p);
+
 /* A text size the font set has: even, CP0_UI_FONT_MIN_PX..CP0_UI_FONT_MAX_PX, an odd px goes to the larger size. */
 int cp0_ui_roller_font_px(int px);
 

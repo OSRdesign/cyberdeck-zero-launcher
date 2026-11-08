@@ -55,6 +55,12 @@ AppUpdates app_updates();
 /* A detached worker re-reads the catalogue (local: no network); a second call while one runs does nothing. */
 void refresh_app_updates();
 
+/* "Auto-check updates" (settings_apps_autocheck.hpp): the stored setting, read once from the launcher's
+ * config (key apps_autocheck::kConfigKey, absent = On) and cached; set_auto_check_enabled() saves a change (false: it
+ * could not be saved, nothing changed). Any thread (the config call is waited for, 3 s at most). */
+bool auto_check_enabled();
+bool set_auto_check_enabled(bool on);
+
 /* Report 047 P4, the busy flag shared with Settings > Updates: a package job (install, update, remove, update all) of any
  * Jobs runs, from its start to its end (the password, dpkg, the finalize step). An upgrade of the system packages does not
  * start meanwhile; and a package job asked while Settings > Updates runs one (launcher_apt::system_job_busy()) fails at once
@@ -72,13 +78,18 @@ public:
     /* The Store backend is installed (apps_backend::available()). */
     static bool available();
 
-    /* The first list ("Loading..." until it comes). */
+    /* The first list ("Loading..." until it comes; the backend's cached lists, no network), then on the same worker, once
+     * per opening, the check for app updates (settings_apps_autocheck.hpp: setting On, a source's list older than the
+     * TTL, a default route): "Checking for updates...", the stale sources re-read, the lists again (the rows change in
+     * place), and the line ("Up to date (just now)", "Updated 3 min ago", "Updated just now (1 failed)" when only some
+     * came back, "Offline: ..."). Busy until it ends. */
     void load();
     /* Each returns false (nothing started) while another job runs. */
     bool package(const std::string &action, const std::string &id, const std::string &name, const std::string &size);
     /* items: (id, title) of every app with an update; first_size: the first one's download size. */
     bool update_all(const std::vector<std::pair<std::string, std::string>> &items, const std::string &first_size);
-    /* url: that source alone (a source's action list); empty: every enabled source (the legacy page's sync) */
+    /* url: that source alone (a source's action list); empty: every enabled source (the legacy page's sync). The forced
+     * refresh: whatever the setting, the TTL and the route, with its per-source progress and errors. */
     bool sync(const std::string &url = std::string());
     bool toggle_source(const std::string &url, bool enable);
     bool remove_source(const std::string &url);

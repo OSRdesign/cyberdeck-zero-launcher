@@ -280,7 +280,9 @@ public:
     void set_caption(const std::string &text, bool error);
     void set_caption(const std::string &text, CaptionTone tone);
     /* A status line too long for its room wraps onto the lines that fit above the centre row (at most
-     * CP0_UI_ROLLER_CAPTION_MAX_LINES, cp0_ui_roller_caption_lines) instead of ending with dots on one line. */
+     * CP0_UI_ROLLER_CAPTION_MAX_LINES, cp0_ui_roller_caption_lines) instead of ending with dots on one line. Its room
+     * then ends a gap left of the roller's up chevron (cp0_ui_roller_caption_clear_w): the two share the band at the top
+     * of the body. */
     void set_caption_wrap(bool wrap);
 
     lv_obj_t *root() const { return root_; }

@@ -80,8 +80,8 @@ with only the Store's built-in CardputerZero Hub), it adds `OSRdesign/cyberdeck-
 and syncs it once, so Settings > Apps > Available lists its apps after the install. A list with sources of the user's
 own is never changed. The decision is taken once per user (marker file `applaunch-default-source` in that folder):
 a source you remove or switch off in Settings > Apps > Sources stays removed after the next `install.sh`. Offline
-during the install, the source is added but not synced: Settings > Apps > Sources > Sync my sources (key `S`) fetches
-it. `--no-default-source` skips all of this. By hand, as the user (never with sudo):
+during the install, the source is added but not synced: the next opening of Settings > Apps with a network fetches it
+(its check for updates, `docs/HOSTING-APPS.md`), or Settings > Apps > Sources > Sync my sources (key `S`) at once. `--no-default-source` skips all of this. By hand, as the user (never with sudo):
 `sh default-sources.sh --dry-run` shows what it would do, `sh default-sources.sh` does it.
 
 ## Install on a PC (amd64)

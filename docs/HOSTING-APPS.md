@@ -13,7 +13,8 @@ Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox
 System Monitor, viz1090) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
 Available lists its apps without typing anything. It is an ordinary source: switch it off or remove it in Sources, and
 the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
-shows after a sync (Sources > Sync my sources). Details: `projects/APPLaunch/pizero2w/README.md`, "Default app source".
+shows the next time Settings > Apps opens with a network (or after Sources > Sync my sources). Details:
+`projects/APPLaunch/pizero2w/README.md`, "Default app source".
 
 Since v0.9.0 main has no **Store** tile and no Store switch in Settings > Launcher: the Store program stays in the
 bundle as the back end of Settings > Apps, with no screen of its own. The Store screen and the 320x170 apps live on
@@ -47,7 +48,8 @@ The complete, step by step guide, the build tools and a working example live in 
 6. On the deck: Settings > Apps > Sources > + Add a GitHub source > `your-name/your-repo`.
 
 To publish an update, raise `version` in `app.json`, run `tools/make_registry.py` again and push; the deck shows
-the update after a sync (Settings > Apps > Sources > Sync my sources).
+the update the next time Settings > Apps opens more than 10 minutes after its last check (see "Checking for updates"
+below), or at once after Settings > Apps > Sources > Sync my sources (key `S`).
 
 ## Format and behaviour
 
@@ -66,7 +68,7 @@ the update after a sync (Settings > Apps > Sources > Sync my sources).
 ## Using Settings > Apps on the deck
 
 **Levels.** Settings > Apps lists **Installed (N)**, **Available (M)** and **Sources**; the counts follow every
-install, removal and sync. **Installed** lists the installed apps; Enter or a tap on one opens its actions
+install, removal, sync and check. **Installed** lists the installed apps; Enter or a tap on one opens its actions
 (Description when the app has one, Update when an update is offered, Remove, Cancel). **Available** lists the apps of
 your enabled sources that are not installed, with the version offered; Enter or a tap opens the app's page
 (Description, Install, Cancel), and Install installs it. The **Description** row shows the first line; Enter or a tap
@@ -80,7 +82,40 @@ read, is listed. Installed and the update count are not filtered. An app's page 
 two read-only rows from its registry entry: **Screen** (`Landscape`, or `Landscape and portrait` when it has a
 `portrait_min_size`) and **Minimum size** (the `min_size`). The apps repo's `tools/make_registry.py` copies both values
 from the packaged `.desktop` (`X-MinSize`, `X-Portrait`). The filter reads the lists the Store backend cached at the last
-sync.
+sync or check.
+
+**Checking for updates** (the check when the page opens). The lists come from the copy of each source's
+`registry.json` the Store backend saved at its last download (`~/.cache/cardputerzero-appstore/registry-<hash>.json`,
+its time in the `synced_at` field). Opening Settings > Apps shows that copy at once; then, in the background, the
+launcher downloads again every enabled source whose copy is older than **10 minutes** (GitHub serves raw files cached
+for 5 minutes, so a shorter time gains nothing), when the board has a network (a default route). The rows change where
+they are (the highlight and the scroll stay; a newer version shows as the yellow `0.1.2>0.1.3` marker as usual) and
+the status line under the title says what happened:
+
+| Shown | Meaning |
+| --- | --- |
+| `Checking for updates...` | the download runs (installs and syncs wait for it; moving around the page works) |
+| `Up to date (just now)` | the lists were downloaded now |
+| `Updated just now (N failed)` | some sources were downloaded now, N of them failed (their saved lists stay; Sources shows them `failed` with the reason) |
+| `Updated N min ago` | nothing was older than 10 minutes, or it was tried a moment ago: the lists are that old (the line follows the clock while the page stays open; ` (N failed)` is added while the failed sources of that check have not come back) |
+| `Offline: showing the list from <age> ago` | no network, or every download failed: the saved lists stay (no error box) |
+
+The line wraps when it is long; it keeps clear of the list's up arrow (beside it, or under it when it would need more
+than three lines there, as on a 320 px wide screen).
+
+It happens at most once per opening, never again within 10 minutes of the last try (a failed source is not retried at
+every opening), never when the launcher starts and never on a timer. A source that is switched off is never
+contacted. One download may take up to 20 seconds before it counts as failed. A source that failed shows `failed`
+in Sources with its reason when highlighted, as after a sync. The Store backend has no conditional requests: a check
+downloads each due `registry.json` again in full, and only the icons of new apps.
+
+**The setting.** Sources ends with **Auto-check updates**, `On` (the default) or `Off`; Enter or a tap flips it, also
+while a job runs. It is stored in `~/.config/cardputerzero/config.json` as `apps_auto_check` (`0` Off,
+`1` On; absent means On, written only when changed) and applies from the next opening. Off: Settings > Apps never
+downloads by itself and shows no such line, as in earlier versions; Sync my sources is then the only way to fetch.
+
+**Sync my sources** (the row, key `S`, or a source's own Sync) is the **forced** refresh: it downloads every enabled
+source at once, whatever its age, the setting or the last try, and shows each source's progress and errors (below).
 
 **Versions and updates.** Installed shows each app's installed version and, when the sources offer a newer one
 (compared the Debian way, as `dpkg --compare-versions` does, not as text), both, for example `0.1.2>0.1.3`, in
@@ -122,9 +157,9 @@ Esc at the password prompt gives a red `Cancelled`.
 | Up / Down | move the selection |
 | Right | open the selected level (Apps root only) |
 | Left / Esc | back one level (Installed / Available / Sources -> Apps -> Settings), or no in a confirmation |
-| Enter | open a level; an installed app's actions (Installed); an available app's page (Available); on/off (Sources); yes in a confirmation |
+| Enter | open a level; an installed app's actions (Installed); an available app's page (Available); on/off (a source, or Auto-check updates, in Sources); yes in a confirmation |
 | `U` | update all (Installed) |
-| `S` | sync (any list) |
+| `S` | sync, the forced refresh (any list) |
 | `A` | add a source (Sources) |
 | `D` or Del | remove the selected app (Installed) or source (Sources) after a confirmation; the built-in source cannot be removed |
 
@@ -189,6 +224,7 @@ sources you trust. The MD5 in a registry protects against a damaged download, no
 | Part | Files |
 | --- | --- |
 | Settings > Apps page | `projects/APPLaunch/main/ui/settings/settings_native_apps_page.{hpp,cpp}` (workers: `settings_apps_jobs.*`, rules: `settings_apps_model.*`) |
+| Check for updates when the page opens (TTL, due sources, offline, the lines, the setting) | `settings_apps_autocheck.{hpp,cpp}` (pure), `settings_apps_jobs.cpp` (`task_auto_check`), test `tests/test_settings_apps_autocheck.cpp`, scenes `settings_native_apps_autocheck*` |
 | Backend access (sources, catalogue, install flow) | `projects/APPLaunch/main/ui/settings/apps_backend.{hpp,cpp}` |
 | Default source at install (the Store's `registries.json`, once per user) | `projects/APPLaunch/pizero2w/default-sources.sh`, run by `install.sh` |
 | The Store's shared source list (mirror) and the default source | `settings_apps_registry_mirror.{hpp,cpp}` (pure), `settings_apps_jobs.cpp` (adapter), test `tests/test_settings_apps_registry_mirror.cpp` |

@@ -83,6 +83,30 @@ std::string cap_description(const std::string &text, std::size_t limit)
     return out + "...";
 }
 
+Reselect reselect(const std::vector<Row> &before, const std::vector<Row> &after, int current, int requested)
+{
+    auto same_key = [](const Row &a, const Row &b) { return a.type == b.type && a.key == b.key; };
+    Reselect result;
+    if (requested < 0 && before.size() == after.size()) {
+        result.in_place = true;
+        for (std::size_t i = 0; result.in_place && i < after.size(); ++i)
+            result.in_place = same_key(before[i], after[i]) && before[i].busy == after[i].busy;
+        if (result.in_place) {
+            result.selected = std::max(0, current);
+            return result;
+        }
+    }
+    int target = requested;
+    if (target < 0) {
+        target = std::min(current, static_cast<int>(after.size()) - 1);
+        if (current >= 0 && current < static_cast<int>(before.size()))
+            for (std::size_t i = 0; i < after.size(); ++i)
+                if (same_key(after[i], before[static_cast<std::size_t>(current)])) target = static_cast<int>(i);
+    }
+    result.selected = std::max(0, target);
+    return result;
+}
+
 void Model::set_backend_missing(bool missing)
 {
     backend_missing_ = missing;
@@ -342,6 +366,8 @@ std::vector<Row> Model::list_rows() const
     }
     rows.push_back({RowType::AddSource, {}, "+ Add a GitHub source", {}, false, Tone::Normal});
     rows.push_back({RowType::Sync, {}, "Sync my sources", {}, false, Tone::Normal});
+    rows.push_back({RowType::AutoCheck, {}, "Auto-check updates", auto_check_ ? "On" : "Off", false,
+                    auto_check_ ? Tone::Good : Tone::Muted});
     return rows;
 }
 
@@ -432,6 +458,10 @@ Action Model::activate(int index) const
         action.kind = ActionKind::ShowDescription;
         action.id = target.key;
         return action;
+    case RowType::AutoCheck: /* a setting: it starts no job */
+        action.kind = ActionKind::ToggleAutoCheck;
+        action.enable = !auto_check_;
+        return action;
     case RowType::App:
         // an installed app: its action list (Update, Remove), never a direct update
         if ((level_ == Level::Installed || level_ == Level::Available) && !actions_) {
@@ -496,6 +526,7 @@ Action Model::activate(int index) const
     case RowType::Description:
     case RowType::Info:
     case RowType::Cancel:
+    case RowType::AutoCheck:
         break;
     }
     return action;

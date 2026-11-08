@@ -502,6 +502,15 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../../AppStore/main/interface/shared_registry_store.cpp" \
     -o "$build_dir/test_settings_apps_registry_mirror"
 "$build_dir/test_settings_apps_registry_mirror"
+# Settings > Apps checks for app updates when it opens: the setting, the backend's saved time, which sources are due (TTL,
+# disabled sources, attempts of this run), offline, the forced sync, the status lines
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$settings_ui_root" \
+    "$test_root/test_settings_apps_autocheck.cpp" \
+    "$settings_ui_root/settings_apps_autocheck.cpp" \
+    "$settings_ui_root/apps_backend.cpp" \
+    -o "$build_dir/test_settings_apps_autocheck"
+"$build_dir/test_settings_apps_autocheck"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/test_dynamic_app_registry.cpp" \
     -o "$build_dir/test_dynamic_app_registry"

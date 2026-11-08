@@ -1701,6 +1701,56 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_text ok: %s\n", lv_label_get_text(label));
         return true;
     }
+    if (cmd == "expect_clear") {
+        /* expect_clear TEXT: the visible label TEXT (a status line, also wrapped onto several lines) is whole (its text
+         * fits its box at the box's width: no dots, not past the screen) and keeps at least 2 px from every visible
+         * scroll chevron of a roller (an lv_line drawn in CP0_UI_ROLLER_CHEVRON_RGB). At least one chevron must show, or
+         * the check would prove nothing. */
+        if (w.size() != 2) return fail(scene, line, "usage: expect_clear TEXT");
+        settle(500);
+        lv_refr_now(nullptr);
+        lv_obj_t *screen = lv_display_get_screen_active(cp0_display_native());
+        lv_obj_t *label = find_label_text(screen, w[1], false);
+        if (!label) return fail(scene, line, "expect_clear: no visible label " + w[1] + " (absent, or cut with dots)");
+        lv_area_t box;
+        lv_obj_get_coords(label, &box);
+        lv_point_t size{};
+        lv_text_get_size(&size, lv_label_get_text(label), lv_obj_get_style_text_font(label, LV_PART_MAIN),
+                         lv_obj_get_style_text_letter_space(label, LV_PART_MAIN),
+                         lv_obj_get_style_text_line_space(label, LV_PART_MAIN),
+                         std::max<int32_t>(1, lv_obj_get_content_width(label)), LV_TEXT_FLAG_NONE);
+        if (size.y > lv_obj_get_content_height(label) || box.x2 >= run.size.w || box.x1 < 0)
+            return fail(scene, line, "expect_clear: the label is cut (text " + std::to_string(size.y) + " px high in " +
+                                         std::to_string(lv_obj_get_content_height(label)) + "): " + w[1]);
+        std::vector<lv_area_t> chevrons;
+        std::function<void(lv_obj_t *)> walk = [&](lv_obj_t *obj) {
+            if (!obj || lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) return;
+            if (lv_obj_check_type(obj, &lv_line_class) &&
+                (lv_color_to_u32(lv_obj_get_style_line_color(obj, LV_PART_MAIN)) & 0xFFFFFFu) == CP0_UI_ROLLER_CHEVRON_RGB) {
+                lv_area_t area;
+                lv_obj_get_coords(obj, &area);
+                chevrons.push_back(area);
+            }
+            const uint32_t n = lv_obj_get_child_count(obj);
+            for (uint32_t k = 0; k < n; ++k) walk(lv_obj_get_child(obj, static_cast<int32_t>(k)));
+        };
+        walk(screen);
+        if (chevrons.empty()) return fail(scene, line, "expect_clear: no roller chevron shown next to " + w[1]);
+        constexpr int kMargin = 2;
+        for (const lv_area_t &c : chevrons) {
+            const bool apart = box.x2 + kMargin < c.x1 || c.x2 + kMargin < box.x1 || box.y2 + kMargin < c.y1 ||
+                               c.y2 + kMargin < box.y1;
+            if (!apart)
+                return fail(scene, line, "expect_clear: " + w[1] + " (x " + std::to_string(box.x1) + ".." +
+                                             std::to_string(box.x2) + ", y " + std::to_string(box.y1) + ".." +
+                                             std::to_string(box.y2) + ") touches the chevron at x " +
+                                             std::to_string(c.x1) + ".." + std::to_string(c.x2) + ", y " +
+                                             std::to_string(c.y1) + ".." + std::to_string(c.y2));
+        }
+        std::printf("expect_clear ok: %s (box x %d..%d, %zu chevron(s))\n", w[1].c_str(), static_cast<int>(box.x1),
+                    static_cast<int>(box.x2), chevrons.size());
+        return true;
+    }
     if (cmd == "expect_unclipped") {
         /* expect_unclipped LABEL...: each label LABEL is whole on the screen: inside its parent (a list row, the waiting
          * box), its parent inside the grandparent (the row inside its list: not scrolled partly out; the box on the page),
@@ -2209,6 +2259,13 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     if (cmd == "configfull") {
         if (w.size() != 2 || (w[1] != "on" && w[1] != "off")) return fail(scene, line, "usage: configfull on|off");
         fx.config_full = w[1] == "on";
+        return true;
+    }
+    if (cmd == "appsrefresh") { /* what the fake Store backend's re-read of a source does (harness_apps.cpp) */
+        if (w.size() != 2 || (w[1] != "ok" && w[1] != "newer" && w[1] != "mend" && w[1] != "fail" && w[1] != "hold"))
+            return fail(scene, line, "usage: appsrefresh ok|newer|mend|fail|hold");
+        std::lock_guard<std::mutex> lock(fx.apps_mutex);
+        fx.apps_refresh = w[1];
         return true;
     }
     if (cmd == "update") { /* Settings > Updates' fixtures (harness_update.cpp, report 047 P1, P2) */

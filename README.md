@@ -163,9 +163,14 @@ see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 Settings > Apps shows the installed and the available version of each app (an update is marked in yellow, for
 example `0.1.2>0.1.3`), with **Update** for one app and **Update all** when several have one. An upgraded app
 keeps its tile where it was on the home grid (the order is stored in `~/.config/cardputerzero/config.json` as
-`app_order`); a new app goes last. A sync shows each source live (`waiting`, `syncing...`, `done` or a red
-`failed` with the reason), and installs, updates and removals show the step and the seconds taken, then a plain
-success or failure message. Each app shows its description: a **Description** row on an installed app's list, and a
+`app_order`); a new app goes last. Opening Settings > Apps **checks for updates by itself**: it shows the saved
+lists at once and downloads again, in the background, every enabled source whose list is older than 10 minutes, with a
+short line (`Checking for updates...`, `Up to date (just now)`, `Updated 3 min ago` or `Offline: showing the list from
+2 h ago`, or `Updated just now (1 failed)` when one source did not answer); **Auto-check updates** (On / Off) at the
+end of Sources turns this off (stored as `apps_auto_check` in `config.json`). **Sync my sources** (key `S`) stays the
+forced refresh of every source. A sync
+shows each source live (`waiting`, `syncing...`, `done` or a red `failed` with the reason), and installs, updates and
+removals show the step and the seconds taken, then a plain success or failure message. Each app shows its description: a **Description** row on an installed app's list, and a
 page with Description and **Install** before an available app is installed (the text is cut at 500 characters with
 dots; the long documentation is the app's README in its repository). Since v0.9.2 **Available lists only the apps that
 fit the screen** (the registry's `min_size`, a portrait screen judged turned; installed apps always stay listed), and an

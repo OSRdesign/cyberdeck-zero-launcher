@@ -43,6 +43,11 @@ Position box, "heard back by N repeaters", packet log. Send back the answers per
 Native pages only (Settings > System > Keyboard test in a development build or with `APPLAUNCH_DEV=1`).
 Full protocol: [launcher-0.5.0-keyboard-tests.md](launcher-0.5.0-keyboard-tests.md) (22 steps).
 
+## G. Settings > Apps checks for app updates when it opens (branch apps-autocheck): built and harness-checked, NOT yet deployed
+Dev build `-autocheck`, one networked board (the Pi 4B). Full protocol: [apps-autocheck-tests.md](apps-autocheck-tests.md)
+(7 steps): the check on opening, no second check within 10 min, offline line, Auto-check updates On / Off, Sync still
+forced.
+
 ## D. Environment note
 `deck.py` needs the PIPW environment variable (the deck password) in the Claude Code session; it was missing in the
 session of 2026-10-06. Rotate the deck password (it leaked twice into tool output on 2026-10-04) and set PIPW again.

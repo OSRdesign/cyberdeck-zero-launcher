@@ -252,7 +252,30 @@ void Page::set_caption(const std::string &text, CaptionTone tone)
     const lv_font_t *font = lv_obj_get_style_text_font(caption_, LV_PART_MAIN);
     const int pad2 = 2 * lv_obj_get_style_pad_left(caption_, LV_PART_MAIN);
     const int padded = text_width(text.c_str(), font) + pad2;
-    bool fits = padded <= layout_.caption_w;
+    const int line_h = font ? std::max(1, static_cast<int>(lv_font_get_line_height(font))) : 1;
+    auto lines_at = [&](int width) { /* lines of the text wrapped at a box this wide */
+        lv_point_t size{};
+        lv_text_get_size(&size, text.c_str(), font, 0, 0, std::max(1, width - pad2), LV_TEXT_FLAG_NONE);
+        return std::max(1, static_cast<int>(size.y) / line_h);
+    };
+    // a wrapping line keeps clear of the roller's up chevron, which shares its band at the top of the body (on a narrow
+    // screen even a short line touched it): beside it when the lines fit there, else under it at the full width
+    int room = layout_.caption_w;
+    int top = layout_.caption_y;
+    int max_lines = 1;
+    if (caption_wrap_ && font) {
+        room = cp0_ui_roller_caption_clear_w(&layout_);
+        max_lines = cp0_ui_roller_caption_lines(&layout_, line_h);
+        if (padded > room && lines_at(room) > max_lines) {
+            room = layout_.caption_w;
+            top = cp0_ui_roller_caption_low_y(&layout_);
+            cp0_ui_roller_page_t low = layout_;
+            low.caption_y = top;
+            max_lines = cp0_ui_roller_caption_lines(&low, line_h);
+        }
+    }
+    lv_obj_set_y(caption_, top);
+    bool fits = padded <= room;
     if (!fits && !caption_wrap_) {
         /* "NAME  VALUE": the end (the address) stays whole, the name is shortened with dots */
         const std::string kept = keep_tail(text, font, layout_.caption_w - pad2);
@@ -261,17 +284,9 @@ void Page::set_caption(const std::string &text, CaptionTone tone)
             fits = true;
         }
     }
-    lv_obj_set_width(caption_, fits ? LV_SIZE_CONTENT : layout_.caption_w);
+    lv_obj_set_width(caption_, fits ? LV_SIZE_CONTENT : room);
     if (font) {
-        const int line_h = lv_font_get_line_height(font);
-        int lines = 1;
-        if (caption_wrap_ && !fits) {
-            lv_point_t size{};
-            const int inner_w = layout_.caption_w - 2 * lv_obj_get_style_pad_left(caption_, LV_PART_MAIN);
-            lv_text_get_size(&size, text.c_str(), font, 0, 0, std::max(1, inner_w), LV_TEXT_FLAG_NONE);
-            lines = std::min(std::max(1, static_cast<int>(size.y) / std::max(1, line_h)),
-                             cp0_ui_roller_caption_lines(&layout_, line_h));
-        }
+        const int lines = caption_wrap_ && !fits ? std::min(lines_at(room), max_lines) : 1;
         lv_obj_set_height(caption_, lines * line_h); /* dots (after the last line) need a fixed height */
     }
     const uint32_t colour = tone == CaptionTone::Error ? kCaptionError : tone == CaptionTone::Warn ? kCaptionWarn : kCaption;

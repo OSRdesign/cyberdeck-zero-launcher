@@ -63,11 +63,6 @@ void unfocus(lv_obj_t *obj)
     if (obj && lv_obj_get_group(obj)) lv_group_remove_obj(obj);
 }
 
-std::string key_of(const Row &row)
-{
-    return std::to_string(static_cast<int>(row.type)) + ":" + row.key;
-}
-
 int rgb_of(Tone tone)
 {
     switch (tone) {
@@ -119,6 +114,7 @@ public:
     {
         jobs_ = std::make_unique<settings_apps::Jobs>();
         model_.set_backend_missing(!settings_apps::Jobs::available());
+        model_.set_auto_check(settings_apps::auto_check_enabled()); /* Sources' Auto-check updates (read once, then cached) */
         page_.set_caption_wrap(true); /* a source's failure reason or a step with its counters: never cut */
 
         cp0::ui::RollerEvents events;
@@ -203,8 +199,6 @@ private:
 
     // ---------------------------------------------------------------- rows, levels and status line
 
-    /* The model's rows; rows that kept their kind change in place (the highlight and the scroll stay), otherwise the
-     * list is rebuilt with the highlight on the same row (selected >= 0: on that row instead). */
     /* The panel's current logical size (a PDA / portrait switch changes it at run time): the Available list follows. */
     bool sync_screen()
     {
@@ -212,6 +206,9 @@ private:
         return model_.set_screen(panel ? panel->w : 0, panel ? panel->h : 0);
     }
 
+    /* The model's rows (settings_apps::reselect): rows that kept their types, keys and kinds change in place (the
+     * highlight and the scroll stay: a refreshed catalogue updates the values under the highlight), otherwise the list
+     * is rebuilt with the highlight on the same row (selected >= 0: on that row instead). */
     void rebuild(int selected = -1)
     {
         if (!roller_) return;
@@ -224,23 +221,12 @@ private:
             if (row.type == RowType::Description) specs.back().value = fit_description(row.label, row.value);
         }
 
-        bool same = selected < 0 && rows.size() == rows_.size();
-        for (std::size_t i = 0; same && i < rows.size(); ++i)
-            same = specs[i].kind == specs_[i].kind && key_of(rows[i]) == key_of(rows_[i]);
-        if (same) {
+        const settings_apps::Reselect pick = settings_apps::reselect(rows_, rows, roller_->selected(), selected);
+        if (pick.in_place) {
             for (std::size_t i = 0; i < rows.size(); ++i)
                 if (!same_spec(specs[i], specs_[i])) roller_->update_row(static_cast<int>(i), specs[i]);
         } else {
-            int target = selected;
-            if (target < 0) {
-                const int current = roller_->selected();
-                target = std::min(current, static_cast<int>(rows.size()) - 1);
-                if (current >= 0 && current < static_cast<int>(rows_.size()))
-                    for (std::size_t i = 0; i < rows.size(); ++i)
-                        if (key_of(rows[i]) == key_of(rows_[static_cast<std::size_t>(current)]))
-                            target = static_cast<int>(i);
-            }
-            roller_->set_rows(specs, std::max(0, target), true);
+            roller_->set_rows(specs, pick.selected, true);
         }
         rows_ = std::move(rows);
         specs_ = std::move(specs);
@@ -405,6 +391,12 @@ private:
             return;
         case ActionKind::AskRemove:
             if (model_.ask_remove(index)) open_remove();
+            return;
+        case ActionKind::ToggleAutoCheck: /* saved at once; it applies from the next opening of the page */
+            if (settings_apps::set_auto_check_enabled(action.enable)) model_.set_auto_check(action.enable);
+            else model_.set_status("Could not save the setting", true);
+            rebuild();
+            show_caption();
             return;
         case ActionKind::Install:
             jobs_->package("install", action.id, action.name, action.size);
