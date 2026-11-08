@@ -8,6 +8,12 @@ licences, an architecture and a phased plan with costs, and a probe to run on a 
 (inspired by a classic portable tape recorder) is the controller's design work; this report only states the technical
 constraints the UI must respect (5.9) and a short trademark note (6.5).
 
+**Update 2026-11-08 (same day).** The owner accepted D1-D19 with changes (section 1): the app is **Cassette**
+(`cassette`), it records only while in front (no background recording for now), and it shows the card's own gain and
+AGC controls instead of forcing AGC off. Probe P0 ran on the zero8 and the HackBerry the same day: results in "P0
+results" after section 1; the UI direction chosen is in "UI direction". The rest of the study text is kept as written,
+with notes where P0 changed it.
+
 **What I read.**
 - Launcher `github/main` @ `28817a50` (2026-11-07): reports 054, 056 and 057 (format; 057 from branch `study-reticulum`),
   report 035 (board facts and launcher requests), `docs/APP-CONTRACT.md` (sections 5c, 13, 14),
@@ -28,7 +34,8 @@ constraints the UI must respect (5.9) and a short trademark note (6.5).
   Fraunhofer's mp3 page, the Android media formats page, WirePlumber 0.5.19 documentation.
 
 **Markers.** **V** = read in a cited source or in our code; **I** = inferred or estimated by me; **U** = unverified: no
-source found, or not checkable without a board (collected in section 10). Nothing was measured for this study. **Cost
+source found, or not checkable without a board (collected in section 10). Nothing was measured for the original
+study; the P0 section holds the later board measurements (V there means measured on the board). **Cost
 unit:** one worker session (ws), about 0.4 M tokens (as in reports 054, 056 and 057).
 
 ## 0. Summary
@@ -79,52 +86,139 @@ would need a non-free or GPL path, and it is not needed.
    `SIGSTOP`: the capture would overrun). The launcher can still close a hidden app at any time (`close`, then SIGTERM
    3 s later, SIGKILL 3 s after that; below 32 MB MemAvailable a running hidden app is closed too) and holding Esc 3 s
    sends SIGTERM then SIGKILL 3 s later (V). Multitasking is off on screens whose short side is under 480 (V), so on
-   480x320 boards a recording runs only while the app is in front.
+   480x320 boards a recording runs only while the app is in front. **Owner decision (D10): no background recording for
+   now**; the app owns the screen while recording and `X-Background=run` is left for later.
 9. **Licences (V).** Fully permissive: miniaudio (public domain or MIT-0), libFLAC, libopus, libopusenc, libopusfile,
    libogg, libvorbis, WavPack (BSD-3-Clause), ALAC (Apache-2.0), PipeWire's client library (MIT). LGPL (dynamic link from
    Debian, replaceable): alsa-lib, libsndfile, LAME, mpg123, libpulse. GPL programs usable only as separate processes:
    `arecord`/alsa-utils, the `flac` and `metaflac` tools, SoX, Debian's FFmpeg. Non-free: FDK AAC.
 10. **Effort (I).** MVP 0.1 (probe, core with WAV, UI with meters, playback, packaging, docs): **6-8.75 ws (2.4-3.5 M
-    tokens)**; with FLAC and Opus and background recording: **8-11.75 ws**; with trimming, a metadata editor, sharing
-    and the desktop-server path: **10.75-16.5 ws** (section 7).
+    tokens)**; with FLAC and Opus and polish: **8-11.75 ws**; with trimming, a metadata editor, sharing
+    and the desktop-server path: **10.75-16.5 ws** (section 7). P0 is done (except the stereo-music encoder test), so
+    its share is spent.
 
-**Recommendation.** Run probe P0 (section 8) on the deck with the owner's cheapest USB card and a USB-C headset, plus a
-short check on a desktop board for PipeWire. If the deck records 10 minutes without an overrun through the adapter or
-hub the owner uses, build 0.1 as in section 7.
+**Recommendation (updated after P0).** Build 0.1 as in section 7 with the writer design P0 asks for: a capture thread
+that only fills a RAM ring, a separate writer thread, periodic sync and a repair step on launch (P0 results).
 
-**Top three risks.** (1) USB full-speed audio on the Zero 2 W's single OTG port, through hubs, with the Bluetooth
-keyboard and Wi-Fi busy: crackles or overruns would sink the app on the reference board (U until P0). (2) Data loss on
-power cuts or unplugging (the owner has unplugged boards by accident): mitigated by the write strategy of 4.4, which
-must be tested with real power cuts. (3) Sound servers on desktop boards holding the card, so a direct `hw:` open fails
-with "busy" (U until P0-f).
+**Top three risks.** (1) USB full-speed audio on the Zero 2 W's single OTG port: P0 found capture itself light and
+clean, but SD-card write bursts cause overruns when one thread both reads and writes (V); the two-thread writer must be
+re-tested. (2) Data loss on power cuts or unplugging (the owner has unplugged boards by accident): P0 measured it (V);
+mitigated by the write strategy of 4.4 and a repair step. (3) Sound servers on desktop boards holding the card: P0-f
+confirmed the EBUSY case and the fallback through the server (V).
 
-**Owner questions:** section 11.
+**Owner questions:** section 11 (all answered).
 
 ## 1. Decisions for the owner
 
-All open. The recommendation column is mine, not a rule; the owner decides, case by case.
+**All accepted by the owner on 2026-11-08.** The last column is the final choice; changes against the study's
+recommendation are in bold.
 
-| # | Decision | Options | Recommendation (not a rule) |
+| # | Decision | Options | Final choice (owner, 2026-11-08) |
 |---|---|---|---|
-| D1 | Start | run probe P0 now (section 8); park | run P0: about 45-60 minutes of the owner's time with the deck, one cheap USB card, one USB-C headset |
-| D2 | Name and app id | "Sound Recorder" / `sound-recorder`; "Recorder" / `recorder`; "Field Recorder" / `field-recorder`; "Tape Recorder" / `tape-recorder` | a generic name (6.5): "Sound Recorder", `sound-recorder` (the owner's own words); never a manufacturer's or model name |
+| D1 | Start | run probe P0 now (section 8); park | run P0: **done** on the zero8 and the HackBerry, 2026-11-08 (P0 results), except the stereo-music encoder test |
+| D2 | Name and app id | a generic name (6.5); never a manufacturer's or model name | **Cassette**, app id **`cassette`** |
 | D3 | Primary recording format | WAV/BWF; FLAC; Ogg Opus | WAV with a `bext` chunk (BWF), RF64 past 4 GiB: no codec, no CPU, the simplest crash repair, every player (4.9) |
-| D4 | Compressed options | none; FLAC; Ogg Opus; both | both, as settings: FLAC for lossless at about half the size (I), Opus for long speech recordings (4.1) |
-| D5 | MP3 | no; export only (LAME, LGPL, run-time loaded); record directly | not in 0.1; export later only if the owner wants files for old players; patents no longer an issue (6.3) |
-| D6 | AAC / M4A | no; FDK AAC (non-free); FFmpeg subprocess (GPL build) | no: non-free or GPL path, an active patent pool, and Opus covers the use (6.3) |
-| D7 | How libraries reach the app | (a) Debian `Depends` + `dlopen` at run time; (b) per-app link flags in the shared build; (c) vendored source compiled in; (d) command-line tools as subprocesses | (a), the house pattern (libcurl, libsystemd, SQLite): no shared-build change, LGPL libraries stay replaceable, Debian security updates apply; (c) only for miniaudio's single-file decoders (public domain or MIT-0) |
-| D8 | Capture API | ALSA direct; miniaudio; PipeWire or PulseAudio client; `arecord` subprocess | ALSA direct (2.2): xrun count, native formats, unplug detection; works on every board |
-| D9 | Desktop boards with a sound server | record through the server's ALSA plugin when it holds the card; ask WirePlumber to release it (device reservation); tell the user | through the server when the card is busy (after P0-f confirms), direct `hw:` otherwise (2.4) |
-| D10 | Background recording | yes (`X-Background=run`); no (the app owns the panel while recording) | yes, `run`, with the limits of 5.5 (480x320 boards: no multitasking) |
-| D11 | Sample rate | the device's native rate, 48 kHz preferred; 44.1 kHz; a fixed rate with resampling | native, 48 kHz first, 44.1 kHz when the device offers only that; never resample in the capture path (`plughw`); Opus resamples by itself (V) |
-| D12 | Channels | follow the device; force mono; force stereo | follow the device (CM108: mono); for a stereo device whose two channels carry the same microphone, a "mono" setting that keeps the left channel (P0 checks the headset) |
-| D13 | Bit depth | the device's native depth; always 24-bit; 32-bit float | native (16-bit on every device seen in this study); 24-bit when the device delivers it; no float WAV in 0.1 |
-| D14 | Where files go | `~/Recordings`; `~/.local/share/sound-recorder`; a USB stick | `~/Recordings` (a documented, visible folder, as Markdown Notes uses `~/Notes`: guidelines section 6); a USB stick as a later "copy to" target |
-| D15 | File names | date-time first; take number first; user prefix | `<prefix>_<take>_<date>-<time>.wav` with a take counter that never repeats, and the date part replaced by `nodate` while the clock has not been set since boot (no RTC: 5.4) |
-| D16 | Metadata | BWF `bext` + iXML in the WAV; Vorbis comments in FLAC/Opus; a sidecar file | in the file (portable), with a padded iXML chunk reserved before the audio so later edits rewrite it in place; no sidecar in 0.1 (4.5) |
-| D17 | Monitoring | the card's hardware sidetone; software monitoring through the same card; none | the hardware sidetone when the card has one (zero latency); software monitoring later (3.4) |
-| D18 | Signal processing defaults | DC blocker, high-pass filter, limiter, AGC | DC blocker on (inaudible, 3.2); high-pass off (80 Hz as an option); limiter off; the card's AGC off; nothing that cannot be undone is applied by default |
+| D4 | Compressed options | none; FLAC; Ogg Opus; both | both, as settings (0.2): FLAC for lossless, Opus for long speech recordings (4.1) |
+| D5 | MP3 | no; export only (LAME, LGPL, run-time loaded); record directly | not in 0.1; export later only if wanted for old players (6.3) |
+| D6 | AAC / M4A | no; FDK AAC (non-free); FFmpeg subprocess (GPL build) | no (6.3) |
+| D7 | How libraries reach the app | (a) Debian `Depends` + `dlopen` at run time; (b) per-app link flags in the shared build; (c) vendored source compiled in; (d) command-line tools as subprocesses | (a), the house pattern (libcurl, libsystemd, SQLite); (c) only for miniaudio's single-file decoders (public domain or MIT-0) |
+| D8 | Capture API | ALSA direct; miniaudio; PipeWire or PulseAudio client; `arecord` subprocess | ALSA direct (2.2): xrun count, native formats, unplug detection |
+| D9 | Desktop boards with a sound server | record through the server's ALSA plugin when it holds the card; ask WirePlumber to release it (device reservation); tell the user | `hw:` first; on `EBUSY` record through the server and say so; a notice while the app holds the card directly. **Confirmed by measurement** (P0-f) |
+| D10 | Background recording | yes (`X-Background=run`); no (the app owns the screen while recording) | **no background recording for now**: multitasking stays off for the app, it owns the screen while recording; `X-Background=run` left for later |
+| D11 | Sample rate | the device's native rate, 48 kHz preferred; 44.1 kHz; a fixed rate with resampling | native, 48 kHz first, 44.1 kHz when the device offers only that; never resample in the capture path |
+| D12 | Channels | follow the device; force mono; force stereo | follow the device; an optional "mono = left" setting for stereo devices (both test devices were mono only, P0) |
+| D13 | Bit depth | the device's native depth; always 24-bit; 32-bit float | native (24-bit when offered); no float WAV |
+| D14 | Where files go | `~/Recordings`; an app data folder; a USB stick | `~/Recordings`; a USB stick as a later "copy to" target |
+| D15 | File names | date-time first; take number first; user prefix | `<prefix>_<take>_<date>-<time>.wav`, a take counter that never repeats, `nodate` while the clock has not been set since boot |
+| D16 | Metadata | BWF `bext` + iXML in the WAV; Vorbis comments in FLAC/Opus; a sidecar file | in the file (`bext` + padded iXML; Vorbis comments for FLAC/Opus); no sidecar |
+| D17 | Monitoring | the card's hardware sidetone; software monitoring through the same card; none | the hardware sidetone when the card has one; software monitoring later |
+| D18 | Signal processing defaults | DC blocker, high-pass filter, limiter, AGC | DC blocker on; high-pass and limiter off by default. **Revised: the app does not force the card's AGC off.** It reads the card's own mixer controls (`Auto Gain Control`, `Mic Capture Volume`, mute), shows them in Settings as rows the user can change, leaves the card as found until the user changes it, and remembers the choice per card |
 | D19 | Screen sizes | `X-MinSize`, `X-Portrait` | the controller's design decision; technical notes in 5.9 |
+
+## P0 results (zero8 and HackBerry, 2026-11-08)
+
+Run with the owner present. zero8 (Zero 2 W class, launcher running): C-Media/TI PCM2902 card `08bb:2902` and the USB-C
+headset "UC02". HackBerry CM5 (trixie desktop, PipeWire + WirePlumber): headset UC02. Method: `arecord` runs of 2-5
+minutes, `vmstat`/`ps` samples, offline analysis. All rows V (measured) unless marked I. Not done: the stereo-music
+encoder test and encoding while capturing.
+
+**Capture, noise floor and devices (V).**
+
+| Item | Result | What it changes |
+|---|---|---|
+| Capture CPU | `arecord` 0.14-0.40 % of a core (1.12 % at 256-frame periods); system 94-98 % idle, not throttled, no USB errors | capture itself is no risk on the Zero 2 W |
+| Noise floor, 48 kHz, quiet room (PCM2902) | -70.6 dBFS at 0 dB gain, -68.1 at +17.9 dB, -65.4 at +23.8 dB; AGC on or off made no difference (loud input not tested); DC offset about 0 | DC blocker stays as a cheap safety, not a fix for a seen fault |
+| Real-time priority | `ulimit -r` is 0 | no real-time priority available: rely on buffers |
+| Mixer (PCM2902) | `Mic Capture Volume` 0-16 = 0 to +23.81 dB; AGC present (on as found); sidetone controls present (off as found) | D18 rows: input level and auto gain read from the card |
+| Mixer after reboot | resets (PCM2902: level 0, AGC on) | the app reapplies the user's saved level and AGC choice per card |
+| Card index | changes across reboots (1 before, 0 after on the zero8; 2 on the HackBerry) | find the card by name or `/dev/snd/by-id`, never by index |
+| Headset UC02 | USB ID `0000:0000`, maker, product and serial all "UC02" (not unique); mono S16 at 48 kHz only; `Mic Capture Volume` 0-127 (0 to +23.81 dB); kernel disabled dB reporting | identity by name + by-id path only; two such headsets cannot be told apart except by USB path (I) |
+| Headset level | full level (+23.8 dB), normal speech: peaks -7 to -17 dBFS; at +13 dB peaks near -29 dBFS | the headset mic is weak: software gain on top of the card level, a level meter and a visible target; "max" is not a safe default for hotter devices |
+
+**Overruns and SD-card writes (V).**
+
+| Period/buffer (frames) | Run | Overruns |
+|---|---|---|
+| 6000/24000 (default) | 4.5 min | 0 |
+| 1024/4096 | 300 s, launcher up | 1 (>= 144 ms) |
+| 1024/4096, 2048/8192, 4096/16384 | 120 s each | 0 |
+| 256/1024 | 120 s | 1 (>= 40 ms) |
+| 1024/4096 + 100 MB SD write (about 12 MB/s) | during the write | 2.6 s + 2.9 s (about 6 s lost) |
+| default 500 ms buffer + 100 MB SD write | during the write | 523 ms + 22 ms (about 2 s lost) |
+
+Likely cause (I): `arecord`'s single thread blocks in `write()` while the system flushes to the card. **Writer design:**
+a capture thread on `hw:` with 1024-frame periods and at least 500 ms of buffer only fills a RAM ring and feeds the
+meters; a separate writer thread drains a ring of at least 8 s (about 750 KB at 48 kHz mono); avoid 256-frame periods;
+no real-time priority; count overruns and show a visible "dropped" marker. This replaces the 20 ms (960-frame) period
+proposed in 2.3. The SD-write test is to repeat with the real two-thread writer.
+
+**Crash safety: power pull, owner pulled the cable (V).**
+
+| Run | Recorded | Survived | Lost |
+|---|---|---|---|
+| A, plain `arecord` (PCM2902) | about 55 s | 30.4 s | about 25 s (matches the usual 30 s dirty-page flush, I) |
+| B, `arecord` + `sync` every 10 s (UC02) | not logged | 60.3 s | about 6 s (within the sync interval) |
+
+Both files kept `arecord`'s placeholder header sizes (RIFF `0x80000024`, data `0x80000000`) and ended cleanly; the file
+system came back read-write with no error or recovery message. **So:** sync every 10 s bounds the loss as planned (4.4);
+a **repair step on launch** must rewrite the real sizes. The cost of a 10 s sync is to measure with the real writer.
+
+**Unplug during recording, UC02 (V).** `arecord` stopped by itself with `read error: File descriptor in bad state`
+(no hang); the file kept 22.75 s, ended cleanly, header with placeholder sizes. On replug: same card name and the same
+`/dev/snd/by-id/usb-UC02_UC02_UC02-00` path. **So:** treat that read error (and `-ENODEV`) as "device lost", finalise the
+file, and find the device again by its by-id path.
+
+**Desktop sound server, HackBerry (V).**
+
+| Case | Result |
+|---|---|
+| PipeWire idle | does not hold the card (stream `closed` 0, 3 and 8 s after the last use); direct `hw:` records fine |
+| Through ALSA `default` or `pw-record` | works, same level as `hw:` |
+| `hw:` while a PipeWire client records | fails at once with `Device or resource busy` |
+| PipeWire client while `hw:` is held | starts without an error but records silence (empty files) |
+
+**So (D9 confirmed):** open `hw:` first; on `EBUSY` record through the server and say so; show a notice while Cassette
+holds the card directly, because other apps get silence meanwhile. Device reservation was not needed and not tested.
+
+**Encoder timings on the zero8 (V).** Input: 60.3 s of mono 48 kHz speech; flac 1.5.0, opus-tools 0.2 (libopus 1.5.2).
+
+| Encoder | Real-time factor | CPU (share of one core) | Size |
+|---|---|---|---|
+| flac -0 | 196x | 0.5 % | 28 % of PCM |
+| flac -5 | 171x | 0.6 % | 27 % |
+| flac -8 | 74x | 1.4 % | 27 % |
+| opus 24 kbps | 10.1x | 9.9 % | 2.9 % |
+| opus 64 kbps | 13.5x | 7.4 % | 8.2 % |
+
+**So:** FLAC is essentially free; Opus 24-64 kbps costs 7-10 % of a core on mono speech. Not yet measured: stereo music
+(expected about twice the CPU, I) and encoding while capturing and writing.
+
+## UI direction (owner's choice, 2026-11-08)
+
+- **Look:** a cassette recorder, **option A (cream portable)**, chosen over option B (black).
+- **Screens:** recording (cassette window with turning hubs, counter, level bars, transport keys); settings, with the
+  card's own controls as rows (input level, auto gain) per D18; recordings list.
+- The mockups (480x320 and 320x480) live in the design canvas, not in this repo. The constraints of 5.9 still apply.
 
 ## 2. Capture stack (question 1)
 
@@ -188,7 +282,9 @@ Proposed parameters (I, to tune in P0): open `hw:CARD=<id>,DEV=0`; the device's 
 at 48 kHz) so that each period feeds one meter frame at 30 Hz; buffer 500 ms or more (25 periods), a wide margin on a
 Zero 2 W whose CPU also renders the UI in software; `snd_pcm_readi()` (the data rate is under 300 KB/s, so `mmap` buys
 nothing, I). A capture thread at normal priority: real-time scheduling needs `RLIMIT_RTPRIO`, which a Debian user does
-not have by default (I; `ulimit -r` in P0), and a large buffer makes it unnecessary (I).
+not have by default (I; `ulimit -r` in P0), and a large buffer makes it unnecessary (I). **After P0:** 1024-frame
+periods with a buffer of at least 500 ms, no real-time priority (`ulimit -r` is 0, V), and a separate writer thread
+(P0 results).
 
 On every overrun: count it, recover, take the length of the gap from the stream's timestamps, and write a marker (an
 iXML note or a `cue ` point) at that sample so the user can find it (I).
@@ -203,7 +299,8 @@ iXML note or a `cue ` point) at that sample so the user can find it (I).
   device-reservation protocol `org.freedesktop.ReserveDevice1`, which WirePlumber can honour (an `alsa.reserve` setting
   appears in a mirror of its documentation, secondary source; defaults U); (3) tell the user to stop the other audio program.
 - The launcher's desktop variant stops the display manager; PipeWire runs as the user's systemd services and may still
-  be up while the launcher runs (I, U). P0-f checks it.
+  be up while the launcher runs (I, U). P0-f on the HackBerry: PipeWire releases the card when idle; `hw:` gives
+  "busy" while a PipeWire client records (V, P0 results).
 - Detection: a PulseAudio-compatible server answers `pactl info`, which the launcher already runs with a timeout
   (V, `board_facts.cpp`); `board.state` `sound_kind=server` says a server sink exists (V, contract 5c).
 
@@ -290,13 +387,13 @@ quiet on a 16-bit card without a preamp.
 
 ### 3.2 DC offset, high-pass filter, limiter, AGC
 
-- **DC offset.** Cheap ADCs can show a DC offset (I; P0 measures it as the mean of a silent recording). A first-order DC
+- **DC offset.** Cheap ADCs can show a DC offset (I; P0 measured about 0 on the PCM2902, V). A first-order DC
   blocker (corner about 5-10 Hz) removes it inaudibly and keeps meters honest (I). Applied before the meters and the
   file (D18).
 - **High-pass filter.** An optional 80 or 100 Hz second-order filter against handling noise and wind (I); off by default.
 - **Limiter.** Useful only after a digital gain stage or when reducing 24-bit to 16-bit; off by default (I).
-- **AGC.** If the card has `Auto Gain Control` (V, control name), expose it as a setting, off by default (I); a software
-  AGC is not in 0.1.
+- **AGC.** If the card has `Auto Gain Control` (V, control name), show it as a Settings row; the app leaves it as found
+  until the user changes it and remembers the choice per card (D18, revised by the owner); a software AGC is not in 0.1.
 
 ### 3.3 Clock drift and xruns on USB isochronous audio
 
@@ -307,7 +404,8 @@ quiet on a 16-bit card without a preamp.
 - The CM108AH uses adaptive synchronisation with an internal PLL (V); USB-C dongles more often use asynchronous
   endpoints (I).
 - An overrun is a gap in the recording. With a 500 ms buffer on a lightly loaded Zero 2 W it should be rare (I); the app
-  must count and mark each one (2.3) and P0 measures the rate under load.
+  must count and mark each one (2.3). P0 measured it: rare in plain capture, but seconds long during SD-card write
+  bursts with a single-threaded writer (V, P0 results).
 
 ### 3.4 Monitoring
 
@@ -372,7 +470,8 @@ A field recorder typically shows a fast peak meter with peak hold and a clip lam
 
 Licence classes: **P** = permissive (MIT, BSD, Apache, public domain), **L** = LGPL (dynamic link from Debian,
 replaceable), **G** = GPL (separate process only), **N** = non-free. Sizes: see 4.2. CPU on a Cortex-A53: no benchmark
-found that applies (searches 2026-11-08), so every figure is "to measure" in P0-e.
+found that applies (searches 2026-11-08), so every figure is "to measure" in P0-e. P0-e later measured FLAC and Opus
+on mono speech on the zero8 (P0 results).
 
 | Format | Lossless | Encoder / decoder library (Debian 13 package) | Class | Patents 2026 | Size per hour (speech 16 kHz mono / music 48 kHz stereo) | CPU on the deck | Power-cut robustness | Seek and trim | Metadata | Players |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -503,7 +602,7 @@ exchange formats, FLAC for archives, Opus for long speech.
 
 | Option | What | For | Against |
 |---|---|---|---|
-| **A. One native app with threads** (recommended) | capture thread, ring buffer, writer/encoder thread, meters, LVGL UI; `X-Background=run` to record while hidden | one process (13-15 MB per native app, guidelines V); the house pattern (Home Assistant: one worker thread, LVGL polls its view, V); simplest lifecycle | a crash of the UI ends the recording (the file is repaired at the next start) |
+| **A. One native app with threads** (chosen) | capture thread, ring buffer, writer/encoder thread, meters, LVGL UI; records only while in front (D10) | one process (13-15 MB per native app, guidelines V); the house pattern (Home Assistant: one worker thread, LVGL polls its view, V); simplest lifecycle | a crash of the UI ends the recording (the file is repaired at the next start) |
 | B. App + recording service | a small daemon (systemd user unit) records; the app is a remote control | recording survives the UI, independent of multitasking | two processes and a protocol; a new service type, like the Reticulum service of report 057; more to test |
 | C. App driving `arecord` | the app runs `arecord` through `async_run` and reads its raw output for meters and files | no ALSA code in 0.1 | text-parsed errors, no xrun count, one more process; fine for P0, not for the product |
 
@@ -533,8 +632,8 @@ USB card --ALSA hw:--> [capture thread] --SPSC ring (10 s)--> [writer thread] --
 | Capture 48 kHz mono 16-bit, 20 ms periods | 50 wake-ups/s, under 1 % of a core | idle CPU "at most a few percent" (V) |
 | Meters (peak, RMS) | under 1 % | |
 | WAV writing | under 1 %; 96 KB/s to the card | |
-| FLAC encoding | to measure (P0-e); expected a few % of one core at level 5 (I) | |
-| Opus encoding, 48 kHz stereo, complexity 10 | to measure; possibly 10-20 % of one core (I); lower complexity if needed | |
+| FLAC encoding | P0-e, mono speech: 0.6 % of one core at level 5 (V) | |
+| Opus encoding, 48 kHz stereo, complexity 10 | not measured; mono speech at 24-64 kbps took 7-10 % of one core (V, P0-e); stereo possibly about twice that (I) | |
 | UI: meters at 30 Hz, small areas | a few % (I) | |
 | UI: large animations (reels) | could reach tens of % (I): 5.9 | |
 | Memory: binary + LVGL | 13-15 MB per native app (V) | VmRSS under 25 MB (V) |
@@ -543,7 +642,7 @@ USB card --ALSA hw:--> [capture thread] --SPSC ring (10 s)--> [writer thread] --
 
 ### 5.4 Files, names, takes, metadata, settings
 
-- **Folder:** `~/Recordings` (D14), created on first use; settings in `~/.config/sound-recorder/` written atomically
+- **Folder:** `~/Recordings` (D14), created on first use; settings in `~/.config/cassette/` written atomically
   (guidelines section 6, V); the journal in `~/Recordings/.journal/`.
 - **Free space and remaining time (I):** `statvfs` of the folder; remaining = (free - reserve) / bytes per second; for
   FLAC use the running compression ratio of the current take; shown for the current format and, if useful, the others.
@@ -552,7 +651,8 @@ USB card --ALSA hw:--> [capture thread] --SPSC ring (10 s)--> [writer thread] --
 - **Metadata (D16):** in the file (4.5); the app's own list (durations, clip counts) is a cache rebuilt from the files.
 - **Settings the app needs (technical list, presentation is the controller's):** input device; sample rate (from the
   device's list); channels (device / mono-left / mono-mix); bit depth (device's list); format (WAV, FLAC, Opus) and its
-  quality (FLAC level, Opus bitrate); input gain, boost and AGC (only the controls the device has); DC blocker,
+  quality (FLAC level, Opus bitrate); input gain, boost and AGC (only the controls the device has, left as found until
+  the user changes them, remembered per card, D18); software gain on top of the card level (P0: weak headset mic); DC blocker,
   high-pass; limiter; monitoring (sidetone on/off and level); pre-roll length; auto-split (size or time); voice-activated
   threshold and hang time; file name prefix; sync interval (advanced).
 
@@ -570,12 +670,12 @@ USB card --ALSA hw:--> [capture thread] --SPSC ring (10 s)--> [writer thread] --
 | A hidden app's `oom_score_adj` is raised to 700 (`run`) or 900 (`freeze`) | V |
 | Multitasking is on only where the canvas's short side is 480 or more (640x480 and up, portrait 480x640/480x800); off on 480x320 unless `APPLAUNCH_MULTITASK=1` | V |
 
-What the app must do (I): declare `X-Background=run` (D10); while hidden, skip all UI work (`cdk::hidden()`, V) but keep
-capture and writing; finish the file within the 3 s of `close` and SIGTERM; write the journal so that an OOM kill or a
-power cut is repaired at the next start. When it is not recording, being hidden costs only the idle capture of the
-armed meters; it may close the device on `hide` when idle (I). The launcher shows no indicator for a hidden recording
-app (I): a technical gap the design must cover (for example a toast through `launcher.sock` when hidden while
-recording: toasts "show when the launcher is in front again", V).
+**Owner decision (D10): no background recording for now.** The app does not declare `X-Background=run`; it owns the
+screen while recording. It must still finish the file within the 3 s of `close` and SIGTERM and write the journal so
+that an OOM kill or a power cut is repaired at the next start (I). The notes below are kept for when background
+recording is revisited (I): declare `X-Background=run`; while hidden, skip all UI work (`cdk::hidden()`, V) but keep
+capture and writing; the launcher shows no indicator for a hidden recording app, a gap the design would have to cover
+(for example a toast through `launcher.sock`: toasts "show when the launcher is in front again", V).
 
 Power and thermal (I): recording WAV is a light load; Opus encoding is the heaviest part and runs at normal priority on
 one thread; the screen and Wi-Fi are larger loads than the recorder. A board that resets on device connect (2.5) is a
@@ -585,7 +685,7 @@ power problem that no app setting fixes.
 
 `NoDevice -> Idle (device open, meters off) -> Armed (meters, pre-roll) -> Recording <-> Paused -> Finalising -> Armed`;
 `DeviceLost` from Armed/Recording/Paused (file finalised); `Recovering` at start-up when the journal lists unfinished
-takes. Every transition is logged with a `[sound-recorder]` tag (guidelines section 6, V).
+takes. Every transition is logged with a `[cassette]` tag (guidelines section 6, V).
 
 ### 5.7 Packaging (draft)
 
@@ -624,11 +724,13 @@ desktop boards with PipeWire, the tablet's built-in microphone, playback through
 | Channels | 1 on most cheap devices; 2 on some; meters must handle both | V (CM108AH), I |
 | Controls the hardware offers | depends on the device: input gain (dB range from the control), capture mute, AGC, boost (often a pin, not a control), sidetone level and switch; some devices have none: the UI must work with no gain control at all | V (kernel names), I |
 | Volume keys | the launcher's (playback and monitoring level); the app must not act on them | V |
-| Recording while hidden | only with multitasking (short side 480 or more); nothing on screen shows it while hidden | V, I |
+| Recording while hidden | not in 0.1 (D10): the app owns the screen while recording | owner decision |
 | Stop and save | must finish within 3 s of `close` or SIGTERM; a power cut loses up to the sync interval (10 s proposed) | V, I |
 | Animation cost | software rendering on the deck: animate small areas; a large rotating graphic (reels) redrawn every frame may cost tens of % of a core: limit its frame rate or area, measure on the deck | I |
 | Clock | no RTC: show "time not set" rather than a wrong date | V (guidelines) |
-| Busy device | on desktop boards the card may be held by the sound server: the UI needs a state for it | I, U |
+| Busy device | on desktop boards the card may be held by the sound server: the UI needs a "through the sound server" state and a notice while Cassette holds the card directly | V (P0-f) |
+| Card controls | Settings rows for the card's own input level and auto gain (D18); a level meter with a visible target, since a weak mic needs software gain | V (P0), owner decision |
+| Dropped audio | a visible "dropped" marker when an overrun happened | I (P0) |
 | Text input | file names and notes need the on-screen keyboard rule; offer generated names so typing is never required (guidelines "Never make typing the only way in", V) | V |
 
 ## 6. Licensing (question 5)
@@ -711,13 +813,13 @@ extra.
 
 | Phase | Content | Size | Cost (ws) | Owner time on boards | Exit |
 |---|---|---|---|---|---|
-| P0 probe | section 8: inventory, 10-minute recordings direct and through the hub, under load, unplug and power-cut tests, mixer controls, encoder timings, a desktop board's server | S | 0.25-0.5 (script, reading the logs, a short note with fixtures) | 45-60 min | go/no-go: no overrun in 10 min on the deck's usual USB path |
+| P0 probe | section 8: inventory, recordings under load, unplug and power-cut tests, mixer controls, encoder timings, a desktop board's server | S | 0.25-0.5 | 45-60 min | **done 2026-11-08** (P0 results) except the stereo-music encoder test; go: capture is clean, writer design adjusted |
 | P1 core | `core/`: audio `Sys` (ALSA by `dlopen`, fakes), devices and identity, hot-plug, capture thread, ring buffer, meters and ballistics, DC blocker/HPF, WAV/BWF/RF64 writer with periodic header, journal and repair, naming, free space, settings; unit tests and golden files | M-L | 2-2.75 | | |
 | P2 UI and meters | the controller's design: record page with meters, device and settings pages, recordings list, recovered-take notice, sizes; scenes, `lifecycle` scene | M-L | 2-3 (custom drawing of the tape-recorder look is the variable) | 15 min | |
 | P3 playback | decoders (miniaudio `dr_wav`/`dr_flac`), output to the chosen card, transport, waveform overview cache, normalised playback gain | M | 1.25-1.75 | 10 min | |
 | Packaging, docs (0.1) | `.desktop`, `app.json`, icon, README, BOARD-TESTS, amd64; docs-writer rows | S | 0.5-0.75 | 20 min (board protocol on 2 boards) | 0.1 published |
 | P4 compressed formats | FLAC (libFLAC) and Opus (libopusenc, libopusfile) writers and readers by `dlopen`, repair for both, convert WAV -> FLAC/Opus | M | 1-1.5 | 10 min | |
-| P5 background and polish | `X-Background=run`, close/SIGTERM budget, auto-split, pre-roll, voice-activated mode, sidetone control, toasts | M | 1-1.5 | 15 min | 0.2 |
+| P5 polish | close/SIGTERM budget, auto-split, pre-roll, voice-activated mode, sidetone control (background recording, `X-Background=run`, left for later by D10) | M | 1-1.5 | 15 min | 0.2 |
 | Later: trimming | lossless cut for WAV and FLAC, page cut for Opus | M | 0.75-1.25 | 10 min | |
 | Later: metadata editor | `bext`/iXML and Vorbis comments, in place (4.5) | S-M | 0.75-1 | 5 min | |
 | Later: sharing | copy to a USB stick (FAT32 split), MP3 export (LAME), a share over the network (design open) | M | 0.75-1.5 | 10 min | |
@@ -725,7 +827,9 @@ extra.
 
 **Totals (I):** MVP 0.1 (P0 + P1 + P2 + P3 + packaging and docs) **6-8.75 ws (2.4-3.5 M tokens)**; with P4 and P5
 **8-11.75 ws**; with every later item **10.75-16.5 ws (4.3-6.6 M tokens)**. For comparison: mmWave MVP 2.25-3 ws
-(report 056), Reticulum MVP 4.5-6 ws (report 057).
+(report 056), Reticulum MVP 4.5-6 ws (report 057). P0 is now spent (except the stereo-music encoder test, a few
+minutes on a board), so the remaining MVP cost is P1-P3 plus packaging and docs; P1 grows slightly for the
+two-thread writer, the repair step and the per-card mixer settings (I).
 
 ### 7.2 What can be tested where
 
@@ -735,19 +839,24 @@ extra.
 
 ### 7.3 Open unknowns
 
-Collected in section 10. The ones that decide the plan: overruns on the deck's USB path (P0-b), what a power cut
-leaves (P0-d), what the owner's devices report (P0-a, P0-g), the PipeWire behaviour on the desktop boards (P0-f).
+Collected in section 10. The ones that decided the plan (overruns, power cut, the owner's devices, PipeWire) were
+measured in P0 (P0 results). Still open: stereo-music encoding, encoding while capturing, the two-thread writer under
+SD-write stress, the cost of a 10 s sync.
 
 ### 7.4 Recommendation, with reasons
 
-1. **Run P0 first** (D1): an evening settles the one risk that could stop the app on the reference board.
+1. **P0 done** (D1): capture is light; the writer design changes (P0 results).
 2. **Build option A** with ALSA direct and WAV/BWF first: no codec, the simplest crash repair, universal files.
 3. **Add FLAC and Opus in 0.2** with BSD libraries loaded at run time: small files without any licence question.
 4. **Keep AAC out**, keep MP3 to an optional export.
-5. **Design the UI for the constraints in 5.9**, especially the animation cost on the deck and the hidden-recording
-   gap.
+5. **Design the UI for the constraints in 5.9** (cassette look, option A: "UI direction"), especially the animation
+   cost on the deck.
 
-## 8. Probe P0 (proposed, NOT run)
+## 8. Probe P0 (as proposed; run 2026-11-08, see P0 results)
+
+The plan below is kept as proposed. In practice P0 ran on the zero8 (the owner chose the zero8 or the deck, the
+lowest-powered boards) with a PCM2902 card and the UC02 headset, the desktop check on the HackBerry, and the real power
+pull approved and done; the tablet check (P0-h) was not run.
 
 On the deck (zero7), with the owner present, using his cheapest USB card and a USB-C headset (through a micro-USB OTG
 adapter); the desktop check on the Pi 5 or the HackBerry; one line on the tablet. Every command is read-only for the
@@ -842,40 +951,43 @@ if the owner wants.
 
 ## 9. Risks, ranked
 
-1. **USB audio on the Zero 2 W's OTG port** (full speed behind adapters and hubs, the controller's overhead, older
-   `dwc_otg` reports): crackles or overruns on the reference board (U). Mitigation: P0-b before any build; a 500 ms+
-   buffer; document a known-good hub; count and mark every gap.
-2. **Power cuts and unplugging** lose data or leave unplayable files (V for the file system, I for the rest).
-   Mitigation: 4.4 (sync interval, header updates, journal, repair), tested with real cuts.
-3. **Desktop boards' sound servers** hold the card (U). Mitigation: record through the server (D9), test on the Pi 5 or
-   HackBerry.
+1. **USB audio on the Zero 2 W's OTG port**: P0 saw clean capture at under 0.5 % of a core, but SD-card write bursts
+   caused overruns of up to 2.9 s with a single-threaded writer (V). Mitigation: 1024-frame periods, a 500 ms+ buffer,
+   a separate writer with an 8 s+ ring (P0 results); count and mark every gap; re-test under SD-write stress.
+2. **Power cuts and unplugging**: measured in P0 (about 25 s lost without sync, about 6 s with a 10 s sync; header
+   sizes left as placeholders; V). Mitigation: 4.4 (sync interval, header updates, journal) and a repair step on launch.
+3. **Desktop boards' sound servers** hold the card: confirmed on the HackBerry (EBUSY; silence for other apps while
+   `hw:` is held; V). Mitigation: D9 as confirmed, with a notice in the UI.
 4. **Device variety**: controls missing, odd formats (S24_3LE, 2 identical channels), no serial numbers, wrong TRRS
    standard (I). Mitigation: probe and adapt to what each device reports; a fixture per owner device.
 5. **The UI's cost on the deck**: a heavy animated look could starve the capture or make the UI slow (I). Mitigation:
    5.9; the audio threads never wait for the UI.
-6. **Hidden recording without a visible indicator**, and the launcher's memory rule closing it (V, I). Mitigation: 5.5,
-   a design for the gap, the journal.
+6. **Hidden recording without a visible indicator**: avoided for now, no background recording (D10); returns if
+   background recording is revisited (5.5).
 7. **Licence or patent missteps**: an AAC or GPL path slipping in (I). Mitigation: section 6, D5-D7.
 8. **Privacy and the law**: recording people may need their consent depending on the country (I); the recording state
    must be obvious. Not ours to enforce; the README says so.
 
 ## 10. Not verified
 
+Items settled by P0 on 2026-11-08 are marked "(P0: ...)".
+
 - Raspberry Pi OS **trixie** Lite has no sound server (verified only for Bookworm, from the Pi announcement and a forum
-  post); which server, if any, runs on the Pi 5 and the HackBerry while the launcher runs; whether `pipewire-alsa` is
-  installed there.
-- Whether a direct `hw:` open fails with "busy" while PipeWire holds the card; WirePlumber's `alsa.reserve` defaults and
-  device-reservation behaviour.
-- USB audio on our Zero 2 W kernels: overruns, crackles, `dwc_otg` FIQ behaviour, hubs (single or multi TT); the owner's
-  hub model.
-- The owner's devices: chips, formats, rates, channels, control names, AGC, sidetone, serial numbers, TRRS standard.
+  post); which server runs on the Pi 5 while the launcher runs (P0: PipeWire + WirePlumber on the HackBerry, and ALSA
+  `default` records through it).
+- (P0: a direct `hw:` open fails with "busy" while a PipeWire client records.) WirePlumber's `alsa.reserve` defaults and
+  device-reservation behaviour remain untested.
+- USB audio through hubs (single or multi TT) and with Bluetooth and Wi-Fi busy; crackles by ear (P0: no overruns or USB
+  errors in plain capture on the zero8's OTG port; overruns only under SD-card write stress).
+- Devices beyond the two tested (P0: PCM2902 card and UC02 headset, both mono 48 kHz; controls and identities in the P0
+  results); TRRS standards.
 - The Apple USB-C adapter's capture abilities (UAC2/UAC3, rates).
-- `arecord`'s behaviour on unplug and on `kill -9` (what header it leaves); what VLC, Audacity, Windows and phone players
-  do with truncated WAV, FLAC and Ogg Opus files (FFmpeg's WAV rule is verified).
-- CPU cost of FLAC and Opus encoding and decoding on a Cortex-A53 (no applicable benchmark found; OpenBenchmarking pages
-  were behind a challenge).
+- What VLC, Audacity, Windows and phone players do with truncated WAV, FLAC and Ogg Opus files (FFmpeg's WAV rule is
+  verified; P0: `arecord` leaves placeholder header sizes after a power pull and after an unplug).
+- CPU cost of FLAC and Opus encoding of stereo music, and of encoding while capturing (P0: mono speech measured).
+  Decoding cost on a Cortex-A53.
 - Whether hot-plugged USB cards are picked up by the launcher's volume keys, and when.
-- `RLIMIT_RTPRIO` on our images; whether `alsa-utils` is on Pi OS Lite trixie by default.
+- Whether `alsa-utils` is on Pi OS Lite trixie by default (P0: `RLIMIT_RTPRIO` is 0 on the zero8).
 - The tablet: internal microphone, PulseAudio vs PipeWire under the appliance and desktop variants, Ubuntu 26.04
   package names (`libflac14`, `libasound2t64`).
 - The exact last expiry of MP3 patents; AAC-LC patent expiry; the current status of the NAGRA registrations.
@@ -887,21 +999,19 @@ if the owner wants.
 
 ## 11. Questions for the owner
 
-1. **P0 (D1):** may it run on the deck with you present, with the commands of section 8? Which USB card and which
-   USB-C headset will you use, and which hub or adapter do you normally plug into the deck?
-2. **Use:** speech (notes, interviews, meetings), music, field sounds, radio audio? It sets the default format and
-   quality.
-3. **Format policy (D3-D6):** WAV/BWF as the recording format, FLAC and Opus as options, MP3 only as a later export, no
-   AAC: agreed?
-4. **Libraries (D7):** Debian packages loaded at run time (LGPL alsa-lib included, it is needed for any capture on
-   Linux): agreed?
-5. **Background recording (D10):** wanted, knowing that on 480x320 boards a recording runs only while the app is in
-   front?
-6. **Default rate and channels (D11, D12):** 48 kHz, following the device's channels: agreed?
-7. **Storage (D14):** `~/Recordings`? Should a USB stick be a target later?
-8. **Name (D2):** "Sound Recorder" (`sound-recorder`), or another generic name?
-9. **Power-cut test:** may P0-d include a real power pull during a recording on the deck?
-10. **Desktop boards:** which of the Pi 5 and the HackBerry should P0-f use?
+All answered by the owner on 2026-11-08.
+
+1. **P0 (D1):** answered: run on the zero8 or the deck (the lowest-powered boards); it ran on the zero8 with a PCM2902
+   card and the UC02 headset.
+2. **Use:** answered: anything (general purpose).
+3. **Format policy (D3-D6):** answered: agreed.
+4. **Libraries (D7):** answered: agreed.
+5. **Background recording (D10):** answered: no, not for now; the app owns the screen while recording.
+6. **Default rate and channels (D11, D12):** answered: agreed.
+7. **Storage (D14):** answered: `~/Recordings`; a USB stick later.
+8. **Name (D2):** answered: **Cassette** (`cassette`).
+9. **Power-cut test:** answered: approved, and done in P0 on the zero8.
+10. **Desktop boards:** answered: the HackBerry; P0-f ran there.
 
 ## Sources
 
