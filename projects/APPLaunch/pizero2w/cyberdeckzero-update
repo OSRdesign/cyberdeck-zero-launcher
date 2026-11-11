@@ -126,7 +126,7 @@ HEALTH_TIMEOUT=${UPDATE_HEALTH_TIMEOUT:-90}
 HEALTH_STABLE=${UPDATE_HEALTH_STABLE:-20}
 RESTART_WAIT=${UPDATE_RESTART_WAIT:-30}
 DESKTOP_GAP=${UPDATE_DESKTOP_GAP:-4}
-PI_BOARDS="zero2w pi3a-luckfox35 pi3a-wsdsi43 pi3a-wsdsi43-portrait pi4b-dsi pi5-hyperpixel4 hackberry-cm5"
+PI_BOARDS="zero2w pi3a-luckfox35 pi3a-wsdsi43 pi3a-wsdsi43-portrait pi4b-dsi pi5-hyperpixel4 pi5-dsi7 hackberry-cm5"
 # What a backup holds (paths without $ROOT; the user's own files are added per user): the launcher's folders whole,
 # then single files. A file that is absent before the install is removed again by a rollback. Everything install.sh can
 # replace or delete is in it: bin and lib, the assets it copies over the folder (share/: images, audio, fonts; strokes/;

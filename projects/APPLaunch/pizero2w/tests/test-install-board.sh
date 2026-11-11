@@ -267,6 +267,103 @@ check "the Pi 3A+ DSI board is still pi3a-wsdsi43" 'run --dry-run; has "board: p
 R=$(root pi4b-dsi); printf 'Raspberry Pi 5 Model B Rev 1.0\n' > "$R/proc/device-tree/model"
 run --dry-run
 check "the Freenove panel on a Pi 5: unknown (not pi4b-dsi)" 'has "board: unknown" && ! has "board: pi4b-dsi"'
+# --- Pi 5 with the official 7" DSI touch panel (pi5-dsi7): the RP1 DSI fbdev "drm-rp1-dsidrmf" 800x480 32 bpp on fb0, the
+# DSI connector on card1 (HDMI on card2), backlight regulator 10-0045, touch ft5x06 (probe of the owner's board 2026-11-11)
+R=$(root pi5-dsi7)
+run --dry-run
+check "pi5-dsi7 dry-run: exit 0, board pi5-dsi7, not the HyperPixel" '[ $RC = 0 ] && has "board: pi5-dsi7" && ! has "pi5-hyperpixel4" && ! has "pi4b-dsi"'
+check "pi5-dsi7 dry-run: the facts of the board are listed" 'has "drm card1-DSI-1: connected, first mode 800x480" && has "/dev/fb0: name \"drm-rp1-dsidrmf\", size 800,480, 32 bpp" && has "backlight: 10-0045"'
+check "pi5-dsi7 dry-run: profile planned, DSI regulator backlight, dim level 20, panel 154x86" 'has "pi5-dsi7: write" && has "APPLAUNCH_FB=/dev/fb0" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045" && has "APPLAUNCH_DIM_PERCENT=20" && has "APPLAUNCH_PANEL_MM=154x86"'
+check "pi5-dsi7 dry-run: appliance, cmdline arguments only, sysfs backlight rule, no gpio rule, no PWM overlay" 'has "session: appliance" && has "boot config: cmdline cursor/consoleblank only" && has "92-applaunch-backlight-sysfs.rules" && ! has "92-applaunch-backlight-gpio" && ! has "PWM backlight overlay +" && ! has "hyperpixel4-pwm-backlight"'
+check "pi5-dsi7 dry-run: nothing written" '[ ! -e "$R/etc" ]'
+run --plan
+check "pi5-dsi7 --plan: board, not forced, profile write" '[ $RC = 0 ] && has "board=pi5-dsi7" && has "board_forced=0" && has "profile_action=write" && has "profile_state=none"'
+run --dry-run --pwm-backlight
+check "pi5-dsi7 --pwm-backlight: ignored, no overlay" '[ $RC = 0 ] && has "--pwm-backlight is for the Pi 5 + HyperPixel 4 (pi5-hyperpixel4) only: ignored on pi5-dsi7" && ! has "hyperpixel4-pwm-backlight.dtbo" && has "boot config: cmdline cursor/consoleblank only"'
+run --board-only
+P="$R/etc/applaunch/board.conf"
+check "pi5-dsi7 board-only: profile written, no gpio rule" '[ $RC = 0 ] && [ -f "$P" ] && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+BLR="$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"
+check "pi5-dsi7 board-only: udev rule lets the video group set the DSI backlight levels" '[ -f "$BLR" ] && grep -q "KERNEL==\"10-0045\"" "$BLR"'
+EXPECT='APPLAUNCH_BOARD=pi5-dsi7
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+APPLAUNCH_PANEL_MM=154x86
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+APPLAUNCH_DIM_PERCENT=20
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(grep -v '^#' "$P")
+if [ "$GOT" = "$EXPECT" ]; then ok "pi5-dsi7 profile: exact keys and values (the owner's working profile)"; else ko "pi5-dsi7 profile: exact keys and values (the owner's working profile)" "$GOT"; fi
+check "pi5-dsi7 profile: only KEY=VALUE or comment lines, no fbcon" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && ! grep -qi fbcon "$P"'
+SUM1=$(cksum < "$P")
+run --board-only
+check "pi5-dsi7 second run: idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && [ ! -e "$P.bak" ]'
+# the owner's hand-written file (installed with --force on v0.10.0): kept without --force, replaced with --force, .bak kept,
+# and the generated profile equals it but for the comments
+HANDW='# Hand-written profile for a Raspberry Pi 5 with the Raspberry Pi 7" DSI touch panel
+# (a second comment line)
+APPLAUNCH_BOARD=pi5-dsi7
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+# visible area of the 7" panel in mm (154 x 86): the layout density
+APPLAUNCH_PANEL_MM=154x86
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+APPLAUNCH_DIM_PERCENT=20
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+printf '%s\n' "$HANDW" > "$P"
+HW_SUM=$(cksum < "$P")
+run --plan
+check "pi5-dsi7 hand-written file: --plan says edited, kept" 'has "profile_state=edited" && has "profile_action=keep"'
+run --board-only
+check "pi5-dsi7 hand-written file: kept without --force" 'has "pi5-dsi7: $P was edited by hand: kept" && [ "$(cksum < "$P")" = "$HW_SUM" ] && [ ! -e "$P.bak" ]'
+run --plan --force
+check "pi5-dsi7 hand-written file + --force: --plan replaces" 'has "profile_action=replace" && has "profile_state=edited"'
+run --board-only --force
+check "pi5-dsi7 hand-written file + --force: replaced, the old one kept as board.conf.bak" '[ $RC = 0 ] && [ "$(cat "$P.bak")" = "$HANDW" ] && [ "$(cksum < "$P")" = "$SUM1" ]'
+check "pi5-dsi7 generated profile equals the hand-written one but for the comments" '[ "$(grep -v "^#" "$P")" = "$(printf "%s\n" "$HANDW" | grep -v "^#")" ]'
+# forced
+R=$(root pi5-dsi7)
+run --dry-run --board pi5-dsi7
+check "--board pi5-dsi7: forced, same profile" '[ $RC = 0 ] && has "board: pi5-dsi7 (forced with --board)" && has "APPLAUNCH_FB=/dev/fb0"'
+run --plan --board pi5-dsi7
+check "--board pi5-dsi7 --plan: board_forced=1" 'has "board=pi5-dsi7" && has "board_forced=1"'
+# without the regulator: unknown on auto-detection (like pi4b-dsi), forced: a profile without a backlight line
+rm -rf "$R/sys/class/backlight/10-0045"
+run --dry-run
+check "pi5-dsi7 without the 10-0045 regulator: unknown" 'has "board: unknown" && ! has "board: pi5-dsi7"'
+run --dry-run --board pi5-dsi7
+check "pi5-dsi7 without the regulator, --board pi5-dsi7: profile without a backlight line" '[ $RC = 0 ] && ! has "APPLAUNCH_BACKLIGHT=" && has "APPLAUNCH_DIM_PERCENT=20"'
+R=$(root pi5-dsi7); echo disconnected > "$R/sys/class/drm/card1-DSI-1/status"
+run --dry-run
+check "pi5-dsi7 with the DSI connector disconnected: unknown" 'has "board: unknown"'
+R=$(root pi5-dsi7); echo 1024,600 > "$R/sys/class/graphics/fb0/virtual_size"
+run --dry-run --board pi5-dsi7
+check "--board pi5-dsi7 without its 800x480 fb: refused, exit 1" '[ $RC = 1 ] && has "no 800x480 \"drm-rp1-dsi\""'
+# the Pi 5 with the HyperPixel is still pi5-hyperpixel4; a Pi 5 with neither panel is unknown; the 7" panel on a Pi 4 is not pi5-dsi7
+R=$(root pi5-hyperpixel4)
+check "the Pi 5 with the HyperPixel is still pi5-hyperpixel4" 'run --dry-run; has "board: pi5-hyperpixel4" && ! has "pi5-dsi7"'
+R=$(root pi5-dsi7); rm -rf "$R/sys/class/drm/card1-DSI-1" "$R/sys/class/graphics/fb0" "$R/sys/class/backlight"
+run --dry-run
+check "a Pi 5 with neither panel: unknown" 'has "board: unknown" && has "Raspberry Pi 5"'
+R=$(root pi5-dsi7); printf 'Raspberry Pi 4 Model B Rev 1.5\n' > "$R/proc/device-tree/model"
+run --dry-run
+check "the Pi 5 DSI fbdev on a Pi 4 B: unknown (not pi5-dsi7, not pi4b-dsi)" 'has "board: unknown" && ! has "board: pi5-dsi7"'
+R=$(root pi4b-dsi)
+check "the Pi 4 B DSI board is still pi4b-dsi" 'run --dry-run; has "board: pi4b-dsi" && ! has "pi5-dsi7"'
 check "install.sh writes no fbcon= argument anywhere" '! grep -n "fbcon=" "$INSTALL" | grep -v "^[0-9]*:[[:space:]]*#" | grep -q .'
 
 # --- the PDA profile (report 038, phase S2): the DSI panel turned to portrait 480x800, only with --board
@@ -433,6 +530,11 @@ run --dry-run --user tester --pwm-backlight
 check "pi5 desktop dry-run --pwm-backlight: the overlay only, cmdline.txt left alone" '[ $RC = 0 ] && has "session: desktop" && has "boot config: the PWM backlight overlay only (--pwm-backlight, below); cmdline.txt left alone on a desktop board" && has "the line dtoverlay=hyperpixel4-pwm-backlight"'
 run --dry-run --user tester
 check "pi5 desktop dry-run: no boot config without --pwm-backlight" 'has "boot config: none on a desktop board" && ! has "hyperpixel4-pwm-backlight"'
+# desktop session (lightdm + labwc on the owner's board): the same profile, config.txt and cmdline.txt left alone
+R=$(root pi5-dsi7)
+desktop "$R" lightdm.service lightdm labwc
+run --dry-run
+check "pi5-dsi7 desktop dry-run: board pi5-dsi7, desktop variant, boot config left alone" '[ $RC = 0 ] && has "board: pi5-dsi7" && has "session: desktop" && has "boot config: none on a desktop board" && has "APPLAUNCH_DIM_PERCENT=20"'
 for B in zero2w pi3a-luckfox35 hackberry-cm5; do
     R=$(root $B)
     run --dry-run --user tester --pwm-backlight
@@ -1160,7 +1262,7 @@ body_sum_of() {  # body_sum_of FIXTURE [install.sh options]: the checksum line i
     SYSROOT="$s" sh "$INSTALL" --board-only "$@" > /dev/null 2>&1
     sed -n 's/^# applaunch-profile-sum: //p' "$s/etc/applaunch/board.conf" 2>/dev/null
 }
-for spec in "pi3a-luckfox35|724676656 664|" "pi4b-dsi|3376657049 694|" "pi5-hyperpixel4|806221525 186|" "hackberry-cm5|1252750838 297|"; do
+for spec in "pi3a-luckfox35|724676656 664|" "pi4b-dsi|3376657049 694|" "pi5-hyperpixel4|806221525 186|" "pi5-dsi7|1200893778 700|" "hackberry-cm5|1252750838 297|"; do
     fx=${spec%%|*}; rest=${spec#*|}; want=${rest%%|*}; opt=${rest#*|}
     # shellcheck disable=SC2086
     got=$(body_sum_of "$fx" $opt)

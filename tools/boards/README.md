@@ -22,6 +22,7 @@ python board.py status     deck
 | pi3a-dsi | 192.168.68.170 | service | /dev/fb0 800x480 RGB565 (Waveshare 4.3" DSI) | 90 deg CCW (PDA portrait) |
 | pi4b | 192.168.68.167 | service | /dev/fb0 800x480 RGB565 (Pi 4 B, Freenove 5" DSI) | 90 deg CCW (PDA portrait) |
 | pi5 | 192.168.68.175 | desktop | /dev/fb0 480x800 32 bpp | 90 deg CCW |
+| pi5-dsi7 | 192.168.68.160 | desktop | /dev/fb0 800x480 32 bpp (Pi 5, official 7" DSI Touch Display, `drm-rp1-dsidrmf`) | none |
 | hackberry | 192.168.68.214 | desktop | /dev/fb0 720x720 32 bpp | none |
 | fzm1 | 192.168.68.183 | desktop, **amd64** | /dev/fb0 1280x800 32 bpp (Panasonic FZ-M1 mk2 tablet, i915) | 90 deg CCW (PDA portrait) |
 
