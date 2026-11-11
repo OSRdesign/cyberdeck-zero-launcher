@@ -14,6 +14,7 @@
 #include <string>
 
 #if defined(__linux__)
+#include <dirent.h>
 #include <sys/utsname.h>
 #endif
 
@@ -44,7 +45,83 @@ std::string read_meminfo()
     return text;
 }
 
+/* One line of `text` that contains `a` and `b` (case-insensitive), lines split at LF. */
+bool line_has(const char *text, const char *a, const char *b)
+{
+    if (!text) return false;
+    const std::string all = text;
+    size_t at = 0;
+    while (at < all.size()) {
+        size_t end = all.find('\n', at);
+        if (end == std::string::npos) end = all.size();
+        const std::string line = all.substr(at, end - at);
+        at = end + 1;
+        if (icontains(line, a) && icontains(line, b)) return true;
+    }
+    return false;
+}
+
+/* A process whose /proc/<pid>/comm is `name` runs (APPLAUNCH_PROC_ROOT: test hook). */
+bool process_running(const char *name)
+{
+#if defined(__linux__)
+    const char *root_env = std::getenv("APPLAUNCH_PROC_ROOT");
+    const std::string root = root_env && root_env[0] ? root_env : "/proc";
+    DIR *dir = opendir(root.c_str());
+    if (!dir) return false;
+    bool found = false;
+    while (const dirent *entry = readdir(dir)) {
+        if (entry->d_name[0] < '0' || entry->d_name[0] > '9') continue;
+        const std::string path = root + "/" + entry->d_name + "/comm";
+        std::FILE *f = std::fopen(path.c_str(), "r");
+        if (!f) continue;
+        char comm[64] = {0};
+        if (std::fgets(comm, sizeof(comm), f)) {
+            comm[std::strcspn(comm, "\r\n")] = '\0';
+            found = std::strcmp(comm, name) == 0;
+        }
+        std::fclose(f);
+        if (found) break;
+    }
+    closedir(dir);
+    return found;
+#else
+    (void)name;
+    return false;
+#endif
+}
+
 } // namespace
+
+std::string bt_audio_stack(const char *pactl_info, bool bluealsa_running, bool pipewire_running)
+{
+    const std::string text = pactl_info ? pactl_info : "";
+    // the "Server Name" line when there is one (the text is translated on some systems: then the whole text counts)
+    std::string line = text;
+    std::string lower;
+    for (char ch : text) lower += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    const size_t at = lower.find("server name:");
+    if (at != std::string::npos) {
+        const size_t end = text.find('\n', at);
+        line = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+    }
+    if (icontains(line, "pipewire")) return "pipewire";
+    if (icontains(line, "pulseaudio")) return "pulseaudio";
+    if (bluealsa_running) return "bluealsa";
+    if (pipewire_running) return "pipewire";
+    return "none";
+}
+
+bool bt_adapter_has_hfp(const char *bluetoothctl_show)
+{
+    return line_has(bluetoothctl_show, "uuid:", "0000111f-");
+}
+
+bool bt_controller_has_cis(const char *btmgmt_info)
+{
+    return line_has(btmgmt_info, "supported settings:", "cis-central") ||
+           line_has(btmgmt_info, "supported settings:", "cis-peripheral");
+}
 
 int meminfo_mb(const char *text)
 {
@@ -105,6 +182,8 @@ void collect(cp0_app_board_t &out, const char *launcher_version, bool ask_server
     out.backlight_steps = -1;
     out.sound = -1;
     out.sound_guess = -1;
+    out.bt_hfp = -1;
+    out.bt_le_audio = -1;
     copy(out.launcher, sizeof(out.launcher), launcher_version);
     const char *board = std::getenv("APPLAUNCH_BOARD");
     copy(out.board, sizeof(out.board), board);
@@ -175,6 +254,23 @@ void collect(cp0_app_board_t &out, const char *launcher_version, bool ask_server
         out.sound = -1; /* not asked: unknown, so the key is absent */
     }
     copy(out.sound_note, sizeof(out.sound_note), caps.note_sound);
+    if (ask_server) { /* the Bluetooth audio facts run programs too: not on the first write */
+        char text[4096];
+        const char *const info[] = {cp0_caps_pactl(), "info", nullptr};
+        if (cp0_caps_run(info, text, sizeof(text), CP0_CAPS_SERVER_TIMEOUT_MS) != 0) text[0] = '\0';
+        copy(out.bt_audio, sizeof(out.bt_audio),
+             bt_audio_stack(text, process_running("bluealsa") || process_running("bluealsad"),
+                            process_running("pipewire"))
+                 .c_str());
+        const char *show_env = std::getenv("APPLAUNCH_BLUETOOTHCTL"); /* test hooks, like the pactl one */
+        const char *mgmt_env = std::getenv("APPLAUNCH_BTMGMT");
+        const char *const show[] = {show_env && show_env[0] ? show_env : "bluetoothctl", "show", nullptr};
+        const char *const mgmt[] = {mgmt_env && mgmt_env[0] ? mgmt_env : "btmgmt", "info", nullptr};
+        text[0] = '\0';
+        out.bt_hfp = cp0_caps_run(show, text, sizeof(text), CP0_CAPS_SERVER_TIMEOUT_MS) == 0 && bt_adapter_has_hfp(text) ? 1 : 0;
+        text[0] = '\0';
+        out.bt_le_audio = cp0_caps_run(mgmt, text, sizeof(text), CP0_CAPS_SERVER_TIMEOUT_MS) == 0 && bt_controller_has_cis(text) ? 1 : 0;
+    }
     copy(out.requests, sizeof(out.requests), requests_for(out).c_str());
 }
 

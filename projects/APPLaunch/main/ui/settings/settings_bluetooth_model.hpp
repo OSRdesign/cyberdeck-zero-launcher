@@ -51,6 +51,11 @@ public:
         bool paired = false;
         bool trusted = false;
         std::string name;
+        // Appended wire fields (Bluetooth audio facts); empty / 0 / false from an older backend that sends six fields
+        std::string icon;
+        unsigned device_class = 0;
+        std::string uuids; // comma separated, Bluetooth-base UUIDs as four lowercase hex digits
+        bool a2dp = false; // a music (A2DP) transport exists
     };
 
     enum class ValidationLimit : std::size_t {
@@ -159,7 +164,8 @@ public:
 
     static bool split_fields(std::string_view record,
                              std::size_t expected_count,
-                             std::vector<std::string_view> &fields)
+                             std::vector<std::string_view> &fields,
+                             std::size_t maximum_count = 0)
     {
         fields.clear();
         std::size_t start = 0;
@@ -171,7 +177,8 @@ public:
             if (separator == std::string_view::npos) break;
             start = separator + 1;
         }
-        return fields.size() == expected_count;
+        return maximum_count == 0 ? fields.size() == expected_count
+                                  : fields.size() >= expected_count && fields.size() <= maximum_count;
     }
 
     static bool decode_status(std::string_view payload, StatusRecord &output)
@@ -199,7 +206,9 @@ public:
     static bool decode_device(std::string_view payload, DeviceRecord &output)
     {
         std::vector<std::string_view> fields;
-        if (!split_fields(payload, 6, fields)) return false;
+        // Six fields (address, rssi, connected, paired, trusted, name), optionally followed by icon, class, uuids and
+        // a2dp: more than ten are rejected, fewer appended ones are fine (an older backend)
+        if (!split_fields(payload, 6, fields, 10)) return false;
         DeviceRecord decoded;
         if (!valid_device_address(fields[0]) || !parse_integer(fields[1], decoded.rssi) ||
             !parse_boolean(fields[2], decoded.connected) ||
@@ -209,6 +218,22 @@ public:
             return false;
         decoded.address.assign(fields[0]);
         decoded.name.assign(fields[5]);
+        // the audio facts are optional: a malformed one is dropped, the device stays listed
+        if (fields.size() > 6 && fields[6].size() < sizeof(((cp0_bt_device_t *)nullptr)->icon) &&
+            !has_wire_control(fields[6]))
+            decoded.icon.assign(fields[6]);
+        if (fields.size() > 7) {
+            int class_value = 0;
+            if (parse_integer(fields[7], class_value) && class_value > 0)
+                decoded.device_class = static_cast<unsigned>(class_value);
+        }
+        if (fields.size() > 8 && fields[8].size() < sizeof(((cp0_bt_device_t *)nullptr)->uuids) &&
+            !has_wire_control(fields[8]))
+            decoded.uuids.assign(fields[8]);
+        if (fields.size() > 9) {
+            bool a2dp = false;
+            if (parse_boolean(fields[9], a2dp)) decoded.a2dp = a2dp;
+        }
         output = std::move(decoded);
         return true;
     }

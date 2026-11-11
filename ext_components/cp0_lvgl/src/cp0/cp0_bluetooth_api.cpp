@@ -63,7 +63,10 @@ std::string encode_devices(const cp0_bt_device_t *devices, int count)
                << devices[i].rssi << '\t'
                << devices[i].connected << '\t' << devices[i].paired << '\t'
                << devices[i].trusted << '\t'
-               << cp0::bluetooth::sanitize_wire_field(devices[i].name) << '\n';
+               << cp0::bluetooth::sanitize_wire_field(devices[i].name) << '\t'
+               // appended fields (Bluetooth audio facts); a reader that stops after the name stays valid
+               << cp0::bluetooth::sanitize_wire_field(devices[i].icon) << '\t' << devices[i].cls << '\t'
+               << cp0::bluetooth::sanitize_wire_field(devices[i].uuids) << '\t' << (devices[i].a2dp ? 1 : 0) << '\n';
     }
     return output.str();
 }

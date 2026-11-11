@@ -89,6 +89,11 @@ trap 'rm -f "$binary" "$esc_state_object" "$caps_object" "$power_supply_object"'
     "$root/tests/test_bluetooth_recovery.cpp" -o "$binary"
 "$binary"
 
+# Bluetooth audio facts: the UUID helpers of the device record (cp0_bluetooth_device_facts.hpp)
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/src" "$root/tests/test_bluetooth_device_facts.cpp" -o "$binary"
+"$binary"
+
 "${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
     -I"$root/src" "$root/tests/test_pointer_lifecycle.cpp" -o "$binary"
 "$binary"

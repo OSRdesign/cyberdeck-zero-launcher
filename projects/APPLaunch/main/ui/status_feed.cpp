@@ -13,7 +13,8 @@ bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 {
     return a.wifi != b.wifi || a.wifi_pct != b.wifi_pct || a.eth != b.eth || a.bt != b.bt || a.battery != b.battery ||
            std::strcmp(a.battery_state, b.battery_state) != 0 || a.volume != b.volume || a.mute != b.mute ||
-           a.brightness_pct != b.brightness_pct || a.ssh != b.ssh || a.ssh_act != b.ssh_act;
+           a.brightness_pct != b.brightness_pct || a.ssh != b.ssh || a.ssh_act != b.ssh_act ||
+           std::strcmp(a.bt_audio_dev, b.bt_audio_dev) != 0;
 }
 
 } // namespace status_feed
@@ -21,6 +22,7 @@ bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)
 
 #include "app_media.hpp"
+#include "bt_audio.hpp"
 #include "cp0_lvgl_app.h"
 #include "cp0_ssh_watch.h"
 #include "launcher_ssh.hpp"
@@ -30,6 +32,7 @@ bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 #include "cp0_ui_status_strip.h"
 #include "hal_lvgl_bsp.h"
 #include "sample_log.h"
+#include "settings/settings_bluetooth_model.hpp"
 
 #include <atomic>
 #include <cerrno>
@@ -41,6 +44,7 @@ bool differs(const cp0_app_status_t &a, const cp0_app_status_t &b)
 #include <mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include <unistd.h>
 
@@ -88,6 +92,31 @@ cp0_app_bt_t read_bluetooth()
     return connected ? CP0_APP_BT_CONNECTED : CP0_APP_BT_ON;
 }
 
+// The paired Bluetooth audio devices (headset, headphones, speaker) for bt_audio_dev: BlueZ's own record of each paired
+// device (kind from Icon / Class / UUIDs, connected, A2DP transport), read only while the adapter is on. "" when off, when
+// BlueZ does not answer, or when the list does not decode.
+std::string read_audio_devices()
+{
+    int code = -1;
+    std::string data;
+    if (!bt_request("BtList", code, data) || code < 0) return {};
+    std::vector<settings_bluetooth_com::DeviceRecord> records;
+    if (!settings_bluetooth_com::decode_device_list_reply(code, data, records)) return {};
+    std::vector<bt_audio::Device> devices;
+    for (const auto &record : records) {
+        bt_audio::Device device;
+        device.address = record.address;
+        device.icon = record.icon;
+        device.device_class = record.device_class;
+        device.uuids = record.uuids;
+        device.paired = record.paired;
+        device.connected = record.connected;
+        device.a2dp = record.a2dp;
+        devices.push_back(std::move(device));
+    }
+    return bt_audio::status_value(devices);
+}
+
 // Volume, mute and brightness (report 035): read again when the launcher changed one (a key, a request) or every
 // kLevelsPeriod (the user may run pactl); in between the last reading stands.
 void sample_levels(cp0_app_status_t &now)
@@ -131,6 +160,10 @@ void sample(cp0_app_status_t &now, ssh_indicator::Sampler &ssh)
     now.wifi_pct = strip.wifi_pct;
     now.eth = wifi.ethernet ? 1 : 0;
     now.bt = read_bluetooth();
+    if (now.bt != CP0_APP_BT_OFF) {
+        const std::string audio = read_audio_devices();
+        std::snprintf(now.bt_audio_dev, sizeof(now.bt_audio_dev), "%s", audio.c_str());
+    }
     cp0_power_battery_t battery{};
     if (cp0_power_supply_battery(&battery) && battery.percent >= 0) {
         now.battery = battery.percent > 100 ? 100 : battery.percent;

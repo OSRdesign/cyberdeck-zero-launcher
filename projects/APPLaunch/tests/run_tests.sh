@@ -103,6 +103,13 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
     "$build_dir/cp0_ui_metrics.o" "$build_dir/cp0_board_state.o" "$build_dir/cp0_ui_state.o" \
     -o "$build_dir/test_board_facts"
 "$build_dir/test_board_facts"
+# Bluetooth audio facts for apps: the device kind from BlueZ's Icon / Class / UUIDs and the status.state bt_audio_dev value
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_bt_audio.cpp" \
+    "$test_root/../main/ui/bt_audio.cpp" \
+    -o "$build_dir/test_bt_audio"
+"$build_dir/test_bt_audio"
 # Multitasking P-b (task 015): the pure lifecycle model, the Alt+Tab key session and the control protocol, under
 # AddressSanitizer + UndefinedBehaviorSanitizer when the compiler has them (plain build otherwise, with a note)
 mt_san="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"

@@ -229,6 +229,7 @@ mute=0
 brightness_pct=70
 ssh=1
 ssh_act=0
+bt_audio_dev=70_BF_92_53_6B_8B:headset:1:a2dp;9E_0C_81_E6_5D_1A:speaker:0
 ```
 
 | Key | Meaning |
@@ -246,6 +247,7 @@ ssh_act=0
 | `gen` | increases on every write (a restarted launcher continues from the old file) |
 | `ssh` | incoming SSH connections to the board's sshd (the SSH indicator, 2026-10-30): established TCP connections whose local port is one sshd listens on, each seen in two consecutive samples (so a port scan never shows); `ssh localhost` and connections still at the password prompt count. `0` = none, Settings > System > SSH indicator is Off (the launcher then does not look), or an older launcher (the reader gives `0` too). A count only: peer addresses never appear in this file |
 | `ssh_act` | `1` = bytes moved on one of them since the launcher's previous sample, 2 s earlier (typing, output, a transfer, an SSH keepalive); `0` otherwise and whenever `ssh` is `0` |
+| `bt_audio_dev` | the **paired Bluetooth audio devices**, read-only facts for an app that records or plays through Bluetooth (2026-11-11; always the **last** key; absent when there is none, Bluetooth is off, or the launcher is older). Syntax below |
 
 `ssh` and `ssh_act` drive the strip's SSH indicator: the terminal glyph (U+F120) in the strip's leftmost slot while `ssh`
 is above 0, the Bluetooth "connected" blue, alternating with white on the strip's 1 s clock tick while `ssh_act` is 1;
@@ -255,6 +257,40 @@ nothing until rebuilt). The slot is always reserved in `cp0::ui::status_strip_le
 move when a session starts or ends. A non-LVGL app that draws its own bar sets `ssh`, `ssh_active` and, for the blink,
 `ssh_bright` in `cp0_statusbar_state_t` (`cp0_ui_status_set_ssh()` and `cp0_ui_status_ssh_tick()` in
 `cp0_ui_status_strip.h` are the rules); a zeroed state draws nothing.
+
+#### `bt_audio_dev`
+
+```
+bt_audio_dev=ENTRY;ENTRY;...
+ENTRY = MAC:kind:connected[:profile[:...]]
+```
+
+| Field | Meaning |
+|---|---|
+| `MAC` | the device address with underscores, capitals: `70_BF_92_53_6B_8B` (the tail of BlueZ's object path, `dev_70_BF_92_53_6B_8B`, and of PipeWire's `bluez_card.` / `bluez_input.` / `bluez_output.` names) |
+| `kind` | `headset` (the device offers the Headset 0x1108 or Handsfree 0x111E service, so it has a **microphone**), `headphones` (an Audio Sink 0x110B, no call profile, BlueZ says headphones), `speaker` (an Audio Sink and nothing else: playback only). Other devices (keyboards, phones, computers) are not listed. New kinds may be added: treat an unknown one as "other" |
+| `connected` | `1` = BlueZ says connected now, `0` = paired but not connected (asleep, switched off) |
+| `profile` | optional. `a2dp` = the device is connected and has a music (A2DP) transport in BlueZ: it can play stereo music. `hfp` = a connected **headset** with no A2DP transport: call profiles only, so playback is call quality (8 or 16 kHz). Left out (with its colon) when not known, e.g. a speaker without a transport, or a device that is not connected |
+
+Rules for readers:
+
+- **Ignore what you do not know:** fields after `profile`, entries that do not parse, unknown `kind` and `profile` words. The format grows by appending fields to an entry and entries to the list.
+- Up to 8 entries, in address order (the text does not change by itself). The list is the launcher's own paired-device record: the launcher does the pairing and stays responsible for it (Settings > Bluetooth); an app never pairs.
+- `connected=1` says the Bluetooth link is up, not that a sound stream exists. The sound server decides which nodes exist (board.state `bt_audio`); an app that records must open the node of that device **explicitly** (see below).
+- `profile=hfp` and `profile=a2dp` come from BlueZ's `MediaTransport1` objects, not from the sound server: they appear a second or two after the connection and follow the music profile only. They say nothing when no sound stack is running (`bt_audio=none`): the transport never exists then.
+- One A2DP device at a time is a limit of some boards (measured on the HackBerry: a second A2DP device gets call profiles only); the launcher reports what it sees, it does not choose.
+
+C reader: `cp0_app_bt_audio_dev_get(&status, i, &dev)` (`cp0_app_contract.h`, SDK, section 9) fills `dev.mac`, `dev.kind`, `dev.connected` and `dev.profile` for entry `i` from 0 and returns `-1` after the last one; it skips later fields.
+
+Examples (real devices of the HackBerry, 2026-11-11; the Evolve 65 connected with music profile, the speaker paired but off):
+
+```
+bt_audio_dev=70_BF_92_53_6B_8B:headset:1:a2dp;9E_0C_81_E6_5D_1A:speaker:0    Jabra Evolve 65 (Icon audio-headset, UUIDs 1108 111e 110b ...), XWF-M18-M28-M38 (Icon audio-headset, UUID 110b only)
+bt_audio_dev=70_BF_92_53_6B_8B:headset:1:hfp                                  the headset connected, call profiles only (another A2DP device holds the link)
+bt_audio_dev=F8_66_5A_18_D3_69:headset:0                                      Beats Fit Pro paired, not connected
+```
+
+**The launcher never changes the default sound source or sink**, and it never moves a stream: it only reports. PipeWire / PulseAudio make the most recently connected headset the default source (measured: the default source followed the Beats Fit Pro when it connected), and a Bluetooth source can run and deliver digital silence or be moved to another source without an error. **An app must select its device explicitly** (the node `bluez_input.<MAC>...` / `bluez_output.<MAC>...` named by `MAC`, or the card), refuse to start when it is absent, check the source of the running stream, and never record from "the default source" when the user chose a Bluetooth device. The volume keys of the launcher act on the default sink (section 14) and are not changed by this.
 
 `volume`, `mute` and `brightness_pct` are for an app that draws its own level bar: the launcher draws nothing over a fullscreen app (section 10), so the user who presses a volume key in your app only hears the change unless the app shows it. Poll the file with the rest of the status; do not call `launcher.sock` for it.
 
@@ -285,6 +321,9 @@ sound=1
 sound_kind=bluetooth
 sound_guess=1
 requests=hello,caps,toast,beep,volume,brightness,dim
+bt_audio=pipewire
+bt_hfp=1
+bt_le_audio=0
 ```
 
 | Key | Meaning |
@@ -301,9 +340,12 @@ requests=hello,caps,toast,beep,volume,brightness,dim
 | `sound_kind` | `alsa` (a local card with a playback volume), `server` (a PulseAudio / PipeWire sink), `bluetooth` |
 | `sound_guess` | `1` when `sound_kind=bluetooth` is a **guess** from the sink's name (`bluez_output.*`); the launcher cannot ask the sink what it is |
 | `requests` | the verbs `launcher.sock` answers **on this board** (section 14): `volume` only with sound, `brightness` only with a backlight, `dim` only on a battery board with brightness levels. `beep` is always listed: without sound it answers `err nosound` |
+| `bt_audio` | which sound stack owns the BlueZ audio endpoints (2026-11-11; read-only): `pipewire` (`pactl info` says `PulseAudio (on PipeWire x.y)`, or no pulse server but a `pipewire` process runs), `pulseaudio` (a plain PulseAudio server), `bluealsa` (a `bluealsa` process and no sound server), `none` (nothing that carries Bluetooth audio: an app should say "Bluetooth audio is not set up on this board"). Absent until the first probe has run. PulseAudio is taken to own the endpoints without asking whether its Bluetooth module is loaded: with `pulseaudio` and no `bluez_*` nodes, say it is not set up |
+| `bt_hfp` | `1` = the adapter offers the Hands-free Audio Gateway (UUID 0x111F; `bluetoothctl show`): call audio (a headset microphone) can be set up. `0` = it does not (no HFP in the sound stack, or no Bluetooth). Absent = not probed yet or an older launcher |
+| `bt_le_audio` | `1` = the controller offers LE Audio isochronous streams (`btmgmt info`: `cis-central` or `cis-peripheral` in the supported settings). `0` where it does not or the tool is missing (none of the boards today). Absent = not probed yet or an older launcher |
 | `battery_note`, `backlight_note`, `sound_note` | the board profile's hint text (`use the button on the case`, `pair XWF-M18 in Bluetooth`), for display only |
 
-**A fact the launcher does not know is an absent key, never `0`.** Right after the launcher starts, `sound` is absent on a board without a local sound card until the first sound-server probe has run (a moment later; the file is rewritten). The sound output can change while the launcher runs (a Bluetooth speaker connects): it is looked at again every 30 s. The physical buttons of a board (which key a button sends) are **not** published: the launcher has no source for them.
+**A fact the launcher does not know is an absent key, never `0`.** Right after the launcher starts, `sound` is absent on a board without a local sound card until the first sound-server probe has run (a moment later; the file is rewritten). The sound output can change while the launcher runs (a Bluetooth speaker connects): it is looked at again every 30 s, and so are the three Bluetooth audio facts (they run `pactl info`, `bluetoothctl show` and `btmgmt info`, each with a short timeout, on the same worker thread, and only after the first write). The physical buttons of a board (which key a button sends) are **not** published: the launcher has no source for them.
 
 Read it with `cp0_app_board_read(NULL, &board)` (SDK, section 9): `0` for a good file, `-1` when it is missing, not `v=1`, has no `pid` or its `pid` is gone. On `-1` assume nothing and hide what depends on it (an older launcher: no sound option, no beeps). `cp0_app_board_has_request(&board, "beep")` looks in `requests`.
 
@@ -338,7 +380,9 @@ Rule: **degrade to the app's own probe, never crash.**
 ## 8. Stability promise
 
 - Within contract 1 the names, units and meanings of every variable and key above never change.
-- Keys and variables are only **added**. Readers must ignore what they do not know.
+- Keys and variables are only **added**. Readers must ignore what they do not know. The same holds **inside** a value
+  that is a list (`bt_audio_dev`): fields are appended to an entry, entries to the list, and words (`kind`, `profile`)
+  may be added; skip what you do not understand.
 - A breaking change raises `v=` and `APPLAUNCH_CONTRACT` together; the launcher then keeps writing the old version's
   keys for at least one release.
 - The SDK files (section 9) are source: they follow the launcher tree and may change shape; copy the version you
@@ -354,7 +398,7 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 
 | Files | What | Needs |
 |---|---|---|
-| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav` and `hand`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav` and `hand`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_bt_audio_dev_get()` (the `bt_audio_dev` entries), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
 | `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |

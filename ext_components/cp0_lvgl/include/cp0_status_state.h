@@ -17,6 +17,9 @@
  *   ssh=N              incoming SSH connections (the SSH indicator, cp0_ssh_watch.h); 0 = none, or Settings > System >
  *                      SSH indicator Off. A count only: no peer address is ever written here
  *   ssh_act=0|1        bytes moved on one since the launcher's previous 2 s sample (the indicator blinks); 0 when ssh=0
+ *   bt_audio_dev=MAC:kind:connected[:profile];...   paired Bluetooth audio devices (kind headset, headphones or speaker;
+ *                      MAC with underscores); absent when there is none. Always the last key; fields appended to an entry
+ *                      later must be ignored by readers (cp0_app_bt_audio_dev_get() does)
  *
  * Readers must ignore unknown keys. Apps read it with cp0_app_status_read() (cp0_app_contract.h).
  *

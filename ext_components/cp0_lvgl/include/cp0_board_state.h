@@ -17,6 +17,9 @@
  *   sound=0|1|2             none, present, not set up
  *   sound_kind=alsa|server|bluetooth
  *   sound_guess=1           sound_kind comes from a guess (a sink named bluez_output.*), not a measurement
+ *   bt_audio=pipewire|pulseaudio|bluealsa|none   the sound stack that owns the BlueZ audio endpoints (absent: not probed yet)
+ *   bt_hfp=0|1              the adapter offers the Hands-free Audio Gateway (UUID 111f)
+ *   bt_le_audio=0|1         the controller offers LE Audio (CIS)
  *   requests=hello,beep,toast,volume,brightness,dim   the verbs launcher.sock answers on this board
  *   battery_note= backlight_note= sound_note=   the board profile's hint text, for display only
  *

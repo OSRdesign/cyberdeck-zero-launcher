@@ -62,6 +62,12 @@ typedef struct {
     int connected;
     int paired;
     int trusted;
+    /* Read-only BlueZ facts for classifying a device (the Bluetooth audio facts of status.state); empty / 0 when BlueZ
+     * has not told yet. Appended: older code that fills only the fields above stays valid. */
+    char icon[32];  /* Device1.Icon, e.g. "audio-headset" */
+    unsigned cls;   /* Device1.Class (Class of Device), 0 = unknown */
+    char uuids[256]; /* Device1.UUIDs, comma separated; Bluetooth-base UUIDs as 4 lowercase hex digits ("111e"), others in full */
+    int a2dp;       /* 1 = an A2DP media transport (BlueZ MediaTransport1) exists for the device: music profile available */
 } cp0_bt_device_t;
 
 typedef struct {

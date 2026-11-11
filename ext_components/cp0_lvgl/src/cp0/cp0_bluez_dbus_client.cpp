@@ -5,6 +5,7 @@
  */
 
 #include "cp0_bluez_dbus_client.hpp"
+#include "cp0_bluetooth_device_facts.hpp"
 #include "cp0_bluetooth_error_policy.hpp"
 #include "cp0_bluetooth_recovery.hpp"
 #include "cp0_lvgl_log.h"
@@ -30,6 +31,7 @@ constexpr const char *kBluez = "org.bluez";
 constexpr const char *kProperties = "org.freedesktop.DBus.Properties";
 constexpr const char *kAdapter = "org.bluez.Adapter1";
 constexpr const char *kDevice = "org.bluez.Device1";
+constexpr const char *kMediaTransport = "org.bluez.MediaTransport1";
 constexpr const char *kAgentManager = "org.bluez.AgentManager1";
 constexpr const char *kAgent = "org.bluez.Agent1";
 constexpr const char *kAgentPath = "/com/cardputerzero/applaunch/agent";
@@ -47,6 +49,8 @@ struct Snapshot {
     std::string adapter_path;
     GDBusProxy *adapter = nullptr;
     std::map<std::string, DeviceEntry> devices;
+    /* MediaTransport1 object path -> the device path it belongs to, A2DP transports only (music profile available) */
+    std::map<std::string, std::string> a2dp_transports;
 };
 
 class BluezWorker {
@@ -108,8 +112,12 @@ public:
         std::lock_guard<std::mutex> lock(snapshot_mutex_);
         std::vector<const DeviceEntry *> ordered;
         ordered.reserve(snapshot_.devices.size());
-        for (const auto &item : snapshot_.devices)
+        for (auto &item : snapshot_.devices) {
+            item.second.value.a2dp = 0;
+            for (const auto &transport : snapshot_.a2dp_transports)
+                if (transport.second == item.first) item.second.value.a2dp = 1;
             ordered.push_back(&item.second);
+        }
         std::stable_sort(ordered.begin(), ordered.end(), [](const DeviceEntry *left, const DeviceEntry *right) {
             const auto rank = [](const DeviceEntry *entry) {
                 return (entry->value.connected ? 4 : 0) +
@@ -524,6 +532,7 @@ private:
                 if (found->second.proxy) g_object_unref(found->second.proxy);
                 self->snapshot_.devices.erase(found);
             }
+            self->snapshot_.a2dp_transports.erase(path ? path : "");
             if (self->snapshot_.adapter_path == (path ? path : "")) {
                 if (self->snapshot_.adapter) g_object_unref(self->snapshot_.adapter);
                 self->snapshot_.adapter = nullptr;
@@ -570,6 +579,8 @@ private:
             snapshot_.devices[path] = entry;
             connect_proxy(proxy);
             read_device(proxy, snapshot_.devices[path].value);
+        } else if (std::strcmp(name, kMediaTransport) == 0) {
+            read_transport(proxy, path); /* Device and UUID never change: no property signal is followed (Volume is chatty) */
         }
     }
 
@@ -591,6 +602,7 @@ private:
                     snapshot_.devices.erase(found);
                 }
             }
+            if (std::strcmp(name, kMediaTransport) == 0) snapshot_.a2dp_transports.erase(path);
         }
         publish();
     }
@@ -625,7 +637,8 @@ private:
     static std::string string_property(GDBusProxy *proxy, const char *name)
     {
         GVariant *value = g_dbus_proxy_get_cached_property(proxy, name);
-        if (!value || !g_variant_is_of_type(value, G_VARIANT_TYPE_STRING)) {
+        if (!value || !(g_variant_is_of_type(value, G_VARIANT_TYPE_STRING) ||
+                        g_variant_is_of_type(value, G_VARIANT_TYPE_OBJECT_PATH))) {
             if (value) g_variant_unref(value);
             return {};
         }
@@ -663,6 +676,43 @@ private:
         copy_string(snapshot_.status.alias, sizeof(snapshot_.status.alias), alias);
     }
 
+    static std::vector<std::string> string_array_property(GDBusProxy *proxy, const char *name)
+    {
+        std::vector<std::string> result;
+        GVariant *value = g_dbus_proxy_get_cached_property(proxy, name);
+        if (!value) return result;
+        if (g_variant_is_of_type(value, G_VARIANT_TYPE_STRING_ARRAY)) {
+            gsize count = 0;
+            const gchar **items = g_variant_get_strv(value, &count);
+            for (gsize i = 0; i < count; ++i)
+                if (items[i]) result.emplace_back(items[i]);
+            g_free(items);
+        }
+        g_variant_unref(value);
+        return result;
+    }
+
+    static unsigned uint_property(GDBusProxy *proxy, const char *name)
+    {
+        GVariant *value = g_dbus_proxy_get_cached_property(proxy, name);
+        if (!value) return 0;
+        unsigned result = 0;
+        if (g_variant_is_of_type(value, G_VARIANT_TYPE_UINT32)) result = g_variant_get_uint32(value);
+        g_variant_unref(value);
+        return result;
+    }
+
+    /* MediaTransport1 of an A2DP endpoint (UUID 110a / 110b): its Device property is the device path. Caller holds
+     * snapshot_mutex_. The object exists while the device has a music profile (a sound server set it up). */
+    void read_transport(GDBusProxy *proxy, const std::string &path)
+    {
+        const std::string device = string_property(proxy, "Device");
+        if (!device.empty() && cp0::bluetooth::is_a2dp_uuid(string_property(proxy, "UUID")))
+            snapshot_.a2dp_transports[path] = device;
+        else
+            snapshot_.a2dp_transports.erase(path);
+    }
+
     void read_device(GDBusProxy *proxy, cp0_bt_device_t &device)
     {
         copy_string(device.address, sizeof(device.address), string_property(proxy, "Address"));
@@ -673,6 +723,10 @@ private:
         device.paired = int_property(proxy, "Paired");
         device.trusted = int_property(proxy, "Trusted");
         device.rssi = int_property(proxy, "RSSI", 0);
+        copy_string(device.icon, sizeof(device.icon), string_property(proxy, "Icon"));
+        device.cls = uint_property(proxy, "Class");
+        copy_string(device.uuids, sizeof(device.uuids),
+                    cp0::bluetooth::join_uuids(string_array_property(proxy, "UUIDs"), sizeof(device.uuids)));
     }
 
     void publish()
@@ -696,6 +750,7 @@ private:
         for (auto &item : snapshot_.devices)
             if (item.second.proxy) g_object_unref(item.second.proxy);
         snapshot_.devices.clear();
+        snapshot_.a2dp_transports.clear();
     }
 
     void execute(CommandRequest *request)

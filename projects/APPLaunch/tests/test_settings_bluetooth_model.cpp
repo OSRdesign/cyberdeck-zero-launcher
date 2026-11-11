@@ -503,10 +503,54 @@ void test_alias()
     }
 }
 
+// The Bluetooth audio facts (2026-11-11) are appended to the device line: icon, class, uuids, a2dp. The six-field line of an
+// older backend still decodes (the facts stay empty), ten fields carry them, anything else is refused.
+void test_wire_audio_fields()
+{
+    const auto decode_device_list_reply = [](int code, const std::string &payload, std::vector<DeviceRecord> &devices) {
+        return settings_bluetooth_com::decode_device_list_reply(code, payload, devices);
+    };
+    std::vector<DeviceRecord> out;
+    const std::string six = "70:BF:92:53:6B:8B\t-50\t1\t1\t1\tJabra Evolve 65\n";
+    assert(decode_device_list_reply(1, six, out));
+    assert(out.size() == 1 && out[0].name == "Jabra Evolve 65" && out[0].connected && out[0].paired);
+    assert(out[0].icon.empty() && out[0].device_class == 0 && out[0].uuids.empty() && !out[0].a2dp);
+
+    const std::string ten = "70:BF:92:53:6B:8B\t0\t1\t1\t1\tJabra Evolve 65\taudio-headset\t2360324\t"
+                            "1101,1108,110b,110c,110d,110e,111e,1200\t1\n"
+                            "9E:0C:81:E6:5D:1A\t0\t0\t1\t1\tXWF-M18-M28-M38\taudio-headset\t2360324\t110b,110c,110e,1200\t0\n";
+    assert(decode_device_list_reply(2, ten, out));
+    assert(out.size() == 2);
+    assert(out[0].name == "Jabra Evolve 65" && out[0].icon == "audio-headset" && out[0].device_class == 0x240404u);
+    assert(out[0].uuids == "1101,1108,110b,110c,110d,110e,111e,1200" && out[0].a2dp);
+    assert(out[1].name == "XWF-M18-M28-M38" && out[1].uuids == "110b,110c,110e,1200" && !out[1].a2dp && !out[1].connected);
+
+    // a device with no facts yet: empty fields (BlueZ gave no Icon / Class / UUIDs)
+    assert(decode_device_list_reply(1, "02:00:00:00:00:09\t-70\t0\t0\t0\tNew\t\t0\t\t0\n", out));
+    assert(out[0].icon.empty() && out[0].device_class == 0 && out[0].uuids.empty() && !out[0].a2dp);
+
+    // fields between 7 and 9 (a backend that sends fewer) and a malformed fact: the device stays, the fact is dropped
+    assert(decode_device_list_reply(1, "02:00:00:00:00:09\t-70\t0\t1\t0\tN\taudio-card\n", out) && out[0].icon == "audio-card");
+    assert(decode_device_list_reply(1, "02:00:00:00:00:09\t-70\t0\t1\t0\tN\ticon\tabc\t110b\t7\n", out));
+    assert(out[0].icon == "icon" && out[0].device_class == 0 && out[0].uuids == "110b" && !out[0].a2dp);
+    // more than ten fields, and a broken core field, are refused as before
+    assert(!decode_device_list_reply(1, "02:00:00:00:00:09\t-70\t0\t1\t0\tN\ti\t1\tu\t0\textra\n", out));
+    assert(!decode_device_list_reply(1, "02:00:00:00:00:09\t-70\t0\t1\t0\n", out));
+    assert(!decode_device_list_reply(1, "nonsense\t-70\t0\t1\t0\tN\ti\t1\tu\t0\n", out));
+
+    // the record reaches the C struct the legacy page keeps (copy_device_record)
+    assert(decode_device_list_reply(1, ten.substr(0, ten.find('\n') + 1), out));
+    cp0_bt_device_t c{};
+    settings_bluetooth::copy_device_record(out[0], c);
+    assert(std::string(c.icon) == "audio-headset" && c.cls == 0x240404u && c.a2dp == 1);
+    assert(std::string(c.uuids) == "1101,1108,110b,110c,110d,110e,111e,1200");
+}
+
 } // namespace
 
 int main()
 {
+    test_wire_audio_fields();
     test_filter_and_texts();
     test_prompt_rules();
     test_agent_session();

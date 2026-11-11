@@ -41,6 +41,8 @@ static cp0_app_board_t sample(void)
     b.sound_guess = 1;
     snprintf(b.requests, sizeof(b.requests), "hello,caps,toast,beep,volume,brightness,dim");
     snprintf(b.sound_note, sizeof(b.sound_note), "pair XWF-M18 in Bluetooth");
+    b.bt_hfp = -1; /* not probed: absent keys */
+    b.bt_le_audio = -1;
     return b;
 }
 
@@ -97,11 +99,45 @@ static void test_format_parse(void)
     sparse.backlight_steps = -1;
     sparse.sound = -1;
     sparse.sound_guess = -1;
+    sparse.bt_hfp = -1;
+    sparse.bt_le_audio = -1;
     CHECK(cp0_board_state_format(&sparse, text, sizeof(text)) > 0);
     CHECK(strcmp(text, "v=1\ngen=0\npid=5\n") == 0);
     CHECK(cp0_app_board_parse(text, strlen(text), &back) == 0);
     CHECK(back.ram_mb == -1 && back.battery == -1 && back.sound == -1 && back.sound_guess == -1 && back.board[0] == '\0');
     CHECK(back.backlight_steps == -1 && !cp0_app_board_has_request(&back, "beep"));
+    CHECK(back.bt_audio[0] == '\0' && back.bt_hfp == -1 && back.bt_le_audio == -1);
+    /* Bluetooth audio facts (2026-11-11): the stack, the adapter's Handsfree Audio Gateway, LE Audio (CIS); a launcher that
+     * did not probe them, or an older one, leaves the keys out */
+    cp0_app_board_t bt = sample();
+    snprintf(bt.bt_audio, sizeof(bt.bt_audio), "pipewire");
+    bt.bt_hfp = 1;
+    bt.bt_le_audio = 0;
+    CHECK(cp0_board_state_format(&bt, text, sizeof(text)) > 0);
+    CHECK(strstr(text, "sound_note=pair XWF-M18 in Bluetooth\nbt_audio=pipewire\nbt_hfp=1\nbt_le_audio=0\n"));
+    CHECK(cp0_app_board_parse(text, strlen(text), &back) == 0);
+    CHECK(strcmp(back.bt_audio, "pipewire") == 0 && back.bt_hfp == 1 && back.bt_le_audio == 0);
+    CHECK(back.sound == 1 && strcmp(back.sound_kind, "bluetooth") == 0); /* the keys before are unchanged */
+    const char *const stacks[] = {"pulseaudio", "bluealsa", "none"};
+    for (int i = 0; i < 3; i++) {
+        snprintf(bt.bt_audio, sizeof(bt.bt_audio), "%s", stacks[i]);
+        CHECK(cp0_board_state_format(&bt, text, sizeof(text)) > 0 && cp0_app_board_parse(text, strlen(text), &back) == 0);
+        CHECK(strcmp(back.bt_audio, stacks[i]) == 0);
+    }
+    const char *older = "v=1\ngen=2\npid=9\nsound=1\n"; /* no Bluetooth audio keys */
+    CHECK(cp0_app_board_parse(older, strlen(older), &back) == 0);
+    CHECK(back.bt_audio[0] == '\0' && back.bt_hfp == -1 && back.bt_le_audio == -1);
+    const char *junk = "v=1\nbt_hfp=2\nbt_le_audio=x\nbt_audio=waytoolongstackname\n"; /* out of range / too long: absent */
+    CHECK(cp0_app_board_parse(junk, strlen(junk), &back) == 0);
+    CHECK(back.bt_audio[0] == '\0' && back.bt_hfp == -1 && back.bt_le_audio == -1);
+    /* differs sees them */
+    cp0_app_board_t p = sample(), q = sample();
+    q.bt_hfp = 1;
+    CHECK(cp0_board_state_differs(&p, &q));
+    q = sample();
+    snprintf(q.bt_audio, sizeof(q.bt_audio), "none");
+    CHECK(cp0_board_state_differs(&p, &q));
+
     /* sound present on a board with no sound output is a "0", not an absent key */
     sparse.sound = 0;
     CHECK(cp0_board_state_format(&sparse, text, sizeof(text)) > 0 && strstr(text, "sound=0\n"));
