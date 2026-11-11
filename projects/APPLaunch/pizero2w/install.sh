@@ -21,7 +21,7 @@
 #                          README.md, "Pi 5 + HyperPixel 4: brightness levels"). Never done without this option
 #   --board NAME           use this board profile instead of detecting it (zero2w, pi3a-luckfox35,
 #                          pi3a-wsdsi43, pi3a-wsdsi43-portrait (PDA: never detected), pi4b-dsi, pi5-hyperpixel4,
-#                          hackberry-cm5)
+#                          pi5-dsi7, hackberry-cm5)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
 #   --dry-run              print the detected board, the session and what would be done, change nothing
 #   --plan                 the dry run as key=value lines for a program (Settings > Updates' helper,
@@ -71,7 +71,7 @@ while [ $# -gt 0 ]; do
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
         --pwm-backlight) PWM_BACKLIGHT=1; shift ;;
-        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
+        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, pi5-dsi7, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --plan) DRY=1; PLAN=1; shift ;;
@@ -231,7 +231,7 @@ print_facts() {
     echo "  backlight:${bl:- none}"
 }
 
-# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi3a-wsdsi43-portrait | pi4b-dsi | pi5-hyperpixel4 | hackberry-cm5
+# BOARD: zero2w | pi3a-luckfox35 | pi3a-wsdsi43 | pi3a-wsdsi43-portrait | pi4b-dsi | pi5-hyperpixel4 | pi5-dsi7 | hackberry-cm5
 # | pc-<model> | "" (unknown). pi3a-wsdsi43-portrait (the PDA profile, report 038) is the DSI panel turned to portrait:
 # chosen only with --board, never detected (the same panel is pi3a-wsdsi43 when detected).
 # PANEL_FB: the panel's framebuffer of a board with a profile (not the deck).
@@ -239,7 +239,7 @@ print_facts() {
 BOARD=""
 PANEL_FB=""
 BOARD_NOTE=""
-KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, hackberry-cm5"
+KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, pi5-dsi7, hackberry-cm5"
 # The panel of each profiled board: fbdev name prefix, buffer size (virtual_size), DRM connector and its mode.
 # The RP1 DPI fbdev ("drm-rp1-dpidrmf") is the panel's native buffer: portrait 480x800 for the HyperPixel 4 (the
 # launcher pre-rotates its 800x480 canvas 90 degrees), square 720x720 for the HackBerry (report 021, addenda 3, 4, 7).
@@ -249,11 +249,15 @@ KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-
 # dtoverlay=vc4-kms-dsi-waveshare-800x480; the generic vc4-kms-dsi-7inch also drives it, but it flickers).
 # The Pi 4 Model B takes the Freenove 5" DSI panel, same family: the same KMS fbdev 800x480 on a DSI connector (card1
 # there); its auto-detection also wants the panel's backlight regulator at i2c 10-0045 (rpi_panel_attiny_regulator).
+# The Pi 5 takes the same family of DSI panel (the official Raspberry Pi 7" Touch Display) on the RP1's DSI port: the
+# fbdev is "drm-rp1-dsidrmf" 800x480 32 bpp (the HyperPixel's is "drm-rp1-dpidrmf", so the two never overlap); its
+# auto-detection wants the 10-0045 regulator as well.
 panel_spec() {
     case "$1" in
         pi3a-luckfox35) echo "panel-mipi-dbi 320,480 SPI-* 320x480" ;;
         pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi) echo "vc4drmfb 800,480 DSI-* 800x480" ;;
         pi5-hyperpixel4) echo "drm-rp1-dpi 480,800 DPI-* 480x800" ;;
+        pi5-dsi7) echo "drm-rp1-dsi 800,480 DSI-* 800x480" ;;
         hackberry-cm5) echo "drm-rp1-dpi 720,720 DPI-* 720x720" ;;
     esac
 }
@@ -270,7 +274,7 @@ detect_panel() {
 if [ -n "$BOARD_ARG" ]; then
     case "$BOARD_ARG" in
         zero2w) BOARD=zero2w ;;
-        pi3a-luckfox35|pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-hyperpixel4|hackberry-cm5)
+        pi3a-luckfox35|pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-hyperpixel4|pi5-dsi7|hackberry-cm5)
             BOARD=$BOARD_ARG
             detect_panel "$BOARD" || true
             if [ -z "$PANEL_FB" ]; then
@@ -299,7 +303,11 @@ else
             fi ;;
         *"Raspberry Pi 4 Model B"*)
             if detect_panel pi4b-dsi && [ -d "$SYSROOT/sys/class/backlight/10-0045" ]; then BOARD=pi4b-dsi; else PANEL_FB=""; fi ;;
-        *"Raspberry Pi 5"*) detect_panel pi5-hyperpixel4 && BOARD=pi5-hyperpixel4 ;;
+        *"Raspberry Pi 5"*)
+            # the HyperPixel 4 (DPI fbdev) first; else the 7" DSI panel, which also wants its 10-0045 regulator
+            if detect_panel pi5-hyperpixel4; then BOARD=pi5-hyperpixel4
+            elif detect_panel pi5-dsi7 && [ -d "$SYSROOT/sys/class/backlight/10-0045" ]; then BOARD=pi5-dsi7
+            else PANEL_FB=""; fi ;;
         *"Compute Module 5"*) detect_panel hackberry-cm5 && BOARD=hackberry-cm5 ;;
     esac
 fi
@@ -524,7 +532,7 @@ if [ "$SESSION" = desktop ] && [ "$DESKTOP_REFUSED" = 0 ] && wireplumber_install
 # profile of every board at the next install (the old one kept as board.conf.bak). Its comments still name the user
 # service of v0.6.0 for that reason.
 # A backlight with levels (an APPLAUNCH_BACKLIGHT=sysfs: line) comes with its idle dim level written out: the
-# launcher's default 10 %, pi4b-dsi its own 20 (in its body). On/off and no backlight: no dim line (nothing to dim to).
+# launcher's default 10 %, pi4b-dsi and pi5-dsi7 their own 20 (in their bodies). On/off and no backlight: no dim line (nothing to dim to).
 dim_lines() {
     echo "# idle dim level, percent of the backlight: 1..100 (the launcher's default is 10)"
     echo "APPLAUNCH_DIM_PERCENT=$1"
@@ -642,6 +650,34 @@ APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0
 EOF
         ;;
+        # Pi 5 with the official 7" Touch Display on the RP1 DSI port: the values of the hand-written profile that works
+        # on the board (2026-11-11: home grid, touch and brightness checked by the owner). Same family as pi4b-dsi:
+        # landscape 800x480 fbdev, no rotation, touch (ft5x06 at i2c 10-0038) by capability in buffer orientation, the
+        # overlay's i2c regulator as backlight. Panel size: the display's 154x86 mm active area.
+        pi5-dsi7)
+            bl=$(dsi_backlight)
+            cat <<EOF
+APPLAUNCH_BOARD=pi5-dsi7
+APPLAUNCH_FB=$PANEL_FB
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+# landscape visible area in mm of the 7" panel (the official display's active area): the layout's density
+APPLAUNCH_PANEL_MM=154x86
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+EOF
+            if [ -n "$bl" ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; fi
+            cat <<EOF
+# idle dim level, percent of the backlight (default 10; raw 50/255 is dimmed but readable on this panel family)
+APPLAUNCH_DIM_PERCENT=20
+LV_LINUX_FBDEV_DEVICE=$PANEL_FB
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+        ;;
         # The two desktop boards: the values board.py's test-start used on them (tools/boards/boards.json, test_env).
         # Touch is already in buffer orientation (report 021, addendum 8). No APPLAUNCH_PANEL_MM yet: the panels'
         # size in mm is still to be measured (task 014), the layout service uses its default density meanwhile.
@@ -722,7 +758,8 @@ pc_backlight() {
     return 0
 }
 # The DSI panel's backlight device: the DSI overlay's regulator at i2c 10-0045 (seen on the Pi 3A+ with both
-# vc4-kms-dsi-waveshare-800x480 and vc4-kms-dsi-7inch, and on the Pi 4 B with the Freenove 5" panel), else
+# vc4-kms-dsi-waveshare-800x480 and vc4-kms-dsi-7inch, and on the Pi 4 B with the Freenove 5" panel, and on the Pi 5 with the
+# 7" Touch Display), else
 # the only backlight device there is; none or several: nothing (no APPLAUNCH_BACKLIGHT line, the launcher's default)
 dsi_backlight() {
     if [ -d "$SYSROOT/sys/class/backlight/10-0045" ]; then echo 10-0045; return 0; fi
