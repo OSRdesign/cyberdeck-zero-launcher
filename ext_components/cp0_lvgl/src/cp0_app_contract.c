@@ -459,6 +459,46 @@ static void status_line(const char *key, size_t key_len, const char *v, size_t l
         if (parse_int(v, len, 0, 9999, &n)) s->ssh = (int)n;
     } else if (key_is(key, key_len, "ssh_act")) {
         if (parse_int(v, len, 0, 1, &n)) s->ssh_act = (int)n;
+    } else if (key_is(key, key_len, "bt_audio_dev")) {
+        (void)copy_text(v, len, s->bt_audio_dev, sizeof(s->bt_audio_dev));
+    }
+}
+
+/* One entry of bt_audio_dev: "MAC:kind:connected[:profile[:...]]", entries separated by ';'. */
+int cp0_app_bt_audio_dev_get(const cp0_app_status_t *status, int index, cp0_app_bt_audio_dev_t *out)
+{
+    if (!out) return -1;
+    memset(out, 0, sizeof(*out));
+    if (!status || index < 0) return -1;
+    const char *p = status->bt_audio_dev;
+    for (;;) {
+        const char *end = strchr(p, ';');
+        const size_t len = end ? (size_t)(end - p) : strlen(p);
+        if (index == 0) {
+            char entry[96];
+            if (len == 0 || len >= sizeof(entry)) return -1;
+            memcpy(entry, p, len);
+            entry[len] = '\0';
+            char *fields[5] = {entry, NULL, NULL, NULL, NULL};
+            int count = 1;
+            for (char *q = entry; *q && count < 5; q++)
+                if (*q == ':') {
+                    *q = '\0';
+                    fields[count++] = q + 1;
+                }
+            if (count < 3 || strlen(fields[0]) >= sizeof(out->mac) || fields[1][0] == '\0' ||
+                strlen(fields[1]) >= sizeof(out->kind) || (strcmp(fields[2], "0") != 0 && strcmp(fields[2], "1") != 0))
+                return -1;
+            snprintf(out->mac, sizeof(out->mac), "%s", fields[0]);
+            snprintf(out->kind, sizeof(out->kind), "%s", fields[1]);
+            out->connected = fields[2][0] == '1';
+            if (count >= 4 && strlen(fields[3]) < sizeof(out->profile))
+                snprintf(out->profile, sizeof(out->profile), "%s", fields[3]);
+            return 0;
+        }
+        if (!end) return -1;
+        p = end + 1;
+        index--;
     }
 }
 
@@ -489,7 +529,7 @@ int cp0_app_status_load(const char *path, cp0_app_status_t *out)
         if (cp0_app_state_path(CP0_APP_STATUS_FILE, def, sizeof(def)) != 0) return cp0_app_status_parse(NULL, 0, out);
         path = def;
     }
-    char text[512];
+    char text[1024]; /* bt_audio_dev is the last key: a reader with a smaller buffer only loses that key */
     size_t len = 0;
     if (read_file(path, text, sizeof(text), &len) != 0) return cp0_app_status_parse(NULL, 0, out);
     return cp0_app_status_parse(text, len, out);
@@ -513,6 +553,8 @@ static void board_clear(cp0_app_board_t *b)
     b->backlight_steps = -1;
     b->sound = -1;
     b->sound_guess = -1;
+    b->bt_hfp = -1;
+    b->bt_le_audio = -1;
 }
 
 typedef struct {
@@ -561,6 +603,12 @@ static void board_line(const char *key, size_t key_len, const char *v, size_t le
         (void)copy_text(v, len, b->backlight_note, sizeof(b->backlight_note));
     } else if (key_is(key, key_len, "sound_note")) {
         (void)copy_text(v, len, b->sound_note, sizeof(b->sound_note));
+    } else if (key_is(key, key_len, "bt_audio")) {
+        (void)copy_text(v, len, b->bt_audio, sizeof(b->bt_audio));
+    } else if (key_is(key, key_len, "bt_hfp")) {
+        if (parse_int(v, len, 0, 1, &n)) b->bt_hfp = (int)n;
+    } else if (key_is(key, key_len, "bt_le_audio")) {
+        if (parse_int(v, len, 0, 1, &n)) b->bt_le_audio = (int)n;
     }
 }
 

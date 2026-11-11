@@ -64,6 +64,25 @@ static void test_path(void)
     CHECK(strcmp(app, "/tmp/applaunch-status.state") == 0);
 }
 
+/* the longest status file: every number at its widest and 8 audio devices of 35 bytes (the most bt_audio.cpp writes) */
+static cp0_app_status_t longest_for_audio(void)
+{
+    cp0_app_status_t l = sample();
+    l.gen = 4294967295u;
+    l.pid = 2147483647;
+    l.wifi_pct = 100;
+    l.battery = 100;
+    l.volume = 100;
+    l.brightness_pct = 100;
+    l.ssh = 9999;
+    l.ssh_act = 1;
+    char *at = l.bt_audio_dev;
+    for (int i = 0; i < 8; i++)
+        at += snprintf(at, sizeof(l.bt_audio_dev) - (size_t)(at - l.bt_audio_dev), "%sAA_BB_CC_DD_EE_%02X:headset:1:a2dp",
+                       i ? ";" : "", i);
+    return l;
+}
+
 static void test_format_parse(void)
 {
     char text[256];
@@ -119,7 +138,49 @@ static void test_format_parse(void)
     CHECK(cp0_app_status_parse(bad_ssh, strlen(bad_ssh), &back) == 0 && back.ssh == 0 && back.ssh_act == 0);
     const char *many = "v=1\nssh=16\nssh_act=1\n";
     CHECK(cp0_app_status_parse(many, strlen(many), &back) == 0 && back.ssh == 16 && back.ssh_act == 1);
-    /* the longest file still fits the writer's buffer (cp0_status_state_write: 320 bytes) */
+    /* Bluetooth audio devices (2026-11-11): bt_audio_dev= is the last key, absent when empty; entries are
+     * MAC:kind:connected[:profile] separated by ';' */
+    cp0_app_status_t audio = s;
+    CHECK(cp0_status_state_format(&audio, text, sizeof(text)) > 0 && !strstr(text, "bt_audio_dev"));
+    snprintf(audio.bt_audio_dev, sizeof(audio.bt_audio_dev),
+             "70_BF_92_53_6B_8B:headset:1:a2dp;9E_0C_81_E6_5D_1A:speaker:0;F8_66_5A_18_D3_69:headset:1:hfp");
+    char wide[768];
+    CHECK(cp0_status_state_format(&audio, wide, sizeof(wide)) > 0);
+    CHECK(strstr(wide, "ssh_act=0\nbt_audio_dev=70_BF_92_53_6B_8B:headset:1:a2dp;9E_0C_81_E6_5D_1A:speaker:0;F8_66_5A_18_D3_69:headset:1:hfp\n"));
+    CHECK(strcmp(wide + strlen(wide) - 4, "hfp\n") == 0); /* the last line */
+    CHECK(cp0_app_status_parse(wide, strlen(wide), &back) == 0);
+    CHECK(back.bt == CP0_APP_BT_CONNECTED && back.ssh == 0 && strcmp(back.bt_audio_dev, audio.bt_audio_dev) == 0);
+    cp0_app_bt_audio_dev_t dev;
+    CHECK(cp0_app_bt_audio_dev_get(&back, 0, &dev) == 0);
+    CHECK(strcmp(dev.mac, "70_BF_92_53_6B_8B") == 0 && strcmp(dev.kind, "headset") == 0 && dev.connected == 1 &&
+          strcmp(dev.profile, "a2dp") == 0);
+    CHECK(cp0_app_bt_audio_dev_get(&back, 1, &dev) == 0);
+    CHECK(strcmp(dev.mac, "9E_0C_81_E6_5D_1A") == 0 && strcmp(dev.kind, "speaker") == 0 && dev.connected == 0 &&
+          dev.profile[0] == '\0');
+    CHECK(cp0_app_bt_audio_dev_get(&back, 2, &dev) == 0 && strcmp(dev.profile, "hfp") == 0 && dev.connected == 1);
+    CHECK(cp0_app_bt_audio_dev_get(&back, 3, &dev) == -1 && dev.mac[0] == '\0');
+    CHECK(cp0_app_bt_audio_dev_get(&back, -1, &dev) == -1);
+    CHECK(cp0_app_bt_audio_dev_get(NULL, 0, &dev) == -1);
+    /* none: no entry; an older launcher's file: the same */
+    CHECK(cp0_app_status_parse(old_file, strlen(old_file), &back) == 0 && back.bt_audio_dev[0] == '\0');
+    CHECK(cp0_app_bt_audio_dev_get(&back, 0, &dev) == -1);
+    /* growth: fields appended to an entry, and a longer profile, are skipped; a broken entry is no device */
+    cp0_app_status_t grow;
+    const char *future = "v=1\nbt_audio_dev=AA_BB_CC_DD_EE_FF:headphones:0:a2dp:le:x;broken;11_22_33_44_55_66:speaker:1\n";
+    CHECK(cp0_app_status_parse(future, strlen(future), &grow) == 0);
+    CHECK(cp0_app_bt_audio_dev_get(&grow, 0, &dev) == 0 && strcmp(dev.kind, "headphones") == 0 && strcmp(dev.profile, "a2dp") == 0);
+    CHECK(cp0_app_bt_audio_dev_get(&grow, 1, &dev) == -1);
+    CHECK(cp0_app_bt_audio_dev_get(&grow, 2, &dev) == 0 && strcmp(dev.mac, "11_22_33_44_55_66") == 0 && dev.profile[0] == '\0');
+    /* a reader with the old 512-byte buffer loses only this key: the file is cut inside bt_audio_dev */
+    char cut[512];
+    memset(cut, 0, sizeof(cut));
+    memcpy(cut, wide, 200 < strlen(wide) ? 200 : strlen(wide));
+    CHECK(cp0_app_status_parse(cut, strlen(cut), &back) == 0 && back.wifi == 1 && back.battery == 64 && back.volume == 40);
+    /* the writer's text with the most devices (8) fits the 768-byte write buffer and a 512-byte reader's file */
+    cp0_app_status_t eight = longest_for_audio();
+    char eightText[768];
+    CHECK(cp0_status_state_format(&eight, eightText, sizeof(eightText)) > 0 && strlen(eightText) < 512);
+    /* the longest file still fits the writer's buffer (cp0_status_state_write: 768 bytes) */
     cp0_app_status_t longest = sample();
     longest.gen = 4294967295u;
     longest.pid = 2147483647;

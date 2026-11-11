@@ -36,6 +36,10 @@ void copy_device_record(const DeviceRecord &source, cp0_bt_device_t &target)
     target.connected = source.connected ? 1 : 0;
     target.paired = source.paired ? 1 : 0;
     target.trusted = source.trusted ? 1 : 0;
+    copy_text(target.icon, sizeof(target.icon), source.icon);
+    target.cls = source.device_class;
+    copy_text(target.uuids, sizeof(target.uuids), source.uuids);
+    target.a2dp = source.a2dp ? 1 : 0;
 }
 
 bool is_agent_authorization_method(std::string_view method)

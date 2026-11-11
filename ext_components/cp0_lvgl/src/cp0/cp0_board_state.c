@@ -68,7 +68,8 @@ int cp0_board_state_format(const cp0_app_board_t *b, char *buf, size_t size)
          put_text(buf, size, &at, "sound_kind", b->sound_kind) && put_int(buf, size, &at, "sound_guess", b->sound_guess) &&
          put_text(buf, size, &at, "requests", b->requests) && put_text(buf, size, &at, "battery_note", b->battery_note) &&
          put_text(buf, size, &at, "backlight_note", b->backlight_note) &&
-         put_text(buf, size, &at, "sound_note", b->sound_note);
+         put_text(buf, size, &at, "sound_note", b->sound_note) && put_text(buf, size, &at, "bt_audio", b->bt_audio) &&
+         put_int(buf, size, &at, "bt_hfp", b->bt_hfp) && put_int(buf, size, &at, "bt_le_audio", b->bt_le_audio);
     return ok ? (int)at : -1;
 }
 

@@ -37,6 +37,12 @@ int cp0_status_state_format(const cp0_app_status_t *state, char *buf, size_t siz
                            state->volume, state->mute ? 1 : 0, state->brightness_pct, state->ssh > 0 ? state->ssh : 0,
                            state->ssh > 0 && state->ssh_act ? 1 : 0);
     if (n < 0 || (size_t)n >= size) return -1;
+    /* last, after the keys older readers know: one with a small buffer then loses only this key */
+    if (state->bt_audio_dev[0]) {
+        const int m = snprintf(buf + n, size - (size_t)n, "bt_audio_dev=%s\n", state->bt_audio_dev);
+        if (m < 0 || (size_t)m >= size - (size_t)n) return -1;
+        return n + m;
+    }
     return n;
 }
 
@@ -46,7 +52,7 @@ int cp0_status_state_write(const char *path, const cp0_app_status_t *state)
         errno = EINVAL;
         return -1;
     }
-    char text[320];
+    char text[768];
     const int len = cp0_status_state_format(state, text, sizeof(text));
     if (len < 0) {
         errno = EOVERFLOW;

@@ -30,6 +30,21 @@ std::string requests_for(const cp0_app_board_t &board);
  * count). */
 std::string server_sink_kind(const char *short_sinks, int &guess);
 
+/* Bluetooth audio facts (read-only, nothing here changes anything).
+ *
+ * bt_audio_stack: which sound stack owns the BlueZ audio endpoints, from `pactl info` text (empty when pactl failed or
+ * is absent), whether a bluealsa daemon runs and whether a pipewire daemon runs: "pipewire" (the server says it runs
+ * on PipeWire, or there is no pulse server but pipewire runs), "pulseaudio" (a plain PulseAudio server), "bluealsa",
+ * "none". */
+std::string bt_audio_stack(const char *pactl_info, bool bluealsa_running, bool pipewire_running);
+
+/* True when `bluetoothctl show` text lists the adapter UUID 0000111f (Hands-free Audio Gateway). */
+bool bt_adapter_has_hfp(const char *bluetoothctl_show);
+
+/* True when `btmgmt info` text has cis-central or cis-peripheral in "supported settings" (the controller can carry LE
+ * Audio isochronous streams). Anything else, including unknown text: false. */
+bool bt_controller_has_cis(const char *btmgmt_info);
+
 /* MemTotal of /proc/meminfo text in MB, -1 when not found. */
 int meminfo_mb(const char *text);
 

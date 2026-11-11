@@ -221,7 +221,23 @@ typedef struct {
     int ssh;                     /* incoming SSH connections the launcher sees (the SSH indicator); 0 = none, Settings >
                                     System > SSH indicator Off, or an older launcher */
     int ssh_act;                 /* 1 = bytes moved on one in the launcher's last 2 s sample (the indicator blinks) */
+    char bt_audio_dev[320];      /* bt_audio_dev= raw: paired Bluetooth audio devices, "MAC:kind:connected[:profile];..."
+                                    ("" = none, Bluetooth off, or an older launcher); read it with
+                                    cp0_app_bt_audio_dev_get() */
 } cp0_app_status_t;
+
+/* One paired Bluetooth audio device of status.state's bt_audio_dev (read-only facts; the launcher does the pairing and
+ * never changes the default sound source or sink: select a device explicitly in the sound server). */
+typedef struct {
+    char mac[18];     /* "AA_BB_CC_DD_EE_FF" as published (underscores) */
+    char kind[12];    /* "headset" (has a microphone: Headset or Handsfree profile), "headphones", "speaker" */
+    int connected;    /* 1 = BlueZ says connected now */
+    char profile[8];  /* "a2dp" (music profile available), "hfp" (a headset with call profiles only), "" = not known */
+} cp0_app_bt_audio_dev_t;
+
+/* The `index`th (from 0) entry of status->bt_audio_dev. 0 and *out filled, or -1 (out cleared) when there is no such
+ * entry. Fields after the profile in an entry are skipped (the format grows by appending). */
+int cp0_app_bt_audio_dev_get(const cp0_app_status_t *status, int index, cp0_app_bt_audio_dev_t *out);
 
 /* Parses status.state text. 0 when it is a v=1 file, else -1 (out cleared). A missing key stays 0 (battery, volume and
  * brightness_pct -1, bt off, ssh and ssh_act 0).
@@ -250,6 +266,11 @@ typedef struct {
     int sound_guess;             /* 1: sound_kind "bluetooth" comes from the sink's name only */
     char requests[160];          /* the verbs launcher.sock answers on this board, comma separated */
     char battery_note[96], backlight_note[96], sound_note[96]; /* the board profile's hint text, for display only */
+    char bt_audio[12];           /* which sound stack owns the BlueZ audio endpoints: "pipewire", "pulseaudio",
+                                    "bluealsa", "none"; "" = not probed yet or an older launcher */
+    int bt_hfp;                  /* 1 = the adapter offers the Hands-free Audio Gateway (UUID 111f): call audio possible;
+                                    -1 = not probed or an older launcher */
+    int bt_le_audio;             /* 1 = the controller offers LE Audio (CIS); -1 = not probed or an older launcher */
 } cp0_app_board_t;
 
 /* Parses board.state text. 0 when it is a v=1 file, else -1 (out cleared, all fields absent). */

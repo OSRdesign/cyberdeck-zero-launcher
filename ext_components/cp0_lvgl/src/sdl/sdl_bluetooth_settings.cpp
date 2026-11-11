@@ -138,7 +138,10 @@ private:
                    << devices[index].rssi << '\t'
                    << devices[index].connected << '\t' << devices[index].paired << '\t'
                    << devices[index].trusted << '\t'
-                   << cp0::bluetooth::sanitize_wire_field(devices[index].name) << '\n';
+                   << cp0::bluetooth::sanitize_wire_field(devices[index].name) << '\t'
+                   << cp0::bluetooth::sanitize_wire_field(devices[index].icon) << '\t' << devices[index].cls << '\t'
+                   << cp0::bluetooth::sanitize_wire_field(devices[index].uuids) << '\t'
+                   << (devices[index].a2dp ? 1 : 0) << '\n';
         }
         return output.str();
     }
