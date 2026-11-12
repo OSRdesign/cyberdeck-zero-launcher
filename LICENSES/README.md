@@ -20,6 +20,11 @@ selection inventory is in [OPEN_SOURCE_COMPONENTS.md](../docs/OPEN_SOURCE_COMPON
 | stb_image-MIT-or-Unlicense.txt | The licence section at the end of ext_components/cp0_lvgl/third_party/stb/stb_image.h (v2.30; MIT or public domain) |
 | libv4l-host-copyright.txt | /usr/share/doc/libv4l-0t64/copyright on the audit host; reference only, not claimed to match CameraApp's target package version |
 | libv4l-1.32.0-copyright.txt | usr/share/doc/libv4l-0t64/copyright from Ubuntu libv4l-0t64_1.32.0-2ubuntu1_arm64.deb, matching CameraApp's libv4l-dev package version |
+| ../projects/APPLaunch/APPLaunch/share/font/DejaVu-LICENSE.txt | LICENSE of github.com/dejavu-fonts/dejavu-fonts at tag version_2_37 (`https://raw.githubusercontent.com/dejavu-fonts/dejavu-fonts/version_2_37/LICENSE`), identical to tag version_2_36; the shipped files are Sans 2.35 and Sans Mono / Serif 2.37, and the name table of DejaVuSans.ttf (licence record, name ID 13) begins with the same text |
+| ../projects/APPLaunch/APPLaunch/share/font/LiberationMono-LICENSE.txt | LICENSE of github.com/liberationfonts/liberation-fonts at tag 2.1.5 (`https://raw.githubusercontent.com/liberationfonts/liberation-fonts/2.1.5/LICENSE`); the shipped file is Liberation Mono 2.1.5 (name table: SIL OFL 1.1) |
+| ../projects/APPLaunch/APPLaunch/share/font/Montserrat-OFL.txt | OFL.txt of github.com/JulietaUla/Montserrat at tag v7.200 (`https://raw.githubusercontent.com/JulietaUla/Montserrat/v7.200/OFL.txt`), identical to the Montserrat OFL.txt in LVGL's `scripts/built_in_font/font_license/`; preceded by a short note of the copyright lines in the two shipped files (Medium 7.200, Bold 2.001). Upstream has no OFL.txt with the Bold file's 2011-2012 line |
+| ../projects/APPLaunch/APPLaunch/share/font/NotoSansCJK-OFL.txt | LICENSE.txt of github.com/adobe-fonts/source-han-sans at tag 2.004R (`https://raw.githubusercontent.com/adobe-fonts/source-han-sans/2.004R/LICENSE.txt`), the upstream design of Noto Sans CJK 2.004 and the copy that carries the copyright line 2014-2021 Adobe; the text after that line equals Sans/LICENSE of github.com/googlefonts/noto-cjk (`https://raw.githubusercontent.com/googlefonts/noto-cjk/main/Sans/LICENSE`), which has no copyright line |
+| ../projects/APPLaunch/APPLaunch/share/font/FontAwesome-LICENSE.txt | LICENSE.txt of github.com/FortAwesome/Font-Awesome at tag 5.9.0 (`https://raw.githubusercontent.com/FortAwesome/Font-Awesome/5.9.0/LICENSE.txt`), which only summarizes the licences; the full OFL 1.1 text is lines 33-117 of LICENSE.txt on the 6.x branch (`https://raw.githubusercontent.com/FortAwesome/Font-Awesome/6.x/LICENSE.txt`). Only the font file ships |
 | GPL-2.0.txt, LGPL-2.0.txt, LGPL-2.1.txt | Full standard texts from /usr/share/common-licenses/GPL-2, LGPL-2 and LGPL-2.1, referenced by the v4l-utils copyright record |
 
 The target libv4l copyright was fetched from
@@ -39,6 +44,10 @@ embedded metadata confirms the same Adobe copyright and OFL-1.1 license.
 
 Retain original per-file notices and any nested dependency licenses. Recheck
 these copies whenever dependency revisions change, especially unpinned downloads.
+
+JetBrainsMono-OFL.txt (next to the fonts) predates this table. The font licence files above are copied by `build.sh` into
+/usr/share/doc/cyberdeckzero-launcher/fonts/ because their names match `*OFL*` or `*LICENSE*`. Alibaba PuHuiTi, `svgfont.ttf` and
+`lockscreen.png` have no text: their licence is not established (see OPEN_SOURCE_COMPONENTS.md).
 
 Note of 2026-10-22 (report 029): the emulator, CameraApp, LaunchWizard (with Keyboard Guide), the stock
 Calculator submodule and the RadioLib, SmoothUI and Spdlog wrappers were removed from this repository. The texts

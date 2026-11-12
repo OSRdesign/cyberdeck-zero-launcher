@@ -26,21 +26,24 @@ Paths in the evidence column are relative to the repository root.
 
 ## Fonts, images and sounds of the launcher (`projects/APPLaunch/APPLaunch/share`)
 
-Installed under `/usr/share/APPLaunch/share/`. Only JetBrains Mono has its licence text in the repository; the
-licences below are the ones these font families are published under, to be checked against the exact files (version,
-vendor) before they are relied on. "To verify" means the source or the licence of the file is not recorded.
+Installed under `/usr/share/APPLaunch/share/`. Every font family below except Alibaba PuHuiTi and `svgfont.ttf` has its
+licence text in `share/font/` (named `*-OFL.txt` or `*-LICENSE.txt`, which `build.sh` copies into
+`/usr/share/doc/cyberdeckzero-launcher/fonts/`). The licence of each file was read from the file's own name table
+(copyright, licence description, version) and the text taken from the upstream repository at the matching tag; the
+source URLs are in [`LICENSES/README.md`](../LICENSES/README.md). "Not established" means the licence of the file could
+not be shown from the file or from an upstream source.
 
 | File(s) | Asset | Licence | Status |
 | --- | --- | --- | --- |
-| `font/JetBrainsMono-Regular.ttf`, `JetBrainsMono-Bold.ttf` | JetBrains Mono | SIL OFL 1.1, [text shipped](../projects/APPLaunch/APPLaunch/share/font/JetBrainsMono-OFL.txt) | recorded |
-| `font/DejaVuSans.ttf`, `DejaVuSansMono.ttf`, `DejaVuSerif.ttf` | DejaVu fonts (<https://dejavu-fonts.github.io/>) | Bitstream Vera Fonts licence (DejaVu changes in the public domain), plus the Arev licence for some glyphs | licence text not in the repo; to add |
-| `font/LiberationMono-Regular.ttf` | Liberation Mono | SIL OFL 1.1 for Liberation 2.x; GPL-2.0 with a font exception for 1.x | version to verify; licence text not in the repo |
-| `font/Montserrat-Medium.ttf`, `Montserrat-Bold.ttf` | Montserrat (<https://github.com/JulietaUla/Montserrat>) | SIL OFL 1.1 | licence text not in the repo; to add |
-| `font/NotoSansCJK-Regular.ttc` | Noto Sans CJK (<https://github.com/notofonts/noto-cjk>) | SIL OFL 1.1 | licence text not in the repo; to add |
-| `font/AlibabaPuHuiTi-3-55-Regular.ttf` | Alibaba PuHuiTi 3.0 | Alibaba's own free-use licence (not an open-source licence) | terms and redistribution to verify |
-| `font/FontAwesome5-Solid+Brands+Regular.woff` | Font Awesome 5 Free (<https://fontawesome.com/>) | font files SIL OFL 1.1, icons CC BY 4.0 (brand icons are trademarks of their owners) | licence text not in the repo; to add |
-| `font/svgfont.ttf` | unknown icon font | unknown | source and licence to verify |
-| `images/lockscreen.png` | lock-screen wallpaper | unknown | source and licence to verify |
+| `font/JetBrainsMono-Regular.ttf`, `JetBrainsMono-Bold.ttf` | JetBrains Mono | SIL OFL 1.1 (version 2.304), [text shipped](../projects/APPLaunch/APPLaunch/share/font/JetBrainsMono-OFL.txt) | recorded |
+| `font/DejaVuSans.ttf`, `DejaVuSansMono.ttf`, `DejaVuSerif.ttf` | DejaVu fonts (<https://dejavu-fonts.github.io/>) | Bitstream Vera Fonts licence (DejaVu changes in the public domain), plus the Arev licence for some glyphs (Sans 2.35, Sans Mono and Serif 2.37), [text shipped](../projects/APPLaunch/APPLaunch/share/font/DejaVu-LICENSE.txt) | recorded |
+| `font/LiberationMono-Regular.ttf` | Liberation Mono | SIL OFL 1.1 (the file is version 2.1.5; the 1.x releases were GPL-2.0 with a font exception, not shipped), [text shipped](../projects/APPLaunch/APPLaunch/share/font/LiberationMono-LICENSE.txt) | recorded |
+| `font/Montserrat-Medium.ttf`, `Montserrat-Bold.ttf` | Montserrat (<https://github.com/JulietaUla/Montserrat>) | SIL OFL 1.1 (Medium is version 7.200, Bold is version 2.001 with an older copyright notice), [text shipped](../projects/APPLaunch/APPLaunch/share/font/Montserrat-OFL.txt); also covers the Montserrat glyphs of LVGL's built-in `lv_font_montserrat_*` fonts compiled into the launcher | recorded |
+| `font/NotoSansCJK-Regular.ttc` | Noto Sans CJK (<https://github.com/notofonts/noto-cjk>) | SIL OFL 1.1 (version 2.004, Copyright 2014-2021 Adobe, Reserved Font Name 'Source'), [text shipped](../projects/APPLaunch/APPLaunch/share/font/NotoSansCJK-OFL.txt) | recorded |
+| `font/AlibabaPuHuiTi-3-55-Regular.ttf` | Alibaba PuHuiTi 3.0 | Copyright 2020-2023 Alibaba (China) Co., Ltd. (file version 3.01); the file carries no licence text or URL, and no official licence text could be fetched | **not established**: the terms and the right to redistribute the file in a bundle are not shown; owner decision (see the pull request that added the texts) |
+| `font/FontAwesome5-Solid+Brands+Regular.woff` | Font Awesome 5 Free (<https://fontawesome.com/>) | Font Awesome 5.9.0: the font file is SIL OFL 1.1; the CC BY 4.0 icons (SVG/JS) and the MIT code are not part of the bundle (brand icons are trademarks of their owners), [text shipped](../projects/APPLaunch/APPLaunch/share/font/FontAwesome-LICENSE.txt) | recorded |
+| `font/svgfont.ttf` | icon font "svgfont", 10 glyphs (exit, fast_forward, fast_rewind, list, pause, play, record, sample_rate, speed, stop); generated by svg2ttf from a Fontello project; no copyright or licence in the file; no code names it (report 029) | **not established**: Fontello fonts take the licences of the glyph sets they were built from, and those are not recorded; first added in this history by the upstream launcher author on 2026-06-11 (commit 45535b0f, Compass app assets) |
+| `images/lockscreen.png` | lock-screen wallpaper (PNG, 320x150, no metadata); added upstream by the M5Stack launcher author in 2026-09 (commits 72fcc076, 21dcb17e) | no source or licence recorded | **not established**: the image carries no author or licence, so only the root MIT licence of the upstream launcher can be presumed; owner decision (replace it or find the source) |
 | `images/logo_lcd.png` | upstream start-up logo (M5Stack logo, a trademark of its owner) | not ours to use as a brand | never in our bundles (report 025); removed from the repository (report 029) |
 | other `images/*.png` (app icons, carousel parts) | upstream launcher assets | presumably the root MIT licence of the upstream launcher | source to verify |
 | `audio/Ding2.wav`, `enter.wav`, `key_back.wav`, `key_enter.wav`, `shutdown.wav`, `switch.wav`, `blocked.mp3`, `lock.mp3`, `select.mp3`, `startup.mp3`, `unlock.mp3` | system sounds | unknown | source and licence to verify |
