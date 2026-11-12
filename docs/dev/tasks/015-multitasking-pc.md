@@ -1,6 +1,8 @@
 # 015 - Multitasking P-c: touch (slot tracker, three-finger hold G1, status strip long-press G2)
 
-Status: built 2026-10-20 on branch `multitasking-pc`, on `main` 4086c1a (P-b squash-merged from PR #63, build
+Status (updated 2026-11-12): done. Multitasking P-a to P-e were released in v0.8.0 (PRs #63 to #67, 2026-10-21; see `docs/dev/ROADMAP.md`).
+
+Status when written: built 2026-10-20 on branch `multitasking-pc`, on `main` 4086c1a (P-b squash-merged from PR #63, build
 0.8.0-pb.4); verified on the PC (section 11); board tests pending. Test build 0.8.0-pc.1.
 Study: [`reports/026-multitasking-study.md`](../reports/026-multitasking-study.md) (sections 1.3, 2.1, 5.1-5.3, 7.1,
 7.3, 10; owner decisions D2, D3, D12, D13 of 2026-10-14). P-b, the launcher core it builds on:

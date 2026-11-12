@@ -1,6 +1,8 @@
 # 011 - Mesh Hop: test fixes and the feature roadmap (draft brief)
 
-Status: DRAFT 2026-10-07, waiting for the user's decisions at the end. Builds on task 010 (phase 1 delivered as mesh-hop
+Status (updated 2026-11-12): the owner's decisions were taken and the work followed in the apps repo (Mesh Hop 0.8.3 is in the registry, 2026-11-07; reports 013 to 019, 033, 036). Which items of this brief are still open was not re-checked here; the Mesh Hop README in the apps repo is the current list.
+
+Status when written: DRAFT 2026-10-07, waiting for the user's decisions at the end. Builds on task 010 (phase 1 delivered as mesh-hop
 0.1.0, report 013). Inputs: the user's first deck test (`reports/013-user-feedback.md`), the user's feature picks and the
 protocol feasibility pass (`reports/014-feasibility.md`, the source for every protocol statement below).
 Owner: apps-dev. Verifier: deck-verifier or the Controller-led protocol (the user tests on the deck). Docs: docs-writer after acceptance.

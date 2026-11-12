@@ -14,6 +14,14 @@ AGC controls instead of forcing AGC off. Probe P0 ran on the zero8 and the HackB
 results" after section 1; the UI direction chosen is in "UI direction". The rest of the study text is kept as written,
 with notes where P0 changed it.
 
+**Outcome (2026-11-12).** Cassette was built (task 016, [`../tasks/016-cassette-recorder.md`](../tasks/016-cassette-recorder.md)) and published: 0.1.0 and 0.2.0 on 2026-11-11, 0.3.0 on 2026-11-12 (apps repo `apps/cassette`). Where the delivered app differs from the decisions of section 1:
+- D4 (compressed options, planned for 0.2): FLAC and Ogg Opus takes shipped already in 0.1.0.
+- D17 (software monitoring "later"): a live software monitor shipped in 0.1.0.
+- D8 and D9 (ALSA direct; the sound server only as a fallback): 0.3.0 added Bluetooth record, play and monitor through the sound server with libpulse (`Depends: libpulse0`), beyond the ALSA-direct plan. The ALSA-direct path for cards stays.
+- D19 (screen sizes): shipped as 480x320 and 320x480 minimum layouts plus a square layout for 720x720 and 480x480.
+- D10 (no background recording): unchanged, not done.
+- Not checked here: D1-D3, D5-D7, D11-D16 and D18 were not compared with the code for this note; the app README in the apps repo is the reference.
+
 **What I read.**
 - Launcher `github/main` @ `28817a50` (2026-11-07): reports 054, 056 and 057 (format; 057 from branch `study-reticulum`),
   report 035 (board facts and launcher requests), `docs/APP-CONTRACT.md` (sections 5c, 13, 14),

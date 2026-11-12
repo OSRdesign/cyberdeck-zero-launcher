@@ -1,6 +1,8 @@
 # 015 - Multitasking P-d: the switcher screen, the legacy app sheet, the grid's dots, the first-run hint
 
-Status: built 2026-10-21 on branch `multitasking-pd`, on `main` 8c08509 (P-b #63 and P-c #64 merged); verified on the
+Status (updated 2026-11-12): done. Multitasking P-a to P-e were released in v0.8.0 (PRs #63 to #67, 2026-10-21; see `docs/dev/ROADMAP.md`).
+
+Status when written: built 2026-10-21 on branch `multitasking-pd`, on `main` 8c08509 (P-b #63 and P-c #64 merged); verified on the
 PC (section 9); board tests pending. Test build 0.8.0-pd.2.
 Study: [`reports/026-multitasking-study.md`](../reports/026-multitasking-study.md) (sections 5.2, 6.1-6.3; owner
 decisions D6-D9, D12, D15). Builds on P-b ([`015-multitasking-pb.md`](015-multitasking-pb.md): lifecycle, hide /

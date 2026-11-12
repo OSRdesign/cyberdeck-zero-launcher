@@ -1,6 +1,8 @@
 # 012 - Launcher 0.5.0 (brief)
 
-Status: draft, 2026-10-10. Owner: Controller. Builder: launcher-dev. Verifier: deck-verifier (user runs physical tests).
+Status (updated 2026-11-12): done, released as v0.5.0 (PR #23, 2026-10-10; see `docs/dev/ROADMAP.md`). The follow-on work is task 013 and task 014.
+
+Status when written: draft, 2026-10-10. Owner: Controller. Builder: launcher-dev. Verifier: deck-verifier (user runs physical tests).
 Base: launcher v0.4.0 (main). Flow per ROLES.md: short-lived branch -> commit (OSRdesign, trailer) -> PR -> merge only on the user's word.
 
 0.5.0 is a theme release. The first theme is the fallback on-screen keyboard. More features are still being evaluated and will be added below as separate numbered items; each gets its own evaluation report before it enters the build list.

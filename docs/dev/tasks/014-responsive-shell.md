@@ -1,6 +1,8 @@
 # 014 - Responsive shell, native Settings, on-screen keyboard (brief)
 
-Status: decisions approved 2026-10-10. Study and evidence: `reports/022-responsive-shell-study.md` (read it before any phase; it holds the code inventory, the framework design, the render harness design, the phase table and effort). Builds on 012 (F1 keyboard, F2 multi-board) and 013 (Pi 3A+ bring-up, T1-T4 done, phase 0 keyboards done).
+Status (updated 2026-11-12): done, released as v0.6.0 (phases P1 to P5 and P4b, PRs #24 to #38, 2026-10-12; see `docs/dev/ROADMAP.md`).
+
+Status when written: decisions approved 2026-10-10. Study and evidence: `reports/022-responsive-shell-study.md` (read it before any phase; it holds the code inventory, the framework design, the render harness design, the phase table and effort). Builds on 012 (F1 keyboard, F2 multi-board) and 013 (Pi 3A+ bring-up, T1-T4 done, phase 0 keyboards done).
 
 ## Decisions (user)
 - **Option B:** one code base, a layout layer places and sizes elements for the logical screen (480x320 up to 1280x720 and square 720x720). Landscape logical canvases only; **portrait not supported (D12)**, the display backend rotates portrait-native panels.
