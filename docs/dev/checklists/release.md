@@ -70,6 +70,15 @@ run by default).
    `git ls-remote --tags github vX.Y.Z` shows two lines (the tag object and `vX.Y.Z^{}`): one line means a
    lightweight tag. Update `ROADMAP.md` and the project notes.
 
+## App publishes (apps repo)
+
+An app is published by its own pull request in the apps repo (its `docs/PUBLISHING.md`), not by a launcher release. Its
+gate (owner decision of 2026-11-12, `decisions.md`): the [`app-design-qa`](../agents/app-design-qa.md) verdict for the
+package being published (the same version and source commit) is **READY**, or every FAIL left in it carries the owner's
+written waiver, the owner's words and their date recorded in the QA report
+([`app-design.md`](app-design.md)). A BLOCKED verdict stops the publish. The audit of the apps already published is a
+separate task.
+
 ## Release notes rules
 
 `projects/APPLaunch/tests/test_settings_update_model.cpp` (the `app-unit` step of `tools/dev/check-all.sh`) reads every
