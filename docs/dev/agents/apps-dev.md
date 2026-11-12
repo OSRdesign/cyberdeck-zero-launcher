@@ -22,6 +22,9 @@ Rules:
   `cp0::ui::status_strip_left`; `docs/cp0_lvgl.en.md`). Never copy the strip, the widgets or `cp0_statusbar.[ch]` into
   an LVGL app and never draw your own clock or icons. Only non-LVGL apps keep a `cp0_statusbar` copy, checked by
   `docs/dev/deck/check_statusbar_drift.py`.
+- Design QA: go through `docs/dev/checklists/app-design.md`, render the scene set of `checklists/app-design-scenes.md`
+  and fix every FAIL before the hand-off; `app-design-qa` reviews it, and a publish needs its READY verdict or the owner's
+  written waiver.
 - Builds run in WSL under the shared build lock (`flock`, see DEV-GUIDE). Never run two scons builds at once.
 - The Pi password is only in the `PIPW` environment variable; never write it in any file, commit or report.
 - Do not commit, push, release, or change the Pi's boot configuration. Do not deploy: hand off to the Controller, who deploys and
