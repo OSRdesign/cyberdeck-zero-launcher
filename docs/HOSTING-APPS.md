@@ -8,13 +8,17 @@ under **Settings > Apps > Available**, where each one installs with Enter or a t
 Settings > Apps is meant for **your own** (sideloaded) sources. The CardputerZero Hub catalogue is not shown there
 (its apps are 320x170 keyboard apps; the Store screen that lists them is on the `small-screen` branch only).
 
-**The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (Home
-Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial Console,
-System Monitor, viz1090) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
+**The project's apps come pre-added.** A fresh install (`install.sh`) adds `OSRdesign/cyberdeck-zero-apps` (14 apps:
+Cassette, Deck Atlas, Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, mmWave Radar, Net Toolbox,
+Net Walk, RSS Reader, Serial Console, System Monitor, viz1090) once, and only for a user who has no source yet, then syncs it: Settings > Apps >
 Available lists its apps without typing anything. It is an ordinary source: switch it off or remove it in Sources, and
 the next `install.sh` leaves it that way; a list with sources of your own is never changed. Installed while offline, it
 shows the next time Settings > Apps opens with a network (or after Sources > Sync my sources). Details:
 `projects/APPLaunch/pizero2w/README.md`, "Default app source".
+
+The three newest, by their `summary` in the apps repository: **Cassette**, "A tape-deck sound recorder: WAV, FLAC, Opus, USB and
+Bluetooth headsets."; **Deck Atlas**, "Offline maps on the deck: your MBTiles, PMTiles and tile folders."; **mmWave Radar**, "See
+people move: a viewer for the Hi-Link LD2452 and LD2451 radars."
 
 Since v0.9.0 main has no **Store** tile and no Store switch in Settings > Launcher: the Store program stays in the
 bundle as the back end of Settings > Apps, with no screen of its own. The Store screen and the 320x170 apps live on
@@ -28,8 +32,8 @@ The complete, step by step guide, the build tools and a working example live in 
 
 1. Create a **public** GitHub repository (default branch `main`) from the template.
 2. Build your app as an **aarch64 Linux executable**. A new app is a native full-screen app built from
-   `apps/cyberdeck-app-template` of the apps repo on `cp0_lvgl`, for 640x480 and up (`X-MinSize=640x480`); its
-   `docs/APP-GUIDELINES.md` gives the rules. Any other program that runs on the Pi works too; the older apps draw a
+   `apps/cyberdeck-app-template` of the apps repo on `cp0_lvgl`, for the screens it supports (it declares its own
+   minimum, `X-MinSize`; see "Full-screen apps" below); its `docs/APP-GUIDELINES.md` gives the rules. Any other program that runs on the Pi works too; the older apps draw a
    320x170 picture that the launcher scales into its window.
 3. Describe it in `apps/<id>/app.json` (name, version, description) and lay its files out in
    `apps/<id>/root/` exactly as they must be on the device. **The descriptor rule** (every app): a `summary` of one
@@ -200,9 +204,10 @@ should take its size, rotation, depth and framebuffer from the app contract (nex
 them. If it really needs a minimum size, add `X-MinSize=WxH` (logical pixels, for example `X-MinSize=640x480`): on a
 smaller screen the launcher hides its tile, and Settings > Apps > Available leaves it out through the registry's
 `min_size` (above). An older launcher
-ignores the key, so the app must still start there and say that the screen is too small. New native (LVGL) apps
-declare `X-MinSize=640x480` by default (decision of 2026-10-13): they are hidden on the Pi 3A+ with its 480x320 SPI panel, while
-text-mode apps (`Terminal=true`) may still run there.
+ignores the key, so the app must still start there and say that the screen is too small. There is no global minimum screen size: each
+app declares what its own layout needs (decision of 2026-11-12, apps repo PR #150). Of the 14 apps of the project's registry, five
+declare `480x320` (Cassette, Deck Atlas, Home Assistant, mmWave Radar, Net Walk) and the rest `640x480`. A tile is hidden only
+where the screen is smaller than the app's own value; text-mode apps (`Terminal=true`) may still run on any screen.
 
 ## Responsive apps (the app contract)
 

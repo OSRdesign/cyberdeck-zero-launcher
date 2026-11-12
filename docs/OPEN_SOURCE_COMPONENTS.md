@@ -1,6 +1,6 @@
 # Open-source and third-party components
 
-Inventory checked against this checkout on 2026-09-09, updated 2026-10-22 when the upstream code we do not use was removed (report 029, section "Removed on 2026-10-22" below). Build references distinguish linked dependencies from optional SDK downloads; this is not a binary SBOM. M5Stack SPDX headers and the root MIT license apply to M5Stack-authored code, without replacing upstream, font or submodule notices.
+Inventory checked against this checkout on 2026-09-09, updated 2026-10-22 when the upstream code we do not use was removed (report 029, section "Removed on 2026-10-22" below), and again in 2026-11 (the stb, SQLite, libcurl and map rows, and the programs the launcher runs). Build references distinguish linked dependencies from optional SDK downloads; this is not a binary SBOM. M5Stack SPDX headers and the root MIT license apply to M5Stack-authored code, without replacing upstream, font or submodule notices.
 
 ## Project code
 
@@ -16,7 +16,7 @@ Paths in the evidence column are relative to the repository root.
 | LVGL 9.5 | SDK LVGL component, APPLaunch `lv_freetype*` and `lv_sdl_keyboard.c` overrides | [MIT](../LICENSES/LVGL-MIT.txt); bundled sublibraries retain their own notices |
 | FreeType | APPLaunch `main/lvgl/ftmodule.h` and `main/SConstruct` | FTL or GPL-2.0; [FTL text](../projects/APPLaunch/main/lvgl/freetype-LICENSE.txt) |
 | miniaudio 0.11.25 | `ext_components/Miniaudio/include/miniaudio.h`; audio service | [Unlicense OR MIT-0](../ext_components/Miniaudio/LICENSE), David Reid |
-| sigslot | `ext_components/Sigslot/SConstruct`, pinned commit `b588b791b9cf7eb17ff0a74d8aebd4a61166c2e1`; used by apps that build against this tree (LAN Scan) | [MIT](../ext_components/Sigslot/LICENSE) |
+| sigslot | `ext_components/Sigslot/SConstruct`, pinned commit `b588b791b9cf7eb17ff0a74d8aebd4a61166c2e1`; used by apps that build against this tree (LAN Scan, an app of the `small-screen` branch only) | [MIT](../ext_components/Sigslot/LICENSE) |
 | eventpp | cp0_lvgl, APPLaunch and AppStore requirements; SDK eventpp component | [Apache-2.0](../LICENSES/eventpp-Apache-2.0.txt) |
 | libhv | AppStore `main/SConstruct` requirement `hv` | [BSD-3-Clause](../LICENSES/libhv-BSD-3-Clause.txt) |
 | fmt | `SDK/components/utilities/SConstruct`, `party/fmt` | [MIT with optional compiled-object exception](../LICENSES/fmt-MIT.txt) |
@@ -76,6 +76,7 @@ Component SConstruct files and application SConstruct/CMake files resolve these 
 | IEEE OUI registry (data) | Vendor names in the LAN Scan and Wi-Fi Survey apps (apps repo, `share/<app>/oui.tsv`), from <https://standards-oui.ieee.org/> | Public registry published by the IEEE; credited in each package's `copyright` file |
 | MeshCore protocol and firmware (data format only) | Mesh Hop app (apps repo): talks the MeshCore companion protocol over USB serial; written from the protocol docs and meshcore_py as a reference, radio presets from `api.meshcore.nz`; no launcher code involved | MeshCore: MIT (Scott Powell / rippleradios.com); meshcore_py: MIT (Florent de Lamotte); GPL clients (wadamesh, Meshy) not used as code; credited in the package's `copyright` file |
 | FreeType; Montserrat Medium, Font Awesome 5 Free (fonts) | Status bar of the Pi port (cp0_statusbar), shared with full-screen apps | FreeType FTL/GPL-2.0; fonts SIL OFL 1.1; Font Awesome icons CC BY 4.0 |
+| Programs the launcher runs, never linked or shipped: `pactl` (pulseaudio-utils or pipewire-pulse), `amixer` (alsa-utils), `bluetoothctl` and `btmgmt` (bluez) | Sound output and volume, and the Bluetooth audio facts of `board.state` (`board_facts.cpp`, `cp0_capabilities`); each is optional and its absence only leaves the fact out | Per package: pulseaudio-utils LGPL-2.1-or-later, alsa-utils GPL-2.0-or-later, bluez GPL-2.0-or-later; the packages of the system, not ours |
 | libcrypt, libc, libstdc++ | Account setup and runtime | Package-specific LGPL/GPL with runtime exceptions |
 | SQLite (`libsqlite3.so.0`, Debian package `libsqlite3-0`) | MBTiles tile archives in the map engine of cp0_lvgl (`CONFIG_CP0_LVGL_MAP`, off by default): loaded at run time with `dlopen`, never linked, no header needed to build (`src/map/cp0_map_sqlite.c`); apps that enable the engine list `libsqlite3-0` in their `depends` | Public domain (<https://sqlite.org/copyright.html>) |
 | PMTiles v3 specification (format only) | The map engine's own PMTiles reader, written from the specification (no reference code used); the tests' fixtures `tests/fixtures/map/ref_*.pmtiles` were written with the reference `pmtiles` Python package (BSD-3-Clause, Protomaps), which is not shipped | Specification CC0; reference implementations BSD-3-Clause |
