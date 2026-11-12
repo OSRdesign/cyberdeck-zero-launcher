@@ -1,5 +1,7 @@
 # 056 - mmWave: an app for the Hi-Link HLK-LD2452 tracking radar (study and probe)
 
+Status: study of 2026-11-06; outcome (2026-11-12): the app was built and published as mmWave Radar 0.1.0 (2026-11-07) and 0.1.1 (2026-11-08), see the last section, "Outcome: what was built".
+
 Date 2026-11-06. Study plus a probe of the real sensor from the owner's Windows PC: no product code, no board touched,
 nothing built or installed on a board. The owner's sensor is an HLK-LD2452 (24 GHz multi-target tracking radar,
 UART) on a CH340 USB-serial board (`VID_1A86 PID_7523`, COM6 on the PC). This report gives the protocol facts, what the
@@ -592,3 +594,35 @@ Read 2026-11-06.
   `apps/serial-console/src/core/{ports,probe,identify}.hpp`, `probe.cpp`, `serial_io.cpp`, `tty_speed.cpp`,
   `apps/viz1090/src/core/gps.{hpp,cpp}`, `docs/APP-GUIDELINES.md`); launcher `github/main` @ `d06faf54`
   (`docs/APP-CONTRACT.md`, `docs/dev/reports/054-offline-maps-wardriving-study.md`).
+
+## Outcome: what was built (2026-11-12)
+
+The study led to the app **mmWave Radar** (package `mmwave-radar`, category Tools), published as 0.1.0 on 2026-11-07
+(apps PR #132) and 0.1.1 on 2026-11-08 (apps PR #135); the README with screenshots followed in apps PR #139. Facts below
+are read from the apps repo on `origin/main` (commit 906cbf7): `README.md`, `app.json`, the `.desktop` file and
+`src/core/` (`settings.hpp`, `detect.cpp`, `units.hpp`, `port_sys.cpp`). The "Source" column names the file. No
+decision is marked "not recorded": each could be established from the code or the README.
+
+| No. | Decision | Recommendation in this report | What was shipped | Source |
+| --- | --- | --- | --- | --- |
+| D1 | Name, app id | "mmWave", `mmwave` | Name "mmWave Radar", id and package `mmwave-radar` (the second option of the report, with a longer name); category Tools | `app.json`, `.desktop` (`Name=mmWave Radar`) |
+| D2 | Commands in 0.1 | (a) listen-only | (a), kept for the whole app: the serial port layer has no write call, so nothing is ever written to a port, not even the enable/end handshake. Over Bluetooth the only thing sent is the standard notification subscription | `README.md` (Listen only, Finding the radar) |
+| D3 | Port scan scope | Bridge chips automatically, native microcontroller USB only when picked | Every `ttyUSB*` and `ttyACM*` port, not only bridge chips: a port another app holds is skipped as busy and never opened; each other port is opened and listened to (three valid frames in a row make it the radar; GPS receivers, an LD2410, text and silence are named and left alone); the port is remembered by its USB identity | `README.md` (Finding the radar), `core/detect.cpp`, `core/port_sys.cpp` |
+| D4 | GPIO UART (`/dev/serial0`) | Only when turned on in the app | Not offered at all: the app looks at `ttyUSB*` and `ttyACM*` only, there is no setting for the GPIO UART ("no GPIO UART in 0.1") | `README.md` (Finding the radar) |
+| D5 | Units | m (2 decimals) and m/s (1 decimal), km/h as a setting | Setting Units: Metres (m with 2 decimals and km/h with 1 decimal, the default) or Millimetres (the sensor's raw mm and cm/s). m/s is not offered; the Table page always shows the raw units | `core/units.hpp`, `core/settings.hpp`, `README.md` (Sensor page) |
+| D6 | Left/right | A flip setting, default from the owner's check | Setting Orientation: Normal (default), Mirror (left and right swapped), Rotate 180. The sign of x is taken as the sensor sends it, and the README tells the user to choose Mirror if a step to the right moves the dot left; the Normal view follows the owner's mounting (sensor on the deck facing away from the screen). An earlier `flip_angle` key is ignored silently | `core/settings.hpp`, `README.md` (Known limits, Orientation) |
+| D7 | Hidden behaviour | `X-Background=freeze` | Not declared: the app has no `X-Background` and never answers the launcher's lifecycle protocol. If the launcher freezes it, it keeps its port (and a Bluetooth radar stays connected) and resumes at once; `freeze` is noted as possible later | `.desktop` (no `X-Background`), `README.md` (Multitasking) |
+| D8 | Writing settings | A later phase, LD2450 only, after the owner's word | Never: no sensor setting is read or changed and no command is sent | `README.md` (Listen only) |
+| D9 | LD2410 | Name it in 0.1, a view in 0.2 if wanted | Named only: the LD2410 is recognised by listening and named in the scan ("not a supported radar"), never read or shown; it exists as a stub driver and a fixed Sensor type does not look for it | `README.md` (Not supported), `core/ld2410.hpp` (stub driver) |
+
+### Shipped beyond the report
+
+- **Held targets.** A target that stays byte-identical for 3 s is dimmed and marked `held`; the setting "Hide held
+  targets" (Sensor page, default Off) neither draws nor lists them, and the status line then counts `N held`. The report
+  did not foresee this: the owner's LD2452 keeps reporting a person at rest with the same numbers for seconds.
+- **A second sensor and Bluetooth.** An LD2451 driver and a Sensor type setting (Auto or a fixed driver), so the app is a
+  viewer for the LD2450, LD2452 and LD2451; the LD2451 also over Bluetooth LE through BlueZ (setting Connection: USB,
+  Bluetooth or Auto; BlueZ is only recommended, the app works over USB without it).
+- **Sizes.** `.desktop` `X-MinSize=480x320`, `X-Portrait=320x480`, `X-Fullscreen=true`; layouts from 480x320 and 320x480
+  up to 480x800 and 1280x800, with a tall Radar page where the room allows.
+- **Screens and pages.** Radar, Table, Graph (30 s) and Sensor pages.
