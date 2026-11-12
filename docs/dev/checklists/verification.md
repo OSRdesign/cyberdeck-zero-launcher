@@ -1,4 +1,7 @@
-# Verification checklist (used by `deck-verifier`)
+# Verification checklist (used by `deck-verifier`, when the owner asks for a run)
+
+Since 2026-11-12 testing is Controller-led and no `deck-verifier` sign-off is needed by default (`decisions.md`); the items below are
+also the source for the Controller's written test protocol.
 
 Write the result of each item in `docs/dev/reports/NNN.md` as PASS / FAIL / N/A with the evidence (command output,
 screenshot path). A FAIL goes back to the owner; the Controller is told. Do not fix things yourself.

@@ -1,6 +1,8 @@
 # 015 - Multitasking P-b: launcher core (lifecycle, handoff, input protection)
 
-Status: designed and built 2026-10-20 on branch `multitasking-pb` (from `main` 798381c, which has the P-a spike
+Status (updated 2026-11-12): done. Multitasking P-a to P-e were released in v0.8.0 (PRs #63 to #67, 2026-10-21; see `docs/dev/ROADMAP.md`).
+
+Status when written: designed and built 2026-10-20 on branch `multitasking-pb` (from `main` 798381c, which has the P-a spike
 tools); verified on the PC (section 12); board tests pending.
 Study: [`reports/026-multitasking-study.md`](../reports/026-multitasking-study.md) (sections 1, 2.2-2.3, 4.2, 4.3,
 6.4, 7.1, 7.3, 7.4; owner decisions D1-D15 of 2026-10-14). P-a tools and protocol: `tools/multitasking-spike/`,

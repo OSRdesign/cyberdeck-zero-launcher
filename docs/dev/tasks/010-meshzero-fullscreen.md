@@ -1,6 +1,8 @@
 # 010 - MeshZero full-screen UI (design brief)
 
-Status: decisions taken 2026-10-06 (see "Decisions"), nothing built yet. Owner (when approved): apps-dev. Verifier: deck-verifier.
+Status (updated 2026-11-12): superseded by Mesh Hop (apps repo `mesh-hop`; phase 1 is 0.1.0, report 013; later phases in task 011).
+
+Status when written: decisions taken 2026-10-06 (see "Decisions"), nothing built yet. Owner (when approved): apps-dev. Verifier: deck-verifier.
 Docs: docs-writer. Acceptance: the user, on the deck with the board.
 
 ## Why

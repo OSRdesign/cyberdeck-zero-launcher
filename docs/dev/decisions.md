@@ -2,15 +2,31 @@
 
 Short, dated, never re-argued without the user. Newest first.
 
+- **2026-11-12: testing practice is Controller-led; no `deck-verifier` sign-off by default.** Owner decision (token cost). The Controller (and its workers) check the code, run `tools/dev/check-all.sh` and deploy to the boards; the owner runs the physical tests from the Controller's written protocol (a numbered list per phase) and says what passed. The `deck-verifier` agent stays defined and is called only when the owner asks for it; it no longer has a standing veto on commits or releases, and "the builder never signs it off" now means: the owner's test result, not a verifier report, accepts a change. Already the practice since task 011 (2026-10-07) and in tasks 012, 013 and 016. Wording fixed in `ROLES.md`, `checklists/app-packaging.md` and `checklists/verification.md`; the release checklist (`checklists/release.md`, steps 1 and 6) and the definition of done in `DEV-GUIDE.md` still say `deck-verifier` and follow in the release and test docs pull request.
+
+- **2026-11-12: 640x480 is not a global minimum screen any more; it is a per-app requirement.** Owner decision, superseding the 2026-10-13 entry below. An app declares `X-MinSize` only when its UI cannot fit a smaller screen; an app that can run on 480x320 and 320x480 declares no larger size (or `X-MinSize=480x320`). The launcher's main branch is not described as "for screens of 640x480 and more" any more. Facts at this date: since v0.9.4 main runs 480x320 panels upright (320x480) in PDA mode (zero8 runs main); 5 of the 14 apps in the apps registry declare `min_size` 480x320 (Cassette, Deck Atlas, Home Assistant, mmWave Radar, Net Walk), the other 9 declare 640x480. The apps repo documents the rule for app authors in its PR #150 (merged 2026-11-12); the apps' `AppSpec` default (still 640x480) changes in a follow-up pull request there. Multitasking stays on by default only from 640x480 (2026-10-21 entry, unchanged). Texts that still carry the old rule (`README.md`, `docs/HOSTING-APPS.md`) are fixed in the other documentation pull requests; this repository's `checklists/app-packaging.md` is fixed with this entry.
+
+- **2026-11-08: Cassette (report 058, decisions D1-D19) accepted by the owner, with changes.** Name Cassette (`cassette`); WAV / BWF as the primary format, FLAC and Ogg Opus as options; ALSA direct capture with the sound server as the fallback; **no background recording for now** (D10); the app shows the card's own gain and AGC controls instead of forcing AGC off (D18, revised). Outcome and what changed while building: the note at the top of `reports/058-sound-recorder-study.md` and `tasks/016-cassette-recorder.md`. Published as Cassette 0.1.0 to 0.3.0 (2026-11-11 to 2026-11-12).
+
+- **2026-11-06: mmWave radar app (report 056).** Report 056 is a study and a probe of the HLK-LD2452; its decisions table was written as open (recommendations only). The app mmWave Radar 0.1.0 was published on 2026-11-07 (apps repo). The owner's choices on the D table are not recorded in this file or in the report: not established from the repository.
+
+- **2026-11-05: Deck Atlas (report 054, owner decisions of questions 2-13).** Name Deck Atlas (`deck-atlas`); map imports always on (MBTiles, PMTiles, a tile folder converted on the board), opt-in viewing caches, Geoapify the only in-app area download, never the OSMF servers; raster first; the app reads the GPS and writes `position.state`; **wardriving deferred**; small screens from the start (640x480, 480x320, 320x480); own MIT engine, GPL and AGPL projects only as design references. Details: report 054 sections 1 and 11; P0 results: report 055.
+
+- **2026-10-30: SSH indicator in the status strip.** Owner decisions, built as PR #113 and released in v0.8.12: the terminal glyph U+F120 while an incoming SSH session exists, blue, blinking blue and white on traffic; its slot reserved on every board; Settings > System > SSH indicator Off / On (default On); `status.state` carries `ssh=` and `ssh_act=` for the apps. Full text: the SSH indicator row history in `ROADMAP.md` and the v0.8.12 entry.
+
 - **2026-10-22: the repository is decoupled from the upstream CardputerZero launcher: the upstream code we do not use is removed.** Owner decision ("we should be completely unrelated now to the CardputerZero from M5Stack repo"), scope chosen: remove the unused upstream projects, submodules, workflows, scripts, documents and components, and the code for the upstream device's own hardware (Settings > ExtPort, Developer/ADB, System > Software updater, the LoRa service and pages, the external stock Calculator, the first-boot wizard hooks); keep every copyright notice and licence text (MIT), the derivation statement and the credits, the bundled Store unchanged, the SDK submodule, and everything our boards use (native UI, dpi-scaled display, compat/VFB for legacy apps, Settings, multitasking, app contract, amd64, board tooling). **No rename in this step**: `APPLaunch`, `APPLAUNCH_*`, `applaunch` paths, `cp0_`/`cp0_lvgl`, `~/.config/cardputerzero/`, the Store's folders and binary name, the BlueZ agent path, the lock file and the apps' `M5CardputerZero-*` binaries stay (a later rename needs a migration: report 029 section 5, options 2/3 not chosen). Battery (X12), Speaker, Ethernet, the camera service, the default hardware profile and the legacy renderer stay until the owner decides (report 029 section 4). Git history is not rewritten. Inventory, evidence and results: `reports/029-upstream-decoupling.md`.
 
 - **2026-10-21: multitasking is on by default from 640x480, released as v0.8.0.** Owner decision (`reports/026-multitasking-study.md`, update of 2026-10-21): on logical canvases of 640x480 and more, off below (480x320, 320x170); `APPLAUNCH_MULTITASK=0` turns it off, `=1` forces it on. Known limits at the release: viz1090 can hang on three-finger touches (accepted by the owner; hold Esc 3 s closes it), the HackBerry CM5 uses Alt+Tab only (its touch reports 2 contacts), Net Toolbox stays legacy.
+
+- **2026-10-21: x86 (amd64) port accepted as recommended in report 028 (decisions X1-X15, all accepted).** fbdev + LVGL with no display server (X1); supported systems have glibc 2.38 or newer: Debian 13, Ubuntu 24.04/26.04 (X2); NetworkManager and BlueZ on the tablet (X3); on-screen keyboard only automatically when no keyboard is present, plus an Alt key on the terminal layout (X4); keyboard ignore list in `board.conf` (X5); one compile-time amd64 profile, hardware facts from `board.conf` (X6); landscape only, density from EDID (X7); one apps repo with per-arch registries (X8); install.sh leaves GRUB and the kernel command line alone (X10); both bundles per release from the first release after x-b (X11); battery shown when present, x-d (X12); Store tile hidden and M5 hub not seeded on amd64 (X13); viz1090 on amd64 deferred (X14); no CI for now (X15). Phases x-a to x-d in report 028 section 9; x-a (spike on the FZ-M1) first.
 
 - **2026-10-18: the native page header's Esc stays 9 mm.** Owner decision, amending the 5/7 mm entry below: the header Esc (`cp0_ui_roller_page`) is excluded from the 7 mm rule and keeps its pre-change size (102 px wide on the deck at 11.3 px/mm), the same in the launcher and every app. It takes the stock-app toolbar keys' constant through `cp0_ui_toolbar_key_px` (`CP0_UI_TOOLBAR_KEY_MM_X10`, at least `CP0_UI_TOOLBAR_KEY_FLOOR_PX`), height still clamped inside the bar's margins; `CP0_TOK_TARGET` stays 7 mm for buttons, action bars and dialog buttons.
 
 - **2026-10-18: the Calculator is exempt from the touch-target token and fills the screen.** Owner decision: the built-in Calculator's keypad is not sized from `CP0_TOK_TARGET` (no 1.3 x TARGET cap, no 75 % floor, no 640 px width cap, no 2.4:1 aspect cap). On every computed canvas (`page_app/calculator_layout.hpp`) the 6x4 keypad spans the full width between the `SPACE_M` margins and runs down to the bottom margin; the display above it takes at most 22 % of the room under the header, with the biggest result font up to 48 px that fits there (the source line 7/12 of it) and no more height than that font needs; the keys get all the rest. Keys may stretch wide; on a very tall screen a key stops at 1.5 x its width and the display takes the extra. Key labels come from the key (55 % of its height, at most 45 % of its width, snapped to the even builtin sizes). Gaps (`SPACE_S`), margins (`SPACE_M`) and radius (`RADIUS_M`) still come from the tokens. The pinned deck 640x480 and Pi 3A+ 480x320 presets already fill the screen and keep their pixels.
 
 - **2026-10-18: two standard touch sizes, 5 mm and 7 mm; the 9 mm target is dropped.** Owner decision: lists already work at 5-7 mm on touch (CompactList 5 mm, rows 7 mm), so a separate 9 mm class for buttons was inconsistent. Standard now: 5 mm for rows where a tap only selects (`CP0_TOK_LIST_ROW_H`), 7 mm for everything that acts (buttons, action bars, dialog buttons, rows that act: `CP0_TOK_ROW_H`; the header Esc was in this list until the same day's amendment above keeps it 9 mm). `CP0_TOK_TARGET` stays as a name for compatibility and equals the row value (7 mm); its pixel floor goes from 48 to 44 px (the usual finger minimum; the floor applies below 6.3 px/mm, e.g. the Pi 3A+ at 6.1 px/mm gets 44 instead of 55). The stock-app toolbar (pinned 140 deck / 100 Pi 3A+, computed sizes 9 mm keys) and the on-screen keyboard (keys and 9 mm Esc/Tab/Ctrl) keep their sizes: they have their own constants (`CP0_UI_TOOLBAR_KEY_MM_X10`, the OSK's) and no longer derive from TARGET. App-facing: `screen.state` `target=` is now 7 mm (79 px deck); the apps repo's APP-GUIDELINES and layout checker change separately.
+
+- **2026-10-16: list rows get an optional affordance (`RowAffordance`), amending the 2026-10-14 "no chevrons" line for tagged rows only.** Owner feedback on Serial Console (Pi 3A+, touch only): nothing told actionable rows from static information. Info = grey Muted value, no chevron; Open = chevron; Edit = value kept plus chevron; Action = a filled dot in the chevron's slot, white while idle (`Action`), the accent blue #5AAAFF while it runs (`ActionRunning`); the Action label is not coloured any more (owner, same day, after the first accent-label version: the dot keeps values in one column and shows the running state). Untagged rows render exactly as before; apps tag rows per PR.
 
 - **2026-10-15: Net Toolbox, scope and phases as in report 027** (`reports/027-net-toolbox.md`). One native app,
   package `net-toolbox`, name **Net Toolbox**, `X-MinSize=640x480`; it does not repeat LanScan or Wi-Fi Survey. Phases:
@@ -56,7 +72,7 @@ Short, dated, never re-argued without the user. Newest first.
   trigger an action uses Comfortable (7 mm, roller-sized). No edge fade; Page Up / Down are LVGL focus keys and do not
   reach the list.
 
-- **2026-10-13: the minimum resolution for new work is 640x480 (the deck); app guidelines come first.**
+- **2026-10-13: the minimum resolution for new work is 640x480 (the deck); app guidelines come first.** *Superseded on 2026-11-12: 640x480 is a per-app requirement, see the entry of that date.*
   - 480x320 (the Pi 3A+) is too small for the apps the project wants to build. New apps and new launcher screens
     are designed for 640x480 and up. The launcher keeps working at 480x320 as it does today (nothing is removed, no
     regression), but 480x320 is best effort: a new app declares `X-MinSize=640x480` by default (hidden on the
@@ -66,6 +82,7 @@ Short, dated, never re-argued without the user. Newest first.
   - Before the first new apps: an app guidelines document (`docs/APP-GUIDELINES.md`) that pins down the UI elements,
     colours, fonts, size requirements and rules every LVGL app follows so it runs on all boards (extracted from the
     launcher's tokens and widgets), plus a template app that follows it.
+
 - **2026-10-05: Settings > Apps decisions (task 006).**
   - The home grid order is stored in the launcher's own config (`app_order` in `~/.config/cardputerzero/config.json`,
     FNV-1a keys of the `.desktop` names), because the Store backend (`projects/AppStore` submodule) cannot be changed.
@@ -81,30 +98,38 @@ Short, dated, never re-argued without the user. Newest first.
     to LVGL's up/down/right/left, so a real W/E/R/T press is recorded and the matching native key within 300 ms is
     ignored (same approach as Wi-Fi Survey). Real arrows and F/X/Z/C still work.
 
+- **ADS-B Radar (native LVGL) was dropped on 2026-10-05**; viz1090 is the ADS-B app. Source archived outside the repos.
+
 - **2026-10-04: a touch screen is found by its capabilities, never by a fixed `/dev/input/eventN`.** The numbers move
   (the RTL-SDR dongle's infrared node and the Bluetooth keyboard take event1 or event2). viz1090 0.1.1 scans
   `event*` for a device with multitouch X/Y and no keyboard keys, prefers a name with "goodix" or "touchscreen", and
   retries every second. `VIZ_TOUCH` stays as an override. Any new app that reads input does the same.
+
 - **Fixed 2026-10-04: `deck.py sudo` exposed the sudo password.** It built `echo '<pw>' | sudo -S ...` as the
   remote command line, so `ps` on the deck, or a shell error that echoes the command, showed it (it happened twice in
   report 006; nothing was written to a file). Now the command is `sudo -S -p '' sh -c <shlex-quoted command>` and the
   password is written to the ssh channel's stdin, never in the command text (checked: `ps` on the deck shows no
   password). The password from those two runs should still be rotated if the tool logs of those runs are kept. Also: `deck.py put` with a Git Bash path
   such as `/tmp/x` is rewritten by MSYS, use `MSYS_NO_PATHCONV=1`.
+
 - **2026-10-04: apps run in the launcher's 640x340 window**, under the shared top bar (320x170 drawing scaled 2x),
   not in X-Fullscreen. Decided by the user for Wi-Fi Survey. Full-screen stays an opt-in for apps like viz1090.
+
 - **2026-10-04: a detail view follows the item's identity, not its list position.** Wi-Fi Survey tracks the access
   point by BSSID; if it vanishes the title shows "- gone" with the last values, and it recovers when it returns.
   R only rescans on every screen (held R does not switch screens).
+
 - **2026-10-04: lean agent setup**: Controller plus `launcher-dev`, `apps-dev`, `deck-verifier`, `docs-writer`.
   Pilot task: Wi-Fi survey. One agent per app only when apps are built in parallel.
+
 - **2026-10-04: apps live in the apps repo**, installed from Settings > Apps (user-added sources only). The launcher
   gets generic capabilities only (full-screen flag, shared top bar).
+
 - **2026-10-04: normal boot lines stay visible.** No `quiet` / `fbcon=map` on the boot line. The launcher service
   waits for `systemctl is-system-running --wait` so nothing prints over the grid.
-- **2026-10-16: list rows get an optional affordance (`RowAffordance`), amending the 2026-10-14 "no chevrons" line for tagged rows only.** Owner feedback on Serial Console (Pi 3A+, touch only): nothing told actionable rows from static information. Info = grey Muted value, no chevron; Open = chevron; Edit = value kept plus chevron; Action = a filled dot in the chevron's slot, white while idle (`Action`), the accent blue #5AAAFF while it runs (`ActionRunning`); the Action label is not coloured any more (owner, same day, after the first accent-label version: the dot keeps values in one column and shows the running state). Untagged rows render exactly as before; apps tag rows per PR.
+
 - **2026-10-03: the built-in CardputerZero Hub stays in the Store**, not in Settings > Apps.
+
 - **2026-10-03: no root-free package installs.** Installing from Settings > Apps asks for the sudo password.
+
 - **Releases and pushes need the user's explicit go-ahead.**
-- **ADS-B Radar (native LVGL) was dropped on 2026-10-05**; viz1090 is the ADS-B app. Source archived outside the repos.
-- **2026-10-21: x86 (amd64) port accepted as recommended in report 028 (decisions X1-X15, all accepted).** fbdev + LVGL with no display server (X1); supported systems have glibc 2.38 or newer: Debian 13, Ubuntu 24.04/26.04 (X2); NetworkManager and BlueZ on the tablet (X3); on-screen keyboard only automatically when no keyboard is present, plus an Alt key on the terminal layout (X4); keyboard ignore list in `board.conf` (X5); one compile-time amd64 profile, hardware facts from `board.conf` (X6); landscape only, density from EDID (X7); one apps repo with per-arch registries (X8); install.sh leaves GRUB and the kernel command line alone (X10); both bundles per release from the first release after x-b (X11); battery shown when present, x-d (X12); Store tile hidden and M5 hub not seeded on amd64 (X13); viz1090 on amd64 deferred (X14); no CI for now (X15). Phases x-a to x-d in report 028 section 9; x-a (spike on the FZ-M1) first.

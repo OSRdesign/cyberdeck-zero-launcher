@@ -1,6 +1,8 @@
-# 016 - Cassette: the sound recorder app (build plan, draft brief)
+# 016 - Cassette: the sound recorder app (build plan)
 
-Status: DRAFT 2026-11-08, waiting for the owner's answers in "Questions for the owner". Inputs: report 058 (`reports/058-sound-recorder-study.md`:
+Status (updated 2026-11-12): done. Cassette 0.1.0 and 0.2.0 were published on 2026-11-11 and 0.3.0 on 2026-11-12 (apps repo `apps/cassette`, registry 0.3.0, arm64 and amd64). Delivered beyond this plan: FLAC and Opus already in 0.1.0 (planned for phase 2), a live monitor, a square layout (720x720, 480x480), MERGE of takes (0.2.0), and Bluetooth record, play and monitor through the sound server with libpulse (0.3.0, `Depends: libpulse0`; needs launcher 0.10.1 or later for paired devices that are not connected). Not done: background recording (D10 of report 058 stands). Question 2 below (playback output) is answered by what shipped. Facts from the apps repo `apps/cassette/README.md` "Changes" and `registry.json`; the per-phase detail below is the plan as written and was not re-checked against the code.
+
+Status when written: DRAFT 2026-11-08, waiting for the owner's answers in "Questions for the owner". Inputs: report 058 (`reports/058-sound-recorder-study.md`:
 decisions D1-D19 accepted on 2026-11-08, and the P0 results measured on the zero8 and the HackBerry), the design canvas (cassette
 option A: recording, settings and recordings-list screens at 480x320 and 320x480, plus the variant for a card without a level
 control), and the owner's rules below.

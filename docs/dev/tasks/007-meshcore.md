@@ -1,6 +1,8 @@
 # 007 - MeshCore messaging app (first version)
 
-Status: building. Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck with their board.
+Status (updated 2026-11-12): superseded. The app was renamed MeshZero (report 009) and then replaced by **Mesh Hop** (tasks 010 and 011, apps repo `mesh-hop`, 0.8.3 in the registry on 2026-11-07); MeshZero was removed from the apps registry on 2026-11-02.
+
+Status when written: building. Owner: apps-dev. Verifier: deck-verifier. Docs: docs-writer. Acceptance: the user, on the deck with their board.
 
 ## Goal
 A native touch LVGL app in the apps repo (`apps/meshcore`) that makes the deck a MeshCore messenger: it controls a

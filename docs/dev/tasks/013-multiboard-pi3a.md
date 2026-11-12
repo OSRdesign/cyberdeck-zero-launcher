@@ -1,6 +1,8 @@
 # 013 - Multi-board bring-up: Pi 3A+ with the 3.5" 480x320 SPI panel (brief)
 
-Status: approved 2026-10-10 (decisions in 012 section F2). Owner: Controller. Builders: savvy workers via launcher-dev rules (ROLES.md). The user runs all physical tests; Controller reads logs, takes framebuffer screenshots over ssh, deploys. No commit, no push without the user's word. Evidence: `reports/021-multi-sbc-multi-screen.md`.
+Status (updated 2026-11-12): done, released in v0.5.0 (see `docs/dev/ROADMAP.md`).
+
+Status when written: approved 2026-10-10 (decisions in 012 section F2). Owner: Controller. Builders: savvy workers via launcher-dev rules (ROLES.md). The user runs all physical tests; Controller reads logs, takes framebuffer screenshots over ssh, deploys. No commit, no push without the user's word. Evidence: `reports/021-multi-sbc-multi-screen.md`.
 
 ## Hard rule: the Pi Zero 2 W deck must not change
 With no profile file (or `APPLAUNCH_BOARD` unset) behaviour is byte-for-byte today's: fb0, 640x480, 32 bpp, no rotation, compat 2x, current touch env. Every new code path is opt-in through the profile.

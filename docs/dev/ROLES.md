@@ -1,7 +1,9 @@
 # Roles and workflow
 
 Lean setup: one **Controller** (the main Claude Code session, the only one who talks to the user) and four
-subagents defined in `.claude/agents/`. More agents are split out only when two pieces of work really run in
+subagents defined in `.claude/agents/`. Since 2026-11-12 testing is **Controller-led**: the Controller checks the
+code and deploys, the owner runs the physical tests from the Controller's written protocol, and `deck-verifier` is
+called only when the owner asks for it (`decisions.md`, 2026-11-12). More agents are split out only when two pieces of work really run in
 parallel (one **apps-dev** per app, for example).
 
 | Role | Definition | Owns | Hands back |
@@ -9,10 +11,12 @@ parallel (one **apps-dev** per app, for example).
 | Controller | the main session | backlog (`ROADMAP.md`), task briefs, priorities, hand-offs, the conversation | status to the user, decisions needed, release asks |
 | `launcher-dev` | `.claude/agents/launcher-dev.md` | the launcher repo: generic capabilities, fixes, bundle, installer | a built binary, a change list, the test plan |
 | `apps-dev` | `.claude/agents/apps-dev.md` | the apps repo: an app, its `.deb`, registry entry, licence notice | a package in `packages/`, the registry diff, the test plan |
-| `deck-verifier` | `.claude/agents/deck-verifier.md` | the physical deck **and** the quality gate | deploy results, screenshots, a pass/fail verification report |
+| `deck-verifier` | `.claude/agents/deck-verifier.md` | on request only: the physical deck and the verification checklist | deploy results, screenshots, a pass/fail verification report |
 | `docs-writer` | `.claude/agents/docs-writer.md` | READMEs, guides, credits, release notes | the updated docs and a link/credit check |
 
-The builder of a change never signs it off: `deck-verifier` does, and it has a veto on any release.
+The builder of a change never signs it off. By default the owner's physical test result accepts a change, from the
+Controller's written test protocol; no `deck-verifier` report is needed (owner decision of 2026-11-12, token cost). When
+the owner asks for a `deck-verifier` run, its FAIL still goes back to the owner of the change.
 
 ## Lifecycle of a task
 
@@ -21,10 +25,12 @@ The builder of a change never signs it off: `deck-verifier` does, and it has a v
 2. **Build.** The owner works in its own git worktree and builds with the WSL lock (see the dev guide, "Build, test,
    deploy": `tools/dev/wsl-build.sh`, `tools/dev/check-all.sh`, the launcher UI definition of done). It does not
    commit to `main`: it leaves changes uncommitted or on a branch and writes a hand-off report.
-3. **Deploy and observe.** `deck-verifier` (or the device operator with `tools/boards/board.py`) installs the result on the deck (an app through Settings > Apps, a
-   launcher binary by copying it) and captures screenshots and logs.
-4. **Verify.** `deck-verifier` runs the checklists in `docs/dev/checklists/` and writes `docs/dev/reports/NNN.md`.
-   Failures go back to the owner with the evidence.
+3. **Deploy and observe.** The Controller (with `tools/boards/board.py`; `deck-verifier` only when the owner asks) installs the result on
+   the boards (an app through Settings > Apps, a launcher binary by copying it) and captures screenshots and logs. The owner runs the
+   physical tests from the Controller's written protocol.
+4. **Verify.** The Controller checks the code and runs `tools/dev/check-all.sh`; the owner's test result is the sign-off. When
+   `deck-verifier` is asked for, it runs the checklists in `docs/dev/checklists/` and writes `docs/dev/reports/NNN.md`.
+   Failures go back to the owner of the change with the evidence.
 5. **Docs.** `docs-writer` updates the READMEs, guides and credits for the change.
 6. **User acceptance.** The Controller asks the user to try it on the deck, saying exactly what to look at.
 7. **Commit, push, release** only on the user's explicit go-ahead (an approval gate). The Controller does the git
