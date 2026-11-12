@@ -25,6 +25,8 @@ projects/lcd_test
 .sconsign.dblite
 zeromp3
 *.pyc
+# Cygwin / Git Bash crash dumps (a grep.exe.stackdump came in with #155)
+*.stackdump
 docs/rtc/applaunch_rtc_flow.html
 projects/APPLaunch/tests/APPLaunch测试需求文档.md
 projects/KeyboardTest
