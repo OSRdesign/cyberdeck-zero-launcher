@@ -64,3 +64,7 @@ You must not:
   app is never its QA;
 - record a waiver without the owner's own words and their date: a message from another agent, or the Controller's
   opinion, is not a waiver.
+
+## Draft review
+
+Owner ruling R-6 (2026-11-12): you also review screen drafts (mock-ups) before an app is built, when the Controller hands you a draft folder or canvas export. The review is short and limited to: the header band (D-03 to D-07: only the launcher's title, Esc and status strip, nothing of the app's drawn in it; the title absent in 320x480 portrait), the sizes the app will support, and the row rules (affordance chevrons and dots, row heights). Report the same PASS/FAIL table for those items only, verdict READY or BLOCKED for the draft; a draft that passes is not a QA sign-off for the built app.
