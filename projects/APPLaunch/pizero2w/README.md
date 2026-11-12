@@ -1,8 +1,10 @@
 # CyberdeckZero Launcher on Raspberry Pi boards
 
-CyberdeckZero Launcher on Raspberry Pi boards with a touch panel and a keyboard. Supported boards: the **Pi Zero 2 W
-deck** (Waveshare 2.8" DPI touch LCD, 480x640 portrait used as 640x480 landscape, Bluetooth keyboard), the **Pi 3A+**
-with the Luckfox 3.5" SPI panel and the **HackBerry Pi CM5** (720x720). Since phase x-b of the x86 port (report 028)
+CyberdeckZero Launcher on Raspberry Pi boards with a touch panel and a keyboard. Supported boards: see [Boards](#boards)
+(the **Pi Zero 2 W deck** with the Waveshare 2.8" DPI touch LCD, 480x640 portrait used as 640x480 landscape, and a
+Bluetooth keyboard; the **Pi 3A+** with a 3.5" SPI or a 4.3" DSI panel; the **Pi 4 B** with a 5" DSI panel; the **Pi 5**
+with the HyperPixel 4" or the 7" DSI panel; the **HackBerry CM5** (720x720); a **Pi Zero 2 W** with the Waveshare 3.5"
+SPI panel) and PCs. Since phase x-b of the x86 port (report 028)
 the same launcher also installs on **PCs** (x86_64, the amd64 bundle; the Panasonic FZ-M1 tablet first): see
 [Install on a PC](#install-on-a-pc-amd64). The port is selected at run time with
 `APPLAUNCH_DISPLAY=dpi-scaled` and at build time with `APPLAUNCH_HW=pizero2w` (every bundle sets both); without them
@@ -17,10 +19,10 @@ locations did not (`/usr/share/APPLaunch`, `APPLAUNCH_*`, `~/.config/cardputerze
 | --- | --- | --- |
 | Binary | `/usr/share/APPLaunch/bin/cyberdeckzero` (`pkill -x cyberdeckzero` works) | the old binary name, kept as a symlink for one release |
 | User service (appliance boards) | `cyberdeckzero.service` | `APPLaunch.service` |
-| Console unit | `cyberdeckzero-console.service` | `cyberdeckzero-console.service` |
-| Desktop unit (desktop boards) | `cyberdeckzero-desktop.service` | `cyberdeckzero-desktop.service` |
-| PolicyKit rule (desktop boards) | renamed to match the desktop unit | `52-cyberdeckzero-desktop.rules` |
-| Menu entry (desktop boards) | `cyberdeckzero.desktop`, "CyberdeckZero Launcher" | `cyberdeckzero.desktop` |
+| Console unit | `cyberdeckzero-console.service` | `applaunch-console.service` |
+| Desktop unit (desktop boards) | `cyberdeckzero-desktop.service` | `applaunch-desktop.service` |
+| PolicyKit rule (desktop boards) | renamed to match the desktop unit | `52-applaunch-desktop.rules` |
+| Menu entry (desktop boards) | `cyberdeckzero.desktop`, "CyberdeckZero Launcher" | `applaunch.desktop` |
 | Release asset | `cyberdeckzero-launcher-<version>-arm64.tar.gz` (the first release after the rename also carries it as `pizero2w-bundle.tar.gz`); PCs: `cyberdeckzero-launcher-<version>-amd64.tar.gz` | `pizero2w-bundle.tar.gz` |
 
 `install.sh` migrates a board installed with the old names: it disables and removes the old user unit (also when
@@ -73,6 +75,29 @@ off again, see [Uninstall](#uninstall).
 It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
 for Debian 13 trixie. It also refuses a bundle of the other architecture (it reads the launcher's ELF header: arm64 on
 a Pi, amd64 on a PC). `sudo ./install.sh --dry-run` prints the detected board and what would be done.
+
+### Install options
+
+`sudo ./install.sh [options]`; `-h` prints the option list. Without options `install.sh` detects the board and
+chooses the session itself.
+
+| Option | Effect | Explained in |
+| --- | --- | --- |
+| `--keyboard-name NAME` | The Bluetooth keyboard's name as `bluetoothctl devices` shows it (default `M4 Keyboard`). | [Install on a Pi](#install-on-a-pi) |
+| `--user NAME` | The user that runs the launcher (default: the user who ran `sudo`). | [Install on a Pi](#install-on-a-pi) |
+| `--no-boot-config` | Do not touch `config.txt` and `cmdline.txt` (no PWM backlight). Also wins over `--pwm-backlight`. | [Reverting the PWM backlight](#reverting-the-pwm-backlight) |
+| `--pwm-backlight` | Pi 5 + HyperPixel 4 only: turn its on/off backlight into a PWM one with levels (a `config.txt` line, a reboot). Never done without this option. | [Boards](#boards), "Pi 5 + HyperPixel 4: brightness levels" |
+| `--board NAME` | Use this profile instead of detecting the board: `zero2w`, `pi3a-luckfox35`, `pi3a-wsdsi43`, `pi3a-wsdsi43-portrait` (never detected), `pi4b-dsi`, `pi5-hyperpixel4`, `pi5-dsi7`, `hackberry-cm5`; `--board zero2w` writes no profile. | [Boards](#boards) |
+| `--board-only` | Only detect the board and write or update `/etc/applaunch/board.conf` (and the backlight rule), then stop. | [Boards](#boards) |
+| `--dry-run` | Print the detected board, the session and what would be done; change nothing. | [Install on a Pi](#install-on-a-pi) |
+| `--plan` | The dry run as `key=value` lines for a program (Settings > Updates' helper). | [Settings > Updates](#settings--updates) |
+| `--force` | Continue on an unknown board (no profile is written); replace a hand-edited `board.conf` (the old one is kept as `board.conf.bak`). | [Boards](#boards) |
+| `--no-default-source` | Do not add the apps repo to Settings > Apps for a user who has no source yet. | "Default app source", below |
+| `-h`, `--help` | Print the option list. | |
+
+Each install records its keyboard name, `--board`, `--no-boot-config`, `--pwm-backlight` and `--no-default-source` in
+`/etc/applaunch/install.conf`; Settings > Updates installs a newer release by running `install.sh` again with them.
+The other options (`--user`, `--board-only`, `--dry-run`, `--plan`, `--force`) are not recorded.
 
 **Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
 password). When that user has no app source yet (no `~/.local/share/cardputerzero-appstore/registries.json`, or one
@@ -273,8 +298,8 @@ board after v0.8.13:
 
 New in v0.8.0 (task 015, `docs/dev/reports/026-multitasking-study.md`). Nothing to install or configure: it comes
 with the bundle and is **on by default** when the short side of the launcher's logical canvas is 480 or more (the
-deck, the Pi 3A+ DSI at 800x480 or turned to 480x800 by the PDA profile, the HackBerry CM5 at 720x720, the Pi 5
-HyperPixel at 800x480). On smaller canvases (the Pi 3A+ SPI panel at 480x320, 320x170) it is off and the launcher
+deck, the Pi 3A+ DSI at 800x480 or turned to 480x800 by the PDA profile, the Pi 4 B DSI, the Pi 5 with the HyperPixel
+or the 7" DSI panel at 800x480, the HackBerry CM5 at 720x720, the FZ-M1 tablet). On smaller canvases (the Pi 3A+ SPI panel at 480x320, 320x170) it is off and the launcher
 behaves as before.
 
 - **Open apps:** three fingers held still for 1 s anywhere, a 0.5 s long-press on the clock / status strip, Alt+Tab
@@ -322,7 +347,7 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
 | `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer`; config.txt only with `--pwm-backlight` (below) |
 | `pi5-dsi7`: Pi 5 with the official Raspberry Pi 7" Touch Display on the RP1 DSI port (800x480, same family as the Pi 4 B's panel; a desktop board when lightdm runs) | model "Raspberry Pi 5", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `drm-rp1-dsi*` (`drm-rp1-dsidrmf`, 32 bpp; the HyperPixel's is `drm-rp1-dpi*`, so the two never overlap) and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi4b-dsi` (that framebuffer, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`: the panel's ft5x06 at i2c 10-0038, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule) with `APPLAUNCH_PANEL_MM=154x86` (the display's active area) and `APPLAUNCH_DIM_PERCENT=20`; touch and brightness checked on the owner's board (2026-11-11). config.txt is not edited (the panel is found by `display_auto_detect=1`; no boot configuration lines on a desktop board, cmdline arguments only on an appliance one); `--pwm-backlight` is ignored (Pi 5 + HyperPixel only) |
-| `hackberry-cm5`: HackBerry Pi CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
+| `hackberry-cm5`: HackBerry CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
 | `pc-<model>`: a PC (amd64 bundle), e.g. `pc-fzm1-2` (Panasonic FZ-M1 mk2) | x86_64 with no device tree, a framebuffer (the DRM driver's, `*drmfb`, first); `<model>` is the DMI product name in lower case | `board.conf`: `APPLAUNCH_DISPLAY=dpi-scaled`, that framebuffer, `APPLAUNCH_LOGICAL` = its size, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_PANEL_MM` from the connected connector's EDID (eDP first; the detailed timing's mm, else the cm of the basic block), else a table of known models (FZM1-2: 150x93), else none (default density, large controls); touch `auto` / `buffer`; `APPLAUNCH_BACKLIGHT=sysfs:` the first backlight (`intel_backlight` first), `APPLAUNCH_DIM_PERCENT=10`, and its udev rule (no backlight: neither line); on a tablet (SMBIOS chassis 30 or 32, or a known tablet) `APPLAUNCH_KBD_IGNORE=bus:0011`; `APPLAUNCH_HIDE_TILES=app_Store`. No boot configuration (GRUB, kernel command line), no dtc |
 | anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report. A Pi 3A+ with both its panels connected is not guessed: choose with `--board`. With `--force`, the deck's PWM backlight overlay is added only on a model that is not one of the boards above (a Pi 3A+, Pi 4 B, Pi 5 or CM5 whose panel was not recognised keeps its config.txt) |
 
@@ -398,14 +423,13 @@ What works in this phase:
 
 Not yet:
 
-- no writing zone ("Strokes", handwriting at the bottom of the panel): phases S1 and S3; until then text is typed;
 - a turned app hidden behind the switcher shows its dimmed frame sideways;
-- long page titles are still cut with dots beside the narrower strip (for example "Keyboard test", "Network Time");
-- no native portrait app yet (S4, S5).
+- long page titles are still cut with dots beside the narrower strip (for example "Keyboard test", "Network Time").
 
-The Pi 5 and HackBerry values are the ones `tools/boards/board.py test-start` used on those boards. Their panels' size
-in mm is not measured yet (task 014), so their profiles have no `APPLAUNCH_PANEL_MM` and the layout uses its default
-density. These two boards normally run the Raspberry Pi OS desktop: they then get the desktop variant
+The Pi 5 + HyperPixel 4 and HackBerry values are the ones `tools/boards/board.py test-start` used on those boards.
+Their panels' size in mm is not measured yet (task 014), so their profiles have no `APPLAUNCH_PANEL_MM` and the layout
+uses its default density; `pi5-dsi7` writes `APPLAUNCH_PANEL_MM=154x86` (the display's active area). These boards
+(the Pi 5 with either panel, and the HackBerry) normally run the Raspberry Pi OS desktop: they then get the desktop variant
 ([Desktop boards](#desktop-boards)); on a Lite image they are installed like the deck.
 
 **Pi 5 + HyperPixel 4: brightness levels (`--pwm-backlight`, optional; report 030, c-4, not yet tested on the
@@ -496,7 +520,7 @@ they write it even without their backlight line. The on/off and no-backlight pro
 profile) have no dim line: there is no level to dim to (on the deck and a Pi 5 with `--pwm-backlight` the launcher
 detects the levels and uses the default 10). A board whose profile an earlier release generated without the line gets
 it from `install.sh` run by hand (the old file kept as `board.conf.bak`); Settings > Updates stops there ("it would
-change /etc/applaunch/board.conf"), and a hand-edited profile is kept. Without the line (the deck, the Pi 5, the
+change /etc/applaunch/board.conf"), and a hand-edited profile is kept. Without the line (the deck, the Pi 5 + HyperPixel 4, the
 HackBerry) the launcher detects the backlight (report 030): the kernel's preferred device of `/sys/class/backlight`
 (firmware, then platform, then raw); `max_brightness` 1 is on / off only (the Pi 5 HyperPixel's `gpio-backlight`:
 Brightness offers On / Off 10 s), more is levels (the deck's PWM `backlight`, exactly as before), no device is no
@@ -717,7 +741,7 @@ removes the binaries, the framebuffer shim, the launcher assets under `/usr/shar
 bundle, listed in `payload/share.manifest`), the udev rules (then `udevadm control --reload`) and the PolicyKit rules,
 the board profile `/etc/applaunch/board.conf` (and the directory if empty; a `board.conf.bak` is kept),
 unmasks and enables `getty@tty1` if it is masked, and takes the PWM backlight out of the boot configuration: the exact
-lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `config.txt` (on the Pi 5,
+lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `config.txt` (on the Pi 5 + HyperPixel 4,
 `dtoverlay=hyperpixel4-pwm-backlight`; a timestamped
 `config.txt.bak-uninstall-<time>` is made first and the removed lines are printed), the `.dtbo`, and the
 `vt.global_cursor_default=0` / `consoleblank=0` arguments in `cmdline.txt` when the `*.bak-applaunch` backup shows that
@@ -733,9 +757,9 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | --- | --- |
 | `--dry-run` | Print every action and change nothing. |
 | `--yes` | No confirmation prompt (without it the script asks once, after printing what it removes and keeps). |
-| `--purge-config` | Also delete `~/.config/cardputerzero`, `~/.local/share/cardputerzero-appstore` and `~/.cache/cardputerzero-appstore`. |
+| `--purge-config` | Also delete `~/.config/cardputerzero`, `~/.local/share/cardputerzero-appstore` and `~/.cache/cardputerzero-appstore`, and Settings > Updates' `~/.local/state/cyberdeckzero` and `~/.cache/cyberdeckzero`. |
 | `--remove-apps` | Also `apt-get remove` the app packages installed from Settings > Apps / the Store, taken from the launcher's `installed.json` and listed first. No record: skipped. With `--purge-config` the packages are purged. |
-| `--restore-config` | Restore `config.txt` from `config.txt.bak-before-pwm` instead of removing the two lines (loses any other later edit; the current file is backed up first). |
+| `--restore-config` | Restore `config.txt` from `config.txt.bak-before-pwm` instead of removing the two lines (loses any other later edit; the current file is backed up first). This works only where that file exists (the deck's own backup, made by hand before `install.sh` existed). `install.sh` itself writes `config.txt.bak-applaunch`, which this option does not use; without the file the option stops with an error. |
 | `--no-boot-config` | Leave `config.txt`, `cmdline.txt` and the overlay alone. |
 | `--disable-linger` | Also run `loginctl disable-linger` (`install.sh` enabled it; it may have been on before). |
 | `--user NAME`, `--payload DIR` | The user that ran `install.sh`; where the bundle's `payload/` is, if it is not next to the script. |
@@ -745,7 +769,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | File | Purpose |
 | --- | --- |
 | `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host; `--arch arm64` by default, `--arch amd64` natively for PCs) / install it (Pi or PC) / remove it again. |
-| `cyberdeckzero-update` | Settings > Updates' root helper, installed in `/usr/share/APPLaunch/bin` (`apply`, `resume`, `plan`, `options`, `status`; [Settings > Updates](#settings--updates)). |
+| `cyberdeckzero-update` | Settings > Updates' root helper, installed in `/usr/share/APPLaunch/bin` (`apply`, `resume`, `plan`, `options`, `status`, `apt-refresh`, `apt-upgrade`, `apt-repair`; [Settings > Updates](#settings--updates)). |
 | `default-sources.sh` | Adds the apps repo to Settings > Apps once for a user with no source yet (run by `install.sh` as that user; see "Default app source"). |
 | `cyberdeckzero.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
 | `cyberdeckzero-console`, `cyberdeckzero-console.service` | The text console helper (installed in `/usr/share/APPLaunch/bin`: `unbind`, `bind`, `status`, `restore-desktop UNIT`) and the appliance boards' boot-time unit that frees the panel from the console ([Text console](#text-console)). |
@@ -758,8 +782,9 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `93-applaunch-rfkill.rules` | `/dev/rfkill` writable by the `netdev` group, so Settings > Bluetooth can run `rfkill unblock bluetooth` as the launcher user. |
 | `50-networkmanager-netdev.rules`, `51-launcher-time-power.rules` | PolicyKit: Wi-Fi scan/connect, Network Time / clock, reboot / shutdown from a background session. |
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
+| `ctl/` | `cyberdeckzero-ctl`, the `launcher.sock` command-line client (`docs/APP-CONTRACT.md` section 14), built by `build.sh`. |
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |
-| `tests/` | `test-install-board.sh`: board and desktop detection, profile, desktop unit and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board, desktop markers added by the test), `cyberdeckzero-console` against a fake `/sys/class/vtconsole` and a fake `systemctl` (the shutdown guard), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). `test-update-helper.sh`: Settings > Updates' root helper `cyberdeckzero-update` and what `install.sh` gives it (`/etc/applaunch/install.conf`, `--plan`) in a fake root (`UPDATE_ROOT`, stand-ins for `systemctl`, `runuser`, `systemd-inhibit`, ...): options replayed or inferred, backup, plan refusals, health check, rollback, the desktop unit's restart, resume after an interruption, uninstall (run it as a normal user, from an LF copy: the fixtures' line ends). |
+| `tests/` | `test-install-board.sh`: board and desktop detection, profile, desktop unit and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board, desktop markers added by the test), `cyberdeckzero-console` against a fake `/sys/class/vtconsole` and a fake `systemctl` (the shutdown guard), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). `test-update-helper.sh`: Settings > Updates' root helper `cyberdeckzero-update` and what `install.sh` gives it (`/etc/applaunch/install.conf`, `--plan`) in a fake root (`UPDATE_ROOT`, stand-ins for `systemctl`, `runuser`, `systemd-inhibit`, ...): options replayed or inferred, backup, plan refusals, health check, rollback, the desktop unit's restart, resume after an interruption, uninstall. **Neither is part of `tools/dev/check-all.sh`.** Run them as a normal user with `sh projects/APPLaunch/pizero2w/tests/test-install-board.sh` and `sh projects/APPLaunch/pizero2w/tests/test-update-helper.sh`, from an LF copy of the **whole repository** (the fixtures' line ends: a Windows checkout with `core.autocrlf=true` has CRLF fixtures, so use WSL on a copy with the CRs stripped; `test-update-helper.sh` also reads `projects/APPLaunch/tests/fixtures/apt/deck-p4`, which a copy of this folder alone does not have). A run on 2026-11-12 (main at v0.10.1, WSL, CRs stripped) passed 501 of 502 checks of `test-install-board.sh` (the failing one: "amd64 config: the device config without the NEON lines") and 159 of 159 of `test-update-helper.sh`; see [`tools/dev/README.md`](../../../tools/dev/README.md) for what `check-all.sh` runs. |
 
 ## Sound, battery and brightness per board
 
@@ -805,13 +830,14 @@ per-app touch choice `touch_<app>`, app switches such as `app_Python`: 0 hides t
 Test hooks of the detection (the render harness and the unit tests use them; leave them unset on a board):
 `APPLAUNCH_BACKLIGHT_ROOT` (default `/sys/class/backlight`), `APPLAUNCH_ASOUND_ROOT` (default `/proc/asound`),
 `APPLAUNCH_POWER_SUPPLY_ROOT` (default `/sys/class/power_supply`), `APPLAUNCH_AMIXER` and `APPLAUNCH_PACTL` (the
-programs, default `amixer` and `pactl`).
+programs, default `amixer` and `pactl`), `APPLAUNCH_BLUETOOTHCTL` and `APPLAUNCH_BTMGMT` (the programs of the Bluetooth
+audio facts) and `APPLAUNCH_PROC_ROOT` (the process scan for `pipewire` and `bluealsa`, default `/proc`).
 
 ## Known limits
 
 - Legacy apps contain their own copy of the inherited matrix keymap, so punctuation typed inside them may
   differ; the launcher's own pages are not affected.
-- The Pi Zero 2W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound (a card
+- The Pi Zero 2 W has no audio output: apps log `aplay: audio open error`; add a USB or I2S sound card for sound (a card
   with a playback volume control then brings the Speaker row, see
   [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board)).
 - The Pi boards have no battery gauge or hardware RTC; the clock comes from Network Time. A board with a Linux

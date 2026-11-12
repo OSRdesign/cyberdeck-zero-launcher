@@ -38,8 +38,8 @@ without the portrait flag does not undo it. While nothing is chosen, the board p
 On rotate left).
 
 The row is there when the short side of the screen is 480 px or more, the screen is not square and the band leaves at
-least 400 px above it in portrait: the Pi 3A+ and Pi 4 B DSI panels, the FZ-M1 tablet (800x1280 in portrait), a
-HyperPixel 4. When the short side is 320 to 479 px (the 480x320 panels) the row is there as well, but the portrait
+least 400 px above it in portrait: the Pi 3A+ and Pi 4 B DSI panels, the Pi 5 with the 7" DSI panel (800x480, the same rule as the Pi 4 B), the FZ-M1
+tablet (800x1280 in portrait), a HyperPixel 4. When the short side is 320 to 479 px (the 480x320 panels) the row is there as well, but the portrait
 canvas (320x480) has no writing band: the normal on-screen keyboard, and apps get APPLAUNCH_PDA=0. The deck and the
 HackBerry's square 720x720 screen do not have the row. Landscape PDA is not offered.
 

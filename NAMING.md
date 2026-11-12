@@ -21,7 +21,7 @@ contract depend on them. They are names in code and on disk, not a brand.
 | Console unit | `cyberdeckzero-console.service` (replaces `applaunch-console.service`) |
 | Desktop unit | `cyberdeckzero-desktop.service` (replaces `applaunch-desktop.service`); the polkit rule is renamed to match |
 | Menu entry (desktop boards) | `cyberdeckzero.desktop`, `Name=CyberdeckZero Launcher` |
-| Release asset | `cyberdeckzero-launcher-<version>-arm64.tar.gz`; the first release after the rename also carries the same file as `pizero2w-bundle.tar.gz` (the older name), dropped in the release after |
+| Release assets | `cyberdeckzero-launcher-<version>-arm64.tar.gz` and, for PCs, `cyberdeckzero-launcher-<version>-amd64.tar.gz`, each with a `.sha256` file; the older name `pizero2w-bundle.tar.gz` (v0.7.0) is history |
 | Repositories | `cyberdeck-zero-launcher`, `cyberdeck-zero-apps` (slugs unchanged) |
 | Bluetooth name fallback | `CyberdeckZero` |
 
@@ -44,7 +44,7 @@ both. See the [Pi port README](projects/APPLaunch/pizero2w/README.md).
 | `/com/cardputerzero/applaunch/agent` | the launcher's BlueZ pairing agent (D-Bus object path) | apps document it (Mesh Hop's BLE notes); changing it needs nothing on disk, but is a visible interface |
 | `/tmp/M5CardputerZero-APPLaunch_fcntl.lock` | single-instance lock file | shared with legacy apps |
 | `M5CardputerZero-APPLaunch` | the launcher binary's name of v0.6.0 and before | kept by `install.sh` as a link to `cyberdeckzero` |
-| `M5CardputerZero-<app>` | binary names of some apps (`/usr/share/APPLaunch/bin/`: LAN Scan, Wi-Fi Survey, the MeshZero draft) | named in their `.desktop` `Exec=` lines; the apps drop the prefix at their next version (report 025 decision 7) |
+| `M5CardputerZero-<app>` | binary names of some apps (`/usr/share/APPLaunch/bin/`: LAN Scan, Wi-Fi Survey, the MeshZero draft; these apps live on the `small-screen` branch only) | named in their `.desktop` `Exec=` lines; the apps drop the prefix at their next version (report 025 decision 7) |
 | `tca8418_keypad_m5stack_keymap` | keymap file of the inherited keyboard path (`cp0_file_path("keyboard_map")`) | a system file name |
 
 Copyright notices (`LICENSE`, the `SPDX-FileCopyrightText: 2026 M5Stack Technology CO LTD` headers, `LICENSES/`)
