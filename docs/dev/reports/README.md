@@ -67,9 +67,11 @@ Reports 001 to 019 are mostly task hand-offs (`NNN-handoff.md`, by the builder) 
 | [`043-pda-large-screens.md`](043-pda-large-screens.md) | PDA mode on large screens (short note) |
 | [`044-apps-with-the-band.md`](044-apps-with-the-band.md) | apps with the band (PDA S4), plan |
 | [`046-home-grid-app-order.md`](046-home-grid-app-order.md) | Home grid app order: drag and drop on the grid, or an order list in Settings |
+| [`047-launcher-updates.md`](047-launcher-updates.md) | Updates: the launcher updates itself (with release notes), and system packages (apt) with protection. Status: implemented (v0.8.13 to v0.9.2), outcome added 2026-11-12 |
+| [`049-app-fork-classification.md`](049-app-fork-classification.md) | App classification for the main / small-screen fork (2026-10-31). Status: applied in the v0.9.0 split; its 640x480 rule was superseded on 2026-11-12 |
 | [`054-offline-maps-wardriving-study.md`](054-offline-maps-wardriving-study.md) | Offline maps with an external GPS, and wardriving (study) |
 | [`055-maps-p0-results.md`](055-maps-p0-results.md) | Deck Atlas P0 spike: results (generated tiles) |
-| [`056-mmwave-sensor-study.md`](056-mmwave-sensor-study.md) | mmWave: an app for the Hi-Link HLK-LD2452 tracking radar (study and probe) |
+| [`056-mmwave-sensor-study.md`](056-mmwave-sensor-study.md) | mmWave: an app for the Hi-Link HLK-LD2452 tracking radar (study and probe). Outcome added 2026-11-12: built as the mmWave Radar app (0.1.0 and 0.1.1), decisions D1 to D9 in the last section |
 | [`058-sound-recorder-study.md`](058-sound-recorder-study.md) | Sound recorder app (study) |
 
 ## Cited but not in the repository
@@ -82,13 +84,12 @@ not be established from git, this says so.
 | 030 | Board capabilities (sound, battery, brightness) and run-time detection (v0.8.4) | git tag `archive/report-030-capabilities` (commit `a483e3c5`, 2026-10-22), file `docs/dev/reports/030-board-capabilities.md`; read it with `git show archive/report-030-capabilities:docs/dev/reports/030-board-capabilities.md` |
 | 031 | Smarter installer for unknown boards (ROADMAP: "report 031 when written") | never written: no file or git ref found |
 | 045 | The study of an emulator of old handheld devices (parked; ROADMAP "Exploration ideas") | apps repo, tag `archive/cloudpilot-study` |
-| 047 | Updates: the launcher updates itself, and apt packages with protection (cited in many files, v0.8.13 to v0.9.2) | cited, not in the repository: no git ref has it. It exists as an untracked local file `docs/dev/reports/047-launcher-updates.md` on the owner's machine only (study of 2026-10-30) |
-| 048 | The Store, the legacy apps and the `small-screen` branch (study, 2026-10-31) | cited, not in the repository: no git ref has it. A local file `048-store-and-small-screen.md` exists on the owner's machine (folder `pkg-out-store-study` of the working area; the same folder holds `049-app-fork-classification.md`, which nothing cites) |
+| 048 | The Store, the legacy apps and the `small-screen` branch (study, 2026-10-31) | cited, not in the repository: no git ref has it. A local file `048-store-and-small-screen.md` exists on the owner's machine (folder `pkg-out-store-study` of the working area; the same folder also holds the original of report 049, which is now in this directory) |
 | 057 | Reticulum on the cyberdeck (study, 2026-11-07; decisions D1-D19 accepted) | branch `study-reticulum` (pull request #148, not merged), file `docs/dev/reports/057-reticulum-study.md` |
 | - | `portrait-320-study.md`: portrait at 320x480 on the zero8 (study of 2026-11-03; cited in ROADMAP, v0.9.4) | cited, not in the repository: no git ref has it. A local file on the owner's machine (folder `pkg-out-zero8` of the working area) |
 | - | `brightness-zero8-study.md`: brightness on the zero8 (study of 2026-11-04; cited in ROADMAP, v0.9.4) | cited, not in the repository: no git ref has it. A local file on the owner's machine (folder `pkg-out-zero8` of the working area) |
 
-Numbers with neither a file here nor a citation: 034, 049 to 053 (049 exists only as the local file named above).
+Numbers with neither a file here nor a citation: 034, 050 to 053.
 The git tag `archive/pda-s7-study` also exists in this repository (a snapshot with report 043, the PDA large-screen study, see
 report 043); it is not a numbered report.
 
