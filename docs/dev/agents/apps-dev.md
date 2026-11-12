@@ -24,7 +24,9 @@ Rules:
   `docs/dev/deck/check_statusbar_drift.py`.
 - Design QA: go through `docs/dev/checklists/app-design.md`, render the scene set of `checklists/app-design-scenes.md`
   and fix every FAIL before the hand-off; `app-design-qa` reviews it, and a publish needs its READY verdict or the owner's
-  written waiver.
+  written waiver, quoted in `apps/<id>/docs/decisions.md`. Hand over the scene folder as that file's "Hand-off" says:
+  the `<scene>/<WxH>/` tree with the PNGs and every `report.txt` (never flattened), `sheets/`, `qa-info.txt`, and
+  `deb-info.txt` (`dpkg-deb -I` and `-c` of the `.deb`) once a package is built.
 - Builds run in WSL under the shared build lock (`flock`, see DEV-GUIDE). Never run two scons builds at once.
 - The Pi password is only in the `PIPW` environment variable; never write it in any file, commit or report.
 - Do not commit, push, release, or change the Pi's boot configuration. Do not deploy: hand off to the Controller, who deploys and
