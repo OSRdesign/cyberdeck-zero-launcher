@@ -1,6 +1,6 @@
 #!/bin/sh
-# Install CyberdeckZero Launcher on a Raspberry Pi Zero 2W with the Waveshare 2.8" DPI LCD (the deck), on another
-# known board (see README.md, "Boards"), or on a PC (x86_64, the amd64 bundle: the "pc" profile, README.md, "PCs"):
+# Install CyberdeckZero Launcher on a Raspberry Pi Zero 2 W with the Waveshare 2.8" DPI LCD (the deck), on another
+# known board (see README.md, "Boards"), or on a PC (x86_64, the amd64 bundle: the "pc" profile, README.md, "Install on a PC (amd64)"):
 # the board is detected and its profile written to /etc/applaunch/board.conf.
 # A board that boots to a desktop (a display manager such as lightdm is enabled or running) gets the desktop
 # variant: the launcher is started from the applications menu and gives the desktop back when it exits (README.md,
@@ -36,7 +36,7 @@
 # To remove everything this script adds, run ./uninstall.sh (see README.md, "Uninstall").
 #
 # Prerequisites that this script does NOT do:
-#   - Waveshare DPI panel overlays in config.txt (see config.txt.snippet and the Waveshare wiki);
+#   - the panel's overlay in config.txt (the deck: config.txt.snippet; other boards: README.md, "Boards");
 #   - pairing the Bluetooth keyboard (bluetoothctl);
 #   - on a PC: installing NetworkManager (Settings > Wi-Fi needs it, but it takes the network over from netplan /
 #     systemd-networkd: the end of the install prints a recipe to run on the console). polkitd and BlueZ are installed

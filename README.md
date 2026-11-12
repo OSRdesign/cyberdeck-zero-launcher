@@ -9,9 +9,21 @@
 <!-- branding-allow-end -->
 
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
-machines with a touch screen and a keyboard. One code base adapts its layout to the screen; it runs on a Raspberry Pi
-Zero 2W cyberdeck (Waveshare 2.8" DPI touch LCD, 640x480), a Raspberry Pi 3A+ with a Waveshare 4.3" DSI panel
-(800x480) or a 3.5" SPI panel (480x320), a Raspberry Pi 4 B with a Freenove 5" DSI panel (800x480), a Raspberry Pi 5 with the official 7-inch DSI Touch Display (800x480) and a HackBerry CM5 (720x720). Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)); since v0.8.9 Settings > Screen > PDA mode turns it on for any screen where portrait fits, among them the 7-inch tablet, which then runs 800x1280 (see [Large screens: the tablet](docs/PDA-PROFILE.md#large-screens-the-tablet)). It has a full-screen terminal, a Calculator, Wi-Fi / Bluetooth / time settings (Network Time, a
+machines with a touch screen and a keyboard. One code base adapts its layout to the screen. Boards it runs on:
+
+| Board | Panel | Resolution |
+| --- | --- | --- |
+| Raspberry Pi Zero 2 W cyberdeck (the deck) | Waveshare 2.8" DPI touch LCD | 640x480 |
+| Raspberry Pi 3A+ | Waveshare 4.3" DSI panel, or Luckfox 3.5" SPI panel | 800x480, or 480x320 |
+| Raspberry Pi Zero 2 W | Waveshare 3.5" RPi LCD (F) | 480x320 |
+| Raspberry Pi 4 B | Freenove 5" DSI panel | 800x480 |
+| Raspberry Pi 5 | Pimoroni HyperPixel 4" DPI panel, or the official 7-inch DSI Touch Display | 800x480 |
+| HackBerry CM5 | 720x720 DPI panel | 720x720 |
+| x86 PC (amd64), e.g. the Panasonic FZ-M1 tablet | the PC's own screen | 1280x800 on the tablet |
+
+How each board is detected, its profile and its backlight: [Pi port README, Boards](projects/APPLaunch/pizero2w/README.md#boards).
+
+Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)); since v0.8.9 Settings > Screen > PDA mode turns it on for any screen where portrait fits, among them the 7-inch tablet, which then runs 800x1280 (see [Large screens: the tablet](docs/PDA-PROFILE.md#large-screens-the-tablet)). It has a full-screen terminal, a Calculator, Wi-Fi / Bluetooth / time settings (Network Time, a
 time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
 [app contract](docs/APP-CONTRACT.md) so apps can adapt to the screen too, and our own apps source
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
@@ -24,8 +36,8 @@ Since v0.8.0 it also keeps apps open in the background, with a touch-first app s
 I ordered two **CardputerZero** from M5Stack, but they have not been delivered yet and I could not wait any
 longer to try the software. Sitting on my desk was the cyberdeck I built from this Reddit post:
 [My first cyberdeck build](https://www.reddit.com/r/cyberDeck/comments/1tng497/my_first_cyberdeck_build/)
-(a Raspberry Pi Zero 2W, a Waveshare 2.8" DPI touch LCD and a Bluetooth keyboard). So I opened Claude Code
-and asked it to adapt the CardputerZero launcher to that machine. The result ran on a Pi Zero 2W, with touch, a 2x
+(a Raspberry Pi Zero 2 W, a Waveshare 2.8" DPI touch LCD and a Bluetooth keyboard). So I opened Claude Code
+and asked it to adapt the CardputerZero launcher to that machine. The result ran on a Pi Zero 2 W, with touch, a 2x
 upscaled window for the legacy 320x170 apps, and has since grown into the launcher described above.
 
 > **This is a hobby project and a derivative work.** Almost all of the code is the work of the CardputerZero
@@ -36,7 +48,7 @@ upscaled window for the legacy 320x170 apps, and has since grown into the launch
 
 ## Screenshots
 
-Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2W, 640x480) on the left and the
+Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2 W, 640x480) on the left and the
 Raspberry Pi 3A+ with the Waveshare 4.3" DSI panel (800x480) on the right: one code base, two screens. Network names
 are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed. These
 captures are older than v0.9.0, which removed the Store tile, Snake, Tank and IP Panel from main (see
@@ -122,7 +134,9 @@ who learns a lot from open source:
 - **System pieces used on the Pi**: [libinput](https://gitlab.freedesktop.org/libinput/libinput),
   [libxkbcommon](https://github.com/xkbcommon/libxkbcommon), [FreeType](https://gitlab.freedesktop.org/freetype/freetype),
   [NetworkManager](https://gitlab.freedesktop.org/NetworkManager/NetworkManager), [BlueZ](https://github.com/bluez/bluez),
-  [systemd](https://github.com/systemd/systemd), [polkit](https://github.com/polkit-org/polkit)
+  [systemd](https://github.com/systemd/systemd), [polkit](https://github.com/polkit-org/polkit),
+  [PipeWire](https://gitlab.freedesktop.org/pipewire/pipewire) / PulseAudio (the sound server, `pactl`) and
+  [alsa-utils](https://github.com/alsa-project/alsa-utils) (`amixer`)
 - **Claude Code** by [Anthropic](https://github.com/anthropics/claude-code), which did the porting work with me
 
 Thank you all for your contribution to open source, and for making it possible for hobbyists like me to build
@@ -144,7 +158,8 @@ puts its last picture back at once and it carries on where it was.
   sheet instead.
 - A **green dot** on a home tile marks an app that is open in the background. When memory runs low the launcher
   closes the least recently used hidden app, and hidden apps are the first the kernel may kill.
-- **Where it is on:** by default on screens of 640x480 and more (the deck, the Pi 3A+ DSI, the HackBerry CM5); off on
+- **Where it is on:** by default where the short side of the screen is 480 or more (the deck, the Pi 3A+ DSI, the
+  Pi 4 B DSI, the Pi 5 with the HyperPixel or the 7-inch DSI panel, the HackBerry CM5, the FZ-M1 tablet); off on
   smaller ones (480x320, 320x170), where the launcher behaves as before. `APPLAUNCH_MULTITASK=0` in the launcher's
   environment turns it off, `=1` forces it on (how: [Pi port README](projects/APPLaunch/pizero2w/README.md#multitasking)).
 - **Known limits:** the HackBerry CM5's touch reports at most two fingers, so there the switcher is Alt+Tab only, and
@@ -155,8 +170,9 @@ puts its last picture back at once and it carries on where it was.
 ## Your own apps
 
 **Settings > Apps** installs and removes apps from any public GitHub repository you add as a source
-(`owner/repo`), so you can sideload your own. Our apps (Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop,
-Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial Console, System Monitor, viz1090) are in
+(`owner/repo`), so you can sideload your own. Our apps (Cassette, Deck Atlas, Home Assistant, Klondike Solitaire,
+Markdown Notes, Mesh Hop, Mine Field, mmWave Radar, Net Toolbox, Net Walk, RSS Reader, Serial Console, System
+Monitor, viz1090) are in
 [cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps), which is also the template to host your own:
 see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
@@ -194,10 +210,12 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 
 ## Branches: main and small-screen
 
-- **`main`** is for screens of 640x480 and more (and the portrait PDA screens). The apps that stay with it are the
-  ones that meet 640x480: the built-in Settings, CLI, Python, SSH and Calculator, and from the apps repository
-  Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, Net Toolbox, Net Walk, RSS Reader, Serial
-  Console, System Monitor and viz1090.
+- **`main`** has no global minimum screen size (decision of 2026-11-12): the smallest screen an app needs is a
+  requirement of that app (`min_size` in the registry, `X-MinSize` in its `.desktop` file), and Settings > Apps >
+  Available lists only the apps that fit the screen. Since v0.9.4 main also runs 480x320 panels upright in PDA mode.
+  Its apps are the built-in Settings, CLI, Python, SSH and Calculator, and from the apps repository Cassette, Deck
+  Atlas, Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, mmWave Radar, Net Toolbox, Net
+  Walk, RSS Reader, Serial Console, System Monitor and viz1090.
 - **`small-screen`** (created at v0.8.13, commit 5ddd2e9f) is the long-lived fork for 480x320-only screens. It keeps
   the Store screen and the 320x170 apps that main removed after v0.8.13 (the Store tile, Snake, Tank, IP Panel). There
   is no release from it for now. Changes flow from main to it by cherry-pick only (never a merge, which would bring
@@ -209,15 +227,20 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 
 1. Set up the Pi and the panel as described in the [Pi port README](projects/APPLaunch/pizero2w/README.md).
 2. Download `cyberdeckzero-launcher-<version>-arm64.tar.gz` from the
-   [releases](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases) (the first release after the rename
-   also carries the same file as `pizero2w-bundle.tar.gz`, the older name), or build it on Linux x86_64 or WSL with
+   [releases](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases) (the older name `pizero2w-bundle.tar.gz` is not
+   published any more), or build it on Linux x86_64 or WSL with
    `projects/APPLaunch/pizero2w/build.sh --with-store`.
 3. Copy it to the Pi, unpack it and run `sudo ./install.sh` in the unpacked folder.
 
 **x86 PCs (amd64).** The same launcher also runs on x86_64 PCs with a touch panel, with no display server (report 028;
 reference: the Panasonic FZ-M1 tablet): take `cyberdeckzero-launcher-<version>-amd64.tar.gz` (or build it with
 `build.sh --arch amd64`) and run the same `sudo ./install.sh`. It needs glibc 2.38 or newer (Debian 13, Ubuntu 24.04
-or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Settings > Apps lists five apps built for amd64 (v0.8.2) and shows the tablet's battery (v0.8.3); from v0.8.4 every board detects its battery, brightness and sound at run time; from v0.8.5 the launcher publishes a status feed apps can read; from v0.8.6 apps can ask the launcher for sounds, notices and volume (launcher.sock); from v0.8.7 volume and brightness buttons on devices that are not keyboards are read too, and a double tap of the Windows key opens the app switcher; from v0.8.8 a portrait PDA profile with handwriting input, and the Pi 4 B board profile; from v0.8.9 a Settings > Screen > PDA mode choice (Off / On rotate left / On rotate right) on any screen where portrait fits; the x86 port is new in v0.8.1.
+or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Every app of the apps repository has an amd64 package (14 today), so Settings > Apps lists them all. Since v0.8.1:
+the tablet's battery (v0.8.3); every board detects its battery, brightness and sound at run time (v0.8.4); a status
+feed apps can read (v0.8.5); sounds, notices and volume for apps through launcher.sock (v0.8.6); volume and brightness
+buttons on devices that are not keyboards, and a double tap of the Windows key for the app switcher (v0.8.7); a portrait
+PDA profile with handwriting input, and the Pi 4 B board profile (v0.8.8); Settings > Screen > PDA mode (Off / On rotate
+left / On rotate right) on any screen where portrait fits (v0.8.9).
 See [Install on a PC](projects/APPLaunch/pizero2w/README.md#install-on-a-pc-amd64).
 
 ## Updating the launcher

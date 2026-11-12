@@ -1,7 +1,7 @@
 #!/bin/sh
-# Uninstall CyberdeckZero Launcher from a Raspberry Pi board: the counterpart of install.sh.
+# Uninstall CyberdeckZero Launcher from a Raspberry Pi board or a PC: the counterpart of install.sh.
 #
-# Run on the Pi as the deck user (sudo is used only for the system parts):   ./uninstall.sh [options]
+# Run on the board as the launcher's user (sudo is used only for the system parts):   ./uninstall.sh [options]
 # It is idempotent: running it again only reports what is already gone. It never writes or logs a password
 # (sudo asks for it itself) and never uses pkill: the launcher is stopped through systemd. It knows the names of this
 # release (cyberdeckzero.service, ...) and those of v0.6.0 and before (APPLaunch.service, ...), so it also cleans a

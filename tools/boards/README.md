@@ -21,11 +21,15 @@ python board.py status     deck
 | pi3a | 192.168.68.170 | service | /dev/fb1 320x480 RGB565 (Luckfox 3.5" SPI) | 90 deg CCW |
 | pi3a-dsi | 192.168.68.170 | service | /dev/fb0 800x480 RGB565 (Waveshare 4.3" DSI) | 90 deg CCW (PDA portrait) |
 | pi4b | 192.168.68.167 | service | /dev/fb0 800x480 RGB565 (Pi 4 B, Freenove 5" DSI) | 90 deg CCW (PDA portrait) |
-| pi5 | 192.168.68.175 | desktop | /dev/fb0 480x800 32 bpp | 90 deg CCW |
-| pi5-dsi7 | 192.168.68.160 | desktop | /dev/fb0 800x480 32 bpp (Pi 5, official 7" DSI Touch Display, `drm-rp1-dsidrmf`) | none |
+| zero8 | 192.168.68.184 | service | /dev/fb1 320x480 RGB565 (Pi Zero 2 W, Waveshare 3.5" RPi LCD (F), profile `pi3a-luckfox35`) | 90 deg CCW |
+| pi5 (RPI53) | 192.168.68.175 | desktop | /dev/fb0 480x800 32 bpp (Pi 5, Pimoroni HyperPixel 4 DPI, profile `pi5-hyperpixel4`) | 90 deg CCW |
+| pi5-dsi7 (RPI52) | 192.168.68.160 | desktop | /dev/fb0 800x480 32 bpp (Pi 5, official 7" DSI Touch Display, `drm-rp1-dsidrmf`, profile `pi5-dsi7`) | none |
 | hackberry | 192.168.68.214 | desktop | /dev/fb0 720x720 32 bpp | none |
 | fzm1 | 192.168.68.183 | desktop, **amd64** | /dev/fb0 1280x800 32 bpp (Panasonic FZ-M1 mk2 tablet, i915) | 90 deg CCW (PDA portrait) |
 
+- **Board names:** the entries are named by what the user tests (`pi5` is the Pi 5 with the HyperPixel 4", `pi5-dsi7` the
+  Pi 5 with the 7" DSI panel); the owner's own names for the two Pi 5 boards are RPI53 (`pi5`) and RPI52 (`pi5-dsi7`).
+  `zero8` is a Pi Zero 2 W like the deck, but with the 3.5" SPI panel, so it is a different board from `deck`.
 - **grab rotation:** `grab` turns the raw framebuffer by the launcher's *current* rotation, read on the board over the
   same ssh session: `/etc/applaunch/board.conf` (`APPLAUNCH_LOGICAL`, `APPLAUNCH_ROTATE`) and the stored Settings >
   Screen > PDA mode (`"pda_mode"` in `~/.config/cardputerzero/config.json`: 0 Off = the landscape canvas, 1 On rotate
@@ -38,8 +42,8 @@ python board.py status     deck
 - **arch** (`boards.json`, default `arm64`): the bundle a board takes. `upload` refuses a bundle of the other arch:
   by its file name (`-arm64` / `-amd64`), by its launcher's ELF header when the tarball is on this machine, and on the
   board (the payload's ELF header against `uname -m`) right after unpacking. `fzm1` is amd64; its `test_env` is
-  install.sh's pc profile. It boots to the text console with no display manager, so it is a service board (until a
-  desktop is installed on it: see below).
+  install.sh's pc profile. It has Armbian's XFCE with lightdm since 2026-10-22, so it is a desktop board
+  (`"kind": "desktop"`; the section "A service board that gets a desktop" below says how a board is flipped).
 
 - **service** boards run the installed launcher as the user service `cyberdeckzero.service` (`APPLaunch.service` up to
   v0.6.0; install.sh migrates it). `test-start` stops it (and `APPLaunch.service` on a board not migrated yet) and
@@ -73,7 +77,7 @@ python board.py status     deck
 - **Pi 4 B (`pi4b`, install.sh profile `pi4b-dsi`):** the same `environ` quirk as the Pi 3A+ (verified 2026-10-25:
   a command string containing the word in any case, `EnvironmentFile` for one, drops the ssh connection), so its entry
   has `no_environ` too. It logs undervoltage warnings with its current supply.
-- **Pi 3A+ `/tmp` is a 208 MB tmpfs.** The bundle is about 54 MB and `upload` unpacks it there, so an earlier bundle or `/tmp/applaunch-bundle` left behind makes `upload` fail with "No space left on device" (or paramiko `OSError: Failure`). Remove the old files (`rm -rf /tmp/applaunch-bundle /tmp/applaunch-upload.tar.gz /tmp/b05 /tmp/bundle*.tar.gz`) and upload again.
+- **Pi 3A+ `/tmp` is a 208 MB tmpfs.** The bundle is about 30 MB (arm64 since v0.9.0) and `upload` unpacks it there, so an earlier bundle or `/tmp/applaunch-bundle` left behind makes `upload` fail with "No space left on device" (or paramiko `OSError: Failure`). Remove the old files (`rm -rf /tmp/applaunch-bundle /tmp/applaunch-upload.tar.gz /tmp/b05 /tmp/bundle*.tar.gz`) and upload again.
 - Never `pkill -f` over ssh (kills the ssh shell); `board.py` uses `pkill -x cyberdeckzero` (the whole binary name is
   the process name: 13 characters), and the earlier binary's process name for a board not migrated yet.
 - `python -I board.py -h` and `--dry-run` need nothing beyond the standard library. For a real run paramiko must be
