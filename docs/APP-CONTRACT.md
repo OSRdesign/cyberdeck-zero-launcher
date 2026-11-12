@@ -7,7 +7,7 @@ header `ext_components/cp0_lvgl/include/cp0_app_contract.h` says the same in sho
 
 ## 1. Purpose and the three layers
 
-The launcher runs on panels from 480x320 to 1280x720, rotated or not, at 16 or 32 bpp. An app needs to know which
+The launcher runs on panels from 480x320 (320x480 upright) to 1280x800 (the FZ-M1 tablet; 800x1280 in PDA mode), rotated or not, at 16 or 32 bpp. An app needs to know which
 mode it runs in, how many pixels it draws, how dense they are (a 7 mm button is 79 px on the deck at 2x and 44 px
 on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen keyboard.
 
@@ -25,14 +25,14 @@ on the Pi 3A+ with its SPI panel), and whether it should show its own on-screen 
 | panel environment (`APPLAUNCH_SCREEN_*`) | the launcher, process-wide at display creation | once | every child process |
 | `screen.state` | **only** the launcher (atomic rename) | at display creation, and again after **every** app exits (`gen + 1`) | any app |
 | `input.state` | **only** the launcher (atomic rename) | keyboard list change, Settings > System > On-screen keyboard or Pointer navigation change | any app |
-| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth, battery, volume, mute, brightness or SSH indicator value changes (checked every 2 s; volume and brightness at least every 10 s, at once after a change by the launcher) | any app |
+| `status.state` | **only** the launcher (atomic rename, from a thread of its own) | when the Wi-Fi, Ethernet, Bluetooth, battery, volume, mute, brightness or SSH indicator value, or the Bluetooth audio devices (`bt_audio_dev`), changes (checked every 2 s; volume and brightness at least every 10 s, at once after a change by the launcher) | any app |
 | `board.state` | **only** the launcher (atomic rename, from a thread of its own) | at start, again after the first sound-server probe, then when a fact changes (sound re-probed every 30 s) | any app |
 | `launcher.sock` | the launcher serves it (a thread of its own, mode 0600) | while the launcher runs | any process of the same user: apps, scripts, ssh (section 14) |
 | `.desktop` keys | the app's package | install | the launcher |
 
 The state files live in one directory: `$APPLAUNCH_STATE_DIR`, else `$XDG_RUNTIME_DIR/applaunch/`, else the files
-`/tmp/applaunch-screen.state`, `/tmp/applaunch-input.state` and `/tmp/applaunch-status.state` (`cp0_app_state_path()`
-implements this order).
+`/tmp/applaunch-screen.state`, `/tmp/applaunch-input.state`, `/tmp/applaunch-status.state` and
+`/tmp/applaunch-board.state` (`cp0_app_state_path()` implements this order).
 
 An app built on `cp0_lvgl` never writes `screen.state`: its display backend sees `APPLAUNCH_APP_MODE` and skips the
 publication (an older app binary may still overwrite the file while it runs; the launcher rewrites it when the app
@@ -247,7 +247,7 @@ bt_audio_dev=70_BF_92_53_6B_8B:headset:1:a2dp;9E_0C_81_E6_5D_1A:speaker:0
 | `gen` | increases on every write (a restarted launcher continues from the old file) |
 | `ssh` | incoming SSH connections to the board's sshd (the SSH indicator, 2026-10-30): established TCP connections whose local port is one sshd listens on, each seen in two consecutive samples (so a port scan never shows); `ssh localhost` and connections still at the password prompt count. `0` = none, Settings > System > SSH indicator is Off (the launcher then does not look), or an older launcher (the reader gives `0` too). A count only: peer addresses never appear in this file |
 | `ssh_act` | `1` = bytes moved on one of them since the launcher's previous sample, 2 s earlier (typing, output, a transfer, an SSH keepalive); `0` otherwise and whenever `ssh` is `0` |
-| `bt_audio_dev` | the **paired Bluetooth audio devices**, read-only facts for an app that records or plays through Bluetooth (2026-11-11; always the **last** key; absent when there is none, Bluetooth is off, or the launcher is older). Syntax below |
+| `bt_audio_dev` | the **paired Bluetooth audio devices**, read-only facts for an app that records or plays through Bluetooth (launcher 0.10.1, 2026-11-11; always the **last** key; absent when there is none, Bluetooth is off, or the launcher is older). Syntax below |
 
 `ssh` and `ssh_act` drive the strip's SSH indicator: the terminal glyph (U+F120) in the strip's leftmost slot while `ssh`
 is above 0, the Bluetooth "connected" blue, alternating with white on the strip's 1 s clock tick while `ssh_act` is 1;
@@ -268,7 +268,7 @@ ENTRY = MAC:kind:connected[:profile[:...]]
 | Field | Meaning |
 |---|---|
 | `MAC` | the device address with underscores, capitals: `70_BF_92_53_6B_8B` (the tail of BlueZ's object path, `dev_70_BF_92_53_6B_8B`, and of PipeWire's `bluez_card.` / `bluez_input.` / `bluez_output.` names) |
-| `kind` | `headset` (the device offers the Headset 0x1108 or Handsfree 0x111E service, so it has a **microphone**), `headphones` (an Audio Sink 0x110B, no call profile, BlueZ says headphones), `speaker` (an Audio Sink and nothing else: playback only). Other devices (keyboards, phones, computers) are not listed. New kinds may be added: treat an unknown one as "other" |
+| `kind` | (decided from the UUIDs; until BlueZ has listed them, from `Device1.Icon`, then from the Class of Device) `headset` (the device offers the Headset 0x1108 or Handsfree 0x111E service, so it has a **microphone**), `headphones` (an Audio Sink 0x110B, no call profile, BlueZ says headphones), `speaker` (an Audio Sink and nothing else: playback only). Other devices (keyboards, phones, computers) are not listed. New kinds may be added: treat an unknown one as "other" |
 | `connected` | `1` = BlueZ says connected now, `0` = paired but not connected (asleep, switched off) |
 | `profile` | optional. `a2dp` = the device is connected and has a music (A2DP) transport in BlueZ: it can play stereo music. `hfp` = a connected **headset** with no A2DP transport: call profiles only, so playback is call quality (8 or 16 kHz). Left out (with its colon) when not known, e.g. a speaker without a transport, or a device that is not connected |
 
@@ -309,7 +309,7 @@ The facts of the board that the launcher already works out for its own Settings 
 v=1
 gen=2
 pid=801
-launcher=0.8.6
+launcher=0.10.1
 board=hackberry-cm5
 arch=aarch64
 ram_mb=1800
@@ -340,7 +340,7 @@ bt_le_audio=0
 | `sound_kind` | `alsa` (a local card with a playback volume), `server` (a PulseAudio / PipeWire sink), `bluetooth` |
 | `sound_guess` | `1` when `sound_kind=bluetooth` is a **guess** from the sink's name (`bluez_output.*`); the launcher cannot ask the sink what it is |
 | `requests` | the verbs `launcher.sock` answers **on this board** (section 14): `volume` only with sound, `brightness` only with a backlight, `dim` only on a battery board with brightness levels. `beep` is always listed: without sound it answers `err nosound` |
-| `bt_audio` | which sound stack owns the BlueZ audio endpoints (2026-11-11; read-only): `pipewire` (`pactl info` says `PulseAudio (on PipeWire x.y)`, or no pulse server but a `pipewire` process runs), `pulseaudio` (a plain PulseAudio server), `bluealsa` (a `bluealsa` process and no sound server), `none` (nothing that carries Bluetooth audio: an app should say "Bluetooth audio is not set up on this board"). Absent until the first probe has run. PulseAudio is taken to own the endpoints without asking whether its Bluetooth module is loaded: with `pulseaudio` and no `bluez_*` nodes, say it is not set up |
+| `bt_audio` | which sound stack owns the BlueZ audio endpoints (launcher 0.10.1, 2026-11-11; read-only): `pipewire` (`pactl info` says `PulseAudio (on PipeWire x.y)`, or no pulse server but a `pipewire` process runs), `pulseaudio` (a plain PulseAudio server), `bluealsa` (a `bluealsa` or `bluealsad` process and no sound server), `none` (nothing that carries Bluetooth audio: an app should say "Bluetooth audio is not set up on this board"). Absent until the first probe has run. PulseAudio is taken to own the endpoints without asking whether its Bluetooth module is loaded: with `pulseaudio` and no `bluez_*` nodes, say it is not set up |
 | `bt_hfp` | `1` = the adapter offers the Hands-free Audio Gateway (UUID 0x111F; `bluetoothctl show`): call audio (a headset microphone) can be set up. `0` = it does not (no HFP in the sound stack, or no Bluetooth). Absent = not probed yet or an older launcher |
 | `bt_le_audio` | `1` = the controller offers LE Audio isochronous streams (`btmgmt info`: `cis-central` or `cis-peripheral` in the supported settings). `0` where it does not or the tool is missing (none of the boards today). Absent = not probed yet or an older launcher |
 | `battery_note`, `backlight_note`, `sound_note` | the board profile's hint text (`use the button on the case`, `pair XWF-M18 in Bluetooth`), for display only |
@@ -398,11 +398,11 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 
 | Files | What | Needs |
 |---|---|---|
-| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav` and `hand`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_bt_audio_dev_get()` (the `bt_audio_dev` entries), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()` | `cp0_ui_metrics.{h,c}` |
-| `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
+| `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav` and `hand`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_bt_audio_dev_get()` (the `bt_audio_dev` entries), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()`, `cp0_app_mode_name()` / `_parse()`, `cp0_app_vkb_name()` / `_parse()` | `cp0_ui_metrics.{h,c}` |
+| `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_path()`, `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
-| `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | the app side of the lifecycle protocol (section 13): `cp0_app_lifecycle_init()` from the environment, `_service()` (non-blocking, answers `ack <n>`), `_send()` (`home`, `switcher`), the key rule `_key_drop()` | libc + POSIX sockets |
+| `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | the app side of the lifecycle protocol (section 13): `cp0_app_lifecycle_init()` from the environment (`_attach()` with a socket the caller has, for tests), `_service()` (non-blocking, answers `ack <n>`), `_send()` (`home`, `switcher`), `_close()`, the key rule `_key_drop()` with `_keys_shown()` after a show | libc + POSIX sockets |
 
 Build: compile the `.c` files with your app, `-I` the folders of the headers. Example of a complete user:
 `tools/dev/app-contract-probe/build.sh`.

@@ -257,6 +257,8 @@ int cp0_app_state_path(const char *file, char *buf, size_t size); /* APPLAUNCH_S
 int cp0_app_screen_read(const char *path, cp0_app_screen_t *out); /* NULL = default path; parse: cp0_app_screen_parse */
 int cp0_app_screen_compute(int w, int h, int rot, int ppmm_x100, cp0_app_screen_t *out); /* no file: same numbers */
 int cp0_app_input_read(const char *path, cp0_app_input_t *out);   /* parse: cp0_app_input_parse */
+const char *cp0_app_mode_name(cp0_app_mode_t mode);               /* "compat", "fullscreen", ""; parse: cp0_app_mode_parse */
+const char *cp0_app_vkb_name(cp0_app_vkb_t vkb);                  /* "auto", "off", "force", "zone"; parse: cp0_app_vkb_parse */
 int cp0_app_osk_allowed(const cp0_app_input_t *in, int64_t now_mono_s); /* the shared on-screen keyboard rule */
 int64_t cp0_app_monotonic_s(void);
 ```
@@ -268,11 +270,15 @@ The readers return 0 or -1 and always fill `out` (cleared on failure); unknown k
 Report 035; contract text in [`APP-CONTRACT.md`](APP-CONTRACT.md) sections 5b, 5c and 14. Plain C99 + POSIX, no LVGL, copy-ready like the contract reader.
 
 ```c
-/* board.state: board, arch, RAM, battery, backlight, sound (and its kind), the verbs launcher.sock answers here */
+/* board.state: board, arch, RAM, battery, backlight, sound (and its kind), the verbs launcher.sock answers here, and
+   (launcher 0.10.1) bt_audio (the sound stack that owns the BlueZ endpoints), bt_hfp, bt_le_audio */
 int cp0_app_board_read(const char *path, cp0_app_board_t *out);   /* NULL = default path; -1 = nothing to assume */
 int cp0_app_board_has_request(const cp0_app_board_t *board, const char *verb);
 /* status.state gained volume (-1 = no sound), mute, brightness_pct (-1 = no backlight) in cp0_app_status_t,
-   then (2026-10-30) ssh (incoming SSH connections, 0 = none) and ssh_act (0|1) */
+   then (2026-10-30) ssh (incoming SSH connections, 0 = none) and ssh_act (0|1),
+   then (launcher 0.10.1) bt_audio_dev (the paired Bluetooth audio devices, the last key) */
+int cp0_app_status_read(const char *path, cp0_app_status_t *out); /* NULL = default path; 0 good feed (the pid is alive), -1 none */
+int cp0_app_bt_audio_dev_get(const cp0_app_status_t *s, int i, cp0_app_bt_audio_dev_t *out); /* bt_audio_dev entries, -1 after the last */
 
 /* launcher.sock: one request line, one reply line; 0 "ok ...", 1 "err ...", -1 no service / timeout (200 ms default) */
 int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_ms);
@@ -281,6 +287,20 @@ int cp0_app_toast(const char *text);    /* shown on the launcher's toast when th
 ```
 
 Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).
+
+### Lifecycle helper (`include/cp0_app_lifecycle.h`)
+
+The app side of the multitasking protocol (hide, show, close, `ack <n>`), plain C99 + POSIX, no LVGL; the rules are in [`APP-CONTRACT.md`](APP-CONTRACT.md) section 13.
+
+```c
+int  cp0_app_lifecycle_init(cp0_app_lifecycle_t *lc, const cp0_app_lifecycle_ops_t *ops, void *ctx);   /* from APPLAUNCH_LIFECYCLE / APPLAUNCH_CONTROL_FD; 1 = active */
+int  cp0_app_lifecycle_attach(cp0_app_lifecycle_t *lc, int fd, const cp0_app_lifecycle_ops_t *ops, void *ctx); /* a socket the caller has (tests) */
+int  cp0_app_lifecycle_service(cp0_app_lifecycle_t *lc);          /* every turn of the main loop; messages handled, -1 launcher gone */
+int  cp0_app_lifecycle_send(cp0_app_lifecycle_t *lc, const char *msg); /* "home" or "switcher" */
+void cp0_app_lifecycle_close(cp0_app_lifecycle_t *lc);
+void cp0_app_lifecycle_keys_shown(cp0_app_lc_keys_t *k);          /* after a show */
+int  cp0_app_lifecycle_key_drop(cp0_app_lc_keys_t *k, int hidden, uint32_t code, int state, int alt); /* 1 = drop the key */
+```
 
 ### Map engine (`include/cp0_map.h`; `CONFIG_CP0_LVGL_MAP`; report 054 section 3.7, report 055)
 
