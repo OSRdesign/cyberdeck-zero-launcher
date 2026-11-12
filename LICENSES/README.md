@@ -46,8 +46,8 @@ Retain original per-file notices and any nested dependency licenses. Recheck
 these copies whenever dependency revisions change, especially unpinned downloads.
 
 JetBrainsMono-OFL.txt (next to the fonts) predates this table. The font licence files above are copied by `build.sh` into
-/usr/share/doc/cyberdeckzero-launcher/fonts/ because their names match `*OFL*` or `*LICENSE*`. Alibaba PuHuiTi has no text: the
-official licence file has not been obtained (see OPEN_SOURCE_COMPONENTS.md). `lockscreen.png` is an upstream M5Stack
+/usr/share/doc/cyberdeckzero-launcher/fonts/ because their names match `*OFL*` or `*LICENSE*`. Alibaba PuHuiTi's official legal notice is
+AlibabaPuHuiTi-LICENSE.txt (see OPEN_SOURCE_COMPONENTS.md). `lockscreen.png` is an upstream M5Stack
 launcher asset under M5Stack-SDK-MIT.txt; the origin of the image itself has not been verified independently.
 `svgfont.ttf` was removed (unused, no licence information; history in git).
 
