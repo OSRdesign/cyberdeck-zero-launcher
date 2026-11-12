@@ -1,19 +1,60 @@
 # tools/dev: build and check the launcher
 
-Two scripts for the Windows dev machine + WSL build box, used by workers and by the Controller. Run them from WSL or
+Scripts for the Windows dev machine + WSL build box, used by workers and by the Controller. Run them from WSL or
 from Git Bash (they re-run themselves in WSL through `wsl.exe`). `-h` prints the usage of each.
 
 | Script | What it does |
 | --- | --- |
-| `wsl-build.sh [--arch arm64\|amd64] [--with-store]` | Syncs this checkout into its WSL build tree, takes the build lock, builds the bundle with `projects/APPLaunch/pizero2w/build.sh` (arm64 for the Pi boards by default; `--arch amd64` builds natively for PCs in its own tree `~/zero7/<checkout>-amd64` and needs the -dev packages listed by `build.sh -h`). Prints the last 25 build lines, the full log's path, and the bundle's path and size (also as a `\\wsl.localhost\...` path for Windows tools such as `tools/boards/board.py upload`). Exit status = the build's. |
-| `check-all.sh` | Syncs, takes the lock, then runs `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`), `app-unit` (`projects/APPLaunch/tests/run_tests.sh`), `render` (`tests/render/run.sh render`), `compare`, `twice`, `header`, `contract` (same script; the app contract probe, `app-contract-probe/`), `branding` (`check-branding.sh` on the checkout). One line per step: `PASS|FAIL <step> (<seconds>s)`; a failing step also shows its last 40 lines. Logs in `/tmp/check-all-<checkout>/`. Exit 1 if any step failed. |
+| `wsl-build.sh [--arch arm64\|amd64] [--with-store]` | Syncs this checkout into its WSL build tree, takes the build lock, builds the bundle with `projects/APPLaunch/pizero2w/build.sh` (arm64 for the Pi boards by default; `--arch amd64` builds natively for PCs in its own tree `~/zero7/<checkout>-amd64` and needs the -dev packages listed by `build.sh -h`). Prints the last 25 build lines, the full log's path, and the bundle's path and size (also as a `\\wsl.localhost\...` path for Windows tools such as `tools/boards/board.py upload`). Exit status = the build's. Environment: `APPLAUNCH_VERSION` (default `dev`), `APPLAUNCH_CHANNEL` (default `development` here, `release` in `build.sh` alone), `LEGACY_BUNDLE_NAME`; set them inside WSL, they do not cross the re-run through `wsl.exe`. A release bundle: [release checklist](../../docs/dev/checklists/release.md), step 5. |
+| `check-all.sh` | Syncs, takes the lock, then runs `cp0-unit` (`ext_components/cp0_lvgl/tests/run_tests.sh`), `app-unit` (`projects/APPLaunch/tests/run_tests.sh`), `strokes` (`make -C tools/strokes check`), `render` (`tests/render/run.sh render`), `compare`, `twice`, `header`, `contract` (same script; the app contract probe, `app-contract-probe/`), `branding` (`check-branding.sh` on the checkout): 9 steps. It does not run the installer tests (see [Running the checks](#running-the-checks)). One line per step: `PASS|FAIL <step> (<seconds>s)`; a failing step also shows its last 40 lines. Logs in `/tmp/check-all-<checkout>/`. Exit 1 if any step failed. |
 | `check-branding.sh [--allow FILE] [ROOT]` | Fails (exit 1, prints `file:line: text`) when a tracked file names the upstream brand outside the technical names of `NAMING.md`, the `branding-allow-begin/end` blocks (credits) and the paths of `branding-allow.txt` (one glob per line, with the reason). POSIX sh, runs anywhere git does (in WSL it uses `git.exe` for a worktree made on Windows). For the apps repo: copy it to `tools/branding/check-branding.sh` there, with `branding-allow.apps-template.txt` as `tools/branding/branding-allow.txt`. |
 | `x86-smoke.sh [--size WxH] [--seconds N] [ENV=VALUE ...]` | Starts the amd64 launcher of `~/zero7/<checkout>-amd64` headless on a virtual framebuffer (the vfb shim on a `/dev/shm` file, 1280x800 by default, the pc profile's environment, its `share/` seen at `/usr/share/APPLaunch` through a private overlay: no root), then prints its display lines, whether it still runs and its peak RSS, and writes a PNG (`/tmp/x86-smoke-<W>x<H>.png`). Exit 0 when it still ran at the shot. |
 | `lib.sh` | Shared helpers (sourced): WSL re-exec, build lock, tree sync. |
 
-Both use the same recipe as the scripts the earlier sessions ran by hand:
+`wsl-build.sh` and `check-all.sh` use the same recipe as the scripts the earlier sessions ran by hand:
 `source ~/zero7/venv/bin/activate`, `APPLAUNCH_HW=pizero2w CONFIG_REPO_AUTOMATION=y
 CONFIG_DEFAULT_FILE=linux_x86_cross_cp0_config_defaults.mk`, everything under `flock /tmp/wsl-build.lock`.
+
+## Running the checks
+
+**`check-all.sh`** runs 9 steps, in this order: `cp0-unit`, `app-unit`, `strokes`, `render`, `compare`, `twice`,
+`header`, `contract`, `branding` (the table above says what each one runs). `app-unit` includes the release notes test
+(`test_settings_update_model.cpp`, rules in the [release checklist](../../docs/dev/checklists/release.md#release-notes-rules)).
+
+**Not in `check-all.sh`: the installer tests.** `projects/APPLaunch/pizero2w/tests/test-install-board.sh` (board
+detection, profiles, whole install, migration, desktop variant, uninstall) and `test-update-helper.sh` (Settings >
+Updates' root helper `cyberdeckzero-update` and what `install.sh` gives it) run on their own, in WSL, as a normal user
+(`test-update-helper.sh` refuses to run as root), from an **LF copy of the whole repository** (cloned from any local repository that has the commit, for example after
+a `git fetch github`):
+
+```
+git -c core.autocrlf=false clone -q --no-checkout /mnt/c/CLAUDE/zero7/launcher/.git /tmp/lf && cd /tmp/lf &&
+git -c core.autocrlf=false checkout -q <commit>
+sh projects/APPLaunch/pizero2w/tests/test-install-board.sh
+sh projects/APPLaunch/pizero2w/tests/test-update-helper.sh
+```
+
+- LF: the checkouts on Windows have `core.autocrlf=true`, and `.gitattributes` keeps only scripts and unit files LF,
+  so the fixtures (fake `/proc` and `/sys` trees, for example `fixtures/zero2w/proc/device-tree/model`) are CRLF
+  there (`Raspberry Pi Zero 2 W Rev 1.0\r`), which no board's `/proc` gives: a run from such a tree does not count.
+- The whole repository: some checks read files outside `pizero2w/`. A copy of `pizero2w/` alone fails 2 checks of
+  `test-install-board.sh` ("build.sh: the earlier name is an arm64 copy only, ..." and "amd64 config: the device
+  config without the NEON lines": they read `projects/APPLaunch/*config_defaults.mk`) and the 5 "deck case" checks of
+  `test-update-helper.sh` (they read the apt fixture `projects/APPLaunch/tests/fixtures/apt/deck-p4`).
+- Time on the build box: about 40 s for `test-install-board.sh` (502 checks), about 4 minutes for
+  `test-update-helper.sh` (159 checks). Each prints `ok` or `FAIL` per check and `N passed, M failed` at the end; exit
+  status 0 only when nothing failed.
+
+**Known failures and flakes** (last full run of the installer tests: 2026-11-12 on main `08b48238`, both 0 failed):
+
+- No known failure on main when the installer tests run as above. The 2 installer checks and the 5 "deck case"
+  checks that were noted as failing on main fail only from a copy of `pizero2w/` alone (checked 2026-11-12: 500/2 and
+  154/5 from such a copy, 502/0 and 159/0 from the whole LF copy). Not a release blocker: rerun from a whole LF copy.
+- `twice` can differ once in the map scenes: the map widget's tile-load thread is not a tracked worker of the harness
+  (`projects/APPLaunch/tests/render/README.md`, `mapdemo wait`). For v0.10.1, 2 of 4315 PNGs differed once and the
+  rerun passed. Rerun `twice` before treating it as a failure; a difference that comes back is a real one.
+- `cp0-unit` prints `SKIP test_keyboard_keymap` without `libxkbcommon-dev` (see Prerequisites); that is not a
+  failure unless `CI=1` or `REQUIRE_XKBCOMMON=1`.
 
 ## The WSL build tree
 
