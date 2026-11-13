@@ -92,9 +92,15 @@ int main()
     assert(credit.lines[8] == "Derived from");
     assert(credit.lines[9] == "The CardputerZero launcher by M5Stack Technology CO LTD");
     assert(credit.lines[13] == "Bundled");
-    assert(credit.lines[14] == "CardputerZero Store by M5Stack, unchanged");
-    assert(credit.lines[18] == "Upstream");
-    assert(credit.lines[19].find("Kickstarter backers") != std::string::npos);
+    assert(credit.lines[6].find("bundles a fork of M5Stack's CardputerZero Store with one change") !=
+           std::string::npos);
+    assert(credit.lines[14] ==
+           "CardputerZero Store by M5Stack, our fork with one change (apt installs without recommended packages)");
+    assert(credit.lines[15] == "https://github.com/CardputerZero/Store");
+    assert(credit.lines[16] == "Fork: https://github.com/OSRdesign/cyberdeck-zero-store");
+    assert(credit.lines[19] == "Upstream");
+    assert(credit.lines[20].find("Kickstarter backers") != std::string::npos);
+    for (const auto &line : credit.lines) assert(line.find("Store unchanged") == std::string::npos);
     for (const auto &line : credit.lines) {
         assert(line.find("CardputerZero is built with") == std::string::npos); // upstream's product sentence
         assert(line.find("Proxmark") == std::string::npos);                    // upstream OS image's list

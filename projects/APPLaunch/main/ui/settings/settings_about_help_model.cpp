@@ -70,7 +70,7 @@ Raspberry Pi port, responsive shell and native Settings by OSRdesign, written to
 Licence: MIT, see LICENSE in the source.
 Source: github.com/OSRdesign/cyberdeck-zero-launcher
 
-CyberdeckZero Launcher is an independent hobby project, derived from the MIT-licensed CardputerZero launcher by M5Stack Technology CO LTD, and bundles M5Stack's CardputerZero Store unchanged. It is not affiliated with, sponsored or endorsed by M5Stack.
+CyberdeckZero Launcher is an independent hobby project, derived from the MIT-licensed CardputerZero launcher by M5Stack Technology CO LTD, and bundles a fork of M5Stack's CardputerZero Store with one change. It is not affiliated with, sponsored or endorsed by M5Stack.
 
 Derived from
 The CardputerZero launcher by M5Stack Technology CO LTD
@@ -78,8 +78,9 @@ https://github.com/CardputerZero/launcher
 MIT, Copyright (c) 2026 M5Stack Technology CO LTD
 
 Bundled
-CardputerZero Store by M5Stack, unchanged
+CardputerZero Store by M5Stack, our fork with one change (apt installs without recommended packages)
 https://github.com/CardputerZero/Store
+Fork: https://github.com/OSRdesign/cyberdeck-zero-store
 MIT; it also uses libhv (BSD-3-Clause), nlohmann/json (MIT) and OpenSSL 3 (Apache-2.0)
 
 Upstream

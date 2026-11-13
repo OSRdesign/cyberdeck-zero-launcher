@@ -107,7 +107,7 @@ share/images/store_arrow_right.png share/images/store_arrow_left.png share/image
 share/images/store_100.png share/images/store_80.png
 share/images/game_100.png share/images/game_80.png share/images/ip_panel_100.png share/images/ip_panel_80.png
 share/images/tank.png share/images/tank_100.png share/images/tank_80.png
-share/font/NotoSerifCJK-Regular.ttc share/font/AlibabaPuHuiTi-3-35-Thin.ttf"
+share/font/NotoSerifCJK-Regular.ttc share/font/AlibabaPuHuiTi-3-35-Thin.ttf share/font/svgfont.ttf"
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 

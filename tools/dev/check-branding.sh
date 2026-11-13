@@ -12,7 +12,7 @@
 #     - names inherited from upstream that stay (NAMING.md): cp0_ APPLaunch APPLAUNCH_ M5APPSTORE_
 #       .config/cardputerzero cardputerzero-appstore /com/cardputerzero/applaunch
 #       M5CardputerZero-APPLaunch_fcntl.lock (lock file shared with legacy apps)
-#     - the bundled Store (M5Stack's code, unchanged): M5CardputerZero-AppStore, "CardputerZero Hub",
+#     - the bundled Store (M5Stack's code, our fork with one change):M5CardputerZero-AppStore, "CardputerZero Hub",
 #       cardputerzero.github.io cardputer-zero-repo
 #     - the keymap file name tca8418_keypad_m5stack_keymap (inherited keyboard path)
 #     - the approved credit and disclaimer phrases (report 025): "CardputerZero launcher by M5Stack",
