@@ -874,7 +874,7 @@ Each library is named in the README credits and the `copyright` file (D-76).
 | Scan I/O starving playback on SD | low with idle I/O [I] / dropouts | `ioprio` IDLE (mq-deadline [F]); B39 |
 | Zero 2 W RSS over 25 MB with FFmpeg | certain for T2 files [F 059] | on-demand loading (P1); README |
 | Track actions hold breaks D-35 | high if drawn as "a hold" | D31 |
-| EQ keys against D-29 | certain without a ruling | D30 |
+| EQ keys against D-29 | certain without a ruling | D30 | One EQ for all outputs; arrow keys on the EQ page | Accepted, then extended: the EQ bars also work by dragging, and so does the track seek bar (owner, 2026-11-13: "for D30 equalizer should also work by dragging the bars and btw so should the track timeline to seek a specific point"). The exception to the page-arrow rule (D-29: Left goes back, Right acts like Enter) stays: the EQ page needs Left/Right to choose a band and Up/Down to change its gain. Dragging a slider is allowed when a key and a tap alternative exist (refines R-1/D-34). Seek dragging is built in Vinyl 0.1.0; EQ dragging comes with P2d. |
 | dB text overflows the value box | certain at 52-68 px | 5.2 #4 |
 | No USB automount on Lite | certain [F] | D28; a launcher automount item |
 | AVRCP registration takes keys off uinput | certain once registered [I] | one transport path; D33 |
