@@ -1,4 +1,4 @@
-**New since v0.10.1** (pull requests #163, #164, #165 and #171: Settings > Apps installs no recommended packages, font licence texts)
+**New since v0.10.1** (pull requests #163, #164, #165, #171 and #172: Settings > Apps installs no recommended packages, font licence texts, the About page names our Store fork)
 
 - **Settings > Apps no longer installs the packages an app only recommends.** When an app needs libraries that are
   not on the board yet, Settings > Apps installs them without apt's recommended packages. The download is much
@@ -13,10 +13,11 @@
 - **Font licences on the board.** The licence text of every font family in the launcher is now installed in
   `/usr/share/doc/cyberdeckzero-launcher/fonts/`: DejaVu, Liberation Mono, Montserrat, Noto Sans CJK, Font Awesome
   and Alibaba PuHuiTi's legal notice are new there, next to JetBrains Mono's. The unused icon font `svgfont.ttf`, which had no licence
-  information, is no longer in the bundle.
+  information, is no longer in the bundle, and updating or installing removes it from the board.
+- **About > Licenses** now says that the bundled Store is our fork of M5Stack's CardputerZero Store with one change (apt
+  installs without recommended packages), with the link to the fork; the upstream credit and its MIT licence are kept.
 - **Known limits:** only the install of apps changed, and only boards that run this launcher get it: an app installed
-  from Settings > Apps on v0.10.1 or older still brings its recommended packages. Updating from v0.10.1 leaves the old
-  `svgfont.ttf` on the board; nothing loads it. Some pages of the apps repository still describe the old behaviour.
+  from Settings > Apps on v0.10.1 or older still brings its recommended packages.
 - **Updating:** the same as for v0.10.1. Boards on v0.8.13 or later with a release build update from Settings >
   Updates. Boards on older builds or dev builds need one install by hand (`install.sh` from the bundle).
 
