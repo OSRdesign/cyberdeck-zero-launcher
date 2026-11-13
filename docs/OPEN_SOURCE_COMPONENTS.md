@@ -4,7 +4,7 @@ Inventory checked against this checkout on 2026-09-09, updated 2026-10-22 when t
 
 ## Project code
 
-The [root MIT license](../LICENSE) uses `2026 M5Stack Technology CO LTD`. A copy is in `ext_components/cp0_lvgl/LICENSE`. The Store (`projects/AppStore`) is a separate Git repository (submodule): its source and license changes are delivered with that repository.
+The [root MIT license](../LICENSE) uses `2026 M5Stack Technology CO LTD`. A copy is in `ext_components/cp0_lvgl/LICENSE`. The Store (`projects/AppStore`) is a separate Git repository (submodule): its source and license changes are delivered with that repository. It is our fork [OSRdesign/cyberdeck-zero-store](https://github.com/OSRdesign/cyberdeck-zero-store) of M5Stack's MIT Store, with its licence kept and one change (the package helper installs without apt Recommends).
 
 ## Embedded, fetched and linked source dependencies
 

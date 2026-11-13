@@ -19,7 +19,9 @@ run by default).
 5. Build both bundles in WSL **from the release commit**. `build.sh` copies `docs/dev/release-notes-<version>.md`
    into the bundle (`/usr/share/doc/cyberdeckzero-launcher/`, What's new offline), so a build from an earlier commit
    ships without the notes. Run it **inside WSL** (`wsl bash -lc '...'`): `wsl-build.sh` started from Git Bash
-   re-runs itself in WSL through `wsl.exe`, and the variables below do not reach it there.
+   re-runs itself in WSL through `wsl.exe`, and the variables below do not reach it there. First
+   `git submodule update --init projects/AppStore` in the release checkout: the Store is our fork with one patch
+   (decisions 2026-11-13) and `build.sh --with-store` refuses Store sources without it.
    ```
    export APPLAUNCH_VERSION=X.Y.Z APPLAUNCH_CHANNEL=release LEGACY_BUNDLE_NAME=0
    bash tools/dev/wsl-build.sh --arch arm64 --with-store

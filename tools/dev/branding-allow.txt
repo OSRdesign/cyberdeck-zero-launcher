@@ -7,7 +7,7 @@ LICENSE                                   # M5Stack's MIT notice
 LICENSES/**                               # licence texts and their index
 ext_components/*/LICENSE                  # cp0_lvgl: M5Stack MIT notice
 ext_components/THIRD_PARTY_NOTICES.md     # upstream third-party notice
-.gitmodules                               # upstream submodule URLs (m5stack, CardputerZero orgs)
+.gitmodules                               # submodule URLs (m5stack SDK; the Store is our fork of the upstream Store)
 docs/OPEN_SOURCE_COMPONENTS.md            # credits: component inventory (M5Stack SDK, upstream notices)
 
 # --- The check itself and the naming reference ---
@@ -17,7 +17,7 @@ NAMING.md                                 # lists the inherited technical names 
 
 # --- Upstream submodules (not our product; submodules are not grepped anyway) ---
 SDK/**                                    # M5Stack Linux Libs SDK (submodule): the build framework
-projects/AppStore/**                      # M5Stack's CardputerZero Store (submodule, unchanged)
+projects/AppStore/**                      # M5Stack's Store (submodule: our fork, upstream plus one patch, decisions 2026-11-13)
 
 # --- Build files that name upstream download locations ---
 projects/APPLaunch/SConstruct             # arm64 sysroot archive downloaded from an upstream release (report 029)

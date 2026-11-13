@@ -42,6 +42,10 @@ The binary is `dist/cyberdeckzero`. An LVGL app project builds the same way and 
 live in the apps repo (`apps/<id>/src`, built in a scratch project under `projects/`: native apps by `apps/<id>/build.sh`
 through `apps/_common/build_app.sh` (`host`, `cross`, `all`, `--strict`, `--sync`; pinned to the launcher commit in
 `apps/_common/LAUNCHER_REF`), the older apps by `apps/<id>/build/build.sh`). The full bundle is `projects/APPLaunch/pizero2w/build.sh --with-store`.
+The Store (`projects/AppStore`) is our fork `OSRdesign/cyberdeck-zero-store`: upstream plus one patch (its package
+helper installs without apt Recommends, decisions 2026-11-13); we change nothing else in it. Run
+`git submodule update --init projects/AppStore` before a `--with-store` build: `build.sh` refuses Store sources
+without the patch.
 
 Packages: write `apps/<id>/app.json`, put the files in `apps/<id>/root/` exactly as they must land on the device,
 then `python tools/make_registry.py --owner OSRdesign --repo cyberdeck-zero-apps` (builds every `.deb` and
