@@ -1140,7 +1140,7 @@ store_arrow_left.png store_wordmark.png store_100.png store_80.png
 game_100.png game_80.png ip_panel_100.png ip_panel_80.png tank.png tank_100.png tank_80.png"
 for f in $RETIRED_IMAGES; do echo old > "$A/share/images/$f"; done
 # and the two large fonts (report 048 section 3.3), with the fonts that stay
-mkdir -p "$A/share/font"; RETIRED_FONTS="NotoSerifCJK-Regular.ttc AlibabaPuHuiTi-3-35-Thin.ttf"
+mkdir -p "$A/share/font"; RETIRED_FONTS="NotoSerifCJK-Regular.ttc AlibabaPuHuiTi-3-35-Thin.ttf svgfont.ttf"
 for f in $RETIRED_FONTS; do echo old > "$A/share/font/$f"; done
 for f in NotoSansCJK-Regular.ttc AlibabaPuHuiTi-3-55-Regular.ttf; do echo kept > "$A/share/font/$f"; done
 echo app-icon > "$A/share/images/some-app-icon.png"; echo app > "$A/applications/some-app.desktop"
@@ -1152,14 +1152,14 @@ mkdir -p "$R$UHOME/.config/cyberdeckzero"; echo '{"app_Store":1}' > "$R$UHOME/.c
 USER_SNAP=$(snapshot "$SD"; snapshot "$R$UHOME/.config/cyberdeckzero")
 full "$R"
 check "retired Store and legacy app images: exit 0, all 24 removed" '[ $RC = 0 ] && [ -z "$(for f in $RETIRED_IMAGES; do [ -e "$A/share/images/$f" ] && echo $f; done)" ] && has "removed /usr/share/APPLaunch/share/images/store_100.png (no longer in the bundle)"'
-check "retired fonts: Noto Serif CJK and the thin Alibaba font removed, Noto Sans CJK and the Regular Alibaba font stay" '[ -z "$(for f in $RETIRED_FONTS; do [ -e "$A/share/font/$f" ] && echo $f; done)" ] && [ "$(cat "$A/share/font/NotoSansCJK-Regular.ttc")" = kept ] && [ "$(cat "$A/share/font/AlibabaPuHuiTi-3-55-Regular.ttf")" = kept ] && has "removed /usr/share/APPLaunch/share/font/NotoSerifCJK-Regular.ttc (no longer in the bundle)" && has "removed /usr/share/APPLaunch/share/font/AlibabaPuHuiTi-3-35-Thin.ttf (no longer in the bundle)"'
+check "retired fonts: Noto Serif CJK, the thin Alibaba font and svgfont removed, Noto Sans CJK and the Regular Alibaba font stay" '[ -z "$(for f in $RETIRED_FONTS; do [ -e "$A/share/font/$f" ] && echo $f; done)" ] && [ "$(cat "$A/share/font/NotoSansCJK-Regular.ttc")" = kept ] && [ "$(cat "$A/share/font/AlibabaPuHuiTi-3-55-Regular.ttf")" = kept ] && has "removed /usr/share/APPLaunch/share/font/NotoSerifCJK-Regular.ttc (no longer in the bundle)" && has "removed /usr/share/APPLaunch/share/font/AlibabaPuHuiTi-3-35-Thin.ttf (no longer in the bundle)" && has "removed /usr/share/APPLaunch/share/font/svgfont.ttf (no longer in the bundle)"'
 check "retired Store and legacy app images: the Store program, an installed app and its image stay" '[ -x "$A/bin/M5CardputerZero-AppStore" ] && [ "$(cat "$A/applications/some-app.desktop")" = app ] && [ "$(cat "$A/share/images/some-app-icon.png")" = app-icon ] && [ -f "$A/share/images/setting_100.png" ]'
 check "retired Store and legacy app images: the Store's state and the user's settings are untouched" '[ "$USER_SNAP" = "$(snapshot "$SD"; snapshot "$R$UHOME/.config/cyberdeckzero")" ]'
 full "$R"
 check "retired Store and legacy app images, second run: nothing more to remove" '[ $RC = 0 ] && ! has "no longer in the bundle"'
 : > "$CALLS"
 OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys"       sh "$BUN/uninstall.sh" --dry-run --no-boot-config 2>&1); RC=$?
-check "uninstall dry-run: the Store images of earlier bundles are in its retired list" 'has "store_wordmark.png" && has "appstore-shortcut-detail.png" && has "store_100.png" && has "tank_100.png" && has "ip_panel_100.png" && has "game_100.png" && has "NotoSerifCJK-Regular.ttc" && has "AlibabaPuHuiTi-3-35-Thin.ttf"'
+check "uninstall dry-run: the Store images of earlier bundles are in its retired list" 'has "store_wordmark.png" && has "appstore-shortcut-detail.png" && has "store_100.png" && has "tank_100.png" && has "ip_panel_100.png" && has "game_100.png" && has "NotoSerifCJK-Regular.ttc" && has "AlibabaPuHuiTi-3-35-Thin.ttf" && has "svgfont.ttf"'
 
 # the DSI Pi 3A+ installed with v0.6.0, its owner's hand-written profile, a real boot configuration: config.txt is not
 # touched, cmdline.txt gets the two console arguments only (no fbcon=), the profile is kept
