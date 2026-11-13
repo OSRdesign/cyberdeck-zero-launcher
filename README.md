@@ -4,8 +4,8 @@
 
 <!-- branding-allow-begin: disclaimer -->
 > **CyberdeckZero Launcher is an independent hobby project**, derived from the MIT-licensed CardputerZero launcher by
-> M5Stack Technology CO LTD, and bundles M5Stack's CardputerZero Store unchanged. It is not affiliated with,
-> sponsored or endorsed by M5Stack.
+> M5Stack Technology CO LTD, and bundles a fork of M5Stack's CardputerZero Store with one change. It is not
+> affiliated with, sponsored or endorsed by M5Stack.
 <!-- branding-allow-end -->
 
 CyberdeckZero Launcher is a home grid, a native touch-friendly Settings and an app installer for small Raspberry Pi
@@ -75,7 +75,7 @@ Calculator and the SSH form (deck, 640x480):
 | --- | --- |
 | ![Calculator](docs/screenshots/calculator.png) | ![SSH form](docs/screenshots/ssh.png) |
 
-The Store (M5Stack's CardputerZero Store, unchanged, upscaled 2x) while it syncs its catalog. Since v0.9.0 this screen
+The Store (M5Stack's CardputerZero Store, upscaled 2x) while it syncs its catalog. Since v0.9.0 this screen
 is only on the `small-screen` branch; main keeps the Store program as the engine of Settings > Apps:
 
 ![Store syncing](docs/screenshots/store-sync.png)

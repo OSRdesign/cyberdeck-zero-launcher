@@ -37,9 +37,9 @@ both. See the [Pi port README](projects/APPLaunch/pizero2w/README.md).
 | `applaunch` | `$XDG_RUNTIME_DIR/applaunch/`, `/tmp/applaunch-*.state`, `/etc/applaunch/board.conf` | app contract and board profile paths |
 | `cp0_`, `CP0_`, `cp0_lvgl` | code prefix and the shared UI/HAL component `ext_components/cp0_lvgl`, SDK header names such as `cp0_app_contract.h` | used across the code and by apps built against the SDK; renaming would break every app build |
 | `~/.config/cardputerzero/` | the launcher's config (`config.json`, home-grid `app_order`, shared `appstore.registry.*` keys) | existing installs keep their settings and tile order; the Store reads the shared keys |
-| `~/.local/share/cardputerzero-appstore`, `~/.cache/cardputerzero-appstore` | the Store's own data and cache | the Store is M5Stack's code and is bundled unchanged |
+| `~/.local/share/cardputerzero-appstore`, `~/.cache/cardputerzero-appstore` | the Store's own data and cache | the Store is M5Stack's code, bundled as our fork with one change (apt without recommends) |
 | `M5CardputerZero-AppStore` | the Store's binary in `/usr/share/APPLaunch/bin/` | the Store's name, unchanged; the launcher starts it by that name |
-| `M5APPSTORE_*` | the Store's environment variables | the Store's code, unchanged |
+| `M5APPSTORE_*` | the Store's environment variables | the Store's code (the fork keeps them) |
 | `CardputerZero Hub` | the Store's built-in catalogue and its registry URLs | built into the Store, which refuses to remove it; credited in Settings and Licenses |
 | `/com/cardputerzero/applaunch/agent` | the launcher's BlueZ pairing agent (D-Bus object path) | apps document it (Mesh Hop's BLE notes); changing it needs nothing on disk, but is a visible interface |
 | `/tmp/M5CardputerZero-APPLaunch_fcntl.lock` | single-instance lock file | shared with legacy apps |
