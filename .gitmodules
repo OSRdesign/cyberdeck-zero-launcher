@@ -3,5 +3,5 @@
 	url = https://github.com/m5stack/M5Stack_Linux_Libs.git
 [submodule "projects/AppStore"]
 	path = projects/AppStore
-	url = https://github.com/CardputerZero/Store.git
-	branch = main
+	url = https://github.com/OSRdesign/cyberdeck-zero-store.git
+	branch = no-install-recommends

@@ -110,7 +110,8 @@ who learns a lot from open source:
 
 - **CardputerZero launcher** (the original this is based on) and its apps — the
   [CardputerZero](https://github.com/CardputerZero) organisation:
-  [launcher](https://github.com/CardputerZero/launcher), [Store](https://github.com/CardputerZero/Store),
+  [launcher](https://github.com/CardputerZero/launcher), [Store](https://github.com/CardputerZero/Store) (bundled from our fork
+  [cyberdeck-zero-store](https://github.com/OSRdesign/cyberdeck-zero-store): apt without recommends, the only change),
   [Calculator](https://github.com/CardputerZero/Calculator), [CameraApp](https://github.com/CardputerZero/CameraApp),
   [Keyboard-Guide](https://github.com/CardputerZero/Keyboard-Guide)
 - **M5Stack** — [M5Stack_Linux_Libs](https://github.com/m5stack/M5Stack_Linux_Libs) SDK and the CardputerZero hardware

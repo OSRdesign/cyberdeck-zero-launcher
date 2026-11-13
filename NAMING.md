@@ -66,7 +66,7 @@ configurations; and the code for hardware our boards do not have: Settings > Ext
 Calculator, the first-boot wizard hooks. Git history keeps all of it.
 
 Kept: every copyright notice and licence text; the names above; the bundled Store (built from the `projects/AppStore`
-submodule, unchanged) and the SDK submodule (the build framework); the native UI, the dpi-scaled display, the
+submodule: our fork of the upstream Store, unchanged except one patch, apt without recommends, decisions 2026-11-13) and the SDK submodule (the build framework); the native UI, the dpi-scaled display, the
 compat/VFB layer for legacy fullscreen apps, Settings, multitasking, the app contract, the amd64 build and the board
 tooling; and, until the owner decides (report 029 section 4), the Battery, Speaker and Ethernet pages (compiled
 out on our boards), the camera service, the default hardware profile and the legacy renderer used by the SDL

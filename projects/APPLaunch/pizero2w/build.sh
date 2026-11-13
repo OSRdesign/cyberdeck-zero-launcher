@@ -15,7 +15,8 @@
 #   amd64 (a native build on an x86_64 host, report 028): gcc, g++, pkg-config and the -dev packages (apt install
 #     libinput-dev libxkbcommon-dev libudev-dev libdbus-1-dev libglib2.0-dev libfreetype-dev, and libssl-dev for the
 #     Store). Its binaries need glibc 2.38 or newer, like the arm64 ones.
-# --with-store also builds the Store (projects/AppStore submodule; amd64: with its own cross config minus NEON).
+# --with-store also builds the Store (projects/AppStore submodule: OSRdesign/cyberdeck-zero-store, our fork of
+# the upstream Store with one patch; amd64: with its own cross config minus NEON).
 set -eu
 
 WITH_STORE=0
@@ -85,6 +86,13 @@ if [ -e "$REPO/.git" ]; then
     git -C "$REPO" submodule update --init --depth 1 SDK
     if [ "$WITH_STORE" = 1 ]; then git -C "$REPO" submodule update --init --depth 1 projects/AppStore; fi
 fi
+# The Store is our fork of the upstream Store carrying one patch (apt without Recommends, decisions 2026-11-13): refuse
+# to bundle a Store built from other sources (the old upstream copy a WSL build tree may have been seeded with)
+if [ "$WITH_STORE" = 1 ] && ! grep -q -e '--no-install-recommends' "$REPO/projects/AppStore/main/backend/appstore_native.cpp" 2>/dev/null; then
+    echo "projects/AppStore is not the pinned fork commit (no --no-install-recommends in its package helper):" >&2
+    echo "run git submodule update --init projects/AppStore in the checkout, then build again" >&2
+    exit 1
+fi
 
 export APPLAUNCH_HW=pizero2w                      # selects the Pi hardware profile (settings_hw_profile.hpp)
 export CONFIG_REPO_AUTOMATION=y                   # download SDK components without asking
@@ -101,7 +109,7 @@ if [ "$WITH_STORE" = 1 ]; then
     if [ "$ARCH" = arm64 ]; then
         ( cd "$REPO/projects/AppStore" && scons -j"$(nproc)" )
     else
-        # The Store is the upstream submodule, unchanged: its own cross config without the aarch64 toolchain and the
+        # The Store is the submodule (our fork, upstream plus one patch): its own cross config without the aarch64 toolchain and the
         # NEON lines, written next to its build output (no "cross" in the name: no sysroot)
         mkdir -p "$REPO/projects/AppStore/build"
         STORE_CONFIG="$REPO/projects/AppStore/build/amd64_native_config_defaults.mk"
