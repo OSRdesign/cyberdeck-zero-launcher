@@ -74,6 +74,7 @@ Reports 001 to 019 are mostly task hand-offs (`NNN-handoff.md`, by the builder) 
 | [`056-mmwave-sensor-study.md`](056-mmwave-sensor-study.md) | mmWave: an app for the Hi-Link HLK-LD2452 tracking radar (study and probe). Outcome added 2026-11-12: built as the mmWave Radar app (0.1.0 and 0.1.1), decisions D1 to D9 in the last section |
 | [`058-sound-recorder-study.md`](058-sound-recorder-study.md) | Sound recorder app (study) |
 | [`059-music-player-study.md`](059-music-player-study.md) | Music player app (study) |
+| [`060-vinyl-p2-plan.md`](060-vinyl-p2-plan.md) | Vinyl music player: the P2 plan (steps, architecture, board matrix, decisions D20-D33 and the owner's answers) |
 
 ## Cited but not in the repository
 
