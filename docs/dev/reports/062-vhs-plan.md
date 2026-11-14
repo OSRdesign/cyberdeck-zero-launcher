@@ -4,6 +4,8 @@ Date 2026-11-13. A read-only plan: no product code was written, nothing was inst
 changed, nothing was committed or pushed. It began as a study of the owner's webcam ideas and was turned into the plan of
 **VHS** on the owner's direction of the same day; the study's content is kept and reorganised.
 
+**Updated 2026-11-14:** the owner's decisions (section 17) and the P0 results with proposed revisions (section 16).
+
 **Owner direction (2026-11-13, verbatim):** "start a plan for "VHS" our Camera and photo app. we only have one camera
 available and you tested it. app should allow still photos and video recording. similar to cassete it should allow to
 choose sound input list "scenes" as short movie, allow codecs selection with expected performance ad for slow device post
@@ -1002,6 +1004,235 @@ Copy now (059 D6 pattern); a shared `apps/_media` is a later question.
 
 ---
 
+## 16. Addendum: P0 results (2026-11-14)
+
+All probes ran on 2026-11-14 on the real boards with the camera plugged into the named board; temporary tools and files
+were removed afterwards (`libturbojpeg0` 2.1.5 stays installed on zero8 and the Pi 3A+, owner OK). Tags: **[F P0-x]**
+measured by that probe, **[F 11-13]** the benchmarks of 2026-11-13 (3.1), **[I]** inference, **[U]** still open.
+Per-hour sizes marked "x360" are the measured MB per 10 s times 360 (arithmetic, decimal GB).
+
+### 16.1 Probes
+
+| # | Board(s) | What was run | Result | Against the plan |
+|---|---|---|---|---|
+| P0-a | zero8 | one camera MJPEG frame per mode (1080p, 720p, 480p), markers parsed | 4 DHT segments in every frame (`DB DB DB C0 C4 C4 C4 C4 SOS`); 235 / 129 / 51 KB per frame | **Pass**: the DHT [U] of 1.2 and the "frames without Huffman tables" risk (15.1) are gone |
+| P0-b | Pi 3A+, both switch positions | `--list-formats-ext`, USB descriptors, `/proc/asound`, kernel log | position A: portrait MJPG only, 6 modes, 30 fps; position B: landscape MJPG 6 modes at 60 and 30 fps plus YUYV 640x480 / 640x360 at 30; a108:2240 in both; `bMaxPower` 200 mA; mic S16_LE stereo 16 kHz only | **Partly fails**: the mic is not 48 kHz (1.2); portrait is not "the same modes rotated"; no MJPEG 640x360 (2.3). `amixer` contents and the `by-id` names: not recorded |
+| P0-c | zero8, Pi 3A+ | TurboJPEG 2.1.5, 300 frames per mode at 8/8, 4/8, 2/8, 1/8 and Y-only | table in 16.2 C4; Huffman floor on zero8 about 17 ms (1080p), 8 ms (720p) | **Pass** for D5; confirms the [I] of 2.2 that scaling saves little at 1080p. stb_image: not measured |
+| P0-d | zero8, Pi 3A+ | static ffmpeg 7.0.2, 10 s each: `h264_v4l2m2m` from YUYV and from MJPEG, x264 ultrafast 480p, MJPEG copy | hardware H.264 works on both; cores in 16.2 C3 | **Pass**: 3.2's [I] becomes [F]; 1080p through the hardware encoder is too slow on the Zero 2 W (0.88x) |
+| P0-e | zero8 | YUYV 640x360, 900 frames | steady 30.01 fps, no drops, `throttled=0x0` | **Pass**. Whether the keyboard and hub were attached: not recorded |
+| P0-f | Pi 4B | `arecord` 600 s at 16 kHz stereo (the command's 48 kHz does not exist on this mic) | 9,600,000 frames (600.000 s of audio) in 600.277 s of wall time: at most +0.046 % (0.28 s per 10 min), `arecord` start/stop included | **Pass** for D12. The 20-100 ppm estimate of 3.6 is neither confirmed nor ruled out: the bound is coarser [I] |
+| P0-h | Pi 4B (not a planned board); Pi 3A+ (replaced); RPI52 | Pi 4B: 1080p MJPEG 30 fps for 10 min, `get_throttled` every 5 s. Pi 3A+: **replaced by the new-supply test** (10 min 1080p MJPEG, 4 CPU burners from minute 5) | Pi 4B: 30.00 fps, 121 samples all 0x0, no under-voltage lines, max 55.5 C. Pi 3A+: no under-voltage; soft temperature limit only (16.2 C11) | **Partly done**: RPI52 soak with the camera not run |
+| P0-j | RPI52 | x264 veryfast 1080p30 for 30 min, **synthetic `testsrc2` source** | 1.0x, 1.16 cores, 0 throttle samples, max 49.9 C, fan state 1, 2.4 GHz held | **Pass, partly**: no camera, so no MJPEG decode in the load [I] |
+| P0-k | RPI52 (60 s quiet scene; 40 s **moving scene**); sizes also from P0-d (zero8, Pi 3A+) and P0-m (Pi 4B) | MJPEG copy and x264 / x265 / SVT-AV1 per preset, file sizes and cores | 16.2 C7, C8 | **Partly done**: x264 sizes depend on motion; x264 sizes on zero8 and the Pi 4B not measured |
+| P0-l | HackBerry; tablet | HackBerry: system ffmpeg 7.1.5, 10 s runs | camera modes as position B; **no hardware H.264 encoder** (`h264_v4l2m2m` fails, -22); x264 veryfast 1080p 1.42 cores; max 58 C, no throttling | HackBerry **pass** ("as RPI52" [I] confirmed); **tablet not done** |
+| P0-m | zero8, Pi 4B, RPI52 | `ffmpeg -f null` decode, software and hardware; HEVC with `-hwaccel drm` (Pi 4B, RPI52) | 16.2 C6 | **Partly done**: Pi 3A+, HackBerry and tablet not measured; zero8 1080p hardware decode aborted in the ffmpeg CLI at frame 209 |
+
+### 16.2 What changes in the plan
+
+C1. **Microphone (1.2, 3.3, 3.4, 3.6):** the camera's card offers **S16_LE stereo at 16 kHz only**, not 48 kHz
+[F P0-b, P0-f]. The 48 kHz of the 2026-11-12 clip was FFmpeg's resample [I]. AAC is encoded from 16 kHz (or
+resampled) [I]; PCM at 16 kHz stereo is 0.512 Mbit/s = 0.23 GB/h (arithmetic). The kernel still logs "Unlikely big
+volume range 3072" [F P0-b].
+
+C2. **Modes per switch position (1.2, 2.3, 7):** [F P0-b]
+
+| Position | Formats and sizes | Rates |
+|---|---|---|
+| A (portrait) | MJPG only: 1080x1920, 960x1280, 720x1280, 600x800, 576x1024, 480x640 | 30 fps |
+| B (landscape) | MJPG 1920x1080, 1280x960, 1280x720, 1024x576, 800x600, 640x480; YUYV 640x480, 640x360 | MJPG 60 and 30 fps; YUYV 30 fps |
+
+- There is **no MJPEG 640x360** (2.3's Zero and Pi 3A+ preview stream) and **no YUYV in portrait**.
+- The USB id stays a108:2240 in both positions; `bMaxPower` 200 mA [F P0-b] (1.2's [U] on both resolved).
+- VHS must build its mode list from `ENUM_FMT` / `ENUM_FRAMESIZES` / `ENUM_FRAMEINTERVALS` at every open and pick
+  from it, never assume one list [I].
+
+C3. **Hardware H.264 encoder on the Zero 2 W and Pi 3A+ (3.1, 3.2, 4.2, 5.1, 5.2):** 3.2's [I] becomes
+**[F P0-d]**: `bcm2835-codec-encode` (`/dev/video11`, H264 and MJPG out) on both, `h264_v4l2m2m` works; zero8 CMA
+256 MB (113 MB free). Cores per wall second, 10 s live:
+
+| Input -> hardware H.264 | Pi 3A+ | zero8 (Zero 2 W) |
+|---|---|---|
+| YUYV 640x480, 2 Mbit/s | 0.06 (2.4 MB/10 s) | 0.07 (2.5 MB/10 s), real time |
+| MJPEG 640x480 | 0.46 | 0.56 |
+| MJPEG 720p, 4 Mbit/s | 1.09 (5.0 MB/10 s), real time | 1.54 (5.0 MB/10 s), 0.994x |
+| MJPEG 1080p, 8 Mbit/s | 2.7 (10.1 MB/10 s), 0.99x | 3.4, **0.88x: too slow** |
+| for comparison: x264 ultrafast 480p | 0.75 | 1.22 |
+| for comparison: MJPEG copy 720p | 0.16 (20 MB/10 s) | 0.26 (35 MB/10 s) |
+
+- Pi 3A+: no throttling, max 49 C; zero8: max 38-42 C, no throttling [F P0-d].
+- The cost of MJPEG input is FFmpeg's MJPEG decode, not the encoder [F P0-d]. 3.2's "MJPEG to the hardware
+  decoder, then the encoder, almost no CPU" path is **not measured** [U].
+- 5.2's "Zero 2 W hardware H.264 about 0.3-1 [I]": measured c = 1.54 at 720p from MJPEG, so about 0.8 minutes of
+  work per minute of video on 2 cores (5.2's method) [I]; Pi 3A+ c = 1.09, about 0.55 [I]. 5.1's condition is met:
+  the queue becomes a convenience on these boards.
+
+C4. **TurboJPEG decode (2.2, 2.3):** [F P0-c], ms per frame (mean of 300); cores at 30 fps = ms x 0.03 (arithmetic):
+
+| Mode | Board (frame size) | 8/8 | 4/8 | 2/8 | 1/8 | Y-only | Peak RSS |
+|---|---|---|---|---|---|---|---|
+| 1080p | zero8 (242 KB) | 39.2 | 26.0 | 22.0 | 17.2 | 23.5 | 79 MB |
+| 720p | zero8 (131 KB) | 18.5 | 12.5 | 10.7 | 8.3 | 11.4 | 43 MB |
+| 480p | zero8 (55 KB) | 6.8 | 4.7 | 4.1 | 3.2 | 4.2 | 19 MB |
+| 1080p | Pi 3A+ (107 KB, darker scene) | 23.8 | 14.3 | 11.6 | 9.0 | 13.1 | 39 MB |
+| 720p | Pi 3A+ (55 KB) | 10.9 | 6.6 | 5.4 | 4.2 | not measured | 21 MB |
+| 480p | Pi 3A+ (22 KB) | 3.8 | 2.3 | 1.9 | not measured | not measured | 9 MB |
+
+- The Huffman decode is a floor (zero8 about 17 ms at 1080p, 8 ms at 720p) [F P0-c]: **1080p live view is ruled out
+  on the Zero 2 W** (4/8 = 0.78 core before display); 1080p there is for stills only (39 ms).
+- **Zero 2 W live view: 720p at 4/8** (12.5 ms = 0.38 core) or 480p at 8/8 (6.8 ms = 0.20 core).
+- **Pi 3A+:** 720p at 4/8 = 0.20 core; **1080p at 4/8 = 0.43 core is possible**, but on 107 KB frames; a brighter
+  scene (zero8's 242 KB) costs more, so 720p at 4/8 is the safe default [I].
+- These replace 2.2's FFmpeg-scaled cost table [I] for the TurboJPEG path. Pi 4B, Pi 5 and HackBerry: TurboJPEG not
+  measured (FFmpeg decode figures in C6).
+
+C5. **DHT and photo size (2.2, 7):** the camera's frames carry their Huffman tables [F P0-a]: no Annex K insertion is
+needed; keep it as a cheap fallback for other cameras. The camera's own frames are 235 / 129 / 51 KB (zero8 scene) and
+107 / 55 / 22 KB (Pi 3A+ darker scene) at 1080p / 720p / 480p [F P0-a, P0-c], not 7's 60-125 KB.
+
+C6. **Playback decode (8.3; replaces its [I] table where measured):** `ffmpeg -f null`, as fast as possible.
+
+| Format | zero8 (Zero 2 W) | Pi 4B | RPI52 (Pi 5) |
+|---|---|---|---|
+| MJPEG 720p, software | 17 ms/frame, 1 core, 58 fps max | 6.4x real time | 20x |
+| MJPEG 1080p, software | 36 ms/frame = 28 fps: just under real time | 3.1x (1 core) | 8.6x |
+| H.264 480p, software | 7x (3 cores) | not measured | not measured |
+| H.264 720p, software | 3.0x | 8x | 41x |
+| H.264 1080p, software | 1.45x (3.5 cores: at the limit) | 3.9x (3.4 cores) | 17x |
+| H.264 hardware (`h264_v4l2m2m`) | 480p 9.4x at 0.08 s CPU per 10 s; 720p 4.2x at 0.11 s; 1080p 2x until the ffmpeg CLI aborted at frame 209 | 720p 6.4x, 1080p 2.8x at about 1 s CPU per 20 s clip | **none**: `-hwaccel drm` decodes H.264 in software |
+| HEVC, software | not measured | 720p 12x, 1080p 5x | 1080p 13x (15.4 s CPU per 60 s clip) |
+| HEVC hardware | not measured | `-hwaccel drm` (`rpi-hevc-dec`, `/dev/video19`): 720p 13x, 1080p 6x, about 3x less CPU than software | `-hwaccel drm`: 1080p 3.7 s CPU per 60 s clip |
+
+- [F P0-m] **HEVC hardware works only through `-hwaccel drm`** on the Pi 4B and RPI52; `hevc_v4l2m2m` fails
+  ("Invalid argument") on both and VAAPI fails on the Pi 4B (no libva). 8.3's "[I] P0-m checks" is answered.
+- [F P0-m] zero8's 1080p hardware abort is an ffmpeg-side assertion ("Assertion pkt failed at ffmpeg_dec.c:710"),
+  not a kernel error; whether VHS's own libavcodec loop hits it is [U].
+- Hardware H.264 decode is practically free on the VideoCore boards [F P0-m], so D16 holds: hardware H.264 there,
+  MJPEG in software (1080p MJPEG on the Zero 2 W only at a reduced rate or scaled).
+- Pi 4B and zero8 temperatures: max 52.5 C and 50 C, `throttled=0x0` [F P0-m].
+
+C7. **Encode costs, Pi 5 and HackBerry (3.1, 4.2):** cores per wall second, all about real time, no throttling
+(RPI52 max 52.7-53.8 C, HackBerry max 58 C) [F P0-k, P0-l]:
+
+| Encoder, preset | RPI52 quiet 60 s | RPI52 moving 40 s (crf 26; x265 crf 28) | HackBerry 10 s | RPI52 2026-11-13 [F 11-13] |
+|---|---|---|---|---|
+| MJPEG copy 720p | not recorded | not recorded | about 0 (15.8 MB/10 s) | 0.2 % |
+| x264 ultrafast 720p | 0.30 | 0.40 | 0.42 | 0.43 |
+| x264 veryfast 720p | 0.46 | 0.64 | 0.62 | 0.7 |
+| x264 medium 720p | 0.47 | 1.59 (0.985x) | 1.58 (0.94x) | 2.4 (0.93x) |
+| x264 ultrafast 1080p | 0.64 | 0.79 | 0.75 | 0.8 |
+| x264 veryfast 1080p | 1.73 (0.996x) | 1.40 | 1.42 | 1.9 |
+| x265 ultrafast 1080p | 2.3 | 2.5 | 2.5 (0.98x) | 3.7 (0.91x) |
+| SVT-AV1 preset 10, 720p | 1.0 | 0.9 | 0.87 | 1.2 |
+
+- **The HackBerry has no hardware H.264 encoder** [F P0-l]; x264 veryfast 1080p (1.42 cores) is fine there.
+- x264 medium 720p moves from "too slow" (0.93x) to borderline on the Pi 5 (0.985x at 1.59 cores) [F P0-k].
+- x265 ultrafast 1080p and SVT-AV1 720p now run in real time on the Pi 5 and HackBerry [F P0-k, P0-l]; D10 (never
+  live, conversion targets only) is unchanged.
+- Peak RSS 115-500 MB on the HackBerry runs [F P0-l].
+
+C8. **Disk per hour (3.4), moving indoor scene, RPI52** [F P0-k]; real footage varies by several times; MJPEG copy is
+15-100x larger than H.264 at the same size:
+
+| Mode | Size | Per hour |
+|---|---|---|
+| MJPEG copy 720p | 82.9 MB / 40 s (2.07 MB/s) | **7.5 GB** (quiet scene 1.6 GB) |
+| MJPEG copy 1080p | 158.5 MB / 40 s (3.96 MB/s) | **14.3 GB** (quiet scene 3.6 GB) |
+| x264 ultrafast 720p, crf 26 | 8.7 MB / 40 s | 0.78 GB |
+| x264 veryfast 720p, crf 26 | 1.9 MB / 40 s | 0.17 GB |
+| x264 medium 720p, crf 26 | 3.8 MB / 40 s | 0.34 GB |
+| x264 ultrafast 1080p, crf 26 | 17.9 MB / 40 s | 1.6 GB |
+| x264 veryfast 1080p, crf 26 | 5.9 MB / 40 s | 0.53 GB |
+| x265 ultrafast 1080p, crf 28 | 0.65 MB / 40 s | 0.06 GB |
+| SVT-AV1 preset 10, 720p | 1.4 MB / 40 s | 0.13 GB |
+| hardware H.264 720p / 1080p, 4 / 8 Mbit/s (rate-controlled, not motion-dependent) | Pi 4B 10 / 20 MB per 20 s [F P0-m]; zero8 and Pi 3A+ 5.0 MB/10 s at 720p, Pi 3A+ 10.1 MB/10 s at 1080p [F P0-d] | 1.8 / 3.6 GB (x360) |
+| hardware H.264 640x480 from YUYV, 2 Mbit/s | 2.4-2.5 MB/10 s [F P0-d] | 0.86-0.9 GB (x360) |
+| MJPEG copy 720p, other boards | zero8 35, Pi 3A+ 20, HackBerry 15.8 MB/10 s [F P0-d, P0-l] | 12.6 / 7.2 / 5.7 GB (x360) |
+
+C9. **Pi 5 thermal (4.2's [U]):** [F P0-j] 30 minutes of x264 veryfast 1080p30 in real time at 1.16 cores, max 49.9 C,
+no throttling, 2.4 GHz held, with the fan (synthetic source; the camera's MJPEG decode is not in this load [I]).
+
+C10. **A/V drift (3.6):** [F P0-f] at most +0.046 % (0.28 s per 10 min) including `arecord`'s overhead: the audio clock
+stays the master (D12 unchanged); long recordings keep remapping video time onto it, as 3.6 already plans.
+
+C11. **Power (3.7, Pi 3A+ and Pi 4B):**
+- Pi 3A+ old supply: active under-voltage with the camera (`0x50005`) [F 11-13].
+- Pi 3A+ new supply, 10 min of 1080p MJPEG plus 4 CPU burners from minute 5: **no under-voltage** (bits 0 and 16
+  never set, no dmesg lines, core 1.25-1.36 V); only the **soft temperature limit** (`0x80008` / `0x80000`) once
+  60 C was reached at t = 395 s with the burners, max 62.8 C, clock alternating 1.2 / 1.4 GHz; no heatsink fitted
+  [F P0-h replacement]. Advice: the new supply is fine for the camera; **a heatsink for sustained full load**.
+- Pi 4B: 10 min 1080p MJPEG all `0x0`, max 55.5 C; the idle `0x50005` of 2026-11-13 did not recur [F P0-h].
+
+C12. **Switch flip and USB reset (3.7, D19, test B3):** on the Pi 3A+ (dwc_otg) [F P0-b]:
+- flipping the switch live made the camera drop and **fail to re-enumerate** ("no configurations -22");
+- unbinding / binding `dwc_otg` through sysfs **OOPSes the kernel**, USB dead until reboot;
+- a reboot with the camera already in the chosen position works.
+
+Consequences [I]:
+
+- never do either on the Pi 3A+ / Zero boards: not in VHS, not in tests; VHS never resets USB itself;
+- the orientation path (3.7) must tolerate the camera coming back late or not at all: after a wait, a notice such
+  as "Camera did not come back: unplug and replug it, or restart the board" (wording is the coordinator's);
+- B3 on the Zero / Pi 3A+ boards expects that notice, not a portrait picture; set the position before boot there.
+- A live flip on the xhci boards (Pi 4B, Pi 5, HackBerry) and a replug on dwc_otg: not tested [U].
+
+### 16.3 Updated per-board defaults and badges (proposal for the owner)
+
+**Proposal for the owner.** D1-D29 were accepted as recommended on 2026-11-14 (section 17) and their text is unchanged.
+This table proposes revisions of **D5, D6 and D9** from the evidence above; where it differs from the D9 table in 4.2 it
+would supersede it once the owner agrees. Badges use 4.1's rules (OK: real time at 2 cores or less; Borderline:
+0.98-1.0x or above 2 cores; Too slow: under 0.98x). Numbers are cores.
+
+| Codec, preset | zero8 / deck (Zero 2 W) | Pi 3A+ | Pi 4B | Pi 5 (RPI52, RPI53) | HackBerry (CM5) | tablet |
+|---|---|---|---|---|---|---|
+| MJPEG copy 720p30 | OK (0.26) | OK (0.16) | OK (0.2 % [F 11-13]) | OK | OK (about 0) | Unknown |
+| MJPEG copy 1080p30 | OK (3 % [F 11-13]) | OK (2 % [F 11-13]) | OK | OK | OK [I] | Unknown |
+| H.264 hardware 640x480 from YUYV | **OK (0.07); default** | OK (0.06) | not measured, OK expected [I] | none | none | Unknown |
+| H.264 hardware 640x480 from MJPEG | OK (0.56) | OK (0.46) | not measured | none | none | Unknown |
+| H.264 hardware 720p, 4 Mbit/s | Borderline (1.54, 0.994x) | **OK (1.09); default** | **OK (0.44 [F 11-13]); default** | none | none | Unknown |
+| H.264 hardware 1080p, 8 Mbit/s | Too slow (3.4, 0.88x) | Borderline (2.7, 0.99x) | OK (0.91 [F 11-13]) | none | none | Unknown |
+| x264 ultrafast 480p | OK (0.95 [F 11-13]; 1.22 [F P0-d]) | OK (0.75) | OK | OK | OK [I] | Unknown |
+| x264 ultrafast 720p | Too slow (3.0, 0.992x [F 11-13]; kept from 4.2: 3 of 4 cores) | Borderline (1.22, 0.996x [F 11-13]) | OK (0.93 [F 11-13]) | OK (0.30-0.43) | OK (0.42) | Unknown |
+| x264 veryfast 720p | Too slow | Too slow [I] | Borderline (1.9, 0.98x [F 11-13]) | OK (0.46-0.7) | OK (0.62) | Unknown |
+| x264 ultrafast 1080p | Too slow (0.474x [F 11-13]) | Too slow (0.90x [F 11-13]) | Borderline (2.0 [F 11-13]) | OK (0.64-0.8) | OK (0.75) | Unknown |
+| x264 veryfast 1080p | Too slow | Too slow | Too slow (0.74x [F 11-13]) | **OK (1.16-1.73); default** | **OK (1.42); default** | Unknown |
+| x264 medium 720p | Too slow | Too slow | Too slow (0.665x [F 11-13]) | Borderline (1.59, 0.985x) | Too slow (1.58, 0.94x) | Unknown |
+| x265 ultrafast 1080p (D10: conversion only) | Too slow [I] | Too slow [I] | Too slow [I] | Borderline (2.3-2.5) | Borderline (2.5, 0.98x) | Unknown |
+| SVT-AV1 preset 10, 720p (D10: conversion only) | Too slow [I] | Too slow [I] | Too slow [I] | OK by the rule (0.9-1.0) | OK by the rule (0.87) | Unknown |
+
+| Board | Live view (proposal) | Default recording (proposal) | Photo (D6 proposal) |
+|---|---|---|---|
+| zero8 / deck | MJPEG 720p at 4/8 (0.38 core) or 640x480 at 8/8 (0.20); YUYV 640x360 / 640x480 (no decode, P0-e passed) in position B | **hardware H.264 640x480 from YUYV** (0.07 core, about 0.9 GB/h) in position B; position A (no YUYV): hardware from MJPEG 480x640 [I: about 0.56 core, as 640x480]; MJPEG copy 720p as the "full quality, convert later" choice | 1080p by mode switch, as D6 (1080p decode 39 ms: stills only) |
+| Pi 3A+ | MJPEG 720p at 4/8 (0.20 core); 1080p at 4/8 (0.43 on 107 KB frames) as an option [I] | **hardware H.264 720p, 4 Mbit/s** (1.09 cores, 1.8 GB/h) | instant 1080p when the live view streams 1080p; else mode switch [I] |
+| Pi 4B | MJPEG 1080p at 1/2 (unchanged; TurboJPEG not measured there, `libturbojpeg0` absent on 2026-11-13) | hardware H.264 720p (unchanged, 0.44); 1080p (0.91) offered as OK | instant 1080p (unchanged) |
+| Pi 5 (RPI52, RPI53) | MJPEG 1080p (unchanged; FFmpeg decodes 1080p MJPEG at 8.6x real time [F P0-m]) | x264 veryfast 1080p (unchanged; 30-minute thermal pass, C9) | instant 1080p (unchanged) |
+| HackBerry | MJPEG 1080p at 3/8 (unchanged; decode not measured there) | **x264 veryfast 1080p** (1.42 cores) | instant 1080p |
+| tablet | not measured | Unknown (P0-l not done) | not measured |
+
+Proposed revisions:
+- **D5:** unchanged in substance (TurboJPEG with DCT scaling, stb_image fallback); add the stream rule of C4: Zero 2 W
+  live view at 720p 4/8 or 480p, never 1080p; Pi 3A+ 720p 4/8, 1080p 4/8 optional; the DHT insertion becomes a fallback
+  (C5). VideoCore hardware MJPEG decode is still "later": P0 shows no need for the live view at 720p.
+- **D6:** the Pi 3A+ may take instant 1080p photos when its live view runs at 1080p 4/8; the Zero class keeps the mode
+  switch.
+- **D9:** the badge table and defaults above (Zero 2 W: hardware H.264 640x480 from YUYV instead of MJPEG copy 720p;
+  Pi 3A+: hardware H.264 720p instead of x264 480p; HackBerry: x264 veryfast 1080p), the mode list read from the camera
+  (C2), and the per-hour figures of C8.
+
+### 16.4 Open after P0
+
+1. **HEVC hardware decode** works only through the drm hwaccel (C6); VHS uses libavcodec directly, so it needs the same
+   `-hwaccel drm` setup through libav (`av_hwdevice_ctx_create` with the DRM type [I]); verify at build on the Pi 4B and
+   a Pi 5.
+2. **The tablet (FZ-M1, amd64) was not probed** (P0-l, P0-m): encode, VAAPI, decode and the camera there are [U].
+3. **Pi 5 soak with the real camera not run** (P0-h on RPI52); P0-j used a synthetic source.
+4. **H.264 sizes depend on motion** (C8): one lightly moving indoor scene; real footage varies by several times.
+5. Not measured: playback decode on the Pi 3A+, HackBerry and tablet; stb_image decode; TurboJPEG on the Pi 4B, Pi 5 and
+   HackBerry; the hardware MJPEG-decode stage before the encoder (C3); the camera mic's mixer (`amixer`).
+6. zero8 1080p hardware H.264 decode aborted in the ffmpeg CLI (C6): check VHS's own decode loop in P2.
+7. Switch flip on the xhci boards and replug on dwc_otg (C12): to see in the P1 tests (B2, B3).
+
+---
+
 ## Not verified
 
 - **Six of eight boards were unreachable** on 2026-11-13 evening (HackBerry, zero8, Pi 3A+, RPI53, tablet, deck).
@@ -1062,7 +1293,7 @@ Board probes (read-only, 2026-11-13), `062-probe-out/`:
 
 ---
 
-## 16. Owner decisions on this plan (2026-11-14)
+## 17. Owner decisions on this plan (2026-11-14)
 
 The owner answered the decision list of 15.3 on 2026-11-14 with: **"go with your recommendations on VHS"**.
 
