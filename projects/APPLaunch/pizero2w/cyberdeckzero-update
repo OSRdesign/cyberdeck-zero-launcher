@@ -140,6 +140,7 @@ BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/sys
 /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules /etc/udev/rules.d/93-applaunch-rfkill.rules
 /etc/udev/rules.d/99-bt-keyboard.rules /etc/polkit-1/rules.d/50-networkmanager-netdev.rules
 /etc/polkit-1/rules.d/51-launcher-time-power.rules /etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules
+/etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules
 /etc/applaunch/board.conf /etc/applaunch/install.conf /usr/share/applications/cyberdeckzero.desktop
 /usr/local/bin/cyberdeckzero-ctl /usr/share/APPLaunch/preinstalled-desktop-apps.tsv
 /usr/share/APPLaunch/applications/vim.desktop.temple"

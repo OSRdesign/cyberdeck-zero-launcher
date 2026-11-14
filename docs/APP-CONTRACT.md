@@ -684,6 +684,10 @@ The launcher reads the keyboards while a fullscreen app is in front and acts on 
 
 The client (`cp0_app_client.h`) returns `-1` for every "no service" case within its timeout (200 ms by default) and prints nothing; **never call it on a thread that must not stall** (the LVGL thread of a toolkit app): use a worker, and remember a failure for a few seconds instead of retrying per event.
 
+### Removable drives (udisks)
+
+An app may run `udisksctl mount -b <dev>` as the launcher's user, and unmount what it mounted (`udisksctl unmount -b <dev>`), without a password: the installer writes the PolicyKit rule `53-cyberdeckzero-udisks.rules` for the install user from the next release (0.10.3) on. It covers removable media only (not fixed disks, encryption or formatting); an older install needs `install.sh` run again, and `udisks2` must be installed. An app unmounts only the drives it mounted itself.
+
 ### The command line: `cyberdeckzero-ctl`
 
 `cyberdeckzero-ctl` (installed in `/usr/share/APPLaunch/bin`, linked in `/usr/local/bin`) is the same client for terminal apps, scripts and the board test protocols: `cyberdeckzero-ctl hello`, `beep done`, `toast "2 new messages"`, `volume set 30`, `brightness get`, `dim allow`, `board` (prints `board.state`). It prints the reply; exit status 0 ok, 1 refused (`err ...`), 2 usage, 3 no launcher service.

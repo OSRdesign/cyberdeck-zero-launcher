@@ -1,0 +1,16 @@
+/* All variants (install.sh writes this file with the launcher's user filled in below). The launcher and its apps
+ * run as a user service of a lingering user: logind puts that in a background session (Class=background, not active,
+ * no seat), and polkit's allow_active only applies to the active session of a seat, so `udisksctl mount -b /dev/sda1`
+ * is refused ("Not authorized ... session not allowed to mount drives"). Allow that user, and only that user, to
+ * mount removable media: org.freedesktop.udisks2.filesystem-mount (a device that is not a system device) and
+ * filesystem-mount-other-seat (the same, when the session has no seat). A user can always unmount what they mounted,
+ * so no unmount action is needed. Not granted: filesystem-mount-system (fixed disks), filesystem-mount-other-user,
+ * filesystem-unmount-others, encryption, loop devices, modify-device, formatting, anything else. Harmless on a
+ * desktop board, where the desktop session already has these rights. install.sh rewrites the file at every run,
+ * uninstall.sh removes it. */
+polkit.addRule(function(action, subject) {
+    if (subject.user == "@USER@" &&
+        (action.id == "org.freedesktop.udisks2.filesystem-mount" ||
+         action.id == "org.freedesktop.udisks2.filesystem-mount-other-seat"))
+        return polkit.Result.YES;
+});

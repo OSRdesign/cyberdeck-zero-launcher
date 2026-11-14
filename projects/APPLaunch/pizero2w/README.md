@@ -72,6 +72,15 @@ kept as `*.bak-applaunch`). On a board that boots to a desktop it installs the d
 the two variants ([Switching between appliance and desktop](#switching-between-appliance-and-desktop)). To take it all
 off again, see [Uninstall](#uninstall).
 
+**Removable drives.** Every variant (appliance, desktop, PC) also writes the PolicyKit rule
+`/etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules` for the install user (`--user`) and only that user: it lets them
+mount removable media through udisks (`udisksctl mount -b /dev/sda1`: the actions `org.freedesktop.udisks2.filesystem-mount`
+and `-mount-other-seat`) without a password. The launcher runs as a user service in a background login session, and
+PolicyKit's "active session" rule does not cover that, so without the file udisks answers "Not authorized". A user can
+always unmount what they mounted. Fixed disks (`filesystem-mount-system`), encryption, formatting and the rest are not
+touched. The file is rewritten at each run and removed by `uninstall.sh`; `install.sh --dry-run` lists it and `--plan`
+prints `udisks_rule=`. It does not install `udisks2` itself (on a Lite image: `sudo apt install udisks2`).
+
 It refuses to run (and changes nothing) on a system with glibc older than 2.38: the launcher and the apps are built
 for Debian 13 trixie. It also refuses a bundle of the other architecture (it reads the launcher's ELF header: arm64 on
 a Pi, amd64 on a PC). `sudo ./install.sh --dry-run` prints the detected board and what would be done.
