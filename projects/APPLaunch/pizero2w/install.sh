@@ -110,6 +110,7 @@ USER_UNIT=cyberdeckzero.service                  # appliance boards: systemd use
 CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the panel from the text console
 DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
 DESKTOP_RULES=52-cyberdeckzero-desktop.rules     # desktop boards: the user may start and stop DESKTOP_UNIT
+UDISKS_RULES=53-cyberdeckzero-udisks.rules       # every variant: the user may mount removable drives (udisksctl)
 DESKTOP_ENTRY_NAME=cyberdeckzero.desktop         # desktop boards: "CyberdeckZero Launcher" in the menu
 DOC_NAME=cyberdeckzero-launcher                  # /usr/share/doc/cyberdeckzero-launcher: licences and notices
 # branding-allow-begin: the binary name of v0.6.0 and before (kept as a link for one release, then removed)
@@ -927,7 +928,7 @@ render() {
 # a user name goes into a unit file and a polkit rule: plain names only
 check_user_name() {
     case "$1" in
-        ""|-*|*[!A-Za-z0-9._-]*) echo "unusable user name \"$1\" for the desktop unit and its polkit rule" >&2; exit 1 ;;
+        ""|-*|*[!A-Za-z0-9._-]*) echo "unusable user name \"$1\" for the polkit rules and the desktop unit" >&2; exit 1 ;;
     esac
 }
 
@@ -1068,6 +1069,7 @@ if [ "$PLAN" = 1 ]; then
     echo "profile_action=$PROFILE_ACTION"
     echo "profile_state=$(profile_state)"
     echo "user=$TARGET_USER"
+    echo "udisks_rule=$UDISKS_RULES"
     exit 0
 fi
 if [ "$DRY" = 1 ]; then
@@ -1134,6 +1136,9 @@ if [ "$DRY" = 1 ]; then
         echo "  source: Settings > Updates runs install.sh again with them)"
         echo "anchor package: $ANCHOR_PKG (built here with dpkg-deb, no files; Depends: the packages of the launcher's"
         echo "  libraries and of the programs it runs on this board, so apt autoremove never takes them away)"
+        echo "removable drives: /etc/polkit-1/rules.d/$UDISKS_RULES: $TARGET_USER (only) may mount removable drives through udisks"
+        echo "  (udisksctl mount -b, org.freedesktop.udisks2.filesystem-mount and -mount-other-seat) without a password, also from"
+        echo "  the launcher's background session; fixed disks, encryption and everything else stay as they are"
     fi
     if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
         if [ "$IS_PC" = 1 ]; then
@@ -1210,6 +1215,7 @@ TARGET_USER=${TARGET_USER:-${SUDO_USER:-}}
 TARGET_UID=$(id -u "$TARGET_USER")
 TARGET_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
 [ -n "$TARGET_HOME" ] || { echo "cannot find the home directory of $TARGET_USER" >&2; exit 1; }
+check_user_name "$TARGET_USER"      # it goes into the polkit rule of removable drives (and the desktop unit)
 TARGET_HOME="$SYSROOT$TARGET_HOME"
 UNIT_DIR="$TARGET_HOME/.config/systemd/user"
 # a command in the user's systemd (the user service lives on the user bus, reachable through the runtime dir)
@@ -1603,6 +1609,13 @@ say "Installing PolicyKit rules (Wi-Fi, time settings, reboot/shutdown from the 
 mkdir -p "$POLKIT_DIR"
 install -m 644 "$PAYLOAD/etc/50-networkmanager-netdev.rules" "$POLKIT_DIR/50-networkmanager-netdev.rules"
 install -m 644 "$PAYLOAD/etc/51-launcher-time-power.rules" "$POLKIT_DIR/51-launcher-time-power.rules"
+# removable drives: the user service is a background session, which polkit's allow_active does not cover; the user
+# (not everybody) may mount removable media through udisks. Written whole and moved into place: a rerun, or another
+# --user, rewrites the same file
+render "$UDISKS_RULES" > "$POLKIT_DIR/$UDISKS_RULES.tmp"
+chmod 644 "$POLKIT_DIR/$UDISKS_RULES.tmp"
+mv "$POLKIT_DIR/$UDISKS_RULES.tmp" "$POLKIT_DIR/$UDISKS_RULES"
+echo "udisks: /etc/polkit-1/rules.d/$UDISKS_RULES ($TARGET_USER may mount removable drives without a password)"
 # Reboot, shutdown and the clock from Settings go through logind / timedated, which ask polkit: without polkitd they
 # refuse the launcher's user service, and the rules above never apply
 POLKIT_OK=0

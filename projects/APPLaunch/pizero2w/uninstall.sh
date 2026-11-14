@@ -84,6 +84,7 @@ USER_UNIT=cyberdeckzero.service
 CONSOLE_UNIT=cyberdeckzero-console.service
 DESKTOP_UNIT=cyberdeckzero-desktop.service
 DESKTOP_RULES=52-cyberdeckzero-desktop.rules
+UDISKS_RULES=53-cyberdeckzero-udisks.rules
 DESKTOP_ENTRY_NAME=cyberdeckzero.desktop
 # branding-allow-begin: the binary name of v0.6.0 and before (a link to the new binary after a migration)
 OLD_LAUNCHER_BIN=M5CardputerZero-APPLaunch
@@ -342,7 +343,7 @@ echo "  - files of earlier bundles no longer shipped: $(echo $RETIRED_FILES | se
 echo "  - licences and notices $DOC_DIR"
 echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 92-applaunch-backlight-sysfs, 93-applaunch-rfkill, 99-bt-keyboard"
 echo "  - board profile $PROFILE and the install options $INSTALL_CONF (and $PROFILE_DIR if it is then empty)"
-echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${DESKTOP_RULES%.rules}, ${OLD_DESKTOP_RULES%.rules}"
+echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${UDISKS_RULES%.rules}, ${DESKTOP_RULES%.rules}, ${OLD_DESKTOP_RULES%.rules}"
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
         echo "  - $CONFIG restored from $CONFIG.bak-before-pwm (a timestamped backup of the current file is made first)"
@@ -480,7 +481,7 @@ for f in 90-backlight-unblank.rules 91-applaunch-vkbd.rules 92-applaunch-backlig
     rm_sys "$UDEV_DIR/$f"
 done
 [ "$UDEV_CHANGED" = 1 ] && act_try $SUDO udevadm control --reload
-for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules "$DESKTOP_RULES" "$OLD_DESKTOP_RULES"; do
+for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules "$UDISKS_RULES" "$DESKTOP_RULES" "$OLD_DESKTOP_RULES"; do
     rm_sys "$POLKIT_DIR/$f"
 done
 

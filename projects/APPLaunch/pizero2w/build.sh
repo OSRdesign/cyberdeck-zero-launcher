@@ -148,7 +148,7 @@ rm -f "$OUT/payload/share/share/font/NotoSerifCJK-Regular.ttc" "$OUT/payload/sha
 for file in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts \
             hyperpixel4-pwm-backlight.dts \
             90-backlight-unblank.rules 91-applaunch-vkbd.rules 93-applaunch-rfkill.rules \
-            50-networkmanager-netdev.rules 51-launcher-time-power.rules \
+            50-networkmanager-netdev.rules 51-launcher-time-power.rules 53-cyberdeckzero-udisks.rules \
             cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules \
             cyberdeckzero.desktop; do
     cp "$HERE/$file" "$OUT/payload/etc/"

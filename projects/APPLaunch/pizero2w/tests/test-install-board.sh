@@ -37,6 +37,10 @@ check "zero2w dry-run: no profile file" 'has "zero2w: no profile file"'
 check "zero2w dry-run: no gpio backlight rule" '! has "92-applaunch-backlight-gpio" && ! has "92-applaunch-backlight-sysfs"'
 check "zero2w dry-run: PWM boot config as today" 'has "boot config: PWM backlight overlay"'
 check "zero2w dry-run: nothing written" '[ ! -e "$R/etc" ]'
+check "zero2w dry-run: the udisks polkit rule for removable drives is listed" 'has "removable drives: /etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules:" && has "filesystem-mount and -mount-other-seat"'
+run --plan
+check "zero2w --plan: key=value lines only, with the udisks rule key" '[ $RC = 0 ] && has "udisks_rule=53-cyberdeckzero-udisks.rules" && ! printf "%s
+" "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
 run --board-only
 check "zero2w board-only: no profile written" '[ $RC = 0 ] && [ ! -e "$R/etc/applaunch/board.conf" ] && [ ! -e "$R/etc/udev" ]'
 
@@ -830,7 +834,7 @@ chmod 755 "$BUN/payload/bin/cyberdeckzero" "$BUN/payload/bin/cyberdeckzero-conso
 : > "$BUN/payload/lib/libapplaunch_vfb.so"
 for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts hyperpixel4-pwm-backlight.dts 90-backlight-unblank.rules \
          91-applaunch-vkbd.rules 93-applaunch-rfkill.rules 50-networkmanager-netdev.rules 51-launcher-time-power.rules \
-         cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules cyberdeckzero.desktop; do
+         cyberdeckzero-console.service cyberdeckzero-desktop.service 52-cyberdeckzero-desktop.rules 53-cyberdeckzero-udisks.rules cyberdeckzero.desktop; do
     cp "$D/$f" "$BUN/payload/etc/"
 done
 chmod 755 "$BUN/payload/etc/"*      # as in the real bundle (built from a Windows checkout: drvfs files are rwx)
@@ -971,11 +975,18 @@ check "fake install, fresh: user unit and console unit by the new names, none of
 check "fake install, fresh: units enabled and started by the new names" 'called "systemctl enable --now cyberdeckzero-console.service" && called "systemctl --user enable cyberdeckzero.service" && called "systemctl --user restart cyberdeckzero.service"'
 check "fake install, fresh: nothing to migrate" 'has "nothing to migrate" && ! called "APPLaunch.service"'
 check "fake install, fresh: licences in /usr/share/doc/cyberdeckzero-launcher" '[ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSE" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/LICENSES/LVGL-MIT.txt" ] && [ -f "$R/usr/share/doc/cyberdeckzero-launcher/fonts/JetBrainsMono-OFL.txt" ]'
+UR="$R/etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules"
+check "fake install, fresh: udisks polkit rule written for the user, 644, no placeholder left, no temp file" '[ -f "$UR" ] && [ "$(stat -c %a "$UR")" = 644 ] && grep -q "subject.user == \"$U\"" "$UR" && ! grep -q "@USER@" "$UR" && [ ! -e "$UR.tmp" ] && has "udisks: /etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules ($U may mount removable drives"'
+check "fake install, fresh: the udisks rule allows the two mount actions of removable media and nothing else" '[ "$(sed -n "/^polkit.addRule/,\$p" "$UR" | grep -o "org\.freedesktop\.[a-z0-9.-]*" | sort -u | tr "\n" " ")" = "org.freedesktop.udisks2.filesystem-mount org.freedesktop.udisks2.filesystem-mount-other-seat " ]'
 check "fake install, fresh: board profile written, assets copied" '[ -f "$R/etc/applaunch/board.conf" ] && [ -f "$A/share/images/setting_100.png" ]'
 check "fake install, fresh: no apt-get, nothing written outside the fake root" '! called "apt-get" && [ ! -e /usr/share/doc/cyberdeckzero-launcher ] && [ ! -e /etc/systemd/system/cyberdeckzero-console.service ]'
 check "fake install, fresh: the user unit is 644 (systemd: not marked executable), no unit, rule or profile executable" '[ "$(stat -c %a "$H/cyberdeckzero.service")" = 644 ] && [ -z "$(find "$R/etc" "$H" -type f -perm /111)" ]'
 check "fake install, fresh: a Pi's packages (dtc, no polkitd or bluez), bluetooth.service left alone, polkit checked" 'called "dpkg -s device-tree-compiler" && ! called "dpkg -s polkitd" && ! called "dpkg -s bluez" && ! called "enable --now bluetooth.service" && called "pkaction --action-id org.freedesktop.login1.reboot" && has "polkit: running"'
 check "fake install, fresh: no sound card of its own (no /proc/asound here): no audio group" '! called "usermod -aG audio" && ! has "audio group"'
+URSUM=$(cksum < "$UR")
+echo "tampered" > "$UR"
+full "$R"
+check "fake install, second run: the udisks rule is written again, the same bytes" '[ $RC = 0 ] && [ "$(cksum < "$UR")" = "$URSUM" ]'
 
 # the anchor package (report 047 P4, D13): cyberdeckzero-runtime built with dpkg-deb and installed with dpkg; its Depends
 # from this board (install.sh's packages, ca-certificates, the owners of the libraries ldd names and of the programs the
@@ -1077,6 +1088,7 @@ unset FAKE_ACTIVE
 check "fake desktop migration: exit 0" '[ $RC = 0 ]'
 check "fake desktop migration: the running earlier launcher stopped (desktop back), its unit, rule and menu entry removed" 'called "systemctl stop applaunch-desktop.service" && [ ! -e "$R/etc/systemd/system/applaunch-desktop.service" ] && [ ! -e "$R/etc/polkit-1/rules.d/52-applaunch-desktop.rules" ] && [ ! -e "$R/usr/share/applications/applaunch.desktop" ]'
 check "fake desktop migration: new unit, rule and menu entry, filled in" 'grep -qx "User=$U" "$R/etc/systemd/system/cyberdeckzero-desktop.service" && grep -q "\"cyberdeckzero-desktop.service\"" "$R/etc/polkit-1/rules.d/52-cyberdeckzero-desktop.rules" && grep -qx "Name=CyberdeckZero Launcher" "$R/usr/share/applications/cyberdeckzero.desktop"'
+check "fake desktop migration: the udisks rule too, for the user (desktop and appliance variants both)" 'grep -q "subject.user == \"$U\"" "$R/etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules"'
 check "fake desktop migration: no user service, no console unit, not started" '[ ! -e "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && [ ! -e "$R/etc/systemd/system/cyberdeckzero-console.service" ] && has "not started now" && ! called "start cyberdeckzero-desktop.service"'
 check "fake desktop migration: the earlier helper name links to the new one (ExecStopPost= of a loaded old unit)" '[ "$(readlink "$A/bin/applaunch-console")" = cyberdeckzero-console ]'
 WPF="$R$UHOME/$WPREL"
@@ -1122,6 +1134,7 @@ mkdir -p "$R/etc/polkit-1/rules.d" "$R/usr/share/applications"
 OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
       sh "$BUN/uninstall.sh" --yes --no-boot-config 2>&1); RC=$?
 check "fake uninstall, half-migrated: exit 0" '[ $RC = 0 ]'
+check "fake uninstall: the udisks polkit rule removed" '[ ! -e "$R/etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules" ] && has "53-cyberdeckzero-udisks"'
 check "fake uninstall: both user services stopped and removed" 'called "systemctl --user stop cyberdeckzero.service" && called "systemctl --user stop APPLaunch.service" && [ ! -e "$H/cyberdeckzero.service" ] && [ ! -e "$H/APPLaunch.service" ] && [ ! -L "$H/default.target.wants/APPLaunch.service" ]'
 check "fake uninstall: both console units, rules and menu entries removed" '[ -z "$(ls "$R/etc/systemd/system" | grep -e cyberdeckzero -e applaunch)" ] && [ ! -e "$R/etc/systemd/system/multi-user.target.wants/applaunch-console.service" ] && [ -z "$(ls "$R/etc/polkit-1/rules.d")" ] && [ -z "$(ls "$R/usr/share/applications" 2>/dev/null)" ]'
 check "fake uninstall: binaries, helpers (both names), retired files and licences gone" '[ ! -e "$A/bin/cyberdeckzero" ] && [ ! -e "$A/bin/$OLDBIN" ] && [ ! -e "$A/bin/cyberdeckzero-console" ] && [ ! -e "$A/bin/applaunch-console" ] && [ ! -e "$A/share/images/logo_lcd.png" ] && [ ! -e "$A/adb" ] && [ ! -e "$R/usr/share/doc/cyberdeckzero-launcher" ]'
