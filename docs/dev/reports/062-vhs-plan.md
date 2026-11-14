@@ -1316,6 +1316,7 @@ that carry over (README of Cassette 0.3.1) and the owner placed each (the option
 | D35 | **Merge** scenes (pick in order, only the same codec, size and rate join, keep or delete originals) | "Together with Edit" | with D34 |
 | D36 | **Live monitor** (hear the microphone in the headphones while filming) | "Not wanted" | dropped |
 | D37 | **Background recording**: foreground only, as Cassette's D10 (the app owns the screen while recording); this replaces the plan's `X-Background=run` for recording | "Foreground only in P1" | P1, revisit on multitasking boards later |
+| D38 | **Sound-on lamp** in P1 (a small lamp on the recording screen that lights while the camera microphone delivers a signal above a noise floor; no meter and no gain controls, those come in P2 with D31). The Controller offered it because D31 leaves P1 without any sound level display | "ok for sound on" | P1 |
 
 Consequences for the plan (the Controller's reading; the phase lists in 13.3 to 13.5 stay as written until the build
 brief): P1 gains the self-timer, auto-split and USB copy (about 3 worker-days together [I]) and loses nothing; P2 gains the
