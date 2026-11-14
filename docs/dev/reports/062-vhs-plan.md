@@ -1301,4 +1301,27 @@ The owner answered the decision list of 15.3 on 2026-11-14 with: **"go with your
 |---|---|
 | D1 to D29 | **Accepted as recommended**, each as worded in 15.3. This includes D1 (name VHS, id `vhs`), D2 (the interpretation points (a) to (h) at the top of the plan), D3 (one camera: the CM969), D8 (FFmpeg libraries as a hard Depends from the first release), D15 (**ruling R-7**: full-screen video playback is exempt from the launcher's header-band rules; Esc and the overlay's Close always leave; to be recorded in `apps/vhs/docs/decisions.md` and in the Design QA checklist's rulings), D24 (phase order with basic controls in P2 and the convert queue first in P3), D26 (memory above the 25 MB guideline while recording, playing or converting on the Zero 2 W) and D28 (P0 permissions: the temporary static ffmpeg and test tools on the named boards, removed afterwards with a rollback list, a few saved frames, the owner flips the camera). |
 
+### 17.1 Cassette features carried over to VHS (owner, 2026-11-14)
+
+The owner: "basically VHS is like cassette for videos (+ it can take photos)"; the Controller listed the Cassette features
+that carry over (README of Cassette 0.3.1) and the owner placed each (the options are quoted):
+
+| # | Decision | Owner's answer | Release |
+|---|---|---|---|
+| D30 | **Self-timer** for photos and video (Cassette's Record timer): Off / 3 / 5 / 10 s, a big countdown over the picture, a tap, Esc or the stop key cancels, no beep, a brief flash at zero for a photo. The owner asked for it: "timer to start recording/take photos 3 / 5 / 10 secs" | "Off/3/5/10 s in P1" | P1 |
+| D31 | **Camera microphone controls** (Input level, SOFT gain up to +24 dB, Mic mute, Low cut 80 Hz, Limiter, the LED meter with its target zone) | "All of them in P2" (so P1 has no meter and no gain controls; the recording screen's meter of the P1 boards is drawn without the target zone until P2) | P2 |
+| D32 | **Auto-split** of long scenes at 4 GiB (part files, Cassette's `_pN` rule, seamless to a frame or two; Off for ext4 folders) | "In P1, default 4 GiB" | P1 |
+| D33 | **Copy a scene to a USB drive**, reusing the mount-on-request code of Vinyl 0.3.0 (udisks, the launcher's polkit rule) | "P1, reuse Vinyl's mount-on-request" | P1 |
+| D34 | **Edit** (trim and split: several split points, no dragging, 'save as new files' by default, 'replace original' asks twice; for MJPEG in MKV the cuts need no re-encoding) | "Its own release after P3" | after P3 (0.4.0) |
+| D35 | **Merge** scenes (pick in order, only the same codec, size and rate join, keep or delete originals) | "Together with Edit" | with D34 |
+| D36 | **Live monitor** (hear the microphone in the headphones while filming) | "Not wanted" | dropped |
+| D37 | **Background recording**: foreground only, as Cassette's D10 (the app owns the screen while recording); this replaces the plan's `X-Background=run` for recording | "Foreground only in P1" | P1, revisit on multitasking boards later |
+
+Consequences for the plan (the Controller's reading; the phase lists in 13.3 to 13.5 stay as written until the build
+brief): P1 gains the self-timer, auto-split and USB copy (about 3 worker-days together [I]) and loses nothing; P2 gains the
+microphone controls with the sound input chooser (the plan already has the chooser there); P3 stays convert queue first,
+then time-lapse; Edit and Merge are a release after P3. Still open: Cassette's scene look (the VHS look of its own, a design
+call of the Controller), the 5x scan and 5 s jump keys in playback (carried over as proposed in 12 item 12), and the take
+number page (carried over as a Settings page like Cassette's).
+
 Next step: P0, the probes of 11.1 and 13.2, run board by board by the Controller with the camera plugged into the named board and the owner's presence where the plan says so; then the screens (coordinator's design) for the P1 pages, then the P1 build. The Design QA checklist gets ruling R-7 in its next revision.
