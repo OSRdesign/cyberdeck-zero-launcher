@@ -75,8 +75,10 @@
 #   cyberdeckzero-update options --user NAME              the install options it would replay
 #   cyberdeckzero-update status                           the status file
 #
-# Options: install.sh records the options of each run in /etc/applaunch/install.conf (keyboard_name, board, boot_config,
-# pwm_backlight, default_source). A board installed before that file existed gets them inferred: the keyboard name from
+# Options: install.sh records the options of each run in /etc/applaunch/install.conf (keyboard_name, board, screen_size,
+# panel_mm, boot_config, pwm_backlight, default_source). screen_size (--screen-size, inches) and panel_mm (--panel-mm) are
+# passed back as they are; an install.conf without them, or empty, passes nothing (the board profile's own size).
+# A board installed before that file existed gets them inferred: the keyboard name from
 # ATTRS{name} in /etc/udev/rules.d/99-bt-keyboard.rules, --board from APPLAUNCH_BOARD= in board.conf when it is one of
 # install.sh's Pi profiles (a pc-* profile is detected, not passed), --no-boot-config when cmdline.txt lacks the two
 # console arguments install.sh adds, --pwm-backlight when config.txt loads the HyperPixel's PWM overlay,
@@ -145,7 +147,7 @@ BACKUP_FILES="/etc/systemd/system/cyberdeckzero-console.service /etc/systemd/sys
 /usr/local/bin/cyberdeckzero-ctl /usr/share/APPLaunch/preinstalled-desktop-apps.tsv
 /usr/share/APPLaunch/applications/vim.desktop.temple"
 
-usage() { sed -n '3,82p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,84p' "$0" | sed 's/^# \{0,1\}//'; }
 now() { date +%s; }
 say() { printf '%s %s\n' "$(date +%H:%M:%S)" "$*"; [ -z "${LOG:-}" ] || printf '%s %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
 oneline() { printf '%s' "$1" | tr '\n\r' '  ' | cut -c1-300; }
@@ -230,13 +232,15 @@ running_launcher() {
 # ---------------------------------------------------------------------------------------------------------------
 # Options: recorded by install.sh, else inferred (see the head of this file)
 # ---------------------------------------------------------------------------------------------------------------
-O_KEYBOARD="M4 Keyboard"; O_BOARD=""; O_BOOT=1; O_PWM=0; O_SOURCE=1; O_FROM=""
+O_KEYBOARD="M4 Keyboard"; O_BOARD=""; O_SIZE=""; O_MM=""; O_BOOT=1; O_PWM=0; O_SOURCE=1; O_FROM=""
 conf_get() { sed -n "s/^$1=//p" "$CONF" | tail -n 1; }
 read_options() {
     if [ -f "$CONF" ]; then
         O_FROM="recorded in /etc/applaunch/install.conf"
         v=$(conf_get keyboard_name); [ -z "$v" ] || O_KEYBOARD=$v
         O_BOARD=$(conf_get board)
+        v=$(conf_get screen_size); case "$v" in ""|*[!0-9.]*) ;; *) O_SIZE=$v ;; esac
+        v=$(conf_get panel_mm); case "$v" in [0-9]*x[0-9]*) case "$v" in *[!0-9x]*) ;; *) O_MM=$v ;; esac ;; esac
         [ "$(conf_get boot_config)" = 0 ] && O_BOOT=0
         [ "$(conf_get pwm_backlight)" = 1 ] && O_PWM=1
         [ "$(conf_get default_source)" = 0 ] && O_SOURCE=0
@@ -260,20 +264,23 @@ read_options() {
 }
 print_options() {
     echo "options ($O_FROM):"
-    echo "  --user $U --keyboard-name \"$O_KEYBOARD\"${O_BOARD:+ --board $O_BOARD}$( [ "$O_BOOT" = 0 ] && echo ' --no-boot-config')$( [ "$O_PWM" = 1 ] && echo ' --pwm-backlight')$( [ "$O_SOURCE" = 0 ] && echo ' --no-default-source')"
+    echo "  --user $U --keyboard-name \"$O_KEYBOARD\"${O_BOARD:+ --board $O_BOARD}${O_SIZE:+ --screen-size $O_SIZE}${O_MM:+ --panel-mm $O_MM}$( [ "$O_BOOT" = 0 ] && echo ' --no-boot-config')$( [ "$O_PWM" = 1 ] && echo ' --pwm-backlight')$( [ "$O_SOURCE" = 0 ] && echo ' --no-default-source')"
 }
 # run_installer SCRIPT EXTRA...: install.sh with the user and the options (the keyboard name stays one argument)
 run_installer() {
     script=$1; shift
     set -- "$@" --user "$U" --keyboard-name "$O_KEYBOARD"
     [ -z "$O_BOARD" ] || set -- "$@" --board "$O_BOARD"
+    [ -z "$O_SIZE" ] || set -- "$@" --screen-size "$O_SIZE"
+    [ -z "$O_MM" ] || set -- "$@" --panel-mm "$O_MM"
     [ "$O_BOOT" = 1 ] || set -- "$@" --no-boot-config
     [ "$O_PWM" = 0 ] || set -- "$@" --pwm-backlight
     [ "$O_SOURCE" = 1 ] || set -- "$@" --no-default-source
+    # stdin is never a terminal for install.sh here: its first-install screen size question is not for an update
     if [ "$FAKE" = 1 ]; then
-        SYSROOT="$ROOT" INSTALL_FAKE_SYSTEM=1 sh "$script" "$@"
+        SYSROOT="$ROOT" INSTALL_FAKE_SYSTEM=1 sh "$script" "$@" < /dev/null
     else
-        env -u SYSROOT -u INSTALL_FAKE_SYSTEM sh "$script" "$@"
+        env -u SYSROOT -u INSTALL_FAKE_SYSTEM -u APPLAUNCH_INSTALL_ASSUME_TTY sh "$script" "$@" < /dev/null
     fi
 }
 
@@ -599,7 +606,7 @@ cmd_apply() {
         # of this script (__install) that runs install.sh with the options
         CDZ_INSTALL_SCRIPT="$B/install.sh" systemd-inhibit --what=sleep:idle:shutdown:handle-power-key:handle-lid-switch \
             --who="CyberdeckZero update" --why="Installing launcher $VERSION" --mode=block \
-            sh "$0" __install "$U" "$O_KEYBOARD" "$O_BOARD" "$O_BOOT" "$O_PWM" "$O_SOURCE" >> "$LOG" 2>&1 < /dev/null 9>&-
+            sh "$0" __install "$U" "$O_KEYBOARD" "$O_BOARD" "$O_BOOT" "$O_PWM" "$O_SOURCE" "$O_SIZE" "$O_MM" >> "$LOG" 2>&1 < /dev/null 9>&-
         rc=$?
     else
         run_installer "$B/install.sh" >> "$LOG" 2>&1 < /dev/null 9>&-
@@ -634,7 +641,7 @@ cmd_apply() {
 
 # the install itself, inside systemd-inhibit (a second shell: the inhibitor wraps one command)
 cmd_install_inner() {
-    set_user "$1"; O_KEYBOARD=$2; O_BOARD=$3; O_BOOT=$4; O_PWM=$5; O_SOURCE=$6
+    set_user "$1"; O_KEYBOARD=$2; O_BOARD=$3; O_BOOT=$4; O_PWM=$5; O_SOURCE=$6; O_SIZE=${7:-}; O_MM=${8:-}
     run_installer "${CDZ_INSTALL_SCRIPT:?}"
 }
 

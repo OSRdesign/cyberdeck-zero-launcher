@@ -375,6 +375,61 @@ helper options --user "$U"
 HELPER=""
 check "deck, inferred: the default keyboard name, no --board, boot config and default source on" 'has "--user $U --keyboard-name \"M4 Keyboard\"" && ! has "--board" && ! has "--no-boot-config" && ! has "--no-default-source"'
 
+# the screen size (--screen-size, --panel-mm): recorded by install.sh in install.conf, replayed by the helper (the plan check
+# and the install), kept by an update; an install.conf without the keys (an earlier release) replays nothing of it
+R=$(root pi3a-wsdsi43)
+mkdir -p "$R/boot/firmware"
+printf 'dtoverlay=vc4-kms-v3d\ndtoverlay=vc4-kms-dsi-waveshare-800x480\n' > "$R/boot/firmware/config.txt"
+echo 'console=tty1 root=PARTUUID=1-02 rootwait' > "$R/boot/firmware/cmdline.txt"
+first_install --keyboard-name "Size Keys" --screen-size 5 --no-boot-config --no-default-source
+C="$R/etc/applaunch/install.conf"
+check "screen size, first install: install.conf records screen_size=5 and an empty panel_mm, board.conf has the 5 inch values" '[ $RC = 0 ] && grep -qx "screen_size=5" "$C" && grep -qx "panel_mm=" "$C" && grep -qx "board=" "$C" && grep -qx "APPLAUNCH_PANEL_MM=108x65" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_DIM_PERCENT=20" "$R/etc/applaunch/board.conf" && has "--screen-size 5"'
+CONF_SUM=$(cksum < "$R/etc/applaunch/board.conf")
+helper options --user "$U"
+check "screen size: the helper's options carry --screen-size 5 (and no --panel-mm, no --board)" '[ $RC = 0 ] && has "recorded in /etc/applaunch/install.conf" && has "--keyboard-name \"Size Keys\" --screen-size 5" && ! has "--panel-mm" && ! has "--board"'
+OUT=$(PATH="$FAKEBIN:$PATH" UPDATE_ROOT="$R" UPDATE_FAKE_SYSTEM=1 sh "$R/usr/share/APPLaunch/bin/cyberdeckzero-update" plan --bundle "$TMP/new/bundle" --user "$U" 2>&1); RC=$?
+check "screen size: the plan check replays --screen-size 5 and sees the profile as up to date (no refusal)" '[ $RC = 0 ] && has "--screen-size 5" && has "profile_action=keep" && has "panel_in_use=108x65" && has "screen_size=5"'
+download "$NEWTGZ"
+apply "$NEWTGZ" 0.8.13
+check "screen size, update: done, install.sh was run with --screen-size 5, board.conf unchanged, install.conf keeps it" '[ $RC = 0 ] && [ "$(st state)" = done ] && grep -q -- "--user $U --keyboard-name \"Size Keys\" --screen-size 5 --no-boot-config --no-default-source$" "$R/var/log/cyberdeckzero/"update-*.log && [ "$(cksum < "$R/etc/applaunch/board.conf")" = "$CONF_SUM" ] && grep -qx "screen_size=5" "$C" && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && ! grep -q -- "--force" "$CALLS"'
+check "screen size, update: the backup held install.conf with the size" '[ -f "$(ls -d "$R/var/lib/cyberdeckzero-update/backup/files/etc/applaunch/install.conf")" ] && grep -qx "screen_size=5" "$R/var/lib/cyberdeckzero-update/backup/files/etc/applaunch/install.conf"'
+# an exact size and a size together, and the update with a bundle that prints extra plan keys (unknown keys are ignored)
+R=$(root pi3a-wsdsi43)
+mkdir -p "$R/boot/firmware"
+printf 'dtoverlay=vc4-kms-v3d\n' > "$R/boot/firmware/config.txt"
+echo 'console=tty1 root=PARTUUID=1-02 rootwait' > "$R/boot/firmware/cmdline.txt"
+first_install --keyboard-name "Size Keys" --panel-mm 100x60 --no-boot-config --no-default-source
+C="$R/etc/applaunch/install.conf"
+check "screen size, --panel-mm 100x60: recorded as panel_mm=100x60, an empty screen_size" '[ $RC = 0 ] && grep -qx "panel_mm=100x60" "$C" && grep -qx "screen_size=" "$C" && grep -qx "APPLAUNCH_PANEL_MM=100x60" "$R/etc/applaunch/board.conf"'
+CONF_SUM=$(cksum < "$R/etc/applaunch/board.conf")
+helper options --user "$U"
+check "screen size: the helper's options carry --panel-mm 100x60" '[ $RC = 0 ] && has "--panel-mm 100x60" && ! has "--screen-size"'
+cp "$TMP/new/bundle/install.sh" "$TMP/install.sh.keep"
+sed -i 's|^    echo "plan=1"$|    echo "plan=1"; echo "some_future_key=yes"|' "$TMP/new/bundle/install.sh"
+check "the fake bundle's install.sh prints an extra plan key (to be ignored)" 'grep -q "some_future_key=yes" "$TMP/new/bundle/install.sh"'
+download "$NEWTGZ"
+helper plan --bundle "$TMP/new/bundle" --user "$U"
+check "plan with an unknown extra key: ignored, no refusal" '[ $RC = 0 ] && has "some_future_key=yes" && has "profile_action=keep" && has "result: an update would go ahead" && ! has "result: refused"'
+cp "$TMP/install.sh.keep" "$TMP/new/bundle/install.sh"
+apply "$NEWTGZ" 0.8.13
+check "screen size, update with --panel-mm: done, board.conf unchanged, panel_mm kept" '[ $RC = 0 ] && [ "$(st state)" = done ] && [ "$(cksum < "$R/etc/applaunch/board.conf")" = "$CONF_SUM" ] && grep -qx "panel_mm=100x60" "$C" && grep -q -- "--panel-mm 100x60 --no-boot-config --no-default-source$" "$R/var/log/cyberdeckzero/"update-*.log'
+# an install.conf without the keys (an earlier release): nothing replayed, the profile's own size, no question (no terminal)
+R=$(root pi3a-wsdsi43)
+mkdir -p "$R/boot/firmware"
+printf 'dtoverlay=vc4-kms-v3d\n' > "$R/boot/firmware/config.txt"
+echo 'console=tty1 root=PARTUUID=1-02 rootwait' > "$R/boot/firmware/cmdline.txt"
+first_install --keyboard-name "Old Keys" --no-boot-config --no-default-source
+C="$R/etc/applaunch/install.conf"
+sed -i '/^screen_size=/d;/^panel_mm=/d' "$C"
+CONF_SUM=$(cksum < "$R/etc/applaunch/board.conf")
+helper options --user "$U"
+check "an install.conf without screen_size and panel_mm: the options replay none of them" '[ $RC = 0 ] && has "--keyboard-name \"Old Keys\"" && ! has "--screen-size" && ! has "--panel-mm"'
+download "$NEWTGZ"
+apply "$NEWTGZ" 0.8.13
+check "update of an earlier install.conf: done, no question asked, board.conf unchanged, the keys written (empty)" '[ $RC = 0 ] && [ "$(st state)" = done ] && ! grep -q "diagonal" "$R/var/log/cyberdeckzero/"update-*.log && [ "$(cksum < "$R/etc/applaunch/board.conf")" = "$CONF_SUM" ] && grep -qx "screen_size=" "$C" && grep -qx "panel_mm=" "$C"'
+# the helper never lets install.sh read a terminal: an unused terminal hook is not passed on, stdin is /dev/null
+check "the helper runs install.sh with stdin from /dev/null (the first-install question is never asked)" 'grep -q "< /dev/null" "$D/cyberdeckzero-update" && grep -q -- "-u APPLAUNCH_INSTALL_ASSUME_TTY" "$D/cyberdeckzero-update"'
+
 # the default app source step of an update: install.sh runs default-sources.sh as the user from a copy the user can read,
 # never from the unpacked bundle (the helper's work folder is root-only, 0700: "sh: cannot open ...: Permission denied")
 R=$(root pi3a-wsdsi43)

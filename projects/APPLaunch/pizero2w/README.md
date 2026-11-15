@@ -96,7 +96,9 @@ chooses the session itself.
 | `--user NAME` | The user that runs the launcher (default: the user who ran `sudo`). | [Install on a Pi](#install-on-a-pi) |
 | `--no-boot-config` | Do not touch `config.txt` and `cmdline.txt` (no PWM backlight). Also wins over `--pwm-backlight`. | [Reverting the PWM backlight](#reverting-the-pwm-backlight) |
 | `--pwm-backlight` | Pi 5 + HyperPixel 4 only: turn its on/off backlight into a PWM one with levels (a `config.txt` line, a reboot). Never done without this option. | [Boards](#boards), "Pi 5 + HyperPixel 4: brightness levels" |
-| `--board NAME` | Use this profile instead of detecting the board: `zero2w`, `pi3a-luckfox35`, `pi3a-wsdsi43`, `pi3a-wsdsi43-portrait` (never detected), `pi4b-dsi`, `pi5-hyperpixel4`, `pi5-dsi7`, `hackberry-cm5`; `--board zero2w` writes no profile. | [Boards](#boards) |
+| `--board NAME` | Use this profile instead of detecting the board: `zero2w`, `pi3a-luckfox35`, `pi3a-wsdsi43`, `pi3a-wsdsi43-portrait` (never detected), `pi4b-dsi`, `pi5-hyperpixel4`, `pi5-dsi7`, `hackberry-cm5`, `generic`; `--board zero2w` writes no profile. `--board generic` is for a screen that has no profile (untested hardware): the profile is written from what is detected. | [My screen is not listed](#my-screen-is-not-listed) |
+| `--screen-size INCHES` | The screen's **diagonal in inches** (1.5 to 15, a decimal such as `2.8`, `3.5`, `4.3`, `5`, `7`). Sets `APPLAUNCH_PANEL_MM` in the profile (the layout's density) from the diagonal and the profile's resolution, and nothing else (board, framebuffer, rotation, touch stay the profile's); for 5 on the DSI panels' backlight regulator also the idle dim level 20 that `pi4b-dsi` has. Use it when the profile's size is wrong (the DSI panels look the same to software) or with `--board generic`. Accepted on every profile that has a screen; the deck (`zero2w`, no profile) refuses it. | [Screen size](#screen-size) |
+| `--panel-mm WxH` | The panel's visible area in mm, exactly (20 to 500 each); wins over `--screen-size`. | [Screen size](#screen-size) |
 | `--board-only` | Only detect the board and write or update `/etc/applaunch/board.conf` (and the backlight rule), then stop. | [Boards](#boards) |
 | `--dry-run` | Print the detected board, the session and what would be done; change nothing. | [Install on a Pi](#install-on-a-pi) |
 | `--plan` | The dry run as `key=value` lines for a program (Settings > Updates' helper). | [Settings > Updates](#settings--updates) |
@@ -104,8 +106,8 @@ chooses the session itself.
 | `--no-default-source` | Do not add the apps repo to Settings > Apps for a user who has no source yet. | "Default app source", below |
 | `-h`, `--help` | Print the option list. | |
 
-Each install records its keyboard name, `--board`, `--no-boot-config`, `--pwm-backlight` and `--no-default-source` in
-`/etc/applaunch/install.conf`; Settings > Updates installs a newer release by running `install.sh` again with them.
+Each install records its keyboard name, `--board`, `--screen-size`, `--panel-mm`, `--no-boot-config`, `--pwm-backlight` and `--no-default-source` in
+`/etc/applaunch/install.conf` (`screen_size=` and `panel_mm=` are empty when none was given); Settings > Updates installs a newer release by running `install.sh` again with them.
 The other options (`--user`, `--board-only`, `--dry-run`, `--plan`, `--force`) are not recorded.
 
 **Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
@@ -351,14 +353,15 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | --- | --- | --- |
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
 | `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel; also a Pi Zero 2 W with the Waveshare 3.5" RPi LCD (F) (the same `mipi-dbi-spi` overlay) | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` (a Zero 2 W only with `--board pi3a-luckfox35`: it is detected as the deck) | `/etc/applaunch/board.conf` (below); the deck's PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio`. On a Zero 2 W the panel's own PWM backlight instead (brightness levels and `APPLAUNCH_DIM_PERCENT=10`, below) |
-| `pi3a-wsdsi43`: Pi 3 Model A+ with the Waveshare 4.3" DSI panel (800x480; overlay `vc4-kms-dsi-waveshare-800x480`, see below) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) with `APPLAUNCH_DIM_PERCENT=10` after it (no dim line without a backlight line) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
+| `pi3a-wsdsi43`: Pi 3 Model A+ with an 800x480 DSI panel, the Waveshare 4.3" one (overlay `vc4-kms-dsi-waveshare-800x480`, see below); the 4.3", 5" and 7" panels look the same to software: for another size use `--screen-size` ([Screen size](#screen-size)) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) with `APPLAUNCH_DIM_PERCENT=10` after it (no dim line without a backlight line) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
 | `pi3a-wsdsi43-portrait`: the same board and panel turned to portrait, the PDA profile ([below](#pda-portrait-on-the-43-dsi-panel)) | never detected: only `--board pi3a-wsdsi43-portrait` (the panel must be there, as for `pi3a-wsdsi43`) | `board.conf`: as `pi3a-wsdsi43` but `APPLAUNCH_LOGICAL=480x800`, `APPLAUNCH_ROTATE=90`, `APPLAUNCH_PDA=1` (the writing zone) and no `APPLAUNCH_COMPAT_SCALE`; the same backlight line and rule, config.txt and cmdline.txt as `pi3a-wsdsi43` |
-| `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
+| `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one; for another size `--screen-size`) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
 | `pi5-hyperpixel4`: Pi 5 with the Pimoroni HyperPixel 4" DPI panel | model "Raspberry Pi 5", connector `DPI-*` connected with mode 480x800, a 480x800 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=90`, touch `auto` / `buffer`; config.txt only with `--pwm-backlight` (below) |
-| `pi5-dsi7`: Pi 5 with the official Raspberry Pi 7" Touch Display on the RP1 DSI port (800x480, same family as the Pi 4 B's panel; a desktop board when lightdm runs) | model "Raspberry Pi 5", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `drm-rp1-dsi*` (`drm-rp1-dsidrmf`, 32 bpp; the HyperPixel's is `drm-rp1-dpi*`, so the two never overlap) and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi4b-dsi` (that framebuffer, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`: the panel's ft5x06 at i2c 10-0038, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule) with `APPLAUNCH_PANEL_MM=154x86` (the display's active area) and `APPLAUNCH_DIM_PERCENT=20`; touch and brightness checked on the owner's board (2026-11-11). config.txt is not edited (the panel is found by `display_auto_detect=1`; no boot configuration lines on a desktop board, cmdline arguments only on an appliance one); `--pwm-backlight` is ignored (Pi 5 + HyperPixel only) |
+| `pi5-dsi7`: Pi 5 with the official Raspberry Pi 7" Touch Display on the RP1 DSI port (800x480, same family as the Pi 4 B's panel; a desktop board when lightdm runs; for another size `--screen-size`) | model "Raspberry Pi 5", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `drm-rp1-dsi*` (`drm-rp1-dsidrmf`, 32 bpp; the HyperPixel's is `drm-rp1-dpi*`, so the two never overlap) and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi4b-dsi` (that framebuffer, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`: the panel's ft5x06 at i2c 10-0038, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule) with `APPLAUNCH_PANEL_MM=154x86` (the display's active area) and `APPLAUNCH_DIM_PERCENT=20`; touch and brightness checked on the owner's board (2026-11-11). config.txt is not edited (the panel is found by `display_auto_detect=1`; no boot configuration lines on a desktop board, cmdline arguments only on an appliance one); `--pwm-backlight` is ignored (Pi 5 + HyperPixel only) |
 | `hackberry-cm5`: HackBerry CM5 (720x720 DPI panel) | model "Compute Module 5", connector `DPI-*` connected with mode 720x720, a 720x720 framebuffer named `drm-rp1-dpi*` | `board.conf`: that framebuffer, `APPLAUNCH_LOGICAL=720x720`, `APPLAUNCH_ROTATE=0`, touch `auto` / `buffer` |
 | `pc-<model>`: a PC (amd64 bundle), e.g. `pc-fzm1-2` (Panasonic FZ-M1 mk2) | x86_64 with no device tree, a framebuffer (the DRM driver's, `*drmfb`, first); `<model>` is the DMI product name in lower case | `board.conf`: `APPLAUNCH_DISPLAY=dpi-scaled`, that framebuffer, `APPLAUNCH_LOGICAL` = its size, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_PANEL_MM` from the connected connector's EDID (eDP first; the detailed timing's mm, else the cm of the basic block), else a table of known models (FZM1-2: 150x93), else none (default density, large controls); touch `auto` / `buffer`; `APPLAUNCH_BACKLIGHT=sysfs:` the first backlight (`intel_backlight` first), `APPLAUNCH_DIM_PERCENT=10`, and its udev rule (no backlight: neither line); on a tablet (SMBIOS chassis 30 or 32, or a known tablet) `APPLAUNCH_KBD_IGNORE=bus:0011`; `APPLAUNCH_HIDE_TILES=app_Store`. No boot configuration (GRUB, kernel command line), no dtc |
-| anything else | - | none: the detected facts are printed and the install stops (`--force` installs without a profile). Run `tools/board-probe/probe-board.sh` on the board and send the report. A Pi 3A+ with both its panels connected is not guessed: choose with `--board`. With `--force`, the deck's PWM backlight overlay is added only on a model that is not one of the boards above (a Pi 3A+, Pi 4 B, Pi 5 or CM5 whose panel was not recognised keeps its config.txt) |
+| `generic-<W>x<H>`: a screen that has no profile (untested hardware) | only `--board generic`, or `--force` on an unknown board when exactly one panel is found (a connected DSI, DPI, SPI, eDP or LVDS connector whose mode is the size of a framebuffer); never on a PC | `board.conf` written from what was detected, see [My screen is not listed](#my-screen-is-not-listed) |
+| anything else | - | none: the detected facts are printed and the install stops (`--force` installs a generic profile when one panel is found, else without a profile; the facts say when `--board generic` would find one). Run `tools/board-probe/probe-board.sh` on the board and send the report. A Pi 3A+ with both its panels connected is not guessed: choose with `--board`. With `--force`, the deck's PWM backlight overlay is added only on a model that is not one of the boards above (a Pi 3A+, Pi 4 B, Pi 5 or CM5 whose panel was not recognised keeps its config.txt) |
 
 **Waveshare 4.3" DSI panel (`pi3a-wsdsi43`):** set up `/boot/firmware/config.txt` yourself before the install;
 install.sh does not edit config.txt on this board. The panel needs the KMS driver and its own overlay:
@@ -372,6 +375,67 @@ Do not use the generic `dtoverlay=vc4-kms-dsi-7inch`: it also lights this 4.3" p
 shakes (from the boot on; a known kernel/firmware issue with this panel). Remove leftover lines of an earlier panel as
 well, such as the SPI panel's overlay or an `fbcon=map:...,rotate:...` argument in cmdline.txt (install.sh never adds
 an `fbcon=` argument). The detection does not depend on the overlay: it reads the DSI connector and the framebuffer.
+
+### Screen size
+
+The Waveshare 4.3", the Freenove 5" and the official 7" DSI panels give the software the same facts (the same ft5x06 touch,
+the same `10-0045` backlight regulator, the same 800x480 framebuffer), so the installer cannot tell them apart: a Pi 3A+
+with the Freenove 5" panel is detected as `pi3a-wsdsi43`, the 4.3" profile. The profile's size only sets the layout's
+density (`APPLAUNCH_PANEL_MM`); say which screen it is:
+
+```
+sudo ./install.sh --screen-size 5            # the Pi 3A+ with the Freenove 5" panel (the board is detected as before)
+sudo ./install.sh --panel-mm 108x65          # or the visible area in mm, exactly (wins over --screen-size)
+```
+
+- **Inches are the diagonal**, 1.5 to 15, any decimal. `--screen-size` changes only the size line of `board.conf`
+  (`APPLAUNCH_PANEL_MM`; a profile that has none, such as the HyperPixel's, gets one) and, for 5 on the DSI regulator's
+  backlight, `APPLAUNCH_DIM_PERCENT=20` (10 % is black on the 5" panel). The board name, framebuffer, rotation, touch and
+  the rest stay the profile's.
+- **The formula**: width = diagonal x 25.4 x w / sqrt(w^2 + h^2) and height likewise, w and h the profile's landscape
+  canvas, each rounded to the nearest mm (4 inch at 640x480: 81x61; 2.8 inch at 640x480: 57x43). The sizes the profiles
+  already know keep their values, which differ from the formula by a millimetre or two: 4.3, 5 and 7 inch at 800x480
+  (94x56, 108x65, 154x86; the 7" official panel's pixels are not square) and 3.5 inch at 480x320 (79x49). When the result
+  is the profile's own size the profile is not touched.
+- **The question**: run from a terminal, on a first install (no `screen_size=` in `/etc/applaunch/install.conf`), with a
+  profile and without `--screen-size` or `--panel-mm`, `install.sh` asks once: "What is the screen's diagonal in inches?
+  (for example 2.8, 3.5, 4.3, 5, 7; Enter = the profile's size, or unknown)". Enter keeps the profile's size; an unusable
+  answer asks again (three tries, then the profile's size stays). It is never asked from a script, from Settings > Updates,
+  with `--dry-run`, `--plan` or `--board-only`, on a PC (its size comes from the screen's EDID) or on the deck.
+- **Kept**: the choice is recorded in `install.conf` (`screen_size=`, `panel_mm=`) and Settings > Updates runs `install.sh`
+  again with it; a manual re-run without the options keeps it too. A hand-edited `board.conf` is still kept (`--force`
+  replaces it, the old one stays as `board.conf.bak`): edit `APPLAUNCH_PANEL_MM` by hand there. `--dry-run` shows the size
+  in use (`screen: panel size ... mm`); `--plan` prints `screen_size=`, `panel_mm=` and `panel_in_use=`.
+- **The deck** (`zero2w`) has no profile, its 2.8" panel size is built in: the options are refused there.
+
+### My screen is not listed
+
+A screen that no profile describes works only as far as the hardware allows, and it is **untested hardware: at your own
+risk**. In order:
+
+1. **Light the panel at the system level.** Its overlay or driver in `/boot/firmware/config.txt` (and a reboot) so that a
+   framebuffer exists and the console shows on it (`/dev/fb0`, `ls /sys/class/graphics`). The installer does not do this on
+   an unknown board; see the panel's own documentation (the kernel's `vc4-kms-dsi-*`, `mipi-dbi-spi` and `vc4-kms-dpi-*`
+   overlays are the usual ones). `sudo ./install.sh --dry-run` prints what it detects (connectors, framebuffers, touch,
+   backlight).
+2. **Install with the generic profile**: `sudo ./install.sh --board generic --screen-size <inches>` (the diagonal of the
+   visible area). `--board generic` writes `/etc/applaunch/board.conf` from the detected facts: `APPLAUNCH_FB` the panel's
+   framebuffer (the one connected DSI, DPI, SPI, eDP or LVDS connector's, else the only framebuffer there is);
+   `APPLAUNCH_LOGICAL` the framebuffer's landscape size (a portrait buffer such as 480x800 gives 800x480 with
+   `APPLAUNCH_ROTATE=90`, as the HyperPixel 4 profile does); `APPLAUNCH_COMPAT_SCALE` 1 below 640 px wide, else 2; touch
+   `auto` / `buffer`; the backlight as the DSI profiles find it (the `10-0045` regulator or the only backlight device; an
+   on/off `backlight_gpio` as on/off); `APPLAUNCH_BOARD=generic-<W>x<H>`; `APPLAUNCH_PANEL_MM` from `--screen-size` (without
+   it no size line: the launcher's default density, large controls). It prints what it assumed and asks you to send the
+   probe report. A board where the facts are not clear (two panels, none) is refused with the facts; a PC has its own
+   profile. Or use the profile of the nearest known board with `--board NAME --screen-size <inches>` (for a panel of the
+   same family).
+3. **Check it.** The home grid, the touch (does a tap land where you tap?) and the rotation. Edit
+   `/etc/applaunch/board.conf` by hand (the keys are listed at the top of `ext_components/cp0_lvgl/src/cp0/cp0_lvgl_dpi_scaled.c`:
+   rotation `APPLAUNCH_ROTATE`, canvas `APPLAUNCH_LOGICAL`, touch `APPLAUNCH_TOUCH_*`, backlight `APPLAUNCH_BACKLIGHT`), then
+   restart the launcher (`systemctl --user restart cyberdeckzero.service`, or reboot). A hand-edited `board.conf` is kept by
+   later installs and updates.
+4. **Send the probe report**: run `tools/board-probe/probe-board.sh` on the board and send the output, so that a profile
+   (and the detection) can be added for it.
 
 ### PDA: portrait on the 4.3" DSI panel
 

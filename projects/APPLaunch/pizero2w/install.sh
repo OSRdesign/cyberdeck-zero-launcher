@@ -21,7 +21,15 @@
 #                          README.md, "Pi 5 + HyperPixel 4: brightness levels"). Never done without this option
 #   --board NAME           use this board profile instead of detecting it (zero2w, pi3a-luckfox35,
 #                          pi3a-wsdsi43, pi3a-wsdsi43-portrait (PDA: never detected), pi4b-dsi, pi5-hyperpixel4,
-#                          pi5-dsi7, hackberry-cm5)
+#                          pi5-dsi7, hackberry-cm5, generic). generic: a screen that has no profile (untested hardware):
+#                          the profile is written from what is detected (the panel's framebuffer and size, rotation,
+#                          touch by capability, the backlight); README.md, "My screen is not listed"
+#   --screen-size INCHES   the screen's diagonal in inches (1.5 to 15, e.g. 2.8, 3.5, 4.3, 5, 7). Panels that look the same to
+#                          software (the 4.3", 5" and 7" DSI ones) cannot be told apart by the profile: this sets the
+#                          profile's panel size (APPLAUNCH_PANEL_MM, the layout's density) from the diagonal and the
+#                          resolution, and nothing else. Not for the deck (zero2w, no profile). Without it the profile
+#                          keeps its own size; in a terminal, a first install asks
+#   --panel-mm WxH         the panel's visible area in mm, exactly (wins over --screen-size)
 #   --board-only           only detect the board and write/update /etc/applaunch/board.conf, then stop
 #   --dry-run              print the detected board, the session and what would be done, change nothing
 #   --plan                 the dry run as key=value lines for a program (Settings > Updates' helper,
@@ -31,7 +39,7 @@
 #   --no-default-source    do not offer the apps repo (OSRdesign/cyberdeck-zero-apps) in Settings > Apps
 #                          (default: added once for the user if they have no source yet, see default-sources.sh)
 #
-# Each install records its options (keyboard name, --board, --no-boot-config, --pwm-backlight, --no-default-source) in
+# Each install records its options (keyboard name, --board, --screen-size, --panel-mm, --no-boot-config, --pwm-backlight, --no-default-source) in
 # /etc/applaunch/install.conf: Settings > Updates installs a newer release by running this script again with them.
 # To remove everything this script adds, run ./uninstall.sh (see README.md, "Uninstall").
 #
@@ -52,11 +60,24 @@ FORCE=0
 DRY=0
 BOARD_ONLY=0
 BOARD_ARG=""
+SIZE_ARG=""
+MM_ARG=""
 DEFAULT_SOURCE=1
 PLAN=0
+# --screen-size and --panel-mm values: a diagonal 1.5 to 15 inches (digits and one point), WxH in mm (20 to 500 each)
+valid_size() {
+    case "$1" in ""|*[!0-9.]*|.*|*.|*.*.*) return 1 ;; esac
+    awk -v d="$1" 'BEGIN { exit !(d + 0 >= 1.5 && d + 0 <= 15) }'
+}
+valid_mm() {
+    case "$1" in [0-9]*x[0-9]*) ;; *) return 1 ;; esac
+    vw=${1%x*}; vh=${1#*x}
+    case "$vw$vh" in *[!0-9]*) return 1 ;; esac
+    [ "$vw" -ge 20 ] && [ "$vw" -le 500 ] && [ "$vh" -ge 20 ] && [ "$vh" -le 500 ]
+}
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,38p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
         --dry-run|--plan) DRY=1 ;;
     esac
 done
@@ -71,7 +92,13 @@ while [ $# -gt 0 ]; do
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
         --pwm-backlight) PWM_BACKLIGHT=1; shift ;;
-        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, pi5-dsi7, hackberry-cm5)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
+        --board) [ $# -ge 2 ] || { echo "--board needs a name (zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, pi5-dsi7, hackberry-cm5, generic)" >&2; exit 2; }; BOARD_ARG="$2"; shift 2 ;;
+        --screen-size) [ $# -ge 2 ] || { echo "--screen-size needs the diagonal in inches (1.5 to 15)" >&2; exit 2; }
+                 valid_size "$2" || { echo "--screen-size: \"$2\" is not a diagonal in inches between 1.5 and 15 (for example 2.8, 3.5, 4.3, 5, 7)" >&2; exit 2; }
+                 SIZE_ARG="$2"; shift 2 ;;
+        --panel-mm) [ $# -ge 2 ] || { echo "--panel-mm needs WxH in mm (for example 108x65)" >&2; exit 2; }
+                 valid_mm "$2" || { echo "--panel-mm: \"$2\" is not WxH in mm (20 to 500 each, for example 108x65)" >&2; exit 2; }
+                 MM_ARG="$2"; shift 2 ;;
         --board-only) BOARD_ONLY=1; shift ;;
         --dry-run) DRY=1; shift ;;
         --plan) DRY=1; PLAN=1; shift ;;
@@ -241,7 +268,7 @@ print_facts() {
 BOARD=""
 PANEL_FB=""
 BOARD_NOTE=""
-KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, pi5-dsi7, hackberry-cm5"
+KNOWN_BOARDS="zero2w, pi3a-luckfox35, pi3a-wsdsi43, pi3a-wsdsi43-portrait, pi4b-dsi, pi5-hyperpixel4, pi5-dsi7, hackberry-cm5, generic"
 # The panel of each profiled board: fbdev name prefix, buffer size (virtual_size), DRM connector and its mode.
 # The RP1 DPI fbdev ("drm-rp1-dpidrmf") is the panel's native buffer: portrait 480x800 for the HyperPixel 4 (the
 # launcher pre-rotates its 800x480 canvas 90 degrees), square 720x720 for the HackBerry (report 021, addenda 3, 4, 7).
@@ -273,8 +300,56 @@ detect_panel() {
     PANEL_FB=$(find_fb "$1" "$2" || true)
     [ -n "$PANEL_FB" ] && drm_connected "$3" "$4"
 }
+# The generic profile (a screen that has no profile of its own: untested hardware): the panel is the one connected internal
+# DRM connector (DSI, DPI, SPI, eDP, LVDS) whose first mode is the size of a framebuffer (either orientation); with LONE=1
+# (--board generic) the only framebuffer there is will do when there is no such connector. Sets GEN_FB, GEN_NW, GEN_NH
+# (the buffer's size) and, when found, GEN_LW, GEN_LH (the landscape canvas) and GEN_ROT (90 when the buffer is portrait);
+# else GEN_WHY says why not. True when exactly one panel was found.
+GEN_FB=""; GEN_NW=""; GEN_NH=""; GEN_LW=""; GEN_LH=""; GEN_ROT=0; GEN_WHY=""; GEN_AUTO=0
+generic_detect() {
+    GEN_FB=""; GEN_WHY=""
+    gd_list=""; gd_n=0; gd_s=""
+    for c in "$SYSROOT"/sys/class/drm/card[0-9]*-*; do
+        [ -d "$c" ] || continue
+        case "${c##*/}" in *-DSI-*|*-DPI-*|*-SPI-*|*-eDP-*|*-LVDS-*) ;; *) continue ;; esac
+        [ "$(rd "$c/status" || true)" = connected ] || continue
+        m=$(rd "$c/modes" || true)
+        case "$m" in [0-9]*x[0-9]*) ;; *) continue ;; esac
+        mw=${m%%x*}; mh=${m#*x}; mh=${mh%%[!0-9]*}
+        for f in "$SYSROOT"/sys/class/graphics/fb[0-9]*; do
+            [ -d "$f" ] || continue
+            s=$(rd "$f/virtual_size" || true)
+            if [ "$s" = "$mw,$mh" ] || [ "$s" = "$mh,$mw" ]; then
+                case " $gd_list " in
+                    *" /dev/${f##*/} "*) ;;
+                    *) gd_list="$gd_list /dev/${f##*/}"; gd_n=$((gd_n + 1)); gd_s=$s ;;
+                esac
+                break
+            fi
+        done
+    done
+    if [ "$gd_n" = 0 ] && [ "${1:-0}" = 1 ]; then
+        for f in "$SYSROOT"/sys/class/graphics/fb[0-9]*; do
+            [ -d "$f" ] || continue
+            s=$(rd "$f/virtual_size" || true)
+            case "$s" in [0-9]*,[0-9]*) gd_list="$gd_list /dev/${f##*/}"; gd_n=$((gd_n + 1)); gd_s=$s ;; esac
+        done
+    fi
+    if [ "$gd_n" = 0 ]; then
+        GEN_WHY="no panel found (a connected DSI, DPI, SPI, eDP or LVDS connector with a framebuffer of its size): is the screen's overlay or driver loaded?"
+        return 1
+    elif [ "$gd_n" != 1 ]; then
+        GEN_WHY="more than one panel found ($gd_list): this installer does not guess which one is the launcher's screen"
+        return 1
+    fi
+    GEN_FB=${gd_list# }; GEN_NW=${gd_s%,*}; GEN_NH=${gd_s#*,}
+    if [ "$GEN_NW" -lt "$GEN_NH" ]; then GEN_LW=$GEN_NH; GEN_LH=$GEN_NW; GEN_ROT=90
+    else GEN_LW=$GEN_NW; GEN_LH=$GEN_NH; GEN_ROT=0; fi
+    return 0
+}
 if [ -n "$BOARD_ARG" ]; then
     case "$BOARD_ARG" in
+        generic) ;;                         # after the PC check below
         zero2w) BOARD=zero2w ;;
         pi3a-luckfox35|pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-hyperpixel4|pi5-dsi7|hackberry-cm5)
             BOARD=$BOARD_ARG
@@ -391,6 +466,29 @@ if [ -z "$MODEL" ] && [ "$MACHINE" = x86_64 ]; then
         fi
     fi
 fi
+# The generic profile: with --board generic (not on a PC: it has its own profile), and on an unknown board installed with
+# --force when exactly one panel is found (then install.conf records board=generic: the updates keep it).
+if [ "$BOARD_ARG" = generic ]; then
+    if [ "$IS_PC" = 1 ]; then
+        echo "--board generic is not for a PC (it has its own profile: leave --board out)." >&2; exit 2
+    fi
+    if ! generic_detect 1; then
+        echo "--board generic: $GEN_WHY" >&2
+        print_facts >&2
+        echo "Nothing was changed." >&2
+        exit 1
+    fi
+    BOARD="generic-${GEN_LW}x${GEN_LH}"; PANEL_FB=$GEN_FB
+elif [ -z "$BOARD" ] && [ "$FORCE" = 1 ] && [ "$IS_PC" = 0 ] && [ -z "$BOARD_NOTE" ] && generic_detect 0; then
+    BOARD="generic-${GEN_LW}x${GEN_LH}"; PANEL_FB=$GEN_FB; GEN_AUTO=1
+fi
+# On an unknown board without --force: when a panel is found, say that the generic profile exists
+generic_hint() {
+    if [ "$IS_PC" = 0 ] && [ -z "$BOARD_NOTE" ] && generic_detect 0; then
+        echo "A panel was found ($GEN_FB, ${GEN_NW}x${GEN_NH}): --board generic (with --screen-size INCHES) writes a generic profile for it"
+        echo "(untested screen; README.md, \"My screen is not listed\")."
+    fi
+}
 # The deck's PWM backlight overlay goes into config.txt on the deck and, as before, on an unknown board installed with
 # --force, except when the model is one of the other boards' (Pi 3A+, Pi 4 B, Pi 5, CM5) and only its panel was not
 # recognised: those panels bring their own backlight (and overlay), so config.txt stays as it is there.
@@ -539,7 +637,29 @@ dim_lines() {
     echo "# idle dim level, percent of the backlight: 1..100 (the launcher's default is 10)"
     echo "APPLAUNCH_DIM_PERCENT=$1"
 }
+# The screen size (--screen-size, --panel-mm, the install question; resolved below, before the first profile_body): when it
+# changes the profile's own PANEL_MM (SCREEN_APPLY=1) the panel-dependent lines are replaced; nothing else changes. The old
+# size lines of the profile go (its comments too) and "APPLAUNCH_PANEL_MM=" is put before the touch lines, where the DSI
+# profiles have it. With no change the body is the profile's own, byte for byte.
+SCREEN_APPLY=0; SCREEN_MM=""; SCREEN_NOTE=""; SCREEN_DIM20=0
 profile_body() {
+    if [ "$SCREEN_APPLY" = 0 ]; then profile_body_base; return; fi
+    sc="/^# landscape visible area in mm/d
+/^# landscape panel size in mm/d
+/^# panel size in mm, from/d
+/^# panel size unknown/d
+/^APPLAUNCH_PANEL_MM=/d
+s|^APPLAUNCH_TOUCH_DEV=|# panel visible area in mm ($SCREEN_NOTE): the layout's density\\
+APPLAUNCH_PANEL_MM=$SCREEN_MM\\
+APPLAUNCH_TOUCH_DEV=|"
+    if [ "$SCREEN_DIM20" = 1 ]; then
+        sc="$sc
+s|^APPLAUNCH_DIM_PERCENT=.*|APPLAUNCH_DIM_PERCENT=20|
+s|^# idle dim level.*|# idle dim level, percent of the backlight (default 10; 20 for the 5-inch panel, where raw 50/255 is dimmed but readable)|"
+    fi
+    profile_body_base | sed -e "$sc"
+}
+profile_body_base() {
     case "$BOARD" in
         # The backlight lines are the only ones that vary: the on/off backlight_gpio, or the overlay's PWM backlight_pwm
         # and its idle dim level when config.txt has it or this run sets it up (LF_PWM). The on/off body is byte for byte
@@ -680,6 +800,37 @@ APPLAUNCH_TOUCH_INVERT_X=0
 APPLAUNCH_TOUCH_INVERT_Y=0
 EOF
         ;;
+        # A screen that has no profile (--board generic, or --force on an unknown board with one panel): what was detected.
+        # The canvas is the landscape size of the framebuffer (a portrait buffer is turned: ROTATE=90, as the HyperPixel 4
+        # profile does), the compat scale 1 below 640 px wide (the Luckfox 3.5" profile) else 2 (the DSI profiles), touch by
+        # capability in buffer orientation, the backlight as the DSI profiles find it (an on/off GPIO one as the Luckfox
+        # profile names it). No panel size unless --screen-size or --panel-mm gives one (see profile_body): the launcher's
+        # default density then.
+        generic-*)
+            bl=$(dsi_backlight)
+            echo "APPLAUNCH_BOARD=$BOARD"
+            echo "APPLAUNCH_FB=$PANEL_FB"
+            echo "APPLAUNCH_LOGICAL=${GEN_LW}x${GEN_LH}"
+            echo "APPLAUNCH_ROTATE=$GEN_ROT"
+            if [ "$GEN_LW" -lt 640 ]; then echo "APPLAUNCH_COMPAT_SCALE=1"; else echo "APPLAUNCH_COMPAT_SCALE=2"; fi
+            echo "# panel size unknown (no --screen-size, no --panel-mm): the launcher's default density (large controls)"
+            cat <<EOF
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+EOF
+            case "$bl" in
+                "") ;;
+                backlight_gpio) echo "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" ;;
+                *) echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$bl"; dim_lines 10 ;;
+            esac
+            cat <<EOF
+LV_LINUX_FBDEV_DEVICE=$PANEL_FB
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+EOF
+        ;;
         # The two desktop boards: the values board.py's test-start used on them (tools/boards/boards.json, test_env).
         # Touch is already in buffer orientation (report 021, addendum 8). No APPLAUNCH_PANEL_MM yet: the panels'
         # size in mm is still to be measured (task 014), the layout service uses its default density meanwhile.
@@ -788,6 +939,16 @@ profile_state() {
     have=$(sed '1,3d' "$PROFILE" | body_sum)
     { [ -n "$want" ] && [ "$want" = "$have" ]; } && echo ours || echo edited
 }
+# The generic profile is for an untested screen: what was assumed, and what to do
+generic_note() {
+    case "$BOARD" in generic-*) ;; *) return 0 ;; esac
+    echo "generic profile: untested screen: please send tools/board-probe/probe-board.sh output so that a profile can be added."
+    echo "  assumed: framebuffer $PANEL_FB (${GEN_NW}x${GEN_NH}), canvas ${GEN_LW}x${GEN_LH}, rotation $GEN_ROT, touch by capability,"
+    echo "  $(profile_body | sed -n 's/^APPLAUNCH_BACKLIGHT=/backlight /p' | head -n 1 | grep . || echo 'no backlight control')"
+    if [ -n "$PANEL_IN_USE" ]; then echo "  panel size $PANEL_IN_USE mm ($SCREEN_NOTE)"
+    else echo "  no panel size (the launcher's default density, large controls): --screen-size INCHES sets it"; fi
+    echo "  check the home grid, touch and rotation; edit /etc/applaunch/board.conf by hand if needed (README.md, \"My screen is not listed\")"
+}
 # PROFILE_ACTION: what apply_profile will do, as one word, plus PROFILE_MSG for the user
 plan_profile() {
     st=$(profile_state)
@@ -820,6 +981,7 @@ apply_profile() {
         keep) ;;
     esac
     echo "$PROFILE_MSG"
+    generic_note
 }
 # The 3.5" SPI panel's backlight in config.txt (pi3a-luckfox35): the parameters of the one dtoverlay=mipi-dbi-spi line,
 # on that line and on the dtparam= lines after it, up to the next dtoverlay= line or [section] (a dtparam applies to the
@@ -901,6 +1063,103 @@ gpio_bl_rule() {
 SUBSYSTEM=="backlight", KERNEL=="backlight_gpio", ACTION=="add|change", RUN+="/bin/sh -c 'chgrp video /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power; chmod g+w /sys/class/backlight/%k/brightness /sys/class/backlight/%k/bl_power'"
 EOF
 }
+# ---------------------------------------------------------------------------------------------------------------
+# The screen's size (--screen-size INCHES, --panel-mm WxH, the question below): the panels of one family look the same to
+# software (the Waveshare 4.3", the Freenove 5" and the official 7" DSI panels: same ft5x06 touch, same 10-0045 regulator,
+# same 800x480 fbdev), and a screen that is not listed has no profile: the profile only holds one size. The size sets
+# APPLAUNCH_PANEL_MM (the layout's density) and, for 5" on the DSI regulator's backlight, the idle dim level 20 as pi4b-dsi
+# has it; the board name, framebuffer, rotation and the rest stay the profile's.
+#   mm from the diagonal d and the landscape canvas (w, h): w * d * 25.4 / sqrt(w^2 + h^2) by h * d * 25.4 / sqrt(...),
+#   each rounded to the nearest mm, except for the sizes the profiles already know (their values were measured or taken
+#   from the panel's data sheet and differ by a mm or two from the formula): 4.3, 5 and 7 inch at 800x480 (94x56, 108x65,
+#   154x86: the 7" official panel's pixels are not square) and 3.5 inch at 480x320 (79x49, the Luckfox overlay's size).
+#   When the result is the profile's own size the profile is not touched (byte for byte).
+# A size given before (install.conf: screen_size, panel_mm) is kept by a re-run without options. The deck (zero2w) and an
+# unknown board have no profile: the options are refused there.
+# The question (a terminal: stdin and stdout; a first install: no screen_size= in install.conf; no option given; a profile
+# written; not a PC, whose size comes from its EDID; not --dry-run, --plan, --board-only) is never asked from scripts,
+# Settings > Updates or CI. APPLAUNCH_INSTALL_ASSUME_TTY=1 is a test hook, honoured only together with SYSROOT.
+# ---------------------------------------------------------------------------------------------------------------
+INSTALL_CONF="$PROFILE_DIR/install.conf"
+size_is() { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 == b + 0) }'; }
+# screen_mm D W H: "WxH" in mm of a D inch diagonal on a W by H canvas (landscape: the larger side first)
+screen_mm() {
+    awk -v d="$1" -v w="$2" -v h="$3" 'BEGIN {
+        if (w < h) { t = w; w = h; h = t }
+        k = sprintf("%gx%g@%g", w, h, d + 0)
+        if (k == "800x480@4.3") print "94x56"
+        else if (k == "800x480@5") print "108x65"
+        else if (k == "800x480@7") print "154x86"
+        else if (k == "480x320@3.5") print "79x49"
+        else { n = sqrt(w * w + h * h); printf "%dx%d\n", int(d * 25.4 * w / n + 0.5), int(d * 25.4 * h / n + 0.5) }
+    }'
+}
+# the diagonal of the profile's own panel, for the question
+profile_diag() {
+    case "$BOARD" in
+        pi3a-wsdsi43|pi3a-wsdsi43-portrait) echo 4.3 ;;
+        pi4b-dsi) echo 5 ;;
+        pi5-dsi7) echo 7 ;;
+        pi3a-luckfox35) echo 3.5 ;;
+    esac
+}
+SIZE_KEY=0; SIZE_REC=""; MM_REC=""
+if [ -f "$INSTALL_CONF" ]; then
+    if grep -q '^screen_size=' "$INSTALL_CONF"; then SIZE_KEY=1; SIZE_REC=$(sed -n 's/^screen_size=//p' "$INSTALL_CONF" | tail -n 1); fi
+    MM_REC=$(sed -n 's/^panel_mm=//p' "$INSTALL_CONF" | tail -n 1)
+fi
+SCREEN_OWN_MM=""; SCREEN_LOGICAL=""
+case "$BOARD" in
+    ""|zero2w)
+        if [ -n "$SIZE_ARG$MM_ARG" ]; then
+            echo "--screen-size and --panel-mm set the panel size of a board profile; this board (${BOARD:-unknown}) has no board profile." >&2
+            if [ "$BOARD" = zero2w ]; then
+                echo "The deck's 2.8\" panel size is built in. For another screen use --board generic (README.md, \"My screen is not listed\")," >&2
+                echo "or set APPLAUNCH_PANEL_MM=WxH in a hand-edited /etc/applaunch/board.conf." >&2
+            fi
+            exit 2
+        fi ;;
+    *)
+        if [ -z "$SIZE_ARG$MM_ARG" ]; then
+            valid_size "$SIZE_REC" && SIZE_ARG=$SIZE_REC
+            valid_mm "$MM_REC" && MM_ARG=$MM_REC
+        fi
+        base=$(profile_body_base)
+        SCREEN_OWN_MM=$(printf '%s\n' "$base" | sed -n 's/^APPLAUNCH_PANEL_MM=//p' | head -n 1)
+        SCREEN_LOGICAL=$(printf '%s\n' "$base" | sed -n 's/^APPLAUNCH_LOGICAL=//p' | head -n 1)
+        if [ -z "$SIZE_ARG$MM_ARG" ] && [ "$SIZE_KEY" = 0 ] && [ "$IS_PC" = 0 ] && [ "$DRY" = 0 ] && [ "$BOARD_ONLY" = 0 ] \
+                && { { [ "${APPLAUNCH_INSTALL_ASSUME_TTY:-0}" = 1 ] && [ -n "$SYSROOT" ]; } || { [ -t 0 ] && [ -t 1 ]; }; }; then
+            own_diag=$(profile_diag)
+            tries=0
+            while [ "$tries" -lt 3 ]; do
+                printf "What is the screen's diagonal in inches? (for example 2.8, 3.5, 4.3, 5, 7; Enter = %s) " "${own_diag:-unknown}"
+                ans=""
+                read -r ans || { echo; echo "no answer: the profile's own size stays"; break; }
+                ans=${ans%\"}
+                if [ -z "$ans" ]; then break; fi
+                if valid_size "$ans"; then SIZE_ARG=$ans; break; fi
+                tries=$((tries + 1))
+                echo "\"$ans\" is not a diagonal in inches between 1.5 and 15."
+                [ "$tries" -lt 3 ] || echo "no usable answer: the profile's own size stays (--screen-size INCHES sets it later)"
+            done
+        fi
+        if [ -n "$MM_ARG" ]; then
+            SCREEN_MM=$MM_ARG; SCREEN_NOTE="--panel-mm $MM_ARG"
+        elif [ -n "$SIZE_ARG" ]; then
+            case "$SCREEN_LOGICAL" in
+                [0-9]*x[0-9]*) SCREEN_MM=$(screen_mm "$SIZE_ARG" "${SCREEN_LOGICAL%x*}" "${SCREEN_LOGICAL#*x}"); SCREEN_NOTE="--screen-size $SIZE_ARG" ;;
+                *) echo "--screen-size: the canvas size of this screen is not known here: give --panel-mm WxH instead." >&2; exit 2 ;;
+            esac
+        fi
+        if [ -n "$SIZE_ARG" ] && size_is "$SIZE_ARG" 5 \
+                && printf '%s\n' "$base" | grep -qx 'APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045'; then
+            own_dim=$(printf '%s\n' "$base" | sed -n 's/^APPLAUNCH_DIM_PERCENT=//p' | head -n 1)
+            { [ -z "$own_dim" ] || [ "$own_dim" = 20 ]; } || SCREEN_DIM20=1
+        fi
+        if [ -n "$SCREEN_MM" ] && { [ "$SCREEN_MM" != "$SCREEN_OWN_MM" ] || [ "$SCREEN_DIM20" = 1 ]; }; then SCREEN_APPLY=1; fi ;;
+esac
+PANEL_IN_USE=${SCREEN_MM:-$SCREEN_OWN_MM}
+
 # The levels backlight of the profile (APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/<name>: the Pi 3A+ DSI
 # regulator, the PC's intel_backlight): its brightness file is root's only, the launcher runs as the user.
 SYSFS_BL_RULE="92-applaunch-backlight-sysfs.rules"
@@ -1062,6 +1321,9 @@ if [ "$PLAN" = 1 ]; then
     echo "pc=$IS_PC"
     echo "board=$BOARD"
     echo "board_forced=$( [ -n "$BOARD_ARG" ] && echo 1 || echo 0 )"
+    echo "screen_size=$SIZE_ARG"
+    echo "panel_mm=$MM_ARG"
+    echo "panel_in_use=$PANEL_IN_USE"
     echo "session=$SESSION"
     echo "desktop_refused=$DESKTOP_REFUSED"
     echo "switch=$SWITCH"
@@ -1080,7 +1342,12 @@ if [ "$DRY" = 1 ]; then
     echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
     if [ -z "$BOARD" ]; then
         if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
+        generic_hint
         [ "$FORCE" = 1 ] || echo "install.sh would stop here (--force installs without a profile)."
+    elif [ "$BOARD" != zero2w ]; then
+        if [ -n "$SCREEN_NOTE" ]; then echo "screen: panel size $PANEL_IN_USE mm ($SCREEN_NOTE)"
+        elif [ -n "$PANEL_IN_USE" ]; then echo "screen: panel size $PANEL_IN_USE mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)"
+        else echo "screen: panel size not set (the launcher's default density; --screen-size INCHES or --panel-mm WxH sets it)"; fi
     fi
     echo "session: $SESSION ($SESSION_WHY)"
     if [ "$SESSION" = desktop ]; then
@@ -1088,6 +1355,7 @@ if [ "$DRY" = 1 ]; then
     fi
     [ -z "$DESKTOP_BOOT_WARN" ] || echo "WARNING: $DESKTOP_BOOT_WARN"
     echo "profile: $PROFILE_MSG"
+    generic_note
     case "$PROFILE_ACTION" in write|replace) echo "--- $PROFILE"; profile_content ;; esac
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
     if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
@@ -1132,7 +1400,7 @@ if [ "$DRY" = 1 ]; then
         print_switch "$TARGET_USER"
         echo "launcher files: /usr/share/APPLaunch/bin/$LAUNCHER_BIN and $CONSOLE_HELPER, the libraries and assets of the"
         echo "  bundle; licences and notices in /usr/share/doc/$DOC_NAME (replaced as a whole)"
-        echo "install options: /etc/applaunch/install.conf (the keyboard name, --board, the boot configuration, the default"
+        echo "install options: /etc/applaunch/install.conf (the keyboard name, --board, --screen-size, --panel-mm, the boot configuration, the default"
         echo "  source: Settings > Updates runs install.sh again with them)"
         echo "anchor package: $ANCHOR_PKG (built here with dpkg-deb, no files; Depends: the packages of the launcher's"
         echo "  libraries and of the programs it runs on this board, so apt autoremove never takes them away)"
@@ -1181,6 +1449,7 @@ if [ "$BOARD_ONLY" = 1 ]; then
     if [ -z "$BOARD" ]; then
         echo "detected:"; print_facts
         if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
+        generic_hint
     fi
     apply_profile
     if [ "$GPIO_BL" = 1 ]; then
@@ -1434,6 +1703,7 @@ echo "board: ${MODEL:-unknown} -> profile ${BOARD:-none (unknown board)}   user:
 if [ -z "$BOARD" ]; then
     echo "detected:"; print_facts
     if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
+    generic_hint
     [ "$FORCE" = 1 ] || { echo "stopping here (use --force to install anyway, without a board profile)" >&2; exit 1; }
 fi
 if [ "$SESSION" = desktop ]; then
@@ -1710,9 +1980,12 @@ INSTALL_CONF="$PROFILE_DIR/install.conf"
 mkdir -p "$PROFILE_DIR"
 {
     echo "# The options of the last install.sh run, written by install.sh. Settings > Updates runs install.sh of a newer"
-    echo "# release again with them (cyberdeckzero-update). board= is empty when the board was detected."
+    echo "# release again with them (cyberdeckzero-update). board= is empty when the board was detected; screen_size= (inches)
+# and panel_mm= (WxH) when no screen size was given (--screen-size, --panel-mm, the install question): the profile's own."
     echo "keyboard_name=$KEYBOARD_NAME"
-    echo "board=$BOARD_ARG"
+    echo "board=${BOARD_ARG:-$( [ "$GEN_AUTO" = 1 ] && echo generic)}"
+    echo "screen_size=$SIZE_ARG"
+    echo "panel_mm=$MM_ARG"
     echo "boot_config=$BOOT_CONFIG"
     echo "pwm_backlight=$PWM_BACKLIGHT"
     echo "default_source=$DEFAULT_SOURCE"
@@ -1720,7 +1993,7 @@ mkdir -p "$PROFILE_DIR"
 } > "$INSTALL_CONF.tmp"
 chmod 644 "$INSTALL_CONF.tmp"
 mv "$INSTALL_CONF.tmp" "$INSTALL_CONF"
-echo "${INSTALL_CONF#"$SYSROOT"}: keyboard \"$KEYBOARD_NAME\"${BOARD_ARG:+, --board $BOARD_ARG}$( [ "$BOOT_CONFIG" = 0 ] && echo ', --no-boot-config')$( [ "$PWM_BACKLIGHT" = 1 ] && echo ', --pwm-backlight')$( [ "$DEFAULT_SOURCE" = 0 ] && echo ', --no-default-source')"
+echo "${INSTALL_CONF#"$SYSROOT"}: keyboard \"$KEYBOARD_NAME\"${BOARD_ARG:+, --board $BOARD_ARG}${SIZE_ARG:+, --screen-size $SIZE_ARG}${MM_ARG:+, --panel-mm $MM_ARG}$( [ "$BOOT_CONFIG" = 0 ] && echo ', --no-boot-config')$( [ "$PWM_BACKLIGHT" = 1 ] && echo ', --pwm-backlight')$( [ "$DEFAULT_SOURCE" = 0 ] && echo ', --no-default-source')"
 
 # The PWM backlight overlay is for the deck's Waveshare panel (DECK_BOOT, see the board detection); a board with its
 # own profile keeps its config.txt and only gets the cmdline arguments (never an fbcon= argument).
