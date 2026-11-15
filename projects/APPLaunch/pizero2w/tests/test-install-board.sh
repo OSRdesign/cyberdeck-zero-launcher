@@ -370,6 +370,253 @@ R=$(root pi4b-dsi)
 check "the Pi 4 B DSI board is still pi4b-dsi" 'run --dry-run; has "board: pi4b-dsi" && ! has "pi5-dsi7"'
 check "install.sh writes no fbcon= argument anywhere" '! grep -n "fbcon=" "$INSTALL" | grep -v "^[0-9]*:[[:space:]]*#" | grep -q .'
 
+# --- --screen-size INCHES / --panel-mm WxH: the screen's size is told at install (panels of one family look the same to
+# software, a screen that is not listed has no profile). Only the panel-dependent lines change (APPLAUNCH_PANEL_MM, and the
+# idle dim level for 5 inch on the DSI regulator); no option: the profile as it was.
+panel_strip() { grep -v -E '^(# landscape visible|# landscape panel size|# panel size|# panel visible|APPLAUNCH_PANEL_MM=|# idle dim|APPLAUNCH_DIM_PERCENT=|# applaunch-profile-sum)' "$1"; }
+mm_in() { sed -n 's/^APPLAUNCH_PANEL_MM=//p' "$1"; }
+dim_in() { sed -n 's/^APPLAUNCH_DIM_PERCENT=//p' "$1"; }
+# size_case LABEL FIXTURE BOARD-OR-"" OPTIONS EXPECTED-MM EXPECTED-DIM-OR-"": the profile with the options against the one without
+size_case() {
+    SC_LABEL=$1; SC_MM=$5; SC_DIM=$6
+    R=$(root "$2"); P="$R/etc/applaunch/board.conf"
+    run --board-only ${3:+--board "$3"}
+    SC_BASE=$(panel_strip "$P"); SC_SUM=$(cksum < "$P"); SC_OWN=$(mm_in "$P"); SC_OWNDIM=$(dim_in "$P")
+    R=$(root "$2"); P="$R/etc/applaunch/board.conf"
+    # shellcheck disable=SC2086
+    run --board-only ${3:+--board "$3"} $4
+    check "$SC_LABEL $4: exit 0, panel $SC_MM mm, one size line" '[ $RC = 0 ] && [ "$(mm_in "$P")" = "$SC_MM" ] && [ "$(grep -c "^APPLAUNCH_PANEL_MM=" "$P")" = 1 ]'
+    check "$SC_LABEL $4: dim level ${SC_DIM:-none}" '[ "$(dim_in "$P")" = "$SC_DIM" ]'
+    check "$SC_LABEL $4: everything else as the profile has it (board, fb, rotation, touch, backlight)" '[ "$(panel_strip "$P")" = "$SC_BASE" ]'
+    check "$SC_LABEL $4: only KEY=VALUE or comment lines, a checksum line, the size line before the touch lines" '! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && grep -q "^# applaunch-profile-sum: " "$P" && [ "$(grep -n "^APPLAUNCH_PANEL_MM=" "$P" | cut -d: -f1)" -lt "$(grep -n "^APPLAUNCH_TOUCH_DEV=" "$P" | cut -d: -f1)" ]'
+    run --board-only ${3:+--board "$3"} $4
+    check "$SC_LABEL $4: the profile is ours (a re-run says up to date)" 'has "already up to date"'
+    if [ "$SC_MM" = "$SC_OWN" ] && [ "$SC_DIM" = "$SC_OWNDIM" ]; then
+        check "$SC_LABEL $4 (its own size): byte for byte the profile without the option" '[ "$(cksum < "$P")" = "$SC_SUM" ]'
+    fi
+}
+size_case "wsdsi43" pi3a-wsdsi43 "" "--screen-size 4.3" 94x56 10
+size_case "wsdsi43" pi3a-wsdsi43 "" "--screen-size 5" 108x65 20
+size_case "wsdsi43" pi3a-wsdsi43 "" "--screen-size 7" 154x86 10
+size_case "wsdsi43" pi3a-wsdsi43 "" "--screen-size 5.0" 108x65 20
+size_case "wsdsi43" pi3a-wsdsi43 "" "--screen-size 6" 131x78 10
+size_case "wsdsi43" pi3a-wsdsi43 "" "--panel-mm 100x60" 100x60 10
+size_case "wsdsi43" pi3a-wsdsi43 "" "--screen-size 5 --panel-mm 100x60" 100x60 20
+size_case "wsdsi43-portrait" pi3a-wsdsi43 pi3a-wsdsi43-portrait "--screen-size 4.3" 94x56 10
+size_case "wsdsi43-portrait" pi3a-wsdsi43 pi3a-wsdsi43-portrait "--screen-size 5" 108x65 20
+size_case "pi4b-dsi" pi4b-dsi "" "--screen-size 4.3" 94x56 20
+size_case "pi4b-dsi" pi4b-dsi "" "--screen-size 5" 108x65 20
+size_case "pi4b-dsi" pi4b-dsi "" "--screen-size 7" 154x86 20
+size_case "pi5-dsi7" pi5-dsi7 "" "--screen-size 5" 108x65 20
+size_case "pi5-dsi7" pi5-dsi7 "" "--screen-size 7" 154x86 20
+size_case "luckfox35" pi3a-luckfox35 "" "--screen-size 3.5" 79x49 ""
+size_case "luckfox35" pi3a-luckfox35 "" "--screen-size 4" 85x56 ""
+size_case "luckfox35" pi3a-luckfox35 "" "--screen-size 3" 63x42 ""
+size_case "hyperpixel4" pi5-hyperpixel4 "" "--screen-size 4" 87x52 ""
+size_case "hyperpixel4" pi5-hyperpixel4 "" "--panel-mm 88x53" 88x53 ""
+size_case "hackberry" hackberry-cm5 "" "--screen-size 4" 72x72 ""
+# the owner's case: a Pi 3A+ detected as the 4.3" profile, the panel is the Freenove 5": the values of the pi4b-dsi profile
+R=$(root pi3a-wsdsi43); P="$R/etc/applaunch/board.conf"
+run --board-only --screen-size 5
+check "Pi 3A+ with the Freenove 5\" panel: board pi3a-wsdsi43, the 5\" size and dim level of the pi4b-dsi profile" '[ $RC = 0 ] && grep -qx "APPLAUNCH_BOARD=pi3a-wsdsi43" "$P" && [ "$(mm_in "$P")" = 108x65 ] && [ "$(dim_in "$P")" = 20 ] && grep -qx "APPLAUNCH_LOGICAL=800x480" "$P" && grep -qx "APPLAUNCH_COMPAT_SCALE=2" "$P"'
+# without a backlight device there is no dim line to set
+R=$(root pi3a-wsdsi43); rm -rf "$R/sys/class/backlight/"*
+P="$R/etc/applaunch/board.conf"
+run --board-only --screen-size 5
+check "wsdsi43 without a backlight device --screen-size 5: the panel size set, still no dim line" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 108x65 ] && ! grep -q "DIM_PERCENT" "$P"'
+# a 5" screen on another backlight than the DSI regulator keeps the profile's dim level
+R=$(root pi3a-wsdsi43); mv "$R/sys/class/backlight/10-0045" "$R/sys/class/backlight/rpi_backlight"; P="$R/etc/applaunch/board.conf"
+run --board-only --screen-size 5
+check "wsdsi43 on another backlight device --screen-size 5: size set, dim level stays 10" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 108x65 ] && [ "$(dim_in "$P")" = 10 ]'
+# the values: --screen-size 1.5 to 15 inches, --panel-mm WxH of 20 to 500 mm
+R=$(root pi3a-wsdsi43)
+for bad in 1.4 15.1 0 abc 5. .5 1e1 -3 4,3 "4 3" 5in '5"'; do
+    run --dry-run --screen-size "$bad"
+    check "--screen-size \"$bad\": refused, exit 2, the range named" '[ $RC = 2 ] && has "between 1.5 and 15"'
+done
+run --dry-run --screen-size ""
+check "--screen-size with an empty value: refused, exit 2" '[ $RC = 2 ]'
+run --dry-run --screen-size
+check "--screen-size without a value: exit 2, nothing written" '[ $RC = 2 ] && has "--screen-size needs" && [ ! -e "$R/etc" ]'
+for good in 1.5 15 2.8 5.0 04.3; do
+    run --dry-run --screen-size "$good"
+    check "--screen-size $good: accepted" '[ $RC = 0 ]'
+done
+for bad in 108 10x10 600x400 ax5 108x 108x65x2 108X65 "108 x 65" -5x60; do
+    run --dry-run --panel-mm "$bad"
+    check "--panel-mm \"$bad\": refused, exit 2" '[ $RC = 2 ] && has "is not WxH in mm"'
+done
+run --dry-run --panel-mm
+check "--panel-mm without a value: exit 2" '[ $RC = 2 ] && has "--panel-mm needs"'
+run --dry-run --panel-mm 20x500
+check "--panel-mm 20x500: accepted (the limits)" '[ $RC = 0 ]'
+# the deck and an unknown board have no profile: refused, nothing written, dry runs and plans too
+R=$(root zero2w)
+run --dry-run --screen-size 2.8
+check "deck --screen-size 2.8: refused, exit 2, says how to set another screen" '[ $RC = 2 ] && has "has no board profile" && has "--board generic" && has "APPLAUNCH_PANEL_MM" && [ ! -e "$R/etc" ]'
+run --board-only --panel-mm 60x45
+check "deck --board-only --panel-mm 60x45: refused too, no profile written" '[ $RC = 2 ] && [ ! -e "$R/etc" ]'
+run --plan --screen-size 2.8
+check "deck --plan --screen-size 2.8: refused too" '[ $RC = 2 ]'
+run --dry-run
+check "deck without the options: as before (no profile file, plan has an empty size)" '[ $RC = 0 ] && has "zero2w: no profile file" && ! has "screen:"'
+run --plan
+check "deck --plan: screen_size=, panel_mm=, panel_in_use= empty" '[ $RC = 0 ] && has "board=zero2w" && [ -z "$(printf "%s\n" "$OUT" | sed -n "s/^screen_size=//p;s/^panel_mm=//p;s/^panel_in_use=//p")" ] && has "screen_size=" && has "panel_in_use="'
+R=$(root pi3a-wsdsi43); printf 'x\n' > "$R/proc/device-tree/model"
+run --dry-run --screen-size 5
+check "an unknown board --screen-size 5: refused (no profile to size)" '[ $RC = 2 ] && has "this board (unknown)"'
+# dry run and plan say which size is in use
+R=$(root pi3a-wsdsi43)
+run --dry-run
+check "wsdsi43 dry-run without options: the profile's own size said, how to set another" '[ $RC = 0 ] && has "screen: panel size 94x56 mm (the profile" && has "--screen-size INCHES or --panel-mm WxH sets another" && has "APPLAUNCH_PANEL_MM=94x56"'
+run --dry-run --screen-size 5
+check "wsdsi43 dry-run --screen-size 5: the size in use, the profile it would write, nothing written" '[ $RC = 0 ] && has "screen: panel size 108x65 mm (--screen-size 5)" && has "APPLAUNCH_PANEL_MM=108x65" && has "APPLAUNCH_DIM_PERCENT=20" && [ ! -e "$R/etc" ]'
+run --dry-run --panel-mm 100x60
+check "wsdsi43 dry-run --panel-mm 100x60: said" 'has "screen: panel size 100x60 mm (--panel-mm 100x60)"'
+run --plan
+check "wsdsi43 --plan without options: empty screen_size and panel_mm, panel_in_use=94x56, key=value lines only" '[ $RC = 0 ] && has "screen_size=" && has "panel_mm=" && has "panel_in_use=94x56" && [ -z "$(printf "%s\n" "$OUT" | sed -n "s/^screen_size=//p")" ] && ! printf "%s\n" "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
+run --plan --screen-size 5 --panel-mm 100x60
+check "wsdsi43 --plan --screen-size 5 --panel-mm 100x60: both keys, panel_in_use=100x60, a profile to write" '[ $RC = 0 ] && has "screen_size=5" && has "panel_mm=100x60" && has "panel_in_use=100x60" && has "profile_action=write" && ! printf "%s\n" "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
+R=$(root pi3a-luckfox35)
+run --plan
+check "luckfox35 --plan: panel_in_use=79x49" '[ $RC = 0 ] && has "panel_in_use=79x49"'
+R=$(root pi5-hyperpixel4)
+run --plan
+check "hyperpixel4 --plan: panel_in_use empty (no size known)" '[ $RC = 0 ] && [ -z "$(printf "%s\n" "$OUT" | sed -n "s/^panel_in_use=//p")" ] && has "panel_in_use="'
+run --dry-run
+check "hyperpixel4 dry-run: says no size is set" 'has "screen: panel size not set (the launcher'"'"'s default density"'
+# a profile generated for one size is replaced when the size changes (the old one kept), a hand-edited one is kept
+R=$(root pi3a-wsdsi43); P="$R/etc/applaunch/board.conf"
+run --board-only
+SUM_A=$(cksum < "$P")
+run --plan --screen-size 5
+check "wsdsi43 profile of the default size, --plan --screen-size 5: profile_action=replace (the update helper stops on it)" 'has "profile_action=replace" && has "profile_state=ours"'
+run --board-only --screen-size 5
+check "wsdsi43 --board-only --screen-size 5 over the default profile: replaced, the old one kept as board.conf.bak" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 108x65 ] && [ "$(cksum < "$P.bak")" = "$SUM_A" ]'
+run --plan --screen-size 5
+check "wsdsi43 --plan --screen-size 5 over its own profile: profile_action=keep" 'has "profile_action=keep"'
+R=$(root pi3a-wsdsi43); P="$R/etc/applaunch/board.conf"
+run --board-only
+printf '# my own change\n' >> "$P"; EDIT=$(cksum < "$P")
+run --board-only --screen-size 7
+check "wsdsi43 hand-edited board.conf --screen-size 7: kept byte for byte (--force replaces it), no .bak" '[ $RC = 0 ] && has "edited by hand: kept" && [ "$(cksum < "$P")" = "$EDIT" ] && [ ! -e "$P.bak" ]'
+run --board-only --screen-size 7 --force
+check "wsdsi43 hand-edited board.conf --screen-size 7 --force: replaced, the edited one kept as board.conf.bak" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 154x86 ] && [ "$(cksum < "$P.bak")" = "$EDIT" ]'
+
+# --- the generic profile (--board generic, and --force on an unknown board with one panel): a screen that has no profile,
+# written from what is detected. gen_root NAME CONNECTOR MODE FBNAME FBSIZE [BACKLIGHT]: a fake root with one panel
+gen_root() {
+    d="$TMP/$1"; rm -rf "$d"
+    mkdir -p "$d/proc/device-tree" "$d/sys/class/drm/$2" "$d/sys/class/graphics/fb0" "$d/sys/class/drm/card9-HDMI-A-1"
+    echo "Raspberry Pi 4 Model B Rev 1.5" > "$d/proc/device-tree/model"
+    echo connected > "$d/sys/class/drm/$2/status"; echo "$3" > "$d/sys/class/drm/$2/modes"
+    echo disconnected > "$d/sys/class/drm/card9-HDMI-A-1/status"; : > "$d/sys/class/drm/card9-HDMI-A-1/modes"
+    echo "$4" > "$d/sys/class/graphics/fb0/name"; echo "$5" > "$d/sys/class/graphics/fb0/virtual_size"; echo 16 > "$d/sys/class/graphics/fb0/bits_per_pixel"
+    if [ -n "${6:-}" ]; then mkdir -p "$d/sys/class/backlight/$6"; echo 255 > "$d/sys/class/backlight/$6/brightness"; fi
+    echo "$d"
+}
+# 640x480 on a DPI connector (a 4" panel), no backlight device
+R=$(gen_root g-640 card1-DPI-1 640x480 vc4drmfb 640,480); P="$R/etc/applaunch/board.conf"
+run --dry-run
+check "generic fixture, Pi 4 B without a profile match: unknown, the generic profile offered" '[ $RC = 0 ] && has "board: unknown" && has "A panel was found (/dev/fb0, 640x480): --board generic" && has "My screen is not listed"'
+run --board-only
+check "generic fixture, no option: unknown, nothing written" '[ $RC = 0 ] && [ ! -e "$R/etc" ]'
+run --dry-run --board generic
+check "--board generic dry-run: board generic-640x480 (forced), the untested-screen note, the profile it would write" '[ $RC = 0 ] && has "board: generic-640x480 (forced with --board)" && has "untested screen: please send tools/board-probe/probe-board.sh output" && has "framebuffer /dev/fb0 (640x480), canvas 640x480, rotation 0" && has "no panel size (the launcher'"'"'s default density" && has "screen: panel size not set" && has "generic-640x480: write" && [ ! -e "$R/etc" ]'
+run --board-only --board generic
+EXPECT='APPLAUNCH_BOARD=generic-640x480
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=640x480
+APPLAUNCH_ROTATE=0
+APPLAUNCH_COMPAT_SCALE=2
+# panel size unknown (no --screen-size, no --panel-mm): the launcher'"'"'s default density (large controls)
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+# the deck'"'"'s legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+GOT=$(sed '1,3d' "$P" 2>/dev/null)
+if [ "$GOT" = "$EXPECT" ]; then ok "generic 640x480 profile: exact keys and values (no size line, no backlight)"; else ko "generic 640x480 profile: exact keys and values (no size line, no backlight)" "$GOT"; fi
+check "generic: board-only exit 0, the note printed, profile is KEY=VALUE or comment lines only, no gpio or sysfs rule" '[ $RC = 0 ] && has "untested screen" && ! grep -v -E "^(#.*|[A-Z_][A-Z0-9_]*=[^ ]*)$" "$P" >/dev/null && [ ! -e "$R/etc/udev" ]'
+run --board-only --board generic
+check "generic: a second run is up to date" 'has "already up to date"'
+run --plan --board generic
+check "generic --plan: board=generic-640x480, board_forced=1, key=value lines only, no panel size" '[ $RC = 0 ] && has "board=generic-640x480" && has "board_forced=1" && has "profile_action=keep" && has "panel_in_use=" && ! printf "%s\n" "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
+R=$(gen_root g-640 card1-DPI-1 640x480 vc4drmfb 640,480); P="$R/etc/applaunch/board.conf"
+run --board-only --board generic --screen-size 4
+check "generic --screen-size 4 (640x480): 81x61 inserted before the touch lines, the unknown-size comment gone" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 81x61 ] && ! grep -q "panel size unknown" "$P" && grep -q "^# panel visible area in mm (--screen-size 4)" "$P" && [ "$(grep -n "^APPLAUNCH_PANEL_MM=" "$P" | cut -d: -f1)" -lt "$(grep -n "^APPLAUNCH_TOUCH_DEV=" "$P" | cut -d: -f1)" ] && has "panel size 81x61 mm (--screen-size 4)"'
+# the size formula: diagonal and canvas (nearest mm; the table of the profiles' own values for 4.3, 5, 7 at 800x480 and 3.5 at 480x320)
+gen_size() {  # gen_size LABEL MODE FBSIZE INCHES EXPECTED
+    R=$(gen_root g-size card1-DPI-1 "$2" vc4drmfb "$3"); P="$R/etc/applaunch/board.conf"
+    run --board-only --board generic --screen-size "$4"
+    GS_MM=$5
+    check "formula $1: $4 inch on $2 is $5 mm" '[ $RC = 0 ] && [ "$(mm_in "$P")" = "$GS_MM" ]'
+}
+gen_size "2.8 inch deck-like" 640x480 640,480 2.8 57x43
+gen_size "3.5 inch" 640x480 640,480 3.5 71x53
+gen_size "4 inch" 640x480 640,480 4 81x61
+gen_size "5 inch" 640x480 640,480 5 102x76
+gen_size "1.5 inch (the lower limit)" 640x480 640,480 1.5 30x23
+gen_size "15 inch (the upper limit)" 1024x768 1024,768 15 305x229
+gen_size "6 inch" 800x480 800,480 6 131x78
+gen_size "4.3 inch (the profiles' value)" 800x480 800,480 4.3 94x56
+gen_size "5 inch (the profiles' value)" 800x480 800,480 5 108x65
+gen_size "7 inch (the profiles' value, not square pixels)" 800x480 800,480 7 154x86
+gen_size "7 inch" 1024x600 1024,600 7 153x90
+gen_size "3.5 inch (the Luckfox value)" 480x320 480,320 3.5 79x49
+gen_size "3 inch" 480x320 480,320 3 63x42
+gen_size "a square 4 inch" 720x720 720,720 4 72x72
+gen_size "a portrait native buffer, 5 inch (landscape first)" 480x800 480,800 5 108x65
+# a 480x320 SPI panel (native 320x480): turned, scale 1, on/off GPIO backlight
+R=$(gen_root g-spi card0-SPI-1 320x480 panel-mipi-dbi 320,480 backlight_gpio); P="$R/etc/applaunch/board.conf"
+run --board-only --board generic --screen-size 3.5
+check "generic SPI 320x480: canvas 480x320, ROTATE=90, COMPAT_SCALE=1, the on/off backlight as the Luckfox profile names it, 79x49" '[ $RC = 0 ] && grep -qx "APPLAUNCH_BOARD=generic-480x320" "$P" && grep -qx "APPLAUNCH_LOGICAL=480x320" "$P" && grep -qx "APPLAUNCH_ROTATE=90" "$P" && grep -qx "APPLAUNCH_COMPAT_SCALE=1" "$P" && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$P" && ! grep -q DIM_PERCENT "$P" && [ "$(mm_in "$P")" = 79x49 ] && [ -f "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+# a portrait native 480x800 DSI panel with the DSI regulator: canvas 800x480, ROTATE=90, 5" gets the dim level 20
+R=$(gen_root g-dsi card1-DSI-1 480x800 vc4drmfb 480,800 10-0045); P="$R/etc/applaunch/board.conf"
+run --board-only --board generic
+check "generic portrait DSI 480x800: canvas 800x480, ROTATE=90, COMPAT_SCALE=2, the regulator's levels, dim 10" '[ $RC = 0 ] && grep -qx "APPLAUNCH_BOARD=generic-800x480" "$P" && grep -qx "APPLAUNCH_LOGICAL=800x480" "$P" && grep -qx "APPLAUNCH_ROTATE=90" "$P" && grep -qx "APPLAUNCH_COMPAT_SCALE=2" "$P" && grep -qx "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045" "$P" && [ "$(dim_in "$P")" = 10 ]'
+R=$(gen_root g-dsi card1-DSI-1 480x800 vc4drmfb 480,800 10-0045); P="$R/etc/applaunch/board.conf"
+run --board-only --board generic --screen-size 5
+check "generic portrait DSI --screen-size 5: 108x65 and the dim level 20 (as pi4b-dsi)" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 108x65 ] && [ "$(dim_in "$P")" = 20 ]'
+# the generic board's own profile survives a hand edit
+printf '# mine\n' >> "$P"; EDIT=$(cksum < "$P")
+run --board-only --board generic --screen-size 7
+check "generic hand-edited: kept without --force" 'has "edited by hand: kept" && [ "$(cksum < "$P")" = "$EDIT" ]'
+# the panel is found by its connector; HDMI alone is not a panel; two panels are not guessed
+R=$(gen_root g-hdmi card9-HDMI-A-2 1024x768 vc4drmfb 1024,768)
+run --dry-run --board generic
+check "--board generic with an HDMI screen only: only the lone framebuffer would do, an HDMI monitor is no panel (profile for fb0)" '[ $RC = 0 ] && has "board: generic-1024x768 (forced with --board)"'
+run --dry-run --force
+check "unknown board with an HDMI screen only, --force: no generic profile (not a panel), nothing offered" '[ $RC = 0 ] && has "board: unknown" && ! has "generic-"'
+R=$(gen_root g-none card1-DPI-1 640x480 vc4drmfb 800,600)
+run --dry-run --board generic
+check "--board generic when the connector's mode matches no framebuffer: the lone framebuffer is used" '[ $RC = 0 ] && has "generic-800x600"'
+rm -rf "$R/sys/class/graphics/fb0"
+run --dry-run --board generic
+check "--board generic without a panel: exit 1, why, the facts, nothing changed" '[ $RC = 1 ] && has "no panel found" && has "Nothing was changed." && [ ! -e "$R/etc" ]'
+R=$(gen_root g-two card1-DPI-1 640x480 vc4drmfb 640,480)
+mkdir -p "$R/sys/class/drm/card1-DSI-1" "$R/sys/class/graphics/fb1"
+echo connected > "$R/sys/class/drm/card1-DSI-1/status"; echo 800x480 > "$R/sys/class/drm/card1-DSI-1/modes"
+echo vc4drmfb > "$R/sys/class/graphics/fb1/name"; echo 800,480 > "$R/sys/class/graphics/fb1/virtual_size"
+run --dry-run --board generic
+check "--board generic with two panels: refused, exit 1, not guessed" '[ $RC = 1 ] && has "more than one panel found" && [ ! -e "$R/etc" ]'
+run --dry-run --force
+check "two panels on an unknown board, --force: stays unknown (no profile)" '[ $RC = 0 ] && has "board: unknown"'
+# the uConsole: unknown, then --force writes the generic profile (a portrait native DSI panel 720x1280)
+R=$(root unknown-cm5-uconsole)
+run --dry-run
+check "uConsole dry-run: unknown, the generic profile offered" 'has "board: unknown" && has "A panel was found (/dev/fb0, 720x1280)"'
+run --board-only --force
+check "uConsole --board-only --force: the generic profile is written from the DSI panel" '[ $RC = 0 ] && grep -qx "APPLAUNCH_BOARD=generic-1280x720" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_FB=/dev/fb0" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_LOGICAL=1280x720" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_ROTATE=90" "$R/etc/applaunch/board.conf" && has "untested screen"'
+R=$(root unknown-cm5-uconsole)
+run --board-only
+check "uConsole --board-only without --force: still nothing written" '[ $RC = 0 ] && [ ! -e "$R/etc" ]'
+R=$(root unknown-cm5-uconsole)
+run --plan --force
+check "uConsole --plan --force: board=generic-1280x720" '[ $RC = 0 ] && has "board=generic-1280x720" && has "profile_action=write"'
+
 # --- the PDA profile (report 038, phase S2): the DSI panel turned to portrait 480x800, only with --board
 R=$(root pi3a-wsdsi43)
 run --dry-run
@@ -1206,6 +1453,152 @@ check "fake pi4b-dsi install: exit 0, profile written with the dim level" '[ $RC
 check "fake pi4b-dsi install: config.txt untouched (no backup, no overlay, no dtc)" '[ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && [ ! -e "$R/boot/firmware/config.txt.bak-applaunch" ] && [ ! -e "$R/boot/firmware/overlays/waveshare-pwm-backlight.dtbo" ] && ! called "dtc " && has "pi4b-dsi: config.txt left as it is"'
 check "fake pi4b-dsi install: cmdline.txt gets the two console arguments only" '[ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && ! grep -q fbcon "$R/boot/firmware/cmdline.txt"'
 
+# --screen-size and --panel-mm in a whole install: install.conf records them (empty when not given), a manual re-run keeps
+# them, and the question on a terminal. A terminal is faked with APPLAUNCH_INSTALL_ASSUME_TTY=1, a hook honoured only
+# together with SYSROOT (the tests' fake root), so it cannot switch the question on for a real run; a real one (script) follows.
+panel_root() {  # panel_root FIXTURE: a fake root with its boot files in $R
+    R=$(root "$1")
+    mkdir -p "$R/boot/firmware/overlays"
+    printf '[all]\ndtoverlay=vc4-kms-v3d\n' > "$R/boot/firmware/config.txt"
+    printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+}
+# panel_install INPUT TTY ARG...: install.sh with INPUT as its stdin and the terminal hook at TTY (1 or 0)
+panel_install() {
+    pi_in=$1; pi_tty=$2; shift 2
+    : > "$CALLS"; OUT=$(printf '%b' "$pi_in" | PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" APPLAUNCH_INSTALL_ASSUME_TTY="$pi_tty" \
+        SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 sh "$BUN/install.sh" --user "$U" --no-default-source "$@" 2>&1); RC=$?
+}
+conf_get() { sed -n "s/^$1=//p" "$R/etc/applaunch/install.conf"; }
+mm_of() { sed -n 's/^APPLAUNCH_PANEL_MM=//p' "$R/etc/applaunch/board.conf"; }
+ASKED="What is the screen's diagonal in inches? (for example 2.8, 3.5, 4.3, 5, 7; Enter = "
+
+panel_root pi3a-wsdsi43
+panel_install '5\n' 0
+check "install without a terminal: not asked (the answer waiting on stdin is not read), the profile's own size, screen_size= and panel_mm= empty in install.conf" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf" && grep -qx "panel_mm=" "$R/etc/applaunch/install.conf" && ! has "--screen-size"'
+panel_root pi3a-wsdsi43
+panel_install '' 0 --screen-size 5
+check "install --screen-size 5: 108x65 and dim 20, screen_size=5 in install.conf, the options line says it" '[ $RC = 0 ] && [ "$(mm_of)" = 108x65 ] && grep -qx "APPLAUNCH_DIM_PERCENT=20" "$R/etc/applaunch/board.conf" && [ "$(conf_get screen_size)" = 5 ] && [ -z "$(conf_get panel_mm)" ] && has "--screen-size 5" && ! has "diagonal"'
+check "install --screen-size 5: install.conf keeps its other keys" 'grep -qx "board=" "$R/etc/applaunch/install.conf" && grep -qx "boot_config=1" "$R/etc/applaunch/install.conf" && grep -qx "pwm_backlight=0" "$R/etc/applaunch/install.conf" && grep -qx "default_source=0" "$R/etc/applaunch/install.conf"'
+panel_install '' 0
+check "re-run without options: the recorded size is kept (board.conf unchanged, no .bak, screen_size=5 still)" '[ $RC = 0 ] && has "already up to date" && [ "$(mm_of)" = 108x65 ] && [ "$(conf_get screen_size)" = 5 ] && [ ! -e "$R/etc/applaunch/board.conf.bak" ]'
+panel_install '' 0 --screen-size 4.3
+check "re-run with --screen-size 4.3: back to the profile's 94x56, the 5 inch profile kept as board.conf.bak, screen_size=4.3" '[ $RC = 0 ] && [ "$(mm_of)" = 94x56 ] && [ "$(conf_get screen_size)" = 4.3 ] && grep -qx "APPLAUNCH_PANEL_MM=108x65" "$R/etc/applaunch/board.conf.bak"'
+panel_install '' 0 --board-only
+check "install.conf is not rewritten by --board-only (screen_size=4.3 stays)" '[ "$(conf_get screen_size)" = 4.3 ]'
+panel_root pi3a-wsdsi43
+panel_install '' 0 --panel-mm 100x60 --screen-size 5
+check "install --panel-mm 100x60 --screen-size 5: panel_mm wins, both recorded, a re-run keeps both" '[ $RC = 0 ] && [ "$(mm_of)" = 100x60 ] && [ "$(conf_get panel_mm)" = 100x60 ] && [ "$(conf_get screen_size)" = 5 ] && has "--screen-size 5, --panel-mm 100x60" && { panel_install "" 0; [ "$(mm_of)" = 100x60 ] && [ "$(conf_get panel_mm)" = 100x60 ]; }'
+# the deck: no profile, the options refused, nothing recorded
+R=$(root zero2w); mkdir -p "$R/boot/firmware"; : > "$R/boot/firmware/config.txt"
+panel_install '' 0 --screen-size 2.8
+check "deck install --screen-size 2.8: refused, exit 2, nothing installed" '[ $RC = 2 ] && has "has no board profile" && [ ! -e "$R/etc/applaunch/install.conf" ]'
+
+# the question: a terminal, a first install (no screen_size= in install.conf), a profile, no option given
+panel_root pi3a-wsdsi43
+panel_install '5\n' 1
+check "terminal, first install: asked, the profile's own size (4.3) as the Enter default" '[ $RC = 0 ] && has "${ASKED}4.3) "'
+check "terminal, answer 5: the 5 inch profile (108x65, dim 20), screen_size=5 recorded" '[ "$(mm_of)" = 108x65 ] && grep -qx "APPLAUNCH_DIM_PERCENT=20" "$R/etc/applaunch/board.conf" && [ "$(conf_get screen_size)" = 5 ]'
+panel_install '7\n' 1
+check "terminal, second run: not asked again (screen_size= is recorded), the 5 inch kept" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 108x65 ] && [ "$(conf_get screen_size)" = 5 ]'
+panel_root pi3a-wsdsi43
+panel_install '\n' 1
+check "terminal, Enter: no change (94x56), screen_size= recorded empty" '[ $RC = 0 ] && has "diagonal" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf"'
+panel_install '5\n' 1
+check "terminal after Enter: not asked again (an empty screen_size= is an answer), still 94x56" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 94x56 ]'
+panel_root pi3a-wsdsi43
+panel_install '2.8\n' 1
+check "terminal, answer 2.8: 61x37 mm from the diagonal and the 800x480 canvas, screen_size=2.8" '[ $RC = 0 ] && [ "$(mm_of)" = 61x37 ] && [ "$(conf_get screen_size)" = 2.8 ]'
+panel_root pi3a-wsdsi43
+panel_install '4.3\n' 1
+check "terminal, answer 4.3 on the 4.3 profile: the profile as it is, screen_size=4.3 recorded" '[ $RC = 0 ] && [ "$(mm_of)" = 94x56 ] && [ "$(conf_get screen_size)" = 4.3 ]'
+panel_root pi3a-wsdsi43
+panel_install '5"\n' 1
+check "terminal, answer 5\" (with the inch mark): taken as 5" '[ $RC = 0 ] && [ "$(mm_of)" = 108x65 ] && [ "$(conf_get screen_size)" = 5 ]'
+panel_root pi3a-wsdsi43
+panel_install 'x\n99\n5\n' 1
+check "terminal, two unusable answers then 5: asked again, the 5 inch profile" '[ $RC = 0 ] && has "\"x\" is not a diagonal in inches between 1.5 and 15." && has "\"99\" is not a diagonal" && [ "$(mm_of)" = 108x65 ] && [ "$(conf_get screen_size)" = 5 ]'
+panel_root pi3a-wsdsi43
+panel_install 'a\nb\nc\n5\n' 1
+check "terminal, three unusable answers: the profile's own size stays (a fourth line is not read), screen_size= empty" '[ $RC = 0 ] && has "no usable answer" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf"'
+panel_root pi3a-wsdsi43
+panel_install '' 1
+check "terminal, stdin closed (no answer): the profile's own size, the install goes on" '[ $RC = 0 ] && has "no answer" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf"'
+panel_root pi3a-wsdsi43
+panel_install '7\n' 1 --screen-size 5
+check "terminal with --screen-size 5: not asked, the option wins" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 108x65 ] && [ "$(conf_get screen_size)" = 5 ]'
+panel_root pi3a-wsdsi43
+panel_install '7\n' 1 --panel-mm 100x60
+check "terminal with --panel-mm: not asked" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 100x60 ]'
+panel_root pi3a-wsdsi43
+panel_install '7\n' 1 --board-only
+check "terminal with --board-only: not asked, no install.conf" '[ $RC = 0 ] && ! has "diagonal" && [ ! -e "$R/etc/applaunch/install.conf" ]'
+R=$(root pi3a-wsdsi43)
+OUT=$(printf '7\n' | APPLAUNCH_INSTALL_ASSUME_TTY=1 SYSROOT="$R" sh "$INSTALL" --dry-run 2>&1); RC=$?
+check "terminal with --dry-run: not asked" '[ $RC = 0 ] && ! has "diagonal"'
+OUT=$(printf '7\n' | APPLAUNCH_INSTALL_ASSUME_TTY=1 SYSROOT="$R" sh "$INSTALL" --plan 2>&1); RC=$?
+check "terminal with --plan: not asked, key=value lines only" '[ $RC = 0 ] && ! has "diagonal" && has "panel_in_use=94x56" && ! printf "%s\n" "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
+OUT=$(printf '7\n' | APPLAUNCH_INSTALL_ASSUME_TTY=1 sh "$INSTALL" --dry-run --board pi3a-wsdsi43 2>&1); RC=$?
+check "the terminal hook alone (no SYSROOT) changes nothing" '! has "diagonal"'
+# an install.conf of an earlier release (no screen_size key): asked once on a terminal; not without one
+panel_root pi3a-wsdsi43
+mkdir -p "$R/etc/applaunch"
+printf 'keyboard_name=M4 Keyboard\nboard=\nboot_config=1\npwm_backlight=0\ndefault_source=0\nuser=%s\n' "$U" > "$R/etc/applaunch/install.conf"
+panel_install '5\n' 1
+check "install.conf without the screen_size key, terminal: asked once, 5 recorded" '[ $RC = 0 ] && has "diagonal" && [ "$(conf_get screen_size)" = 5 ] && [ "$(mm_of)" = 108x65 ]'
+panel_root pi3a-wsdsi43
+mkdir -p "$R/etc/applaunch"
+printf 'keyboard_name=M4 Keyboard\nboard=\nboot_config=1\npwm_backlight=0\ndefault_source=0\nuser=%s\n' "$U" > "$R/etc/applaunch/install.conf"
+panel_install '' 0
+check "install.conf without the screen_size key, no terminal (Settings > Updates, a script): not asked, installs as before, empty keys written" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf" && grep -qx "panel_mm=" "$R/etc/applaunch/install.conf"'
+# the other profiles: the Enter default names their own panel
+panel_root pi4b-dsi
+panel_install '\n' 1
+check "pi4b-dsi, terminal: asked, Enter = 5, Enter changes nothing (108x65)" '[ $RC = 0 ] && has "${ASKED}5) " && [ "$(mm_of)" = 108x65 ]'
+panel_root pi4b-dsi
+panel_install '7\n' 1
+check "pi4b-dsi, answer 7: 154x86 (the profiles' value for a 7 inch at 800x480), dim 20 stays" '[ $RC = 0 ] && [ "$(mm_of)" = 154x86 ] && [ "$(conf_get screen_size)" = 7 ] && grep -qx "APPLAUNCH_DIM_PERCENT=20" "$R/etc/applaunch/board.conf"'
+panel_root pi5-dsi7
+panel_install '\n' 1
+check "pi5-dsi7, terminal: asked, Enter = 7, Enter changes nothing (154x86)" '[ $RC = 0 ] && has "${ASKED}7) " && [ "$(mm_of)" = 154x86 ]'
+panel_root pi3a-wsdsi43
+panel_install '5\n' 1 --board pi3a-wsdsi43-portrait
+check "portrait profile, terminal: asked (Enter = 4.3), answer 5: 108x65 on the portrait profile, its canvas and board otherwise its own" '[ $RC = 0 ] && has "${ASKED}4.3) " && [ "$(mm_of)" = 108x65 ] && grep -qx "APPLAUNCH_LOGICAL=480x800" "$R/etc/applaunch/board.conf" && grep -qx "board=pi3a-wsdsi43-portrait" "$R/etc/applaunch/install.conf"'
+panel_root pi3a-luckfox35
+panel_install '4\n' 1
+check "Luckfox 3.5\" SPI panel, terminal: asked (Enter = 3.5), answer 4: 85x56, recorded" '[ $RC = 0 ] && has "${ASKED}3.5) " && [ "$(mm_of)" = 85x56 ] && [ "$(conf_get screen_size)" = 4 ]'
+# never asked on the deck (no profile) nor on a PC (its size comes from the EDID)
+R=$(root zero2w); mkdir -p "$R/boot/firmware"; : > "$R/boot/firmware/config.txt"; printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+panel_install '5\n' 1
+check "deck, terminal: not asked, screen_size= empty in install.conf" '[ $RC = 0 ] && ! has "diagonal" && grep -qx "screen_size=" "$R/etc/applaunch/install.conf"'
+# the generic profile in a whole install: the uConsole (unknown) with --force, then a manual re-run, asked once
+R=$(root unknown-cm5-uconsole); mkdir -p "$R/boot/firmware"; : > "$R/boot/firmware/config.txt"; printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+panel_install '' 0
+check "uConsole install without --force: stops (unknown board), nothing written" '[ $RC = 1 ] && [ ! -e "$R/etc/applaunch/board.conf" ] && has "A panel was found"'
+panel_install '6\n' 1 --force
+check "uConsole install --force on a terminal: the generic profile, asked (Enter = unknown), 6 inch -> 133x75 mm, board=generic recorded" '[ $RC = 0 ] && has "${ASKED}unknown) " && grep -qx "APPLAUNCH_BOARD=generic-1280x720" "$R/etc/applaunch/board.conf" && [ "$(conf_get board)" = generic ] && [ "$(conf_get screen_size)" = 6 ] && [ "$(mm_of)" = 133x75 ] && has "untested screen"'
+check "uConsole install --force: config.txt left as it is (no deck PWM overlay on a generic profile)" '[ ! -s "$R/boot/firmware/config.txt" ] && ! called "dtc "'
+# the generic board, explicit, on a terminal: asked with Enter = unknown
+R=$(gen_root g-term card1-DPI-1 640x480 vc4drmfb 640,480); mkdir -p "$R/boot/firmware"; : > "$R/boot/firmware/config.txt"; printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+panel_install '2.8\n' 1 --board generic
+check "generic --board generic on a terminal: asked (Enter = unknown), 2.8 inch -> 57x43, board=generic recorded" '[ $RC = 0 ] && has "${ASKED}unknown) " && [ "$(mm_of)" = 57x43 ] && [ "$(conf_get board)" = generic ] && [ "$(conf_get screen_size)" = 2.8 ]'
+panel_install '' 0 --board generic
+check "generic re-run without options: the recorded size stays (57x43), the profile up to date" '[ $RC = 0 ] && [ "$(mm_of)" = 57x43 ]'
+# a size on a recorded non-profile board is ignored: never an error (install.conf of an earlier board)
+R=$(root zero2w); mkdir -p "$R/boot/firmware" "$R/etc/applaunch"; : > "$R/boot/firmware/config.txt"; printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+printf 'keyboard_name=M4 Keyboard\nboard=\nscreen_size=5\npanel_mm=\nboot_config=1\npwm_backlight=0\ndefault_source=0\nuser=%s\n' "$U" > "$R/etc/applaunch/install.conf"
+panel_install '' 0
+check "a recorded size on the deck is ignored (no error, no profile)" '[ $RC = 0 ] && [ ! -e "$R/etc/applaunch/board.conf" ]'
+# a real terminal (script(1)): stdin and stdout are ttys, no hook
+if command -v script >/dev/null 2>&1 && script -qec true /dev/null >/dev/null 2>&1; then
+    panel_root pi3a-wsdsi43
+    : > "$CALLS"
+    OUT=$( { sleep 1; printf '5\n'; } | PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \
+        script -qec "sh $BUN/install.sh --user $U --no-default-source" /dev/null 2>&1); RC=$?
+    check "a real terminal (script): asked, answer 5 gives the 5 inch profile" '[ $RC = 0 ] && has "diagonal" && [ "$(mm_of)" = 108x65 ]'
+else
+    printf 'skip a real terminal test: script(1) not usable here\n'
+fi
+
 # the Pi 5 + HyperPixel 4's PWM backlight (report 030, c-4): config.txt is left alone without --pwm-backlight; with it
 # the overlay is built, its line goes right after the HyperPixel one (config.txt backed up first) and a reboot is asked
 # for; a second run adds nothing; uninstall.sh takes the line and the overlay off again
@@ -1523,6 +1916,26 @@ check "pc dry-run: the intel_backlight levels rule planned" 'has "92-applaunch-b
 check "pc dry-run: the PC's packages (polkitd, bluez, alsa-utils; no dtc), bluetooth.service, NetworkManager left to the owner" 'has "packages (PC, when missing): libinput10 libxkbcommon0 libfreetype6 curl polkitd bluez alsa-utils; bluetooth.service enabled" && has "network-manager is" && ! has "device-tree-compiler"'
 check "pc dry-run: the HDA sound card: the user joins the audio group (report 030)" 'has "audio group: the user joins it (sound card: 0 [PCH            ]: HDA-Intel - HDA Intel PCH)"'
 check "pc dry-run: nothing written" '[ ! -e "$R/etc/applaunch" ] && [ ! -e "$R/etc/udev" ]'
+# a PC: the EDID size is the default, the options override it
+PC_R_SAVE=$R
+R=$(pc_root pc_gen)
+pcrun --dry-run --board generic
+check "--board generic on a PC: refused, exit 2 (it has its own profile)" '[ $RC = 2 ] && has "not for a PC"'
+R=$(pc_root pc_size)
+pcrun --board-only
+check "pc: the profile's size is the EDID's (152x94)" '[ "$(mm_in "$R/etc/applaunch/board.conf")" = 152x94 ]'
+R=$(pc_root pc_size)
+pcrun --board-only --panel-mm 300x190
+check "pc --panel-mm 300x190: the size replaced, the EDID comment gone" '[ $RC = 0 ] && [ "$(mm_in "$R/etc/applaunch/board.conf")" = 300x190 ] && ! grep -q "from the EDID" "$R/etc/applaunch/board.conf"'
+R=$(pc_root pc_size)
+pcrun --board-only --screen-size 12
+check "pc --screen-size 12 (1280x800): 258x162 from the diagonal and the canvas" '[ $RC = 0 ] && [ "$(mm_in "$R/etc/applaunch/board.conf")" = 258x162 ]'
+R=$(pc_root pc_size); rm -f "$R/sys/class/drm/card1-eDP-1/edid"; echo ZZ99-Unknown > "$R/sys/class/dmi/id/product_name"
+pcrun --board-only
+check "pc without an EDID size nor a known model: no size line (the default density)" '[ $RC = 0 ] && [ -z "$(mm_in "$R/etc/applaunch/board.conf")" ] && grep -q "panel size unknown" "$R/etc/applaunch/board.conf"'
+pcrun --board-only --screen-size 12 --force
+check "pc of an unknown model --screen-size 12: the size line added where there was none" '[ $RC = 0 ] && [ "$(mm_in "$R/etc/applaunch/board.conf")" = 258x162 ] && ! grep -q "panel size unknown" "$R/etc/applaunch/board.conf"'
+R=$PC_R_SAVE
 pcrun --board-only
 P="$R/etc/applaunch/board.conf"
 EXPECT='APPLAUNCH_BOARD=pc-fzm1-2
