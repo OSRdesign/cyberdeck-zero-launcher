@@ -1284,6 +1284,24 @@ the field of view misleads framing. The P1 page takes the smallest TurboJPEG sca
 fits it during the RGB565 or XRGB conversion (a border to the 16:9 box where the shape differs). The spike's "auto" crops,
 which is fine for measuring.
 
+**Owner ruling 2026-11-15, D6:** accepted as proposed, Instant on boards that previewed 1080p under 0.75 core (RPI52, Pi 4B,
+palmpi, zero8), Light elsewhere; the setting is shown in Settings > Photo.
+
+**A second camera, Logitech C270 on the Pi 4B (2026-11-15, headless bench, MJPEG, auto scale, indoor light):**
+
+| Mode | Camera delivers | Decode | CPU | Latency |
+|---|---|---|---|---|
+| MJPG 1280x720, 1/2 scale | **15 fps** (30 fps with `exposure_dynamic_framerate=0`) | 5-10 ms | 0.09-0.16 core (0.31 at 30 fps) | 52-65 ms |
+| MJPG 960x544, 1/2 | 15 fps (24 fps in another run) | 3-7 ms | 0.08-0.19 core | 48-68 ms |
+| YUYV 640x480 | 24 fps | convert 3.9 ms | 0.05-0.11 core | 52-54 ms |
+
+**Finding C14:** the C270 lowers its own frame rate in indoor light (UVC control `exposure_dynamic_framerate` is 1 by default: the
+camera lengthens the exposure and drops to 15 fps). With the control at 0 it holds 30 fps. P1 must set it to 0 when a mode asks
+for 30 fps (on any camera that has the control) or recordings come out at 15 fps with a 30 fps label. The C270 has no 1080p mode
+(largest 1280x960 MJPG), so the mode picker must list only what the camera reports and Instant needs 1080p: a camera without it
+is Light-like by construction (the photo is the largest mode it has). Not checked on the FineCam (a P1 probe). The C270 microphone is
+a separate ALSA card (card 3, USB Audio).
+
 **Not done:** the Pi 4B stats were not read (the owner reported it works well); the old Pi 3A+ (192.168.68.170) was offline;
 the latency was not measured with the phone stopwatch of B12; the rotation cost of the portrait canvas on zero8 and the
 Pi 3A+ was not isolated from the SPI refresh.
