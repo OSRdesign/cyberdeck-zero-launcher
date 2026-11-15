@@ -1233,6 +1233,61 @@ Proposed revisions:
 
 ---
 
+### 16.5 Live-view spike results (2026-11-15)
+
+The spike is a throwaway app, `vhs-spike` (apps repo, branch `vhs-spike`, never published): a V4L2 capture thread, two
+"newest wins" mailboxes (capture to decode, decode to screen: a stage that is late drops frames, none ever waits), TurboJPEG
+by `dlopen` with the decode scale chosen by the picture box, a conversion into the display's pixel format (RGB565 on the
+Pi 3A+ and zero8, XRGB8888 on the Pi 5), and the toolkit page with the P1 picture area. Its log line `[vhs-spike] stats`
+and a headless `--bench SECONDS` give the numbers below [F spike]. All runs: camera in the landscape position, MJPEG 30 fps
+unless noted, `fastdct`.
+
+| Board | Mode and scale chosen by "auto" | Shown fps | Decode ms (mean) | Cores | Camera to screen ms |
+|---|---|---|---|---|---|
+| RPI52 (Pi 5, headless bench, 352x198 box) | 1080p, 1/4 | 29.9 | 4.3 | 0.14 | 25 |
+| RPI52 | 1080p, 1/1 (forced) | 29.8 | 8.5 | 0.26 | 28 |
+| RPI52 | 720p, 1/2 | 29.6 | 2.8 | 0.09 | 21 |
+| RPI52 | 480p, 1/1 | 29.6 | 1.9 | 0.06 | 19 |
+| RPI52 (YUYV 480p) | 1/1, convert 1.3 ms | 28.4 | 0 | 0.04 | 43 |
+| palmpi (Pi 3A+, page, 640x360 box) | 1080p, 1/2 (960x540) | 30 | 17-18 | 0.66-0.70 | 44-50 |
+| palmpi | 720p, 1/2 (640x360) | 30 | 8.3 | 0.40 | 41-50 |
+| zero8 (Zero 2 W, page, portrait, 288x162 box, 61 s) | 1080p, 1/4 (480x270) | 29.0, 19 UI drops | 18.6 (p95 up to 28) | 0.64 | 44 (p95 74) |
+| zero8 | 720p, 1/4 (320x180) | 28.3 | 8.8 | 0.32 | 31 |
+| zero8 | 480p, 1/2 (320x240) | 26.6 | 4.1 | 0.19 | 23 |
+| zero8 (YUYV 480p) | 1/2, convert 2.7 ms | 27.1 | 0 | 0.15 | 47 |
+
+- On every board the preview holds 30 fps, with no camera gaps and no decode failures [F spike]. Memory is 11-30 MB.
+  Temperature: 44-50 C; zero8 and the Pi 5 never throttled. palmpi's supply sagged (`0x50000`, "Undervoltage detected"
+  17 s after boot, then a reboot): the camera needs the good supply on that board (as 16.1, the new-supply test).
+- The Huffman floor of 2.2 and 16.2 C4 is confirmed by the page: at the 1/4 scale the Zero's decode is still 18.6 ms at
+  1080p (the entropy decoding does not shrink), but that is 0.64 core, not the "no 1080p live view" of 2.3.
+- YUYV costs no decode but shows 37-47 ms from camera to screen against 19-31 ms for MJPEG: the delay is the camera's
+  (the raw frame takes longer to cross USB 2.0), not the code.
+- On zero8 the screen drops a frame now and then (about 0.3 per second at 1080p, up to 4 in 13 s at 720p): the page
+  thread is bound by the SPI panel's refresh, not by the decode [I]. The shown rate is 26-29 fps.
+
+**Correction C13 (to 2.3, the live view of the Zero class):** the "MJPEG 640x360" stream of 2.3 does not exist (C2). The
+Zero class previews **720p MJPEG decoded at 1/4** (0.32 core, 28 fps, 31 ms) or **1080p decoded at 1/4** (0.64 core, 29 fps,
+44 ms); the Pi 3A+ previews 720p at 1/2 (0.40 core) or 1080p at 1/2 (0.70 core). Recording needs the rest of the CPU: the
+hardware H.264 encode costs 1.1 core (3A+) and 1.5 cores (Zero) at 720p (C3), so a 720p preview plus a 720p hardware encode
+is 1.4-1.8 cores of 4 [I].
+
+**Proposal (for the owner) D6 revised, the photo on the Zero class and the Pi 3A+:** the plan's D6 took the photo as the next
+frame where the preview streams 1080p and as a mode switch (about 1-1.5 s, "Taking photo") elsewhere. The spike shows
+the 1080p preview is affordable everywhere (0.64 core on the Zero, 0.70 on the 3A+). Proposal: a setting "Photo" with
+**Instant** (the preview streams 1080p, a photo is the next good frame, +0.3 core while previewing on the Zero class) and
+**Light** (a 720p preview, a photo is a short mode switch: stop, 1920x1080, start, drop 15 frames, keep one), Instant the
+default on boards that previewed 1080p under 0.75 core in the spike. It replaces the "Quick photo" idea of 7. Not decided.
+
+**Design call (the Controller's, recorded here):** the preview always shows the **whole frame**; a camera preview that crops
+the field of view misleads framing. The P1 page takes the smallest TurboJPEG scale whose output covers the picture box, then
+fits it during the RGB565 or XRGB conversion (a border to the 16:9 box where the shape differs). The spike's "auto" crops,
+which is fine for measuring.
+
+**Not done:** the Pi 4B stats were not read (the owner reported it works well); the old Pi 3A+ (192.168.68.170) was offline;
+the latency was not measured with the phone stopwatch of B12; the rotation cost of the portrait canvas on zero8 and the
+Pi 3A+ was not isolated from the SPI refresh.
+
 ## Not verified
 
 - **Six of eight boards were unreachable** on 2026-11-13 evening (HackBerry, zero8, Pi 3A+, RPI53, tablet, deck).
