@@ -11,6 +11,8 @@
  *   cyberdeckzero-ctl volume get | set N | up | down | mute | unmute
  *   cyberdeckzero-ctl brightness get | set N
  *   cyberdeckzero-ctl dim allow | deny
+ *   cyberdeckzero-ctl screen off | on  (off lasts only while this process runs: the launcher restores the light once
+ *                                       it is gone, so from a shell it is back about a second later)
  *   cyberdeckzero-ctl board            (prints board.state)
  *
  * Prints the launcher's reply. Exit status: 0 ok, 1 refused (the reply starts with err), 2 usage, 3 no launcher service
@@ -34,6 +36,7 @@ static int usage(FILE *to)
           "       cyberdeckzero-ctl volume get | set N | up | down | mute | unmute\n"
           "       cyberdeckzero-ctl brightness get | set N\n"
           "       cyberdeckzero-ctl dim allow | deny\n"
+          "       cyberdeckzero-ctl screen off | on\n"
           "       cyberdeckzero-ctl board\n"
           "exit status: 0 ok, 1 refused (err ...), 2 usage, 3 no launcher service\n",
           to);

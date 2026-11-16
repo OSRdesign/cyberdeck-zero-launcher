@@ -65,6 +65,10 @@ static pid_t fake_server(int lfd, char mode)
         if (nl) *nl = '\0';
         snprintf(out, sizeof(out), "ok got:%s\n", line);
         (void)!write(c, out, strlen(out));
+    } else if (mode == 'F' || mode == 'N') { /* the exact screen request, else err bad */
+        const char *want = mode == 'F' ? "screen off\n" : "screen on\n";
+        if (strcmp(line, want) == 0) (void)!write(c, "ok\n", 3);
+        else (void)!write(c, "err bad\n", 8);
     } else if (mode == 'x') {
         (void)!write(c, "err nosound\n", 12);
     } else if (mode == 's') {
@@ -134,6 +138,19 @@ int main(void)
     waitpid(child, NULL, 0);
     child = fake_server(fd, 'e');
     CHECK(cp0_app_toast("two\nlines") == 0); /* a newline would end the request: it becomes a space */
+    waitpid(child, NULL, 0);
+
+    child = fake_server(fd, 'F');
+    CHECK(cp0_app_backlight(0) == 0);
+    waitpid(child, NULL, 0);
+    child = fake_server(fd, 'N');
+    CHECK(cp0_app_backlight(7) == 0); /* any nonzero value is on */
+    waitpid(child, NULL, 0);
+    child = fake_server(fd, 'F');
+    CHECK(cp0_app_backlight(1) == 1); /* the fake wanted "screen off": err bad is a refusal, not a failure */
+    waitpid(child, NULL, 0);
+    child = fake_server(fd, 'x');
+    CHECK(cp0_app_backlight(0) == 1);
     waitpid(child, NULL, 0);
 
     /* a reply without a newline, a reply that is too long, a silent server: -1, within the timeout */

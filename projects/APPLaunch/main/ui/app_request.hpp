@@ -40,6 +40,8 @@ public:
     virtual std::string volume(const std::string &action, int value) = 0; /* get, set (value), up, down, mute, unmute */
     virtual std::string brightness(const std::string &action, int value) = 0; /* get, set (value) */
     virtual std::string dim(bool allow, const Peer &peer) = 0;
+    /* on = false: backlight fully off, not saved; on = true: back to the level before. ok | err busy | err absent */
+    virtual std::string screen(bool on, const Peer &peer) = 0;
 };
 
 /* Minimum time between two requests of one class from one client (ms), 0 = unlimited. */
@@ -54,7 +56,7 @@ private:
     std::map<std::pair<int, std::string>, long long> last_;
 };
 
-/* The minimum interval of a verb's class: beep 1000, toast 1000, volume, brightness and dim 100, the rest 20. */
+/* The minimum interval of a verb's class: beep 1000, toast 1000, volume, brightness, dim and screen 100, the rest 20. */
 int min_interval_ms(const std::string &verb);
 
 /* True for text that is valid UTF-8 without control characters (newline, tab and DEL included). */

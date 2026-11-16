@@ -21,6 +21,8 @@
  *   volume get|set N|up|down|mute|unmute      ok <0..100> muted=<0|1> | err nosound
  *   brightness get|set N      ok <0..100> kind=levels|onoff | err absent
  *   dim allow|deny            ok | err absent       (idle dimming while this app is in front; battery boards only)
+ *   screen off|on             ok | err busy | err absent   (backlight fully off, not saved; the launcher restores it
+ *                                                 by itself, see cp0_app_backlight)
  */
 #pragma once
 
@@ -48,6 +50,14 @@ int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_
 /* One-shot helpers. name NULL: "notify". 0 sent and accepted, 1 refused (no sound output, rate limit), -1 no service. */
 int cp0_app_beep(const char *name);
 int cp0_app_toast(const char *text);
+
+/* The backlight fully off (on = 0) or back (on != 0), nothing saved. 0 done, 1 refused (`err busy`: another app holds
+ * it off; `err absent`: no backlight or the board's requests= has no `screen`; rate limit), -1 no service (older
+ * launcher: `err unknown` also counts as 1). The launcher gives the light back by itself when this process sends
+ * `screen on`, exits or dies (looked at about once a second), is hidden or replaced in front, or the launcher stops:
+ * keep running while the screen is off and call this with 1 to wake it. Each call is one connection, so the
+ * launcher follows the process, not the socket. Touch and keys are not filtered: the app ignores them while off. */
+int cp0_app_backlight(int on);
 
 #ifdef __cplusplus
 }

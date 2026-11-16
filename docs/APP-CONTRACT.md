@@ -320,7 +320,7 @@ backlight_steps=10
 sound=1
 sound_kind=bluetooth
 sound_guess=1
-requests=hello,caps,toast,beep,volume,brightness,dim
+requests=hello,caps,toast,beep,volume,brightness,dim,screen
 bt_audio=pipewire
 bt_hfp=1
 bt_le_audio=0
@@ -339,7 +339,7 @@ bt_le_audio=0
 | `sound` | `0` no sound output, `1` present, `2` not set up (the profile says how to set it up: `sound_note`) |
 | `sound_kind` | `alsa` (a local card with a playback volume), `server` (a PulseAudio / PipeWire sink), `bluetooth` |
 | `sound_guess` | `1` when `sound_kind=bluetooth` is a **guess** from the sink's name (`bluez_output.*`); the launcher cannot ask the sink what it is |
-| `requests` | the verbs `launcher.sock` answers **on this board** (section 14): `volume` only with sound, `brightness` only with a backlight, `dim` only on a battery board with brightness levels. `beep` is always listed: without sound it answers `err nosound` |
+| `requests` | the verbs `launcher.sock` answers **on this board** (section 14): `volume` only with sound, `brightness` only with a backlight, `dim` only on a battery board with brightness levels, `screen` with any backlight (levels or on/off). `beep` is always listed: without sound it answers `err nosound` |
 | `bt_audio` | which sound stack owns the BlueZ audio endpoints (launcher 0.10.1, 2026-11-11; read-only): `pipewire` (`pactl info` says `PulseAudio (on PipeWire x.y)`, or no pulse server but a `pipewire` process runs), `pulseaudio` (a plain PulseAudio server), `bluealsa` (a `bluealsa` or `bluealsad` process and no sound server), `none` (nothing that carries Bluetooth audio: an app should say "Bluetooth audio is not set up on this board"). Absent until the first probe has run. PulseAudio is taken to own the endpoints without asking whether its Bluetooth module is loaded: with `pulseaudio` and no `bluez_*` nodes, say it is not set up |
 | `bt_hfp` | `1` = the adapter offers the Hands-free Audio Gateway (UUID 0x111F; `bluetoothctl show`): call audio (a headset microphone) can be set up. `0` = it does not (no HFP in the sound stack, or no Bluetooth). Absent = not probed yet or an older launcher |
 | `bt_le_audio` | `1` = the controller offers LE Audio isochronous streams (`btmgmt info`: `cis-central` or `cis-peripheral` in the supported settings). `0` where it does not or the tool is missing (none of the boards today). Absent = not probed yet or an older launcher |
@@ -399,7 +399,7 @@ All in `ext_components/cp0_lvgl`, MIT, plain C99 + POSIX, **no LVGL** and no cp0
 | Files | What | Needs |
 |---|---|---|
 | `include/cp0_app_contract.h`, `src/cp0_app_contract.c` | `cp0_app_env_read()`, `cp0_app_state_path()`, `cp0_app_screen_read()` / `_parse()` / `_compute()`, `cp0_app_input_read()` / `_parse()` (with `pointer_nav` and `hand`), `cp0_app_status_read()` / `_load()` / `_parse()` (section 5b; `cp0_app_status_read()` needs POSIX `kill`), `cp0_app_bt_audio_dev_get()` (the `bt_audio_dev` entries), `cp0_app_board_read()` / `_load()` / `_parse()` / `_has_request()` (section 5c), `cp0_app_osk_allowed()` / `cp0_app_osk_rule()`, `cp0_app_monotonic_s()`, `cp0_app_mode_name()` / `_parse()`, `cp0_app_vkb_name()` / `_parse()` | `cp0_ui_metrics.{h,c}` |
-| `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_path()`, `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
+| `include/cp0_app_client.h`, `src/cp0_app_client.c` | the app side of `launcher.sock` (section 14): `cp0_app_client_path()`, `cp0_app_client_call()`, `cp0_app_beep()`, `cp0_app_toast()`, `cp0_app_backlight()`. Never blocks longer than the timeout (default 200 ms), no service = `-1` | libc + POSIX sockets |
 | `include/cp0_ui_metrics.h`, `src/cp0_ui_metrics.c` | the layout service: class rules, density, tokens, text sizes, compat window (`cp0_ui_metrics_compute()`) | libc only |
 | `src/cp0/cp0_fb_output.h`, `src/cp0/cp0_fb_output.c` | drawing into a mapped framebuffer with the panel's rotation and 16/32 bpp; touch mapping (`cp0_fbo_setup()`, `cp0_fbo_blit*()`, `cp0_fbo_pack()`, `cp0_fbo_touch_to_logical()`) | libc only |
 | `include/cp0_app_lifecycle.h`, `src/cp0_app_lifecycle.c` | the app side of the lifecycle protocol (section 13): `cp0_app_lifecycle_init()` from the environment (`_attach()` with a socket the caller has, for tests), `_service()` (non-blocking, answers `ack <n>`), `_send()` (`home`, `switcher`), `_close()`, the key rule `_key_drop()` with `_keys_shown()` after a show | libc + POSIX sockets |
@@ -632,7 +632,7 @@ the PC: `ext_components/cp0_lvgl/tests/test_app_lifecycle.c` (the helper), `proj
 An app is a separate process; the launcher owns the volume, the backlight, the sounds and the notices. An app asks it through one Unix stream socket, `$XDG_RUNTIME_DIR/applaunch/launcher.sock` (mode 0600, the launcher's user). One request line, one reply line, UTF-8, at most 254 bytes plus the newline. It is served by a thread of its own, so it works for apps launched in every mode (compat, fullscreen with or without multitasking, a terminal app) and from a shell or ssh as the same user. There is **no `/tmp` fallback**: without `XDG_RUNTIME_DIR` there is no service. Added within contract 1 (section 8); the protocol has its own level (`hello` says `1`), and verbs and reply fields are only added.
 
 ```
-> hello 1                      < ok 1 launcher=0.8.6 app=mesh-hop verbs=hello,caps,toast,beep,volume,brightness,dim
+> hello 1                      < ok 1 launcher=0.8.6 app=mesh-hop verbs=hello,caps,toast,beep,volume,brightness,dim,screen
 > caps                         < ok sound=1 backlight=levels dim=1 verbs=...
 > beep [notify|done|warn]      < ok | err nosound
 > toast <text>                 < ok queued | err limit
@@ -641,9 +641,10 @@ An app is a separate process; the launcher owns the volume, the backlight, the s
 > brightness get               < ok 70 kind=levels
 > brightness set 30            < ok 30 kind=levels | err absent (no backlight, or on / off only)
 > dim allow|deny               < ok | err absent
+> screen off|on                < ok | err busy | err absent
 ```
 
-Replies are `ok ...` or `err <word>`: `unknown` (no such verb: an older launcher, or a typo), `bad` (arguments), `nosound`, `absent` (the board has no such thing), `limit` (rate limit), `busy` (the backend failed or the server is full), `denied` (reserved, section 6 `X-Permissions`). `app=` in the `hello` reply is the name of the calling process (`/proc/<pid>/comm`, from the kernel's peer credentials; the request cannot name itself).
+Replies are `ok ...` or `err <word>`: `unknown` (no such verb: an older launcher, or a typo), `bad` (arguments), `nosound`, `absent` (the board has no such thing), `limit` (rate limit), `busy` (the backend failed, the server is full, or for `screen`: another app holds the screen off), `denied` (reserved, section 6 `X-Permissions`). `app=` in the `hello` reply is the name of the calling process (`/proc/<pid>/comm`, from the kernel's peer credentials; the request cannot name itself).
 
 | Verb | What the launcher does |
 |---|---|
@@ -652,8 +653,9 @@ Replies are `ok ...` or `err <word>`: `unknown` (no such verb: an older launcher
 | `volume` | reads or changes the output volume exactly like the volume keys (the same backend, saved the same way). `set` un-mutes. Apps that do not play media have no business here; `get` is for a level bar, but `status.state` already has it |
 | `brightness` | `get` reads the percent; `set` snaps to the launcher's steps and saves like the key. Levels backlights only |
 | `dim` | `allow` lets the launcher dim the backlight (to 10%) when nothing was touched for the user's *Dark time* (Settings > Screen; *Never* = never) while this app is in front, on a battery board with brightness levels (`requests` has `dim`); any key or touch brings the light back. Today the panel never dims while an app is in front. The permission is **for the app in front and ends when the launcher takes the panel back** (exit, hidden, Alt+Tab): send `dim allow` again after a resume. Touch is seen only on the supervisor's path (multitasking on); a mouse or trackpoint is not seen, so an app that is used with a pointer only should not allow it. `deny` withdraws it |
+| `screen` | `off` switches the backlight **fully off**, `on` brings it back to the level it had. Nothing is saved: the saved brightness and the Settings value are untouched, and the launcher's own startup restore (levels backlights) brings the saved level back if the launcher itself died while the screen was off. Works on levels and on/off backlights alike (`requests` has `screen` whenever the board has a backlight; absent otherwise, and the app hides what depends on it). The launcher **never leaves the screen black**: it restores the light by itself when the app that switched it off sends `screen on`, is hidden or replaced in front (Alt+Tab, home, another app), quits, crashes or is killed (the launcher looks at the process about once a second, so the light is back within about a second), and when the launcher itself stops. State is "off, requested by process X": `off` twice from X is `ok` and changes nothing, `on` without an `off` is `ok` and does nothing, another process sending `off` or `on` meanwhile gets `err busy`. Only the process id counts, not the connection (every request is one connection in the client library). **Touch and keys are not filtered**: the app ignores them itself while the screen is off (a touch on a black screen still reaches the app). While it is off the launcher ignores the brightness keys and `brightness set` (`err busy`), `brightness get` and `status.state` keep showing the level that comes back, and an idle `dim` does nothing (it would otherwise raise a dark panel to the dim level). The volume and media keys are not affected. `cyberdeckzero-ctl screen off` exits at once, so the launcher restores the light a second later: to try it, use an app that keeps running |
 
-Limits (all per client process, answered `err limit`): `beep` and `toast` one per second, `volume`, `brightness` and `dim` ten per second, the rest fifty. Every request is logged by the launcher with the process name (`[req] mesh-hop: beep done`). Eight connections at most (more get `err busy`), an idle one is closed after 30 s, a line over the limit gets `err bad` and the connection is closed. The launcher never executes anything a client names: verbs are looked up in a fixed list, arguments are numbers or a few fixed words, the toast text is displayed and nothing else. **Permissions are an agreement, not a wall:** every client is the same user, who can already run `pactl` or write the backlight; the point is that the launcher keeps owning volume, brightness and sounds.
+Limits (all per client process, answered `err limit`): `beep` and `toast` one per second, `volume`, `brightness`, `dim` and `screen` ten per second, the rest fifty. Every request is logged by the launcher with the process name (`[req] mesh-hop: beep done`). Eight connections at most (more get `err busy`), an idle one is closed after 30 s, a line over the limit gets `err bad` and the connection is closed. The launcher never executes anything a client names: verbs are looked up in a fixed list, arguments are numbers or a few fixed words, the toast text is displayed and nothing else. **Permissions are an agreement, not a wall:** every client is the same user, who can already run `pactl` or write the backlight; the point is that the launcher keeps owning volume, brightness and sounds.
 
 ### The volume, brightness and mute keys inside an app
 

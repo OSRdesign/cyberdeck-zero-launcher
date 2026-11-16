@@ -74,7 +74,7 @@ void RateLimiter::forget(int client)
 int min_interval_ms(const std::string &verb)
 {
     if (verb == "beep" || verb == "toast") return 1000;
-    if (verb == "volume" || verb == "brightness" || verb == "dim") return 100;
+    if (verb == "volume" || verb == "brightness" || verb == "dim" || verb == "screen") return 100;
     return 20;
 }
 
@@ -122,7 +122,7 @@ std::string handle_line(const std::string &line, const Peer &peer, Backend &back
     if (w.empty()) return "err bad";
     const std::string &verb = w[0];
     const bool known = verb == "hello" || verb == "caps" || verb == "beep" || verb == "toast" || verb == "volume" ||
-                       verb == "brightness" || verb == "dim";
+                       verb == "brightness" || verb == "dim" || verb == "screen";
     if (!known) return "err unknown";
     if (!limiter.allow(peer.pid, verb, now_ms)) return "err limit";
     if (log) log("[req] " + peer.name + ": " + line);
@@ -162,6 +162,10 @@ std::string handle_line(const std::string &line, const Peer &peer, Backend &back
         if (w.size() == 2 && w[1] == "get") return backend.brightness("get", 0);
         int v = 0;
         if (w.size() == 3 && w[1] == "set" && percent(w[2], v)) return backend.brightness("set", v);
+        return "err bad";
+    }
+    if (verb == "screen") {
+        if (w.size() == 2 && (w[1] == "off" || w[1] == "on")) return backend.screen(w[1] == "on", peer);
         return "err bad";
     }
     /* dim */

@@ -68,6 +68,7 @@ public:
         if (app_media::sound_present()) v += ",volume";
         if (app_media::backlight_present()) v += ",brightness";
         if (app_media::dim_eligible()) v += ",dim";
+        if (app_media::screen_available()) v += ",screen";
         return v;
     }
 
@@ -126,6 +127,13 @@ public:
     std::string dim(bool allow, const app_request::Peer &) override
     {
         return app_media::set_dim_allowed(allow) ? "ok" : "err absent";
+    }
+
+    std::string screen(bool on, const app_request::Peer &peer) override
+    {
+        if (!app_media::screen_available()) return "err absent";
+        const int r = app_media::screen_set(on, peer.pid);
+        return r == 0 ? "ok" : r == 1 ? "err busy" : "err absent";
     }
 };
 
