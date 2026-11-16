@@ -160,3 +160,8 @@ int cp0_app_toast(const char *text)
         if (*p == '\n' || *p == '\r') *p = ' ';
     return cp0_app_client_call(line, NULL, 0, 0);
 }
+
+int cp0_app_backlight(int on)
+{
+    return cp0_app_client_call(on ? "screen on" : "screen off", NULL, 0, 0);
+}

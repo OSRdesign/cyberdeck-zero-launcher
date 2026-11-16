@@ -20,7 +20,7 @@
  *   bt_audio=pipewire|pulseaudio|bluealsa|none   the sound stack that owns the BlueZ audio endpoints (absent: not probed yet)
  *   bt_hfp=0|1              the adapter offers the Hands-free Audio Gateway (UUID 111f)
  *   bt_le_audio=0|1         the controller offers LE Audio (CIS)
- *   requests=hello,caps,toast,beep,volume,brightness,dim   the verbs launcher.sock answers on this board
+ *   requests=hello,caps,toast,beep,volume,brightness,dim,screen   the verbs launcher.sock answers on this board
  *   battery_note= backlight_note= sound_note=   the board profile's hint text, for display only
  *
  * Readers must ignore unknown keys. Apps read it with cp0_app_board_read() (cp0_app_contract.h).

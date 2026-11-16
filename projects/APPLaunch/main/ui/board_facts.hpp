@@ -22,7 +22,7 @@ void collect(cp0_app_board_t &out, const char *launcher_version, bool ask_server
 
 /* The verbs launcher.sock answers on a board with these facts, comma separated: hello, caps, toast and beep always
  * (beep answers `err nosound` where there is no sound), volume with sound, brightness with a backlight, dim on a
- * battery board with brightness levels. The socket server's `hello` reply and board.state `requests=` use it. */
+ * battery board with brightness levels, screen with a backlight (levels or on/off). The socket server's `hello` reply and board.state `requests=` use it. */
 std::string requests_for(const cp0_app_board_t &board);
 
 /* The kind of sink listing (`pactl list short sinks`): "bluetooth" when a usable sink is named bluez_output.* or

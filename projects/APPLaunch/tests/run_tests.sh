@@ -77,6 +77,12 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$test_root/../main/ui/app_request.cpp" \
     -o "$build_dir/test_app_request"
 "$build_dir/test_app_request"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    -I"$test_root/../main/ui" \
+    "$test_root/test_screen_gate.cpp" \
+    "$test_root/../main/ui/screen_gate.cpp" \
+    -o "$build_dir/test_screen_gate"
+"$build_dir/test_screen_gate"
 ${CC:-cc} -std=c99 -Wall -Wextra -Werror -I"$cp0_root/include" \
     -c "$cp0_root/src/cp0_app_client.c" -o "$build_dir/cp0_app_client.o"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \

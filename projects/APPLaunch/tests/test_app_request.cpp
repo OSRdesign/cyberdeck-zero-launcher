@@ -56,6 +56,11 @@ struct Fake : app_request::Backend {
         calls.push_back(allow ? "dim allow" : "dim deny");
         return "ok";
     }
+    std::string screen(bool on, const app_request::Peer &p) override
+    {
+        calls.push_back(std::string(on ? "screen on " : "screen off ") + std::to_string(p.pid));
+        return "ok";
+    }
 };
 
 std::vector<std::string> g_log;
@@ -104,6 +109,14 @@ int main()
     CHECK(go("dim allow") == "ok" && b.calls.back() == "dim allow");
     CHECK(go("dim deny") == "ok" && b.calls.back() == "dim deny");
     CHECK(go("dim") == "err bad" && go("dim maybe") == "err bad");
+    CHECK(go("screen off") == "ok" && b.calls.back() == "screen off 7"); // the pid is the socket peer's
+    CHECK(go("screen on") == "ok" && b.calls.back() == "screen on 7");
+    {
+        const size_t before = b.calls.size();
+        CHECK(go("screen") == "err bad" && go("screen dark") == "err bad" && go("screen off now") == "err bad");
+        CHECK(go("screen OFF") == "err bad" && go("screen 0") == "err bad" && go("screen get") == "err bad");
+        CHECK(b.calls.size() == before); // a bad argument never reaches the backend
+    }
 
     // unknown verbs never reach the backend, and nothing is executed
     const size_t calls = b.calls.size();
@@ -160,6 +173,9 @@ int main()
     CHECK(run(f, rl, "hello", 30000, 1) == "ok 1" && run(f, rl, "hello", 30010, 1) == "err limit");
     CHECK(run(f, rl, "hello", 30040, 1) == "ok 1");
     CHECK(run(f, rl, "dim allow", 40000, 1) == "ok" && run(f, rl, "dim deny", 40010, 1) == "err limit");
+    CHECK(run(f, rl, "screen off", 50000, 1) == "ok" && run(f, rl, "screen on", 50050, 1) == "err limit");
+    CHECK(run(f, rl, "screen on", 50100, 1) == "ok" && run(f, rl, "screen off", 50050, 2) == "ok"); // per client
+    CHECK(app_request::min_interval_ms("screen") == 100);
     CHECK(app_request::min_interval_ms("beep") == 1000 && app_request::min_interval_ms("toast") == 1000);
     CHECK(app_request::min_interval_ms("volume") == 100 && app_request::min_interval_ms("hello") == 20);
     // a client that left is forgotten; the table never grows without bound

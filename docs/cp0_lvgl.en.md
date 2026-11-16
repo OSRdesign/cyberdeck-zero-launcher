@@ -284,6 +284,7 @@ int cp0_app_bt_audio_dev_get(const cp0_app_status_t *s, int i, cp0_app_bt_audio_
 int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_ms);
 int cp0_app_beep(const char *name);     /* NULL = "notify"; 1 = "err nosound" (board.state sound=0) */
 int cp0_app_toast(const char *text);    /* shown on the launcher's toast when the launcher is in front */
+int cp0_app_backlight(int on);             /* 0 = backlight fully off, nonzero = back; not saved; 1 = err busy / absent (board.state requests= has no "screen"); the launcher restores it by itself when the app hides, exits or dies */
 ```
 
 Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).

@@ -48,10 +48,17 @@ bool toast_take(std::string &text)
 #include "model/setup_value_policy.hpp"
 #include "sample_log.h"
 
+#include "screen_gate.hpp"
+
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
+#include <cstring>
 #include <thread>
+
+#include <signal.h>
 
 namespace app_media {
 namespace {
@@ -91,6 +98,58 @@ long long now_ms()
     return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
 }
 
+void bump();
+
+/* ---- screen off: the hardware behind the gate. Raw backlight only, nothing saved. */
+std::atomic<int> g_off_percent{-1}; /* the brightness percent before the screen went off, for brightness get */
+
+bool process_alive(int pid)
+{
+    if (pid <= 0) return false;
+    if (::kill(pid, 0) != 0 && errno != EPERM) return false;
+    char path[48];
+    std::snprintf(path, sizeof(path), "/proc/%d/stat", pid);
+    std::FILE *f = std::fopen(path, "r");
+    if (!f) return false;
+    char buf[256] = {0};
+    const bool read = std::fgets(buf, sizeof(buf), f) != nullptr;
+    std::fclose(f);
+    if (!read) return true;
+    const char *close = std::strrchr(buf, ')'); /* "pid (comm) S ...": the state follows the last bracket */
+    return !(close && close[1] == ' ' && (close[2] == 'Z' || close[2] == 'X'));
+}
+
+class ScreenHardware : public app_request::ScreenHw {
+public:
+    int suspend() override
+    {
+        try {
+            std::lock_guard<std::mutex> ops(g_ops);
+            const int percent = launcher_media_controls::read_brightness_percent();
+            const int raw = launcher_media_controls::suspend_backlight();
+            if (raw > 0) g_off_percent.store(percent);
+            return raw;
+        } catch (...) {
+            return -1;
+        }
+    }
+    void restore(int raw) override
+    {
+        try {
+            std::lock_guard<std::mutex> ops(g_ops);
+            launcher_media_controls::restore_backlight(raw);
+        } catch (...) {
+        }
+        g_off_percent.store(-1);
+        g_activity_ms.store(now_ms()); /* the idle dim starts counting from the wake-up */
+        bump();
+    }
+    bool alive(int pid) override { return process_alive(pid); }
+};
+
+ScreenHardware g_screen_hw;
+app_request::ScreenGate g_screen(g_screen_hw);
+
 void bump()
 {
     g_generation.fetch_add(1);
@@ -117,6 +176,7 @@ void run_key(KeyAction action)
         case KeyAction::BrightnessUp:
         case KeyAction::BrightnessDown:
             if (!backlight_present()) return;
+            if (g_screen.is_off()) return; /* a read of 0 would snap to a step and light the panel */
             (void)launcher_media_controls::adjust_brightness(action == KeyAction::BrightnessUp
                                                                  ? setup_values::kBrightnessStepPercent
                                                                  : -setup_values::kBrightnessStepPercent);
@@ -143,6 +203,7 @@ void tick_dim()
     std::lock_guard<std::mutex> lock(g_mutex);
     const long long now = now_ms();
     const bool active = g_app_front.load() && g_raw_session.load() && g_dim_allowed.load();
+    if (g_screen.is_off()) return; /* off is darker than dim: dimming would raise the light (a read of 0 falls back to the saved step) */
     if (g_dimmed) {
         if (!active || g_activity_ms.load() > g_dim_at_ms) undim_locked();
         return;
@@ -175,6 +236,7 @@ void work()
             if (g_dimmed && g_activity_ms.load() > g_dim_at_ms) undim_locked();
         }
         for (KeyAction a : batch) run_key(a);
+        if (g_screen.poll()) SLOGI("[SCREEN] client gone: backlight restored");
         tick_dim();
     }
 }
@@ -193,6 +255,7 @@ void start()
 
 void stop()
 {
+    screen_release(); /* never leave the panel black behind */
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         if (!g_worker.joinable()) return;
@@ -288,6 +351,10 @@ int volume_mute(bool muted)
 int brightness_get()
 {
     if (!backlight_present()) return -1;
+    if (g_screen.is_off()) {
+        const int before = g_off_percent.load(); /* the level that comes back, not the 0 of the panel */
+        if (before >= 0) return before;
+    }
     std::lock_guard<std::mutex> ops(g_ops);
     return launcher_media_controls::read_brightness_percent();
 }
@@ -295,6 +362,7 @@ int brightness_get()
 int brightness_set(int percent)
 {
     if (std::string(backlight_kind()) != "levels") return -1;
+    if (g_screen.is_off()) return -1; /* busy: the screen is off by request */
     std::lock_guard<std::mutex> ops(g_ops);
     const int now = launcher_media_controls::set_brightness_percent(percent);
     bump();
@@ -314,6 +382,33 @@ Levels read_levels()
 unsigned levels_generation()
 {
     return g_generation.load();
+}
+
+/* ---------------------------------------------------------------------------------------------------- screen off */
+
+bool screen_available()
+{
+    return backlight_present();
+}
+
+int screen_set(bool on, int pid)
+{
+    if (!backlight_present()) return 2;
+    app_request::ScreenGate::Result r;
+    if (on) {
+        r = g_screen.on(pid);
+    } else {
+        std::lock_guard<std::mutex> lock(g_mutex); /* an idle dim in force goes first, so its level is not "the level before" */
+        undim_locked();
+        r = g_screen.off(pid);
+    }
+    bump();
+    return r == app_request::ScreenGate::Result::Ok ? 0 : r == app_request::ScreenGate::Result::Busy ? 1 : 2;
+}
+
+void screen_release()
+{
+    if (g_screen.release()) SLOGI("[SCREEN] backlight restored");
 }
 
 /* ---------------------------------------------------------------------------------------------------- beeps */
@@ -364,6 +459,7 @@ void toast_install_pump()
 
 void set_app_front(bool front)
 {
+    screen_release(); /* the panel changes hands: whoever switched it off loses that right */
     g_app_front.store(front);
     g_activity_ms.store(now_ms());
     if (!front) {
@@ -464,6 +560,9 @@ void raw_key(int, int) {}
 void raw_touch() {}
 void raw_session(bool) {}
 bool set_dim_allowed(bool) { return false; }
+bool screen_available() { return false; }
+int screen_set(bool, int) { return 2; }
+void screen_release() {}
 
 } // namespace app_media
 

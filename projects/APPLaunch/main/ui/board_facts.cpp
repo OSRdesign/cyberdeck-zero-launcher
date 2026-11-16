@@ -167,6 +167,7 @@ std::string requests_for(const cp0_app_board_t &b)
     if (b.sound == 1) verbs += ",volume";
     if (std::strcmp(b.backlight, "none") != 0 && b.backlight[0]) verbs += ",brightness";
     if (b.battery == 1 && std::strcmp(b.backlight, "levels") == 0) verbs += ",dim";
+    if (std::strcmp(b.backlight, "none") != 0 && b.backlight[0]) verbs += ",screen"; /* levels and on/off alike */
     return verbs;
 }
 

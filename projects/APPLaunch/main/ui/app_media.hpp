@@ -57,6 +57,15 @@ bool toast_take(std::string &text);
 /* Creates the LVGL timer that shows the waiting texts. LVGL thread, after launcher_ui::init(). */
 void toast_install_pump();
 
+/* ---- screen off (launcher.sock `screen`, see screen_gate.hpp). The backlight is switched fully off without saving
+ * anything and comes back by itself: `screen on` from the same client, the panel changing hands (set_app_front, either
+ * way), the client process gone (looked at about once a second), stop(). Any board with a backlight, levels or on/off. */
+bool screen_available();
+/* 0 done, 1 another client holds the screen off, 2 the backlight cannot be switched. on = true restores. */
+int screen_set(bool on, int pid);
+/* Restores the backlight if a client switched it off. Any thread. */
+void screen_release();
+
 /* ---- the app in front */
 /* The launcher hands the panel to an app (true) or takes it back (false): ui_screensaver_set_foreground(). Resets the
  * app's dim permission and un-dims. */
