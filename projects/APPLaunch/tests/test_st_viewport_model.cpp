@@ -90,5 +90,33 @@ int main()
     static_assert(st_viewport::font_px(320, 320) == 20);  /* not taller than wide */
     static_assert(CP0_UI_NARROW_PORTRAIT_SIZE(320, 480) && !CP0_UI_NARROW_PORTRAIT_SIZE(480, 640));
 
+    // Settings > Screen > Terminal text size (2026-11-18): the font the terminal opens with. Precedence: the setting
+    // (stored px, 0 = Auto) over board.conf's APPLAUNCH_TERM_FONT over the display's default.
+    using st_viewport::font_px_resolved;
+    assert(font_px_resolved(480, 800, 0, nullptr) == 20);       /* Auto, nothing in board.conf: today's default */
+    assert(font_px_resolved(320, 480, 0, nullptr) == 14);       /* Auto on the narrow portrait: 14 */
+    assert(font_px_resolved(480, 800, 0, "") == 20);
+    assert(font_px_resolved(480, 800, 0, "17") == 17);          /* Auto honours board.conf */
+    assert(font_px_resolved(320, 480, 0, "24") == 24);
+    assert(font_px_resolved(480, 800, 0, "9") == 20);           /* board.conf out of range: ignored, as before */
+    assert(font_px_resolved(480, 800, 0, "49") == 20);
+    assert(font_px_resolved(480, 800, 0, "abc") == 20);
+    assert(font_px_resolved(480, 800, 14, nullptr) == 14);      /* the setting */
+    assert(font_px_resolved(480, 800, 14, "24") == 14);         /* the setting wins over board.conf */
+    assert(font_px_resolved(320, 480, 24, "17") == 24);
+    assert(font_px_resolved(480, 800, 5, "17") == 17);          /* a stored value out of range is Auto */
+    assert(font_px_resolved(480, 800, -3, nullptr) == 20);
+    static_assert(st_viewport::font_px_valid(10) && st_viewport::font_px_valid(48));
+    static_assert(!st_viewport::font_px_valid(9) && !st_viewport::font_px_valid(49));
+
+    // the grid (the terminal's own clamps: 20..80 columns, 8..24 rows)
+    static_assert(st_viewport::grid_cols(480, 8, st_viewport::kMaxCols) == 60);
+    static_assert(st_viewport::grid_cols(800, 8, st_viewport::kMaxCols) == 80);   /* clamped to BIG_COLS */
+    static_assert(st_viewport::grid_cols(100, 12, st_viewport::kMaxCols) == 20);  /* at least 20 */
+    static_assert(st_viewport::grid_rows(800, 18, st_viewport::kMaxRows) == 24);  /* clamped to BIG_ROWS */
+    static_assert(st_viewport::grid_rows(320, 26, st_viewport::kMaxRows) == 12);
+    static_assert(st_viewport::grid_rows(100, 26, st_viewport::kMaxRows) == 8);   /* at least 8 */
+    static_assert(st_viewport::grid_cols(480, 0, st_viewport::kMaxCols) == 20);   /* no cell: the minimum, no division */
+
     return 0;
 }

@@ -585,6 +585,13 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/test_st_viewport_model.cpp" \
     -o "$build_dir/test_st_viewport_model"
 "$build_dir/test_st_viewport_model"
+# Settings > Screen > Idle dim level, Terminal text size, Screen size (2026-11-18): the stored values, the precedence rules,
+# the panel size from a diagonal, and install.sh's own screen_mm() / valid_size / valid_mm against the launcher's
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_screen_prefs_model.cpp" \
+    -o "$build_dir/test_screen_prefs_model"
+"$build_dir/test_screen_prefs_model" "$test_root/../pizero2w/install.sh"
 ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$(dirname "$0")/test_terminal_unicode.cpp" \
     "$(dirname "$0")/../main/ui/model/terminal_unicode.cpp" \

@@ -7,6 +7,7 @@
 #define APP_PAGE_IMPLEMENTATION_UNIT
 #include "ui_app_st.hpp"
 #include "../model/st_viewport_model.hpp"
+#include "../screen_prefs.hpp"
 
 #include <sstream>
 
@@ -94,19 +95,21 @@ void UISTPage::init_geometry()
 
     term_w_ = lv_display_get_horizontal_resolution(display);
     term_h_ = lv_display_get_vertical_resolution(display);
-    font_px_ = st_viewport::font_px(term_w_, term_h_);
-    if (const char *requested = std::getenv("APPLAUNCH_TERM_FONT")) {
-        const int value = std::atoi(requested);
-        if (value >= 10 && value <= 48) font_px_ = value;
-    }
+    // Settings > Screen > Terminal text size (screen_prefs.hpp), read as the terminal opens; Auto: board.conf's
+    // APPLAUNCH_TERM_FONT, else the display's default
+    font_px_ = st_viewport::font_px_resolved(term_w_, term_h_, screen_prefs::stored_terminal_font(),
+                                             std::getenv("APPLAUNCH_TERM_FONT"));
     if (const lv_font_t *font = terminal_font()) {
         const int advance = static_cast<int>(lv_font_get_glyph_width(font, 'M', 0));
         const int height = static_cast<int>(lv_font_get_line_height(font));
         if (advance > 0) char_w_ = advance;
         if (height > 0) char_h_ = height;
     }
-    normal_cols_ = clamp(term_w_ / char_w_, 20, MAX_COLS);
-    normal_rows_ = clamp(term_h_ / char_h_, 8, MAX_ROWS);
+    // the grid limits Settings > Screen > Terminal text size shows its grids with
+    static_assert(MAX_COLS == st_viewport::kMaxCols && MAX_ROWS == st_viewport::kMaxRows,
+                  "st_viewport::kMaxCols / kMaxRows are the terminal's grid limits");
+    normal_cols_ = st_viewport::grid_cols(term_w_, char_w_, MAX_COLS);
+    normal_rows_ = st_viewport::grid_rows(term_h_, char_h_, MAX_ROWS);
     term_cols_ = normal_cols_;
     term_rows_ = normal_rows_;
     scroll_bot_ = normal_rows_ - 1;

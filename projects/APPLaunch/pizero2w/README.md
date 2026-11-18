@@ -407,6 +407,14 @@ sudo ./install.sh --panel-mm 108x65          # or the visible area in mm, exactl
   replaces it, the old one stays as `board.conf.bak`): edit `APPLAUNCH_PANEL_MM` by hand there. `--dry-run` shows the size
   in use (`screen: panel size ... mm`); `--plan` prints `screen_size=`, `panel_mm=` and `panel_in_use=`.
 - **The deck** (`zero2w`) has no profile, its 2.8" panel size is built in: the options are refused there.
+- **In Settings** (since v0.10.5, draft): Settings > Screen > Screen size picks the diagonal from a list (2.8, 3.5, 4.3, 5,
+  5.5, 7, 8, 10.1 inches; "Auto (board profile)" clears the choice) on any board that has a profile, with the same formula
+  and the same exceptions as above, and applies it at the next launcher start (the grey hint says so and shows the size in
+  use and its source: installer, setting, board profile). It is stored in the launcher's user settings
+  (`~/.config/cardputerzero/config.json`: `screen_diag`, `screen_mm`), not in `board.conf` or `install.conf`, so an update
+  or a re-run of `install.sh` keeps it, and it wins over the size the installer wrote (`install.sh` writes the same
+  `APPLAUNCH_PANEL_MM`). "Auto" clears only the setting: an installer-given size stays. No custom diagonal in Settings: use
+  `--screen-size`.
 
 ### My screen is not listed
 
@@ -580,7 +588,7 @@ APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio   # gpio:<dir> on/o
 APPLAUNCH_GAUGE=max17048:/dev/i2c-15:0x36   # battery fuel gauge read over i2c-dev when the kernel has no battery; auto = the bus of the touch controller
 APPLAUNCH_KBD_IGNORE=bus:0011        # keyboards that do not count as connected (names, bus:XXXX; drop:... = not read either)
 APPLAUNCH_HIDE_TILES=app_Python      # home tiles hidden by default (Settings > Launcher can show them)
-APPLAUNCH_DIM_PERCENT=20             # idle dim level (screensaver, idle dim), percent of the backlight: 1..100 (default 10)
+APPLAUNCH_DIM_PERCENT=20             # idle dim level (screensaver, idle dim), percent of the backlight: 1..100 (default 10); Settings > Screen > Idle dim level overrides it
 ```
 
 `APPLAUNCH_BACKLIGHT=sysfs:<dir>` (since x-b; before, it fell back to `/sys/class/backlight/backlight`) writes
@@ -894,7 +902,7 @@ What each board gets (from the boards' measured facts, the fake trees of `projec
 `cyberdeckzero.service` environment: `APPLAUNCH_DISPLAY=dpi-scaled`, `APPLAUNCH_ROTATE=0`,
 `LV_LINUX_KEYBOARD_DEVICE=/dev/input/bt-keyboard`, `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y` (touch panel
 orientation measured on this deck), `APPLAUNCH_STD_KEYBOARD=1`, optional `APPLAUNCH_FN_KEY=<evdev code>`,
-optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20), optional `APPLAUNCH_MULTITASK=0|1`
+optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20; Settings > Screen > Terminal text size, when not Auto, wins over it), optional `APPLAUNCH_MULTITASK=0|1`
 ([Multitasking](#multitasking); not set = on from 640x480).
 
 User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness, volume,

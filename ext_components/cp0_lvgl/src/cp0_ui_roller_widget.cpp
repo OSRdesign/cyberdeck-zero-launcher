@@ -267,6 +267,9 @@ void Roller::build_row(int index)
         row.value = lv_label_create(row.obj);
         lv_label_set_text(row.value, LV_SYMBOL_OK);
         lv_obj_set_style_text_color(row.value, lv_color_hex(kCheck), 0);
+        row.note = lv_label_create(row.obj); /* the optional grey note (RowSpec::value); hidden while empty */
+        lv_obj_set_style_text_color(row.note, lv_color_hex(kLock), 0);
+        lv_obj_remove_flag(row.note, LV_OBJ_FLAG_SCROLLABLE); /* dots: not scrollable (see row.label) */
         break;
     case RowKind::Toggle:
         row.control = lv_switch_create(row.obj);
@@ -378,6 +381,9 @@ void Roller::fill_row(Row &row)
     case RowKind::Choice:
         if (row.spec.on) lv_obj_remove_flag(row.value, LV_OBJ_FLAG_HIDDEN);
         else lv_obj_add_flag(row.value, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(row.note, row.spec.value.c_str());
+        if (row.spec.value.empty()) lv_obj_add_flag(row.note, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_remove_flag(row.note, LV_OBJ_FLAG_HIDDEN);
         break;
     case RowKind::Toggle:
         if (row.spec.on) lv_obj_add_state(row.control, LV_STATE_CHECKED);
@@ -452,6 +458,25 @@ void Roller::style_row(int index, bool force)
         lv_obj_set_style_text_font(row.value, symbol, 0);
         right = text_width(LV_SYMBOL_OK, symbol);
         lv_obj_align(row.value, LV_ALIGN_RIGHT_MID, -inset, 0);
+        if (!row.spec.value.empty()) {
+            /* the note sits left of the check mark's slot (kept whether the row is checked or not, so the notes line
+             * up); too long for the row it ends with dots so that the label keeps its width or a third of the row */
+            const int slot = right + layout_.gap;
+            lv_obj_set_style_text_font(row.note, value_font, 0);
+            int note_w = text_width(row.spec.value.c_str(), value_font);
+            const int content = layout_.roller_w - 2 * inset - slot;
+            const int label_min = std::min(text_width(row.spec.label.c_str(), font), content / 3);
+            const int cap = std::max(0, content - layout_.gap - label_min);
+            if (note_w > cap) {
+                lv_label_set_long_mode(row.note, LV_LABEL_LONG_MODE_DOTS);
+                lv_obj_set_size(row.note, cap, lv_font_get_line_height(value_font));
+                note_w = cap;
+            } else {
+                lv_obj_set_size(row.note, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+            }
+            lv_obj_align(row.note, LV_ALIGN_RIGHT_MID, -(inset + slot), 0);
+            right = slot + note_w;
+        }
         break;
     }
     case RowKind::Toggle:

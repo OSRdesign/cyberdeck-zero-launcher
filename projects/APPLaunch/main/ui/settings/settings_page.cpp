@@ -10,6 +10,7 @@
 #include "settings_hw_profile.hpp"
 #include "settings_keyboard_page.hpp"
 #include "settings_pda_page.hpp"
+#include "settings_screen_prefs_page.hpp"
 #include "settings_pointer_page.hpp"
 #include "settings_ssh_indicator_page.hpp"
 #include "settings_strokes_page.hpp"
@@ -706,6 +707,9 @@ SettingsNodeKind settings_node_kind(const NodeIter &node)
                                          settings_keyboard_choice_page_factory, settings_pointer_choice_page_factory,
                                          settings_ssh_indicator_choice_page_factory,
                                          settings_pda_mode_choice_page_factory, // its restart question: a host Dialog
+                                         settings_idle_dim_choice_page_factory,
+                                         settings_terminal_font_choice_page_factory,
+                                         settings_panel_size_choice_page_factory,
                                          settings_rtc_confirm_page_factory, // Save?: its warning is a host Dialog
                                          volume_page3_factory})
             if (factory_is(entry.page_factory, value_page)) return SettingsNodeKind::Choice;
@@ -777,6 +781,13 @@ void UISettingTreePage::create_page_detail()
         }
         // PDA mode (report 043): where a portrait canvas with the writing zone fits; native Settings only
         if (settings_ui::native_selected()) settings_pda::append_entry(mode_tree, screen);
+        // Idle dim level (where the backlight has levels), Terminal text size, Screen size (where a board profile
+        // exists): 2026-11-18, native Settings only (settings_screen_prefs_page.hpp)
+        if (settings_ui::native_selected())
+            settings_screen_prefs::append_entries(
+                mode_tree, screen,
+                hardware.brightness == settings_caps::RowShow::Row &&
+                    cp0_backlight_profile_kind() != CP0_BACKLIGHT_KIND_GPIO_ONOFF);
     }
 
     // Speaker (the volume, 100 % to 0 %): our boards when they have a sound output (a non-HDMI card, a sound server's

@@ -16,7 +16,7 @@ launch Settings
 wait 300
 key ENTER
 wait 300
-expect_rows Brightness DarkTime
+expect_rows Brightness DarkTime "Terminal text size"
 shot settings_backlight_onoff_screen
 header settings_backlight_onoff_screen "Settings > Screen" Screen
 key ENTER

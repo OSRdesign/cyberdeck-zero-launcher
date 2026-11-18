@@ -136,7 +136,7 @@ APP_SRCS := $(addprefix $(UI)/,\
     native_ui.cpp desktop_entry.cpp launcher_update.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp launcher_zone.cpp     pda_mode.cpp \
-    launcher_ssh.cpp model/ssh_indicator_model.cpp \
+    launcher_ssh.cpp model/ssh_indicator_model.cpp screen_prefs.cpp \
     model/launcher_media_model.cpp model/setup_value_policy.cpp model/launcher_navigation_model.cpp \
     home_order_launcher.cpp model/home_order.cpp model/desktop_app_order.cpp model/home_move.cpp \
     page_app/ui_app_calculator.cpp \

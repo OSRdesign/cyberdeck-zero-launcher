@@ -21,7 +21,7 @@ panelshot pda_mode_panel_left
 launch Settings
 key ENTER
 wait 300
-expect_rows Brightness DarkTime "PDA mode"
+expect_rows Brightness DarkTime "PDA mode" "Idle dim level" "Terminal text size" "Screen size"
 expect_text "On rotate left"
 shot pda_mode_screen
 header pda_mode_screen "Settings > Screen" Screen

@@ -47,9 +47,14 @@ void restore_backlight(int raw);
 int dim_backlight(int percent);
 
 /* The idle dim level in percent for dim_backlight() (the clock screensaver, the idle dim of the request socket).
- * The board profile may set it with APPLAUNCH_DIM_PERCENT (some panels are black at 10 %); read once. */
+ * The board profile may set it with APPLAUNCH_DIM_PERCENT (some panels are black at 10 %); read once. Settings > Screen >
+ * Idle dim level (screen_prefs.hpp) overrides it: set_idle_dim_override(percent) from the stored choice (1..100; 0, or
+ * anything else, removes the override), at once and for every later dim. Precedence: setting, board profile, 10. */
 constexpr int kDefaultDimPercent = 10;
 int parse_dim_percent(const char *text);    // an integer 1..100; nullptr, empty or anything else: kDefaultDimPercent
-int idle_dim_percent();                     // parse_dim_percent(getenv("APPLAUNCH_DIM_PERCENT")), read on first use
+int profile_dim_percent();                  // parse_dim_percent(getenv("APPLAUNCH_DIM_PERCENT")), read on first use
+void set_idle_dim_override(int percent);    // the Settings choice: 1..100 overrides the profile; 0 / invalid: none
+int idle_dim_override();                    // the override in force, 0: none
+int idle_dim_percent();                     // the override, else profile_dim_percent()
 
 } // namespace launcher_media_controls

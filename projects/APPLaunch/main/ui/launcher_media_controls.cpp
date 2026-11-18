@@ -12,6 +12,7 @@
 #include "model/setup_value_policy.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <string>
 
@@ -302,10 +303,30 @@ int parse_dim_percent(const char *text)
     return value >= 1 && value <= 100 ? value : kDefaultDimPercent;
 }
 
-int idle_dim_percent()
+int profile_dim_percent()
 {
     static const int percent = parse_dim_percent(std::getenv("APPLAUNCH_DIM_PERCENT"));
     return percent;
+}
+
+namespace {
+std::atomic<int> s_dim_override{0}; // read by the screensaver (LVGL thread) and the request socket's thread
+}
+
+void set_idle_dim_override(int percent)
+{
+    s_dim_override.store(percent >= 1 && percent <= 100 ? percent : 0);
+}
+
+int idle_dim_override()
+{
+    return s_dim_override.load();
+}
+
+int idle_dim_percent()
+{
+    const int override_percent = s_dim_override.load();
+    return override_percent > 0 ? override_percent : profile_dim_percent();
 }
 
 void restore_backlight(int raw)

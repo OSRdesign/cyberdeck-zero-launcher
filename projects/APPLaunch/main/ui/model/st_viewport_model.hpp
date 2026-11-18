@@ -16,6 +16,8 @@
 
 #include "cp0_ui_metrics.h" /* CP0_UI_NARROW_PORTRAIT_SIZE: the one narrow-portrait predicate */
 
+#include <cstdlib>
+
 namespace st_viewport {
 
 /* The compat canvas (320x170): the terminal there is the old fixed grid with the top bar and no keyboard. */
@@ -33,6 +35,47 @@ constexpr bool native_display(int w, int h)
 constexpr int font_px(int w, int h)
 {
     return CP0_UI_NARROW_PORTRAIT_SIZE(w, h) ? 14 : 20;
+}
+
+/* A terminal font size px is usable from kMinFontPx to kMaxFontPx (board.conf's APPLAUNCH_TERM_FONT and Settings >
+ * Screen > Terminal text size). */
+constexpr int kMinFontPx = 10;
+constexpr int kMaxFontPx = 48;
+constexpr bool font_px_valid(int px)
+{
+    return px >= kMinFontPx && px <= kMaxFontPx;
+}
+
+/* The font size the terminal opens with: the Settings choice `stored` (0 = Auto, anything unusable = Auto) first, then
+ * board.conf's APPLAUNCH_TERM_FONT (`env`, atoi as the terminal always read it; null, empty or out of range: not set),
+ * then the display's own default (font_px above). Auto therefore keeps honouring board.conf. */
+inline int font_px_resolved(int w, int h, int stored, const char *env)
+{
+    if (font_px_valid(stored)) return stored;
+    if (env && *env) {
+        const int value = std::atoi(env);
+        if (font_px_valid(value)) return value;
+    }
+    return font_px(w, h);
+}
+
+/* The grid of the full screen for a font cell: the terminal's own clamps (UISTPage::init_geometry: at least 20 columns
+ * and 8 rows, at most max_cols x max_rows, its BIG_COLS x BIG_ROWS). */
+constexpr int kMaxCols = 80; /* UISTPage::BIG_COLS x BIG_ROWS (static_assert in ui_app_st.cpp) */
+constexpr int kMaxRows = 24;
+constexpr int kMinCols = 20;
+constexpr int kMinGridRows = 8;
+constexpr int clamp_to(int value, int low, int high)
+{
+    return value < low ? low : value > high ? high : value;
+}
+constexpr int grid_cols(int screen_w, int cell_w, int max_cols)
+{
+    return clamp_to(cell_w > 0 ? screen_w / cell_w : kMinCols, kMinCols, max_cols);
+}
+constexpr int grid_rows(int screen_h, int cell_h, int max_rows)
+{
+    return clamp_to(cell_h > 0 ? screen_h / cell_h : kMinGridRows, kMinGridRows, max_rows);
 }
 
 /* fewest rows a terminal is given above the keyboard (a prompt line and the line under it) */

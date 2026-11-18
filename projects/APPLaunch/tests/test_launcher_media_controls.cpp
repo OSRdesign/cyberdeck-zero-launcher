@@ -278,5 +278,28 @@ int main()
     assert(launcher_media_controls::idle_dim_percent() == 20);
     unsetenv("APPLAUNCH_DIM_PERCENT");
 
+    // Settings > Screen > Idle dim level (2026-11-18): the setting overrides the board profile at once; 0 or an invalid
+    // value removes the override (precedence: setting, profile, 10)
+    assert(launcher_media_controls::profile_dim_percent() == 20);
+    assert(launcher_media_controls::idle_dim_override() == 0);
+    launcher_media_controls::set_idle_dim_override(5);
+    assert(launcher_media_controls::idle_dim_override() == 5);
+    assert(launcher_media_controls::idle_dim_percent() == 5);
+    assert(launcher_media_controls::profile_dim_percent() == 20);
+    launcher_media_controls::set_idle_dim_override(50);
+    assert(launcher_media_controls::idle_dim_percent() == 50);
+    launcher_media_controls::set_idle_dim_override(0); /* Default: the profile's level again */
+    assert(launcher_media_controls::idle_dim_percent() == 20);
+    for (const int bad : {-1, 101, 1000}) {
+        launcher_media_controls::set_idle_dim_override(30);
+        launcher_media_controls::set_idle_dim_override(bad);
+        assert(launcher_media_controls::idle_dim_override() == 0);
+        assert(launcher_media_controls::idle_dim_percent() == 20);
+    }
+    // the callers of dim_backlight() take idle_dim_percent(): a set override is what they pass
+    launcher_media_controls::set_idle_dim_override(30);
+    assert(launcher_media_controls::idle_dim_percent() == 30);
+    launcher_media_controls::set_idle_dim_override(0);
+
     return 0;
 }
