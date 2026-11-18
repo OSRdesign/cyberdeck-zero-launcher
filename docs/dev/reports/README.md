@@ -75,6 +75,7 @@ Reports 001 to 019 are mostly task hand-offs (`NNN-handoff.md`, by the builder) 
 | [`058-sound-recorder-study.md`](058-sound-recorder-study.md) | Sound recorder app (study) |
 | [`059-music-player-study.md`](059-music-player-study.md) | Music player app (study) |
 | [`060-vinyl-p2-plan.md`](060-vinyl-p2-plan.md) | Vinyl music player: the P2 plan (steps, architecture, board matrix, decisions D20-D33 and the owner's answers) |
+| [`061-vinyl-music-server-study.md`](061-vinyl-music-server-study.md) | How Vinyl could play from a network music server (study, 2026-11-17): Subsonic/OpenSubsonic, Jellyfin, DLNA, MPD, SMB/NFS compared; streaming layer, RAM buffer, SD cache, credentials; phases N1-N3; owner decisions M1-M12 open |
 | [`062-vhs-plan.md`](062-vhs-plan.md) | VHS, the camera and photo app (plan): one camera, photos, video, scenes, codec picker, post-recording conversion, windowed and full-screen playback; decisions D1-D29 accepted 2026-11-14; P0 results added 2026-11-14 |
 
 ## Cited but not in the repository
