@@ -59,8 +59,8 @@ then `python tools/make_registry.py --owner OSRdesign --repo cyberdeck-zero-apps
 `SDK/github_source/lvgl/lvgl_9_5`): use the 9.5 API.
 
 - `tools/dev/wsl-build.sh`: syncs your checkout into its own WSL tree (`~/zero7/<checkout folder>`), builds the Pi
-  bundle under the build lock, prints the tail of the log and the bundle path. `tools/dev/check-all.sh`: 9 steps,
-  `cp0-unit`, `app-unit`, `strokes`, `render`, `compare`, `twice`, `header`, `contract`, `branding`, one PASS/FAIL line
+  bundle under the build lock, prints the tail of the log and the bundle path. `tools/dev/check-all.sh`: 10 steps,
+  `cp0-unit`, `app-unit`, `strokes`, `render`, `compare`, `twice`, `header`, `contract`, `branding`, `probe`, one PASS/FAIL line
   each. The installer tests (`projects/APPLaunch/pizero2w/tests/`) run separately. Details, prerequisites and the
   known failures: `tools/dev/README.md` ([Running the checks](../../tools/dev/README.md#running-the-checks)).
 - `tools/boards/board.py` (`boards.json`): upload, install, test-start / test-stop, grab, status on the deck, the

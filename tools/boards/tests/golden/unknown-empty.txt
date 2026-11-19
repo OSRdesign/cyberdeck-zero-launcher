@@ -1,0 +1,91 @@
+launcher-probe 1: a read-only board and screen probe (nothing was changed on this system)
+date: 2026-11-19
+mode: PROBE_ROOT test root
+running as: (test)
+
+==== 1. BOARD ====
+device-tree model: unavailable: no /proc/device-tree/model (not a device-tree board, or /proc not readable)
+compatible: unavailable: no device-tree compatible
+SoC: unknown
+unavailable: no /proc/cpuinfo
+memory: unavailable: no /proc/meminfo
+kernel: unavailable: no osrelease
+arch: riscv64
+unavailable: no /etc/os-release
+dmi: none (not a PC)
+
+==== 2. DISPLAY SESSION AND LAUNCHER SERVICES ====
+default target: unavailable: no default.target link
+display manager: none enabled
+display processes running: none
+session type: unset (of this shell; ssh gives tty or unset)
+active virtual console: unavailable
+fbcon rotate: n/a
+verdict: no compositor running: the console or the launcher owns the display
+
+-- launcher service names that exist (files; current name first) --
+user unit cyberdeckzero.service: not found
+user unit APPLaunch.service: not found
+system unit cyberdeckzero-desktop.service: not found
+system unit cyberdeckzero-console.service: not found
+system unit APPLaunch-desktop.service: not found
+system unit applaunch-desktop.service: not found
+system unit applaunch-console.service: not found
+unavailable: systemctl not used (not present, or test root)
+installed bundle: /usr/share/APPLaunch not present
+
+==== 3. DRM CONNECTORS ====
+unavailable: no DRM connector in /sys/class/drm (no KMS driver loaded, or a legacy framebuffer)
+
+-- optional tools --
+unavailable: kmsprint not installed
+unavailable: modetest not installed (package libdrm-tests)
+
+==== 4. FRAMEBUFFERS ====
+unavailable: no framebuffer in /sys/class/graphics (the launcher draws on fbdev: it cannot start here)
+(fbset not installed: fine)
+
+==== 5. PANEL DRIVER (kernel log and device tree) ====
+
+-- kernel log lines about the display and the touch (first 40) --
+unavailable: kernel log not readable by this user (dmesg_restrict; try: journalctl -k -b as the user, or sudo dmesg)
+
+-- device-tree nodes of panels, touch controllers and backlights --
+unavailable: no /proc/device-tree
+
+==== 6. BOOT CONFIGURATION (read only; comments left out) ====
+unavailable: no config.txt in /boot (not a Raspberry Pi firmware board, or not readable)
+
+unavailable: no cmdline.txt
+unavailable: no overlays folder in /boot
+unavailable: vcgencmd not installed (not a Raspberry Pi OS board)
+
+==== 7. INPUT DEVICES ====
+unavailable: no input device in /sys/class/input
+unavailable: udevadm not used (not installed, or test root)
+
+==== 8. BACKLIGHT ====
+none: no backlight class device (the launcher shows no brightness control)
+
+==== 9. WHAT install.sh WOULD PICK (--dry-run, nothing written) ====
+using: install.sh (dry run)
+glibc: 2.41 (ok)
+detected:
+  model: unknown
+  drm: no connector
+  framebuffer: none
+  backlight: none
+board: unknown
+This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report.
+install.sh would stop here (--force installs without a profile).
+session: appliance (no display manager enabled or running: the launcher starts at boot)
+profile: unknown board: no profile written
+boot config: PWM backlight overlay + cmdline cursor/consoleblank
+(install.sh --dry-run exit status 0)
+
+==== 10. INSTALLED LAUNCHER FILES (if present) ====
+--- /etc/applaunch/board.conf: not present
+--- /etc/applaunch/install.conf: not present
+(no launcher installed or running: this is the state of a board before the first install)
+
+==== END OF REPORT ====

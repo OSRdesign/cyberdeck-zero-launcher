@@ -417,15 +417,16 @@ report() {
     block_end
 
     h2 "Launcher"
-    block_start "APPLaunch install and service"
+    block_start "launcher install and service (cyberdeckzero.service; APPLaunch.service before v0.7.0)"
     if [ -d /usr/share/APPLaunch ]; then
         LAUNCHER="installed"
         ls /usr/share/APPLaunch/bin 2>&1
         if have systemctl; then
-            echo "enabled: $(systemctl --user is-enabled APPLaunch.service 2>&1)  active: $(systemctl --user is-active APPLaunch.service 2>&1)"
-            $TO systemctl --user show APPLaunch.service -p Environment 2>&1 | tr ' ' '\n' | grep -E '^(Environment=)?(APPLAUNCH|LV_)'
-            $TO systemctl --user --no-pager status APPLaunch.service 2>&1 | head -n 6
-            journalctl --user -u APPLaunch.service -b --no-pager 2>/dev/null | grep '\[dpi\]' | tail -n 15
+            echo "enabled: $(systemctl --user is-enabled cyberdeckzero.service 2>&1)  active: $(systemctl --user is-active cyberdeckzero.service 2>&1)"
+            echo "desktop variant (system unit cyberdeckzero-desktop.service): enabled: $(systemctl is-enabled cyberdeckzero-desktop.service 2>&1)  active: $(systemctl is-active cyberdeckzero-desktop.service 2>&1)"
+            $TO systemctl --user show cyberdeckzero.service -p Environment 2>&1 | tr ' ' '\n' | grep -E '^(Environment=)?(APPLAUNCH|LV_)'
+            $TO systemctl --user --no-pager status cyberdeckzero.service 2>&1 | head -n 6
+            journalctl --user -u cyberdeckzero.service -b --no-pager 2>/dev/null | grep '\[dpi\]' | tail -n 15
         fi
     else
         LAUNCHER="not installed"

@@ -1,0 +1,483 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+#
+# launcher-probe: a read-only board and screen probe. Prints ONE plain-text report to paste back.
+#
+#   sh launcher-probe [--out FILE] [--installer PATH] [--edid-hex] [-h]
+#
+# Run it on the board as a normal user (no sudo). It changes nothing: it only reads /proc, /sys, /boot and
+# /etc, and runs optional read-only tools (fbset, kmsprint, edid-decode, modetest, vcgencmd, udevadm, python3)
+# when they are present. A missing tool or a refused file prints "unavailable: reason"; nothing aborts.
+#
+#   --out FILE        also save the report to FILE (the only file this script ever writes)
+#   --installer PATH  the install.sh to ask "what would you pick?" (default: next to this script, in the repository
+#                     layout, or the installed copy); it is run with --dry-run only
+#   --edid-hex        also print each EDID as hex, with the serial number bytes blanked (the checksum byte is then
+#                     wrong on purpose)
+#
+# Redacted: Wi-Fi names and passwords are never read; MAC addresses, IPv4 addresses, the host name, the user
+# name and serial numbers print as "redacted". Exit status 0 always, 2 for a wrong option.
+#
+# PROBE_ROOT=DIR (test only) reads /proc, /sys, /boot, /etc, /run, /home and /usr/share/APPLaunch below DIR and
+# runs no external tool; kernel log, ioctl results and a few more come from DIR/probe-fixtures (see
+# tools/boards/README.md). PROBE_MACHINE, PROBE_DATE, PROBE_USER, PROBE_WORD_BITS replace uname -m, the date, the
+# user name and the kernel's bitmap word size in that mode.
+
+LC_ALL=C
+export LC_ALL
+VERSION=1
+
+OUT=""
+INSTALLER=""
+EDID_HEX=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h | --help) awk 'NR > 2 && /^#/ { sub(/^# ?/, ""); print; next } NR > 2 { exit }' "$0"; exit 0 ;;
+        --out) [ $# -ge 2 ] || { echo "launcher-probe: --out needs a file name" >&2; exit 2; }; OUT=$2; shift 2 ;;
+        --installer) [ $# -ge 2 ] || { echo "launcher-probe: --installer needs a path" >&2; exit 2; }; INSTALLER=$2; shift 2 ;;
+        --edid-hex) EDID_HEX=1; shift ;;
+        *) echo "launcher-probe: unknown option $1 (see -h)" >&2; exit 2 ;;
+    esac
+done
+
+R=${PROBE_ROOT:-}
+FIXT="$R/probe-fixtures"
+HERE=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
+
+have() { [ -z "$R" ] && command -v "$1" >/dev/null 2>&1; }  # an external tool: never in the test root
+TO=""
+if [ -z "$R" ] && command -v timeout >/dev/null 2>&1; then TO="timeout 10"; fi
+
+# one value of a sysfs/procfs file on one line (device-tree strings are NUL separated)
+rd() { [ -r "$1" ] && tr '\0' ' ' < "$1" 2>/dev/null | head -n 1 | sed 's/ *$//'; }
+unavail() { echo "unavailable: $1"; }
+h1() { printf '\n==== %s ====\n' "$1"; }
+sub() { printf '\n-- %s --\n' "$1"; }
+
+# Word size of the kernel bitmaps (a C "long" of the kernel).
+case "${PROBE_MACHINE:-$(uname -m 2>/dev/null)}" in
+    *64*) WB=64 ;;
+    *) WB=32 ;;
+esac
+WB=${PROBE_WORD_BITS:-$WB}
+
+# The bit numbers set in a kernel capability bitmap: hex words of WB bits, most significant word first.
+setbits() { # "$hex"
+    awk -v WB="$WB" -v bm="$1" 'BEGIN {
+        nw = split(bm, ws, " "); out = ""
+        for (w = 0; w < nw; w++) {
+            word = ws[nw - w]; len = length(word)
+            for (p = 1; p <= len; p++) {
+                v = index("0123456789abcdef", tolower(substr(word, len - p + 1, 1))) - 1
+                for (k = 0; k < 4; k++) if (int(v / (2 ^ k)) % 2) out = out " " (w * WB + (p - 1) * 4 + k)
+            }
+        }
+        sub(/^ /, "", out); print out }'
+}
+hasbit() { # "$bits" N
+    case " $1 " in *" $2 "*) return 0 ;; esac
+    return 1
+}
+# a big-endian u32 cell of a device-tree file
+dtu32() { [ -r "$1" ] && od -An -tu1 -N4 -v "$1" 2>/dev/null | awk 'NF == 4 { print $1 * 16777216 + $2 * 65536 + $3 * 256 + $4 }'; }
+
+# EDID decoder: reads the bytes of one EDID file (od -An -tu1 -v) and prints what the launcher cares about.
+# shellcheck disable=SC2016
+EDID_AWK='
+{ for (i = 1; i <= NF; i++) b[n++] = $i }
+END {
+    if (n < 128) { print "  EDID: too short (" n " bytes)"; exit }
+    if (!(b[0] == 0 && b[1] == 255 && b[2] == 255 && b[3] == 255 && b[4] == 255 && b[5] == 255 && b[6] == 255 && b[7] == 0)) { print "  EDID: bad header"; exit }
+    L = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    v = b[8] * 256 + b[9]
+    vendor = substr(L, int(v / 1024) % 32 + 1, 1) substr(L, int(v / 32) % 32 + 1, 1) substr(L, v % 32 + 1, 1)
+    printf "  EDID: %d bytes, vendor %s, product code 0x%04x, version %d.%d, week %d of %d, serial redacted\n", n, vendor, b[11] * 256 + b[10], b[18], b[19], b[16], 1990 + b[17]
+    sum = 0; for (i = 0; i < 128; i++) sum += b[i]
+    printf "  EDID checksum %s, %d extension block(s)\n", (sum % 256 == 0 ? "ok" : "BAD"), b[126]
+    printf "  basic size block: %d x %d cm%s\n", b[21], b[22], (b[21] == 0 || b[22] == 0 ? " (0: not given)" : "")
+    first = 1
+    for (d = 54; d <= 108; d += 18) {
+        if (b[d] == 0 && b[d + 1] == 0) {
+            tag = b[d + 3]
+            if (tag == 252) { name = ""; for (k = 5; k < 18 && b[d + k] != 10; k++) name = name sprintf("%c", b[d + k]); sub(/ +$/, "", name); print "  monitor name: " name }
+            continue
+        }
+        pc = (b[d + 1] * 256 + b[d]) * 10
+        ha = b[d + 2] + 256 * int(b[d + 4] / 16); va = b[d + 5] + 256 * int(b[d + 7] / 16)
+        hm = b[d + 12] + 256 * int(b[d + 14] / 16); vm = b[d + 13] + 256 * (b[d + 14] % 16)
+        printf "  %s timing: %dx%d, pixel clock %.2f MHz, image size %d x %d mm\n", (first ? "preferred (first detailed)" : "detailed"), ha, va, pc / 1000, hm, vm
+        first = 0
+    }
+}'
+# the same bytes as hex, bytes 12-15 (serial) and the text of "serial" descriptors blanked
+# shellcheck disable=SC2016
+EDID_HEX_AWK='
+{ for (i = 1; i <= NF; i++) b[n++] = $i }
+END {
+    for (i = 12; i <= 15; i++) b[i] = 0
+    for (d = 54; d <= 108; d += 18) if (b[d] == 0 && b[d + 1] == 0 && (b[d + 3] == 255)) for (k = 5; k < 18; k++) b[d + k] = 32
+    for (i = 0; i < n; i++) { printf "%02x", b[i]; if (i % 16 == 15 || i == n - 1) printf "\n"; else printf " " }
+}'
+
+kernlog() {
+    if [ -n "$R" ]; then cat "$FIXT/kernel.log" 2>/dev/null || return 1
+    elif command -v dmesg >/dev/null 2>&1 && dmesg 2>/dev/null | head -n 1 | grep -q .; then dmesg 2>/dev/null
+    elif command -v journalctl >/dev/null 2>&1; then journalctl -k -b --no-pager 2>/dev/null
+    else return 1; fi
+}
+
+report() {
+echo "launcher-probe $VERSION: a read-only board and screen probe (nothing was changed on this system)"
+if [ -n "$R" ]; then echo "date: ${PROBE_DATE:-test}"; else echo "date: $(date -u '+%Y-%m-%d %H:%M UTC' 2>/dev/null)"; fi
+[ -z "$R" ] || echo "mode: PROBE_ROOT test root"
+if [ -n "$R" ]; then echo "running as: (test)"; elif [ "$(id -u 2>/dev/null)" = 0 ]; then echo "running as: root"; else echo "running as: a normal user"; fi
+
+# ------------------------------------------------------------------------------------------------ 1 board
+h1 "1. BOARD"
+dt="$R/proc/device-tree"
+model=$(rd "$dt/model")
+echo "device-tree model: ${model:-unavailable: no /proc/device-tree/model (not a device-tree board, or /proc not readable)}"
+comp=""
+[ -r "$dt/compatible" ] && comp=$(tr '\0' '\n' < "$dt/compatible" | grep . | tr '\n' ' ' | sed 's/ $//')
+echo "compatible: ${comp:-unavailable: no device-tree compatible}"
+soc=$(printf '%s\n' "$comp" | tr ' ' '\n' | grep -E '^(brcm|rockchip|allwinner|amlogic|fsl|nvidia|qcom|mediatek),' | tail -n 1)
+echo "SoC: ${soc:-unknown}"
+if [ -r "$R/proc/cpuinfo" ]; then
+    echo "cpu: $(grep -m1 -i -E '^(model name|Hardware)' "$R/proc/cpuinfo" | sed 's/^[^:]*: *//') x$(grep -c '^processor' "$R/proc/cpuinfo")"
+    grep -q -i '^Serial' "$R/proc/cpuinfo" && echo "cpu serial: redacted"
+else unavail "no /proc/cpuinfo"; fi
+[ -r "$dt/serial-number" ] && echo "board serial: redacted"
+mem=$(awk '/^MemTotal/ { printf "%d MB", $2 / 1024 }' "$R/proc/meminfo" 2>/dev/null)
+echo "memory: ${mem:-unavailable: no /proc/meminfo}"
+kv=$(rd "$R/proc/sys/kernel/osrelease"); [ -n "$kv" ] || [ -n "$R" ] || kv=$(uname -r 2>/dev/null)
+echo "kernel: ${kv:-unavailable: no osrelease}"
+echo "arch: ${PROBE_MACHINE:-$(uname -m 2>/dev/null || echo "unavailable: no uname")}"
+osr="$R/etc/os-release"
+if [ -r "$osr" ]; then
+    echo "OS: $(sed -n 's/^PRETTY_NAME=//p' "$osr" | tr -d '"')"
+    echo "OS id: $(sed -n 's/^ID=//p' "$osr" | tr -d '"') $(sed -n 's/^VERSION_ID=//p' "$osr" | tr -d '"')"
+else unavail "no /etc/os-release"; fi
+dmi="$R/sys/class/dmi/id"
+if [ -d "$dmi" ]; then
+    echo "dmi: $(rd "$dmi/sys_vendor") / $(rd "$dmi/product_name"), chassis type $(rd "$dmi/chassis_type"), bios $(rd "$dmi/bios_vendor")"
+    [ -r "$dmi/product_serial" ] && echo "dmi serial: redacted"
+else echo "dmi: none (not a PC)"; fi
+
+# ------------------------------------------------------------------------------------------------ 2 session
+h1 "2. DISPLAY SESSION AND LAUNCHER SERVICES"
+if have systemctl; then echo "default target: $($TO systemctl get-default 2>&1)"
+else
+    tgt=""
+    for f in "$R/etc/systemd/system/default.target" "$R/usr/lib/systemd/system/default.target" "$R/lib/systemd/system/default.target"; do
+        [ -L "$f" ] && { tgt=$(readlink "$f"); break; }
+    done
+    if [ -n "$tgt" ]; then echo "default target: ${tgt##*/}"; else echo "default target: unavailable: no default.target link"; fi
+fi
+dmlink="$R/etc/systemd/system/display-manager.service"
+if [ -e "$dmlink" ] || [ -L "$dmlink" ]; then echo "display manager: $(readlink "$dmlink" 2>/dev/null | sed 's|.*/||')$([ -L "$dmlink" ] || echo "enabled (not a link)")"; else echo "display manager: none enabled"; fi
+procs=$(cat "$R"/proc/[0-9]*/comm 2>/dev/null | sort -u | grep -x -E 'labwc|wayfire|weston|sway|Xorg|Xwayland|X|lightdm|gdm3|sddm|cyberdeckzero|cyberdeckzero-console|cage|mutter|kwin_wayland|openbox' | tr '\n' ' ')
+echo "display processes running: ${procs:-none}"
+echo "session type: ${XDG_SESSION_TYPE:-unset} (of this shell; ssh gives tty or unset)"
+echo "active virtual console: $(rd "$R/sys/class/tty/tty0/active" || echo unavailable)"
+echo "fbcon rotate: $(rd "$R/sys/class/graphics/fbcon/rotate" || echo n/a)"
+case " $procs " in
+    *" labwc "* | *" wayfire "* | *" weston "* | *" sway "* | *" Xorg "* | *" Xwayland "* | *" cage "* | *" mutter "* | *" kwin_wayland "*) echo "verdict: a desktop or compositor owns the display" ;;
+    *) echo "verdict: no compositor running: the console or the launcher owns the display" ;;
+esac
+sub "launcher service names that exist (files; current name first)"
+udirs="$R/etc/systemd/user $R/usr/lib/systemd/user $R/lib/systemd/user"
+for h in "$R"/home/*; do [ -d "$h" ] && udirs="$udirs $h/.config/systemd/user"; done
+for u in cyberdeckzero.service APPLaunch.service; do
+    found=""
+    for d in $udirs; do [ -e "$d/$u" ] && found="$found ${d#"$R"}/$u"; done
+    found=${found# }; echo "user unit $u: ${found:-not found}"
+done
+for u in cyberdeckzero-desktop.service cyberdeckzero-console.service APPLaunch-desktop.service applaunch-desktop.service applaunch-console.service; do
+    found=""
+    for d in "$R/etc/systemd/system" "$R/usr/lib/systemd/system" "$R/lib/systemd/system"; do [ -e "$d/$u" ] && found="$found ${d#"$R"}/$u"; done
+    found=${found# }; echo "system unit $u: ${found:-not found}"
+done
+if have systemctl; then
+    echo "state cyberdeckzero.service (user): enabled $($TO systemctl --user is-enabled cyberdeckzero.service 2>&1 | head -n 1), active $($TO systemctl --user is-active cyberdeckzero.service 2>&1 | head -n 1)"
+    echo "state cyberdeckzero-desktop.service: enabled $($TO systemctl is-enabled cyberdeckzero-desktop.service 2>&1 | head -n 1), active $($TO systemctl is-active cyberdeckzero-desktop.service 2>&1 | head -n 1)"
+    echo "state cyberdeckzero-console.service: enabled $($TO systemctl is-enabled cyberdeckzero-console.service 2>&1 | head -n 1), active $($TO systemctl is-active cyberdeckzero-console.service 2>&1 | head -n 1)"
+else unavail "systemctl not used (not present, or test root)"; fi
+if [ -d "$R/usr/share/APPLaunch" ]; then echo "installed bundle: /usr/share/APPLaunch ($(ls "$R/usr/share/APPLaunch/bin" 2>/dev/null | tr '\n' ' '))"
+else echo "installed bundle: /usr/share/APPLaunch not present"; fi
+
+# ------------------------------------------------------------------------------------------------ 3 drm
+h1 "3. DRM CONNECTORS"
+nconn=0
+for d in "$R"/sys/class/drm/card[0-9]*-*; do
+    [ -e "$d/status" ] || continue
+    nconn=$((nconn + 1))
+    echo
+    echo "connector ${d##*/}"
+    echo "  status: $(rd "$d/status")  enabled: $(rd "$d/enabled" || echo n/a)  dpms: $(rd "$d/dpms" || echo n/a)"
+    if [ -r "$d/modes" ]; then
+        cnt=$(grep -c . "$d/modes")
+        echo "  modes: $cnt; preferred (first listed): $(head -n 1 "$d/modes")"
+        echo "  mode list: $(head -n 12 "$d/modes" | tr '\n' ' ')$([ "$cnt" -gt 12 ] && echo "...")"
+    else unavail "no modes file"; fi
+    ed="$d/edid"
+    if [ -s "$ed" ]; then
+        od -An -tu1 -v -N256 "$ed" 2>/dev/null | awk "$EDID_AWK"
+        if [ "$EDID_HEX" = 1 ]; then echo "  EDID hex (serial blanked):"; od -An -tu1 -v -N256 "$ed" | awk "$EDID_HEX_AWK" | sed 's/^/    /'; fi
+        if have edid-decode; then
+            echo "  edid-decode (serial lines removed):"
+            $TO edid-decode "$ed" 2>&1 | grep -v -i 'serial' | head -n 30 | sed 's/^/    /'
+        else echo "  edid-decode: not installed (the decoder above is built in)"; fi
+    else echo "  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)"; fi
+done
+[ "$nconn" -gt 0 ] || unavail "no DRM connector in /sys/class/drm (no KMS driver loaded, or a legacy framebuffer)"
+sub "optional tools"
+if have kmsprint; then $TO kmsprint 2>&1 | head -n 40; else unavail "kmsprint not installed"; fi
+if have modetest; then
+    $TO modetest -c 2>&1 | awk '/^[ \t]*edid:/ { skip = 1; print "\tedid: (omitted)"; next } skip && /^[ \t]+[0-9a-f]+$/ { next } { skip = 0; print }' | head -n 60
+else unavail "modetest not installed (package libdrm-tests)"; fi
+
+# ------------------------------------------------------------------------------------------------ 4 fb
+h1 "4. FRAMEBUFFERS"
+nfb=0
+for d in "$R"/sys/class/graphics/fb[0-9]*; do
+    [ -d "$d" ] || continue
+    nfb=$((nfb + 1))
+    n=${d##*/}
+    echo
+    echo "/dev/$n"
+    echo "  name: $(rd "$d/name")  size: $(rd "$d/virtual_size")  bpp: $(rd "$d/bits_per_pixel")  stride: $(rd "$d/stride")  rotate: $(rd "$d/rotate" || echo n/a)"
+    if [ -n "$R" ]; then
+        if [ -r "$FIXT/$n.vinfo" ]; then sed 's/^/  /' "$FIXT/$n.vinfo"; else unavail "pixel layout: no fixture"; fi
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 - "/dev/$n" 2>&1 <<'PY' | sed 's/^/  /'
+import fcntl, struct, sys
+try:
+    fd = open(sys.argv[1], "rb")
+    v = struct.unpack("40I", fcntl.ioctl(fd, 0x4600, bytes(160)))
+    mm = "unknown" if v[23] == 0xFFFFFFFF or v[22] == 0xFFFFFFFF else "%dx%d" % (v[23], v[22])
+    print("vinfo: visible %dx%d virtual %dx%d bpp %d red %d/%d green %d/%d blue %d/%d transp %d/%d, driver mm %s (width x height)"
+          % (v[0], v[1], v[2], v[3], v[6], v[8], v[9], v[11], v[12], v[14], v[15], v[17], v[18], mm))
+except Exception as e:
+    print("unavailable: pixel layout (FBIOGET_VSCREENINFO): %s" % e)
+PY
+    else unavail "pixel layout: python3 not installed"; fi
+    if have fbset; then $TO fbset -fb "/dev/$n" -i 2>&1 | grep -i -E 'mode|geometry|rgba|stride|name' | sed 's/^/  fbset: /' | head -n 8; fi
+done
+[ "$nfb" -gt 0 ] || unavail "no framebuffer in /sys/class/graphics (the launcher draws on fbdev: it cannot start here)"
+have fbset || echo "(fbset not installed: fine)"
+
+# ------------------------------------------------------------------------------------------------ 5 panel driver
+h1 "5. PANEL DRIVER (kernel log and device tree)"
+sub "kernel log lines about the display and the touch (first 40)"
+kl=$(kernlog)
+if [ -n "$kl" ]; then
+    printf '%s\n' "$kl" | grep -i -E 'panel|dsi|dpi|drm|vc4|simpledrm|fb[0-9]|hdmi|edt|goodix|ft5|ili9|st77|mipi|hyperpixel|backlight|touchscreen|display' | grep -v -i -E 'audio|snd|alsa' | head -n 40 | cut -c1-200
+    echo "(kernel log: whole log has $(printf '%s\n' "$kl" | grep -c .) lines)"
+else unavail "kernel log not readable by this user (dmesg_restrict; try: journalctl -k -b as the user, or sudo dmesg)"; fi
+sub "device-tree nodes of panels, touch controllers and backlights"
+if [ -d "$dt" ]; then
+    list=$(find -L "$dt" -name compatible 2>/dev/null | sort | while IFS= read -r f; do
+        c=$(tr '\0' ',' < "$f" 2>/dev/null | sed 's/,$//')
+        case $c in
+            *panel* | *dsi* | *dpi* | *display* | *touch* | *goodix* | *edt* | *ft5* | *hyperpixel* | *waveshare* | *ili9* | *st77* | *mipi-dbi* | *backlight* | *7inch*)
+                echo "$f" ;;
+        esac
+    done)
+    if [ -n "$list" ]; then
+        printf '%s\n' "$list" | while IFS= read -r f; do
+            nd=${f%/compatible}
+            echo "node ${nd#"$dt"}"
+            echo "  compatible: $(tr '\0' ',' < "$f" | sed 's/,$//')"
+            [ -r "$nd/status" ] && echo "  status: $(rd "$nd/status")"
+            for k in width-mm height-mm rotation reg; do
+                [ -r "$nd/$k" ] && [ "$(wc -c < "$nd/$k")" -eq 4 ] && echo "  $k: $(dtu32 "$nd/$k")"
+            done
+        done
+    else echo "none found (no node with panel, dsi, dpi, touch or backlight in its compatible)"; fi
+    ovl=$(find -L "$dt" -path '*overlay*' -name name 2>/dev/null | head -n 5)
+    [ -z "$ovl" ] || echo "(overlay nodes exist; see config.txt below for what was asked for)"
+else unavail "no /proc/device-tree"; fi
+
+# ------------------------------------------------------------------------------------------------ 6 boot config
+h1 "6. BOOT CONFIGURATION (read only; comments left out)"
+boot="$R/boot/firmware"
+[ -d "$boot" ] || boot="$R/boot"
+if [ -r "$boot/config.txt" ]; then
+    echo "file: ${boot#"$R"}/config.txt"
+    grep -E '^[[:space:]]*(\[|dtoverlay|dtparam|dtdebug|display_auto_detect|display_|hdmi_|disable_|dpi_|enable_dpi|enable_tvout|gpu_mem|max_framebuffer|framebuffer|ignore_lcd|lcd_rotate|rotate|camera_auto|arm_64bit|arm_boost|video=|gpio=|extra_transpose|over_voltage|core_freq|kernel=|initramfs|cmdline=|include|hdmi|force_)' "$boot/config.txt" 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true
+else unavail "no config.txt in ${boot#"$R"} (not a Raspberry Pi firmware board, or not readable)"; fi
+echo
+if [ -r "$boot/cmdline.txt" ]; then
+    echo "cmdline.txt (display words only): $(tr ' ' '\n' < "$boot/cmdline.txt" | grep -E '^(video=|fbcon|vt\.|console=|consoleblank|logo\.|quiet|splash|plymouth|vc4\.|drm\.|rotate|panel_orientation)' | tr '\n' ' ')"
+else unavail "no cmdline.txt"; fi
+if [ -r "$R/boot/armbianEnv.txt" ]; then
+    echo "armbianEnv.txt (overlay and display lines):"
+    grep -E '^(overlays|user_overlays|overlay_prefix|extraargs|console|disp_mode|bootlogo)=' "$R/boot/armbianEnv.txt" | sed 's/^/  /'
+fi
+if [ -d "$boot/overlays" ]; then
+    echo "display overlays shipped: $(ls "$boot/overlays" 2>/dev/null | grep -E '^(vc4-kms-(dsi|dpi)|hyperpixel|waveshare|mipi|hackberry|rpi-ft5406|edt|goodix|ili|st77|ads7846|vc4-kms-v3d|vc4-fkms)' | sed 's/-overlay\.dtbo$//; s/\.dtbo$//' | tr '\n' ' ')"
+else unavail "no overlays folder in ${boot#"$R"}"; fi
+if have vcgencmd; then
+    echo "vcgencmd get_config (display lines):"
+    $TO vcgencmd get_config int 2>&1 | grep -i -E 'display|hdmi|dpi|lcd|rotate' | sed 's/^/  /' | head -n 20
+    $TO vcgencmd get_config str 2>&1 | grep -i -E 'display|hdmi|dpi|lcd|rotate' | sed 's/^/  /' | head -n 10
+else unavail "vcgencmd not installed (not a Raspberry Pi OS board)"; fi
+
+# ------------------------------------------------------------------------------------------------ 7 input
+h1 "7. INPUT DEVICES"
+nin=0
+for d in "$R"/sys/class/input/event[0-9]*; do
+    [ -e "$d" ] || continue
+    nin=$((nin + 1))
+    n=${d##*/}
+    c="$d/device/capabilities"
+    ev=$(rd "$c/ev"); key=$(rd "$c/key"); abs=$(rd "$c/abs"); rel=$(rd "$c/rel"); prop=$(rd "$d/device/properties")
+    [ -n "$prop" ] || prop=$(rd "$c/prop")
+    evb=$(setbits "$ev"); kb=$(setbits "$key"); ab=$(setbits "$abs"); rb=$(setbits "$rel"); pb=$(setbits "$prop")
+    kind=""
+    hasbit "$kb" 30 && hasbit "$kb" 44 && hasbit "$kb" 28 && kind="$kind keyboard"
+    if hasbit "$ab" 53 && hasbit "$ab" 54; then
+        hasbit "$pb" 1 && kind="$kind touchscreen" || kind="$kind multitouch-pad"
+    elif hasbit "$ab" 0 && hasbit "$ab" 1; then
+        if hasbit "$kb" 330; then hasbit "$pb" 1 && kind="$kind touchscreen-singletouch" || kind="$kind touchpad-or-tablet"; else kind="$kind abs-pointer"; fi
+    fi
+    hasbit "$rb" 0 && hasbit "$rb" 1 && hasbit "$kb" 272 && kind="$kind mouse-or-trackpoint"
+    hasbit "$evb" 5 && kind="$kind switch"
+    echo
+    echo "$n: \"$(rd "$d/device/name")\""
+    echo "  bus $(rd "$d/device/id/bustype") vendor $(rd "$d/device/id/vendor") product $(rd "$d/device/id/product"); kind:${kind:- other}"
+    echo "  ev bits:$evb ; properties:${pb:- none}$(hasbit "$pb" 1 && echo " (INPUT_PROP_DIRECT: a screen)")"
+    if [ -n "$ab" ]; then
+        names=""
+        for a in $ab; do
+            case $a in 0) t=X ;; 1) t=Y ;; 24) t=PRESSURE ;; 47) t=MT_SLOT ;; 48) t=MT_TOUCH_MAJOR ;; 53) t=MT_POSITION_X ;; 54) t=MT_POSITION_Y ;; 57) t=MT_TRACKING_ID ;; 58) t=MT_PRESSURE ;; *) t=$a ;; esac
+            names="$names $t"
+        done
+        echo "  abs axes:$names"
+        if [ -n "$R" ]; then
+            if [ -r "$FIXT/$n.absinfo" ]; then sed 's/^/  /' "$FIXT/$n.absinfo"; else unavail "abs ranges: no fixture"; fi
+        elif [ -r "/dev/input/$n" ] && command -v python3 >/dev/null 2>&1; then
+            python3 - "/dev/input/$n" $ab 2>&1 <<'PY' | sed 's/^/  /'
+import fcntl, struct, sys
+names = {0: "X", 1: "Y", 24: "PRESSURE", 47: "MT_SLOT", 48: "MT_TOUCH_MAJOR", 53: "MT_POSITION_X", 54: "MT_POSITION_Y", 57: "MT_TRACKING_ID", 58: "MT_PRESSURE"}
+slots = None
+try:
+    fd = open(sys.argv[1], "rb")
+    for a in map(int, sys.argv[2:]):
+        v = struct.unpack("6i", fcntl.ioctl(fd, 0x80184540 + a, bytes(24)))
+        print("ABS %-15s min %d max %d fuzz %d flat %d res %d" % (names.get(a, a), v[1], v[2], v[3], v[4], v[5]))
+        if a == 47:
+            slots = v[2] + 1
+    if slots is not None:
+        print("slots (ABS_MT_SLOT max + 1): %d" % slots)
+except Exception as e:
+    print("unavailable: abs ranges (EVIOCGABS): %s" % e)
+PY
+        elif [ ! -r "/dev/input/$n" ]; then unavail "abs ranges: cannot read /dev/input/$n (this user is not in the input group; run as root or add the user to input)"
+        else unavail "abs ranges: python3 not installed"; fi
+    fi
+    if have udevadm; then
+        echo "  udev: $($TO udevadm info -q property -n "/dev/input/$n" 2>/dev/null | grep -E '^ID_INPUT_(TOUCHSCREEN|KEYBOARD|MOUSE|POINTINGSTICK|TOUCHPAD)=' | tr '\n' ' ')"
+    fi
+done
+[ "$nin" -gt 0 ] || unavail "no input device in /sys/class/input"
+have udevadm || unavail "udevadm not used (not installed, or test root)"
+have python3 || [ -n "$R" ] || unavail "python3 not installed: abs ranges and pixel layouts above are missing"
+
+# ------------------------------------------------------------------------------------------------ 8 backlight
+h1 "8. BACKLIGHT"
+nbl=0
+for d in "$R"/sys/class/backlight/*; do
+    [ -e "$d" ] || continue
+    nbl=$((nbl + 1))
+    n=${d##*/}
+    mx=$(rd "$d/max_brightness")
+    echo "$n: type $(rd "$d/type" || echo n/a), max $mx, brightness $(rd "$d/brightness"), actual $(rd "$d/actual_brightness" || echo n/a), bl_power $(rd "$d/bl_power" || echo n/a)"
+    case $mx in
+        1) kindbl="on/off only (max_brightness 1)" ;;
+        "" | 0) kindbl="no usable range" ;;
+        *) kindbl="levels (0..$mx)" ;;
+    esac
+    case $n in backlight_gpio) logic="gpio:/sys/class/backlight/$n" ;; *) logic="sysfs:/sys/class/backlight/$n" ;; esac
+    echo "  $kindbl; the launcher's profile logic would name it APPLAUNCH_BACKLIGHT=$logic"
+    if [ -n "$R" ]; then echo "  writable by this user: n/a (test root)"
+    elif [ -w "$d/brightness" ]; then echo "  writable by this user: yes"
+    else echo "  writable by this user: no (the installer's udev rule gives the video group write access to a levels backlight)"; fi
+done
+[ "$nbl" -gt 0 ] || echo "none: no backlight class device (the launcher shows no brightness control)"
+
+# ------------------------------------------------------------------------------------------------ 9 installer
+h1 "9. WHAT install.sh WOULD PICK (--dry-run, nothing written)"
+inst=$INSTALLER
+if [ -z "$inst" ]; then
+    for c in "$HERE/../../projects/APPLaunch/pizero2w/install.sh" "$HERE/install.sh" "./install.sh" "$R/usr/share/doc/cyberdeckzero-launcher/install.sh"; do
+        [ -f "$c" ] && { inst=$c; break; }
+    done
+fi
+if [ -z "$inst" ] || [ ! -f "$inst" ]; then
+    unavail "install.sh not found next to this script (pass --installer PATH to the install.sh of a release bundle or of the repository)"
+else
+    echo "using: install.sh (dry run)"
+    dry=$(mktemp -d 2>/dev/null) || dry=""
+    if [ -z "$dry" ]; then unavail "no temporary folder"
+    else
+        if [ -n "$R" ]; then
+            SYSROOT="$R" INSTALL_GLIBC_VERSION=${INSTALL_GLIBC_VERSION:-2.41} INSTALL_MACHINE=${PROBE_MACHINE:-aarch64} sh "$inst" --dry-run >"$dry/out" 2>&1
+        else
+            sh "$inst" --dry-run >"$dry/out" 2>&1
+        fi
+        rc=$?
+        # up to the migration notes (the rest is about files of earlier versions)
+        sed -e '/^migration from the names/,$d' "$dry/out" | grep -v '^DRY RUN' | head -n 80
+        echo "(install.sh --dry-run exit status $rc)"
+        rm -rf "$dry"
+    fi
+fi
+
+# ------------------------------------------------------------------------------------------------ 10 installed files
+h1 "10. INSTALLED LAUNCHER FILES (if present)"
+shown=0
+for f in "$R/etc/applaunch/board.conf" "$R/etc/applaunch/install.conf"; do
+    if [ -r "$f" ]; then
+        shown=1
+        echo "--- ${f#"$R"}"
+        grep -v -i -E 'pass|token|secret|psk|ssid' "$f" | head -n 80
+    else echo "--- ${f#"$R"}: not present"; fi
+done
+for f in "$R"/run/user/*/applaunch/board.state "$R"/run/user/*/applaunch/screen.state; do
+    [ -r "$f" ] || continue
+    shown=1
+    echo "--- $(printf '%s' "${f#"$R"}" | sed 's|/run/user/[0-9]*/|/run/user/UID/|')"
+    grep -v -i -E 'pass|token|secret|psk|ssid' "$f" | head -n 80
+done
+[ "$shown" = 1 ] || echo "(no launcher installed or running: this is the state of a board before the first install)"
+
+h1 "END OF REPORT"
+}
+
+# the redaction filter: MAC and IPv4 addresses, host name, user name
+host=$(rd "$R/etc/hostname")
+[ -n "$R" ] || host=${host:-$(hostname 2>/dev/null)}
+user=${PROBE_USER:-}
+[ -n "$R" ] || user=${user:-$(id -un 2>/dev/null)}
+redact() {
+    if [ -n "$R" ]; then sed "s|$R||g"; else cat; fi |
+    sed -E \
+        -e 's/([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}/redacted/g' \
+        -e 's/[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}/redacted/g' |
+        if [ -n "$host" ] && printf '%s' "$host" | grep -q -E '^[A-Za-z0-9._-]{3,}$'; then sed "s/$host/redacted/g"; else cat; fi |
+        if [ -n "$user" ] && [ "$user" != root ] && printf '%s' "$user" | grep -q -E '^[A-Za-z0-9._-]{3,}$'; then sed "s/$user/redacted/g"; else cat; fi
+}
+
+tmp=$(mktemp 2>/dev/null) || tmp=""
+if [ -z "$tmp" ]; then
+    report 2>&1 | redact
+else
+    report 2>&1 | redact >"$tmp"
+    cat "$tmp"
+    if [ -n "$OUT" ]; then
+        if cp "$tmp" "$OUT" 2>/dev/null; then echo "(saved to $OUT)"; else echo "unavailable: cannot write $OUT"; fi
+    fi
+    rm -f "$tmp"
+fi
+exit 0

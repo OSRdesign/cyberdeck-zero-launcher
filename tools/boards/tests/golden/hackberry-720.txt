@@ -1,0 +1,153 @@
+launcher-probe 1: a read-only board and screen probe (nothing was changed on this system)
+date: 2026-11-19
+mode: PROBE_ROOT test root
+running as: (test)
+
+==== 1. BOARD ====
+device-tree model: Raspberry Pi Compute Module 5 Rev 1.0
+compatible: raspberrypi,5-compute-module raspberrypi,5-model-b brcm,bcm2712
+SoC: brcm,bcm2712
+cpu: ARMv8 Processor rev 4 (v8l) x4
+cpu serial: redacted
+board serial: redacted
+memory: 7851 MB
+kernel: 6.12.47+rpt-rpi-2712
+arch: aarch64
+OS: Debian GNU/Linux 13 (trixie)
+OS id: debian 13
+dmi: none (not a PC)
+
+==== 2. DISPLAY SESSION AND LAUNCHER SERVICES ====
+default target: unavailable: no default.target link
+display manager: enabled (not a link)
+display processes running: labwc lightdm 
+session type: unset (of this shell; ssh gives tty or unset)
+active virtual console: unavailable
+fbcon rotate: n/a
+verdict: a desktop or compositor owns the display
+
+-- launcher service names that exist (files; current name first) --
+user unit cyberdeckzero.service: /home/redacted/.config/systemd/user/cyberdeckzero.service
+user unit APPLaunch.service: not found
+system unit cyberdeckzero-desktop.service: /etc/systemd/system/cyberdeckzero-desktop.service
+system unit cyberdeckzero-console.service: not found
+system unit APPLaunch-desktop.service: not found
+system unit applaunch-desktop.service: not found
+system unit applaunch-console.service: not found
+unavailable: systemctl not used (not present, or test root)
+installed bundle: /usr/share/APPLaunch (cyberdeckzero )
+
+==== 3. DRM CONNECTORS ====
+
+connector card0-DPI-1
+  status: connected  enabled: enabled  dpms: On
+  modes: 1; preferred (first listed): 720x720
+  mode list: 720x720 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card0-HDMI-A-1
+  status: disconnected  enabled: disabled  dpms: Off
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card0-HDMI-A-2
+  status: disconnected  enabled: disabled  dpms: Off
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+-- optional tools --
+unavailable: kmsprint not installed
+unavailable: modetest not installed (package libdrm-tests)
+
+==== 4. FRAMEBUFFERS ====
+
+/dev/fb0
+  name: drm-rp1-dpidrmf  size: 720,720  bpp: 32  stride: 2880  rotate: 0
+  vinfo: visible 720x720 virtual 720x720 bpp 32 red 16/8 green 8/8 blue 0/8 transp 24/8, driver mm unknown (width x height)
+(fbset not installed: fine)
+
+==== 5. PANEL DRIVER (kernel log and device tree) ====
+
+-- kernel log lines about the display and the touch (first 40) --
+[    4.000000] vc4-drm axi:gpu: [drm] fb0: drm-rp1-dpidrmf frame buffer device
+[    4.200000] edt_ft5x06 6-0038: touchscreen probe failed
+(kernel log: whole log has 2 lines)
+
+-- device-tree nodes of panels, touch controllers and backlights --
+node /axi/pcie@1000120000/rp1/i2c@74000/touchscreen@38
+  compatible: edt,edt-ft5406
+node /panel
+  compatible: hackberry,720x720-dpi
+
+==== 6. BOOT CONFIGURATION (read only; comments left out) ====
+file: /boot/firmware/config.txt
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=0
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+arm_64bit=1
+[all]
+dtoverlay=hackberrypicm5
+dtparam=rotate=0
+
+cmdline.txt (display words only): console=tty1 quiet splash 
+display overlays shipped: hackberrypicm5 
+unavailable: vcgencmd not installed (not a Raspberry Pi OS board)
+
+==== 7. INPUT DEVICES ====
+
+event0: "EP0110M09"
+  bus 0018 vendor 2a8f product 0110; kind: touchscreen
+  ev bits:0 1 3 ; properties:1 (INPUT_PROP_DIRECT: a screen)
+  abs axes: X Y MT_SLOT MT_TOUCH_MAJOR MT_POSITION_X MT_POSITION_Y MT_TRACKING_ID
+  ABS X               min 0 max 719 fuzz 0 flat 0 res 0
+  ABS Y               min 0 max 719 fuzz 0 flat 0 res 0
+  ABS MT_SLOT         min 0 max 1 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_X   min 0 max 719 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_Y   min 0 max 719 fuzz 0 flat 0 res 0
+  ABS MT_TRACKING_ID  min 0 max 65535 fuzz 0 flat 0 res 0
+  slots (ABS_MT_SLOT max + 1): 2
+
+event1: "HackBerry Keyboard"
+  bus 0003 vendor 1209 product b001; kind: keyboard
+  ev bits:0 1 ; properties: none
+
+event2: "HackBerry Trackpoint"
+  bus 0003 vendor 1209 product b002; kind: mouse-or-trackpoint
+  ev bits:0 1 2 ; properties: none
+unavailable: udevadm not used (not installed, or test root)
+
+==== 8. BACKLIGHT ====
+none: no backlight class device (the launcher shows no brightness control)
+
+==== 9. WHAT install.sh WOULD PICK (--dry-run, nothing written) ====
+using: install.sh (dry run)
+glibc: 2.41 (ok)
+detected:
+  model: Raspberry Pi Compute Module 5 Rev 1.0
+  drm card0-DPI-1: connected, first mode 720x720
+  drm card0-HDMI-A-1: disconnected
+  drm card0-HDMI-A-2: disconnected
+  /dev/fb0: name "drm-rp1-dpidrmf", size 720,720, 32 bpp
+  backlight: none
+board: hackberry-cm5
+screen: panel size not set (the launcher's default density; --screen-size INCHES or --panel-mm WxH sets it)
+session: desktop (running: labwc+lightdm)
+profile: hackberry-cm5: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)
+i2c group: the user joins it, if the system has one (battery gauge)
+boot config: none on a desktop board (config.txt and cmdline.txt left alone)
+(install.sh --dry-run exit status 0)
+
+==== 10. INSTALLED LAUNCHER FILES (if present) ====
+--- /etc/applaunch/board.conf
+APPLAUNCH_BOARD=hackberry-cm5
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=720x720
+--- /etc/applaunch/install.conf
+board=hackberry-cm5
+variant=desktop
+
+==== END OF REPORT ====

@@ -1,0 +1,2 @@
+[    2.000000] i915 0000:00:02.0: [drm] fb0: i915drmfb frame buffer device
+[    2.500000] i915 0000:00:02.0: drm display link up addr 10.0.0.42 hw 00:11:22:33:44:55 on probehost

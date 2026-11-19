@@ -1,0 +1,4 @@
+version=0.10.5
+board=pi3a-wsdsi43
+backlight=levels
+ip=192.168.1.77

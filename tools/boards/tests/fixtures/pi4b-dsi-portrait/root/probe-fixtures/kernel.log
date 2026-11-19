@@ -1,0 +1,8 @@
+[    0.000000] Booting Linux on physical CPU 0x0000000000 [0x410fd083]
+[    3.512345] vc4-drm gpu: bound fe600000.dsi (ops vc4_dsi_ops)
+[    3.612345] panel-simple-dsi 10.panel@0: probing panel waveshare,4.0inch-dsi
+[    3.712345] Goodix-TS 1-0014: ID 911, version: 1060
+[    4.012345] [drm] Initialized vc4 0.0.0 for gpu on minor 1
+[    4.112345] Console: switching to colour frame buffer device 60x50
+[    4.212345] vc4-drm gpu: [drm] fb0: vc4drmfb frame buffer device
+[    9.512345] vc4-drm gpu: hdmi hotplug seen by host probehost, mac aa:bb:cc:dd:ee:ff gateway 192.168.1.1 user pilot
