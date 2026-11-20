@@ -22,6 +22,7 @@ constexpr uint32_t kKeyPressed = 0x2D9CDB;   /* ... and their pressed colour */
 constexpr uint32_t kCaption = 0x66CC88;      /* today's value pages: status line ... */
 constexpr uint32_t kCaptionError = 0xFF6666; /* ... and its error colour */
 constexpr uint32_t kCaptionWarn = 0xF0B400;  /* the legacy Apps page's amber (some sources failed) */
+constexpr uint32_t kCaptionHint = 0x9A9A9A;  /* a plain hint: the text fields' label grey */
 
 int text_width(const char *text, const lv_font_t *font)
 {
@@ -289,7 +290,10 @@ void Page::set_caption(const std::string &text, CaptionTone tone)
         const int lines = caption_wrap_ && !fits ? std::min(lines_at(room), max_lines) : 1;
         lv_obj_set_height(caption_, lines * line_h); /* dots (after the last line) need a fixed height */
     }
-    const uint32_t colour = tone == CaptionTone::Error ? kCaptionError : tone == CaptionTone::Warn ? kCaptionWarn : kCaption;
+    const uint32_t colour = tone == CaptionTone::Error  ? kCaptionError
+                            : tone == CaptionTone::Warn ? kCaptionWarn
+                            : tone == CaptionTone::Hint ? kCaptionHint
+                                                        : kCaption;
     lv_obj_set_style_text_color(caption_, lv_color_hex(colour), 0);
     if (!text.empty()) lv_obj_move_foreground(caption_); /* above the roller, created after the scaffold */
     show_caption();

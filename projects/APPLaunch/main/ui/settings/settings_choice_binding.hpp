@@ -55,6 +55,15 @@ public:
     virtual void choice_set_observer(SettingsChoiceObserver *observer) = 0;
     /* the answer to choice_confirm(); the observer answers false when the question goes away unanswered */
     virtual void choice_confirm_reply(bool confirmed) { (void)confirmed; }
+    /* Optional looks (the screen preferences, settings_screen_prefs_page.hpp); the defaults leave a page as it was:
+     *   choice_chevron      the row in the section list carries the grey chevron (row-affordance rule)
+     *   choice_row_value    the value text of that row, when it is not the current option's label (empty: the label)
+     *   choice_option_note  a grey note on option `index` of the list (empty: none)
+     *   choice_hint         a grey hint line under the title while the list is open (empty: none) */
+    virtual bool choice_chevron() const { return false; }
+    virtual std::string choice_row_value() const { return {}; }
+    virtual std::string choice_option_note(int index) const { (void)index; return {}; }
+    virtual std::string choice_hint() const { return {}; }
 };
 
 /* The parent that makes a value page logic-only (see above): hidden, never drawn. */

@@ -279,6 +279,11 @@ cp0::ui::RowSpec SettingsNativeHost::row_spec(const Row &row) const
     case RowType::Choice: {
         const int value = known_value(row);
         if (value >= 0 && row.binding->choice_shows_value()) spec.value = option_label(row.node, value);
+        if (row.binding) {
+            std::string shown = row.binding->choice_row_value();
+            if (!shown.empty()) spec.value = std::move(shown);
+            spec.chevron = row.binding->choice_chevron();
+        }
         break;
     }
     case RowType::Slider: {
@@ -325,6 +330,7 @@ cp0::ui::RowSpec SettingsNativeHost::option_spec(const Row &row, int option) con
     spec.kind = cp0::ui::RowKind::Choice;
     spec.label = option_label(row.node, option);
     spec.on = option == checked_;
+    if (row.binding) spec.value = row.binding->choice_option_note(option);
     return spec;
 }
 
@@ -337,6 +343,7 @@ void SettingsNativeHost::show_section(int selected)
     for (const auto &row : rows_) specs.push_back(row_spec(*row));
     roller_->set_rows(specs, selected, true);
     page_->set_title(title_path());
+    page_->set_caption_wrap(false); /* the host's other lists keep their one line (show_choice may have wrapped) */
     clear_caption();
 }
 
@@ -352,6 +359,12 @@ void SettingsNativeHost::show_choice(int index)
     roller_->set_rows(specs, current >= 0 ? current : row.binding->choice_selection(), false);
     page_->set_title(title_path());
     clear_caption();
+    /* a page's grey hint ("applies at next start") stays under the title while its list is open */
+    const std::string hint = row.binding->choice_hint();
+    if (!hint.empty()) {
+        page_->set_caption_wrap(true);
+        page_->set_caption(hint, cp0::ui::CaptionTone::Hint);
+    }
 }
 
 void SettingsNativeHost::back()

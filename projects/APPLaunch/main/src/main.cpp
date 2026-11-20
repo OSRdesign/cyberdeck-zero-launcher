@@ -10,6 +10,7 @@
 #include "ui/app_requests.hpp"
 #include "ui/launcher_media_controls.h"
 #include "ui/pda_mode.hpp"
+#include "ui/screen_prefs.hpp"
 #include "ui/settings/settings_session_model.hpp"
 #include "ui/status_feed.hpp"
 #include "ui/ui.h"
@@ -27,6 +28,10 @@
 
 int main(void)
 {
+    // Settings > Screen > Screen size and Idle dim level (screen_prefs.hpp): the stored panel size sets
+    // APPLAUNCH_PANEL_MM before anything reads it (the display, PDA mode below, every app the launcher starts), the
+    // stored idle dim level overrides the board profile's. Nothing stored: board.conf as it is.
+    launcher_media_controls::set_idle_dim_override(screen_prefs::apply_at_start().stored.dim);
     // Settings > Screen > PDA mode (pda_mode.hpp): the stored choice turns board.conf's canvas before the display opens
     // (APPLAUNCH_LOGICAL, APPLAUNCH_ROTATE, APPLAUNCH_PDA); nothing stored, the board's values as they are.
     pda_mode::apply_at_start();

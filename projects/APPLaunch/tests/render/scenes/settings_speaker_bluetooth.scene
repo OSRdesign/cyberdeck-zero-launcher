@@ -23,5 +23,5 @@ expect_rows Screen Speaker Wi-Fi Bluetooth Launcher Touch Apps Updates User "Dat
 shot settings_speaker_bluetooth_root
 key ENTER
 wait 300
-expect_rows DarkTime
+expect_rows DarkTime "Terminal text size" "Screen size"
 shot settings_speaker_bluetooth_screen

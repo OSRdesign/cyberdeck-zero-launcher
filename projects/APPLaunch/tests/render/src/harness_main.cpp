@@ -1069,6 +1069,9 @@ void boot(Run &run)
      * apps-root (big: apps-cache-big) */
     setenv("M5APPSTORE_CACHE_DIR", "/nonexistent/harness-appstore-cache", 1);
     setenv("M5APPSTORE_APP_ROOT", "/nonexistent/harness-appstore-root", 1);
+    /* Settings > Screen > Screen size reads the installer's install.conf: never the machine's own; `env HARNESS_INSTALL_CONF NAME`
+     * points it at tests/render/fixtures/NAME */
+    setenv("APPLAUNCH_INSTALL_CONF", "/nonexistent/harness-install.conf", 1);
     for (const auto &kv : run.profile.env) setenv(kv.first.c_str(), kv.second.c_str(), 1);
     if (run.profile.env.count("HARNESS_APPS_NEEDS")) { /* on: the usual fixture; big: every app needs 2000x1500 */
         const std::string needs = run.profile.env["HARNESS_APPS_NEEDS"];
@@ -1078,6 +1081,8 @@ void boot(Run &run)
             setenv("M5APPSTORE_APP_ROOT", (harness::fixtures().fixture_root + "/apps-root").c_str(), 1);
         }
     }
+    if (run.profile.env.count("HARNESS_INSTALL_CONF"))
+        setenv("APPLAUNCH_INSTALL_CONF", (harness::fixtures().fixture_root + "/" + run.profile.env["HARNESS_INSTALL_CONF"]).c_str(), 1);
     /* screen.state lands next to the shots, never in the real runtime directory */
     const std::string runtime = run.out_dir + "/" + run.size.name() + "/runtime";
     mkdirs(runtime);

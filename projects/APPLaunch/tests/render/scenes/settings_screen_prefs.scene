@@ -1,0 +1,105 @@
+# Settings > Screen > Idle dim level, Terminal text size, Screen size (2026-11-18): the three rows of the Screen section
+# with their grey chevrons and values, each choice list with its grey hint and notes, a pick stored and shown again.
+# Release build, a board profile (APPLAUNCH_BOARD: the Screen size row), a levels backlight (the Idle dim level row), the
+# installer's install.conf with --screen-size 7. Review only: no golden. The grid notes are the terminal's own: its font
+# cell measured with the real font, its clamps (20..80 columns, 8..24 rows).
+title settings screen prefs
+review
+sizes 480x320 640x480 800x480 720x720 480x480 1280x720
+env APPLAUNCH_DEV 0
+env APPLAUNCH_BOARD pi3a-wsdsi43
+env HARNESS_INSTALL_CONF screen_prefs_install.conf
+backlight levels
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home
+launch Settings
+wait 300
+key ENTER
+wait 300
+shot screen_section
+# 480x320 is the Pi 3A+ profile: an on/off backlight (no Idle dim level row) and PDA mode offered
+@640x480,800x480,720x720,1280x720 expect_rows Brightness DarkTime "Idle dim level" "Terminal text size" "Screen size"
+@480x320 expect_rows Brightness DarkTime "PDA mode" "Terminal text size" "Screen size"
+@640x480,800x480,720x720,480x480,1280x720 expect_text "Default (10 %)"
+expect_text "Auto (20 px)"
+expect_text Auto
+header screen_section "Settings > Screen" Screen
+
+# Idle dim level: Default (10 %), 5, 10, 20, 30, 50 %; the grey hint; 20 % is picked and shown in the section
+@640x480,800x480,720x720,480x480,1280x720 key DOWN
+@640x480,800x480,720x720,480x480,1280x720 key DOWN
+@640x480,800x480,720x720,480x480,1280x720 key ENTER
+@640x480,800x480,720x720,480x480,1280x720 wait 300
+@640x480,800x480,720x720,480x480,1280x720 expect_rows "Default (10 %)" "5 %" "10 %" "20 %" "30 %" "50 %"
+@640x480,800x480,720x720,480x480,1280x720 expect_clear "Brightness while the screen is dimmed. Applies at once."
+@640x480,800x480,720x720,480x480,1280x720 shot dim_list
+@640x480,800x480,720x720,480x480,1280x720 key DOWN
+@640x480,800x480,720x720,480x480,1280x720 key DOWN
+@640x480,800x480,720x720,480x480,1280x720 key DOWN
+@640x480,800x480,720x720,480x480,1280x720 key ENTER
+@640x480,800x480,720x720,480x480,1280x720 wait 300
+@640x480,800x480,720x720,480x480,1280x720 expect_text "20 %"
+@640x480,800x480,720x720,480x480,1280x720 shot dim_picked
+@640x480,800x480,720x720,480x480,1280x720 key ENTER
+@640x480,800x480,720x720,480x480,1280x720 wait 300
+@640x480,800x480,720x720,480x480,1280x720 shot dim_list_again
+# Default again: the override goes
+@640x480,800x480,720x720,480x480,1280x720 key UP
+@640x480,800x480,720x720,480x480,1280x720 key UP
+@640x480,800x480,720x720,480x480,1280x720 key UP
+@640x480,800x480,720x720,480x480,1280x720 key ENTER
+@640x480,800x480,720x720,480x480,1280x720 wait 300
+@640x480,800x480,720x720,480x480,1280x720 expect_text "Default (10 %)"
+
+@480x320 key DOWN
+@480x320 key DOWN
+# Terminal text size: Auto (20 px), Small 14, Medium 17, Large 20, XL 24 px, each with its grid
+key DOWN
+key ENTER
+wait 300
+expect_rows "Auto (20 px)" "Small 14 px" "Medium 17 px" "Large 20 px" "XL 24 px"
+expect_clear "Columns x rows. Applies the next time the terminal opens."
+shot term_list
+key DOWN
+key DOWN
+key ENTER
+wait 300
+expect_text "Medium 17 px"
+shot term_picked
+key ENTER
+wait 300
+shot term_list_again
+key UP
+key UP
+key ENTER
+wait 300
+expect_text "Auto (20 px)"
+
+# Screen size: Auto (board profile), 2.8 ... 10.1 in; the installer's 7 in is the size in use
+key DOWN
+key ENTER
+wait 300
+expect_rows "Auto (board profile)" "2.8 in" "3.5 in" "4.3 in" "5 in" "5.5 in" "7 in" "8 in" "10.1 in"
+shot size_list
+expect_clear "In use: 7 in from the installer. A change applies at next start."
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 300
+expect_text "4.3 in"
+shot size_picked
+key ENTER
+wait 300
+shot size_list_again
+key UP
+key UP
+key UP
+key ENTER
+wait 300
+expect_text Auto
+shot size_auto_again

@@ -98,7 +98,8 @@ enum class RowKind { Nav, Choice, Toggle, Slider, Info, Network, Busy };
 struct RowSpec {
     RowKind kind = RowKind::Nav;
     std::string label;  /* Info: the key */
-    std::string value;  /* Nav: current value (green, right); Slider: value text; Info: the value; Network: "Saved" */
+    std::string value;  /* Nav: current value (green, right); Slider: value text; Info: the value; Network: "Saved";
+                         * Choice: an optional note (grey, right, left of the check mark; empty: none, the row as before) */
     bool on = false;    /* Choice: carries the check mark; Toggle: switch state; Network: connected (check, bold) */
     int slider_min = 0; /* Slider */
     int slider_max = 100;
@@ -146,6 +147,7 @@ private:
         lv_obj_t *control = nullptr; /* switch, slider, spinner (Busy) */
         lv_obj_t *check = nullptr;  /* Network: the connected check mark */
         lv_obj_t *chevron = nullptr; /* Nav with RowSpec::chevron */
+        lv_obj_t *note = nullptr;   /* Choice with a RowSpec::value note */
         lv_obj_t *lock = nullptr;   /* Network: the lock (shackle and body) */
         lv_obj_t *bars[4] = {};     /* Network: signal bars */
         int distance = -1;          /* styled for this distance from the centre (-1: not yet) */
@@ -256,7 +258,7 @@ int status_strip_left();
 lv_obj_t *add_title(lv_obj_t *parent, const char *text);
 
 /* The status line's colour: green, amber (partly failed, task 014 P3d), red. */
-enum class CaptionTone { Normal, Warn, Error };
+enum class CaptionTone { Normal, Warn, Error, Hint /* grey: a plain hint ("applies at next start"), not a state */ };
 
 class Page {
 public:

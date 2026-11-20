@@ -1,0 +1,37 @@
+# Settings > Screen > Idle dim level, Terminal text size, Screen size at 320x480 (profile p320: no clipping on the
+# narrowest screen): the section, the three lists with their hints and notes. Review only.
+title p320 settings screen prefs
+review
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_BOARD pi3a-luckfox35
+backlight levels
+keyboards 0
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch Settings
+wait 300
+key ENTER
+wait 300
+shot p320_prefs_section
+# Brightness, DarkTime, PDA mode (offered on this profile), then the three rows
+key DOWN
+key DOWN
+key DOWN
+key ENTER
+wait 300
+shot p320_prefs_dim
+key ESC
+key DOWN
+key ENTER
+wait 300
+shot p320_prefs_term
+key ESC
+key DOWN
+key ENTER
+wait 300
+shot p320_prefs_size
