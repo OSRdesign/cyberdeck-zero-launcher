@@ -4,6 +4,11 @@ Study, 2026-11-18. Research and design only: no product code, no board access, n
 by the ROADMAP exploration idea ("A study first (report 031 when written)") and the reports index lists it as "never
 written", so this report takes it. Status: owner decisions open (section 9).
 
+Addendum 2026-11-20 (installer fix, branch installer-armbian, board facts from the Orange Pi Zero 2W probe): the installer
+called an Orange Pi Zero 2W (Armbian, no config.txt) the Raspberry Pi "zero2w" and died at the boot configuration. Board
+detection now needs a Raspberry Pi device tree (compatible raspberrypi / brcm,bcm), and the boot configuration step is
+skipped, with a message, where there is no config.txt and cmdline.txt (section 4.3: Armbian boards use armbianEnv.txt).
+
 Markers: **V** verified (this repository at `github/main` e3f3d382, or a primary source fetched on 2026-11-18, cited),
 **M** measured on our boards (report 021 addenda, roadmap rows, the owner's board notes), **I** inferred, **[U]**
 unverified (not checked; do not build on it without a probe).
