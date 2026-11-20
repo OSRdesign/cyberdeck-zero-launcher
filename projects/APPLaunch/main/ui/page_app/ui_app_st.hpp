@@ -61,8 +61,10 @@ class UISTPage : public AppPage
     static constexpr int BIG_COLS = 80;
     static constexpr int BIG_ROWS = 24;
     static constexpr int BIG_BOTTOM_H = 15;
-    static constexpr int MAX_COLS = BIG_COLS;
-    static constexpr int MAX_ROWS = BIG_ROWS;
+    // buffer size: the grid on a screen larger than 720x720 px is not capped to BIG_COLS x BIG_ROWS
+    // (st_viewport::max_cols_for / max_rows_for; up to this safety bound)
+    static constexpr int MAX_COLS = 255;
+    static constexpr int MAX_ROWS = 255;
     static constexpr int SCROLLBACK_MAX_ROWS = 200;
     static constexpr int SCROLLBAR_W = 3;
     static constexpr int BOTTOM_BAR_SLOTS = 5;

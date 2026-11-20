@@ -22,7 +22,9 @@ Setup (Controller): install the bundle; note the board's screen diagonal and whi
 ## B. Terminal text size (3 minutes)
 6. Open Terminal text size: Auto (20 px) (14 px on a portrait screen under 480 wide), Small 14, Medium 17, Large 20, XL
    24 px. Every row shows a grey grid note ("57 x 24": columns x rows); a grey line says "Columns x rows. Applies the
-   next time the terminal opens." Nothing is cut off.
+   next time the terminal opens." Nothing is cut off. On a screen up to 800x480 or 720x720 (either way up) no note
+   exceeds 80 x 24; on a larger one (1024x600, 1280x720, 1920x1080, ...) the grid is not capped, e.g. Small 14 px on
+   1280x720 gives "160 x 40".
 7. Pick Small 14 px. Open the CLI: the text is small and `tput cols; tput lines` give the grid the note showed. Pick XL
    24 px, leave the CLI and open it again: larger text, the grid of the XL note. An SSH session opened from the launcher
    (Home > SSH) has the same size.

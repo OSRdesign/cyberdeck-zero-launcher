@@ -60,8 +60,8 @@ View terminal_view(Screen screen, MeasureFn measure)
         v.labels.push_back(term_label(px, auto_px));
         const Cell cell = measure ? measure(shown) : Cell{};
         v.notes.push_back(cell.w > 0 && cell.h > 0 && screen.w > 0 && screen.h > 0
-                              ? grid_text(st_viewport::grid_cols(screen.w, cell.w, st_viewport::kMaxCols),
-                                          st_viewport::grid_rows(screen.h, cell.h, st_viewport::kMaxRows))
+                              ? grid_text(st_viewport::grid_cols(screen.w, cell.w, st_viewport::max_cols_for(screen.w, screen.h)),
+                                          st_viewport::grid_rows(screen.h, cell.h, st_viewport::max_rows_for(screen.w, screen.h)))
                               : std::string());
     }
     v.current = row;

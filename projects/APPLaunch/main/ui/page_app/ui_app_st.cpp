@@ -105,11 +105,14 @@ void UISTPage::init_geometry()
         if (advance > 0) char_w_ = advance;
         if (height > 0) char_h_ = height;
     }
-    // the grid limits Settings > Screen > Terminal text size shows its grids with
-    static_assert(MAX_COLS == st_viewport::kMaxCols && MAX_ROWS == st_viewport::kMaxRows,
-                  "st_viewport::kMaxCols / kMaxRows are the terminal's grid limits");
-    normal_cols_ = st_viewport::grid_cols(term_w_, char_w_, MAX_COLS);
-    normal_rows_ = st_viewport::grid_rows(term_h_, char_h_, MAX_ROWS);
+    // the grid limits Settings > Screen > Terminal text size shows its grids with: 80x24 up to 720x720 px, else the
+    // lifted bound (the buffers' size)
+    static_assert(BIG_COLS == st_viewport::kMaxCols && BIG_ROWS == st_viewport::kMaxRows,
+                  "st_viewport::kMaxCols / kMaxRows are the capped grid (the 80x24 view)");
+    static_assert(MAX_COLS == st_viewport::kLiftedMaxCols && MAX_ROWS == st_viewport::kLiftedMaxRows,
+                  "st_viewport::kLiftedMaxCols / kLiftedMaxRows are the terminal's buffer size");
+    normal_cols_ = st_viewport::grid_cols(term_w_, char_w_, st_viewport::max_cols_for(term_w_, term_h_));
+    normal_rows_ = st_viewport::grid_rows(term_h_, char_h_, st_viewport::max_rows_for(term_w_, term_h_));
     term_cols_ = normal_cols_;
     term_rows_ = normal_rows_;
     scroll_bot_ = normal_rows_ - 1;

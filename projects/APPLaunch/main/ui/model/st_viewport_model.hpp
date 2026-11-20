@@ -60,9 +60,30 @@ inline int font_px_resolved(int w, int h, int stored, const char *env)
 }
 
 /* The grid of the full screen for a font cell: the terminal's own clamps (UISTPage::init_geometry: at least 20 columns
- * and 8 rows, at most max_cols x max_rows, its BIG_COLS x BIG_ROWS). */
-constexpr int kMaxCols = 80; /* UISTPage::BIG_COLS x BIG_ROWS (static_assert in ui_app_st.cpp) */
+ * and 8 rows, at most max_cols x max_rows, see max_cols_for / max_rows_for). */
+constexpr int kMaxCols = 80; /* the capped grid: UISTPage::BIG_COLS x BIG_ROWS (static_assert in ui_app_st.cpp) */
 constexpr int kMaxRows = 24;
+
+/* The 80x24 cap holds on screens up to and including 800x480 or 720x720 (either orientation): a screen of at most
+ * 720 * 720 px. Larger screens (1024x600, 1280x720, 1920x1080, ...) get the grid the text size gives, up to
+ * kLiftedMaxCols x kLiftedMaxRows (a safety bound; UISTPage::MAX_COLS x MAX_ROWS, the size of its buffers). w and h are
+ * the display's logical resolution (after rotation), the one the terminal lays out on. (Owner decision 2026-11-20.) */
+constexpr long kCapScreenPx = 720L * 720L;
+constexpr int kLiftedMaxCols = 255;
+constexpr int kLiftedMaxRows = 255;
+constexpr bool grid_capped(int w, int h)
+{
+    return static_cast<long>(w) * static_cast<long>(h) <= kCapScreenPx;
+}
+constexpr int max_cols_for(int w, int h)
+{
+    return grid_capped(w, h) ? kMaxCols : kLiftedMaxCols;
+}
+constexpr int max_rows_for(int w, int h)
+{
+    return grid_capped(w, h) ? kMaxRows : kLiftedMaxRows;
+}
+
 constexpr int kMinCols = 20;
 constexpr int kMinGridRows = 8;
 constexpr int clamp_to(int value, int low, int high)
