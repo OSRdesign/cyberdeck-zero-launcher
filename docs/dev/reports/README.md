@@ -54,6 +54,7 @@ Reports 001 to 019 are mostly task hand-offs (`NNN-handoff.md`, by the builder) 
 | [`027-net-toolbox.md`](027-net-toolbox.md) | Net Toolbox: a network toolbox app with live, visual tools |
 | [`028-x86-port.md`](028-x86-port.md) | x86 (amd64) port of the whole stack: launcher, Settings, Store backend, apps |
 | [`029-upstream-decoupling.md`](029-upstream-decoupling.md) | Decoupling from the upstream CardputerZero launcher: remove the code we do not use |
+| [`031-smarter-installer-screen-test.md`](031-smarter-installer-screen-test.md) | Smarter installer for unknown boards, and testing the screen during installation (study, 2026-11-18): safe detection inventory, an install-time screen test (patterns, touch math, brightness), tryboot-based trial for boot changes, a panel catalog, the generic profile; phases P0-P3; owner decisions D1-D14 open. The number was reserved by the ROADMAP idea |
 | [`032-apps-status-strip.md`](032-apps-status-strip.md) | The status strip in every app: battery everywhere (A), Wi-Fi and Bluetooth on the FZ-M1 (B) |
 | [`033-mesh-hop-cli.md`](033-mesh-hop-cli.md) | A CLI / terminal for Mesh Hop: what it would be and how to build it |
 | [`035-board-state-and-app-sdk.md`](035-board-state-and-app-sdk.md) | board.state, app-to-launcher requests and a mini app SDK |
@@ -86,7 +87,6 @@ not be established from git, this says so.
 | No. | Subject | Where it is known to live |
 | --- | --- | --- |
 | 030 | Board capabilities (sound, battery, brightness) and run-time detection (v0.8.4) | git tag `archive/report-030-capabilities` (commit `a483e3c5`, 2026-10-22), file `docs/dev/reports/030-board-capabilities.md`; read it with `git show archive/report-030-capabilities:docs/dev/reports/030-board-capabilities.md` |
-| 031 | Smarter installer for unknown boards (ROADMAP: "report 031 when written") | never written: no file or git ref found |
 | 045 | The study of an emulator of old handheld devices (parked; ROADMAP "Exploration ideas") | apps repo, tag `archive/cloudpilot-study` |
 | 048 | The Store, the legacy apps and the `small-screen` branch (study, 2026-10-31) | cited, not in the repository: no git ref has it. A local file `048-store-and-small-screen.md` exists on the owner's machine (folder `pkg-out-store-study` of the working area; the same folder also holds the original of report 049, which is now in this directory) |
 | 057 | Reticulum on the cyberdeck (study, 2026-11-07; decisions D1-D19 accepted) | branch `study-reticulum` (pull request #148, not merged), file `docs/dev/reports/057-reticulum-study.md` |
