@@ -1453,6 +1453,34 @@ check "fake pi4b-dsi install: exit 0, profile written with the dim level" '[ $RC
 check "fake pi4b-dsi install: config.txt untouched (no backup, no overlay, no dtc)" '[ "$(cksum < "$R/boot/firmware/config.txt")" = "$CFG_SUM" ] && [ ! -e "$R/boot/firmware/config.txt.bak-applaunch" ] && [ ! -e "$R/boot/firmware/overlays/waveshare-pwm-backlight.dtbo" ] && ! called "dtc " && has "pi4b-dsi: config.txt left as it is"'
 check "fake pi4b-dsi install: cmdline.txt gets the two console arguments only" '[ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0 vt.global_cursor_default=0 consoleblank=0" ] && ! grep -q fbcon "$R/boot/firmware/cmdline.txt"'
 
+# an Orange Pi Zero 2W (Allwinner H618, Armbian trixie): its device-tree model also says "Zero 2W", but it is no Raspberry
+# Pi. Not the deck (zero2w); no config.txt, no cmdline.txt (armbianEnv.txt and boot.cmd), no polkitd: the boot
+# configuration is skipped and the install goes on to enable and start the service (a real run died at cp config.txt)
+R=$(root opizero2w)
+run --dry-run
+check "orangepi dry-run: exit 0, not detected as the deck (zero2w), unknown board" '[ $RC = 0 ] && ! has "board: zero2w" && has "board: unknown" && ! has "zero2w: no profile file"'
+check "orangepi dry-run: boot configuration skipped, nothing about a PWM backlight overlay" 'has "boot configuration: skipped (not a Raspberry Pi firmware board: /boot/config.txt not found); nothing changed" && ! has "PWM backlight overlay" && ! has "cmdline cursor"'
+run --dry-run --force
+check "orangepi dry-run --force: says plainly that generic settings are used" '[ $RC = 0 ] && has "unknown board: using generic settings" && has "boot configuration: skipped"'
+run --plan --force
+check "orangepi --plan: board empty (not zero2w)" '[ $RC = 0 ] && has "board=" && ! has "board=zero2w"'
+fullboot() { : > "$CALLS"; OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1     sh "$BUN/install.sh" --user "$U" --no-default-source "$@" 2>&1); RC=$?; }
+R=$(root opizero2w)
+fullboot
+check "orangepi install without --force: stops at the unknown board, nothing written" '[ $RC = 1 ] && has "stopping here" && [ ! -e "$R/etc/applaunch" ]'
+R=$(root opizero2w)
+BOOT_SUM=$(snapshot "$R/boot")
+fullboot --force
+check "orangepi --force install: exit 0, generic settings, boot configuration skipped without error" '[ $RC = 0 ] && has "unknown board: using generic settings" && has "boot configuration: skipped (not a Raspberry Pi firmware board: /boot/config.txt not found); nothing changed" && ! has "cannot stat"'
+check "orangepi --force install: /boot untouched (no config.txt, no cmdline.txt, no backup, no dtc)" '[ "$BOOT_SUM" = "$(snapshot "$R/boot")" ] && [ ! -e "$R/boot/config.txt" ] && [ ! -e "$R/boot/cmdline.txt" ] && ! called "dtc " && ! has "reboot now"'
+check "orangepi --force install: units written, user service enabled and started, linger, console unit" '[ -f "$R$UHOME/.config/systemd/user/cyberdeckzero.service" ] && called "systemctl --user enable cyberdeckzero.service" && called "systemctl --user restart cyberdeckzero.service" && called "loginctl enable-linger $U" && called "systemctl enable --now cyberdeckzero-console.service"'
+fullboot --force
+check "orangepi --force install, second run: exit 0 again" '[ $RC = 0 ] && has "boot configuration: skipped"'
+# a Raspberry Pi board whose firmware folder lacks config.txt (damaged image): skipped too, not a crash
+R=$(root zero2w)
+fullboot
+check "Pi Zero 2 W without config.txt: boot configuration skipped, install goes on" '[ $RC = 0 ] && has "boot configuration: skipped (/boot/config.txt or cmdline.txt not found); nothing changed" && called "systemctl --user enable cyberdeckzero.service"'
+
 # --screen-size and --panel-mm in a whole install: install.conf records them (empty when not given), a manual re-run keeps
 # them, and the question on a terminal. A terminal is faked with APPLAUNCH_INSTALL_ASSUME_TTY=1, a hook honoured only
 # together with SYSROOT (the tests' fake root), so it cannot switch the question on for a real run; a real one (script) follows.

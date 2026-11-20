@@ -210,6 +210,15 @@ fi
 # ---------------------------------------------------------------------------------------------------------
 rd() { [ -r "$1" ] && tr -d '\0' < "$1" 2>/dev/null | head -n 1; }
 MODEL=$(rd "$SYSROOT/proc/device-tree/model" || true)
+# A Raspberry Pi's device tree names it in "compatible" (raspberrypi,... and brcm,bcm...); a model string alone is not
+# enough: an Orange Pi Zero 2W also says "Zero 2W". Without a compatible file (the test fixtures), the model has to
+# start with "Raspberry Pi".
+COMPAT=$(rd "$SYSROOT/proc/device-tree/compatible" || true)
+IS_RPI=0
+case "$COMPAT" in
+    *raspberrypi*|*brcm,bcm*) IS_RPI=1 ;;
+    "") case "$MODEL" in "Raspberry Pi"*) IS_RPI=1 ;; esac ;;
+esac
 # a PC: x86_64 and DMI (see "PC" below)
 MACHINE=${INSTALL_MACHINE:-$(uname -m)}
 DMI="$SYSROOT/sys/class/dmi/id"
@@ -366,7 +375,7 @@ if [ -n "$BOARD_ARG" ]; then
     esac
 else
     case "$MODEL" in
-        *"Zero 2"*) BOARD=zero2w ;;
+        *"Zero 2"*) if [ "$IS_RPI" = 1 ]; then BOARD=zero2w; fi ;;
         *"Raspberry Pi 3 Model A Plus"*)
             # one panel or the other; both connected at once is not guessed
             SPI_FB=""; DSI_FB=""
@@ -498,8 +507,19 @@ if [ "$BOARD" = zero2w ]; then
 elif [ -z "$BOARD" ] && [ "$IS_PC" = 0 ]; then
     case "$MODEL" in
         *"Raspberry Pi 3 Model A Plus"*|*"Raspberry Pi 4 Model B"*|*"Raspberry Pi 5"*|*"Compute Module 5"*) ;;
-        *) DECK_BOOT=1 ;;
+        *) if [ "$IS_RPI" = 1 ]; then DECK_BOOT=1; fi ;;
     esac
+fi
+# The boot configuration (config.txt, cmdline.txt) exists on Raspberry Pi firmware boards only. Another board (an Orange Pi
+# with Armbian: /boot/armbianEnv.txt and boot.cmd) is left alone, and the install goes on: the step is optional.
+BOOT_FW=1
+BOOT_FW_WHY=""
+if [ "$IS_PC" = 0 ]; then
+    if [ "$IS_RPI" = 0 ]; then
+        BOOT_FW=0
+        if [ -f "$BOOT/config.txt" ]; then BOOT_FW_WHY="not a Raspberry Pi firmware board: the device tree is not a Raspberry Pi's"
+        else BOOT_FW_WHY="not a Raspberry Pi firmware board: ${BOOT#"$SYSROOT"}/config.txt not found"; fi
+    fi
 fi
 # The Pi 5 + HyperPixel 4's own PWM backlight overlay (brightness levels, report 030 c-4): only when asked with
 # --pwm-backlight, only on that board, on the appliance and the desktop variant alike; --no-boot-config wins.
@@ -510,7 +530,7 @@ HP_DTBO=hyperpixel4-pwm-backlight.dtbo
 HP_LINE=dtoverlay=hyperpixel4-pwm-backlight
 # true on a model whose PWM0 has no other user (no headphone jack): there the 3.5" SPI panel (pi3a-luckfox35) gets its
 # PWM backlight by default (LF_SETUP below)
-lf_pwm_free() { case "$MODEL" in *"Zero 2"*) return 0 ;; esac; return 1; }
+lf_pwm_free() { [ "$IS_RPI" = 1 ] || return 1; case "$MODEL" in *"Zero 2"*) return 0 ;; esac; return 1; }
 if [ "$PWM_BACKLIGHT" = 1 ]; then
     if [ "$BOARD" = pi3a-luckfox35 ] && lf_pwm_free; then
         HP_PWM_NOTE="--pwm-backlight: not needed on pi3a-luckfox35 on a Zero 2 W (its panel's PWM backlight needs no option): ignored"
@@ -1343,7 +1363,8 @@ if [ "$DRY" = 1 ]; then
     if [ -z "$BOARD" ]; then
         if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
         generic_hint
-        [ "$FORCE" = 1 ] || echo "install.sh would stop here (--force installs without a profile)."
+        if [ "$FORCE" = 1 ]; then echo "unknown board: using generic settings (--force: no board profile)."
+        else echo "install.sh would stop here (--force installs without a profile)."; fi
     elif [ "$BOARD" != zero2w ]; then
         if [ -n "$SCREEN_NOTE" ]; then echo "screen: panel size $PANEL_IN_USE mm ($SCREEN_NOTE)"
         elif [ -n "$PANEL_IN_USE" ]; then echo "screen: panel size $PANEL_IN_USE mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)"
@@ -1368,6 +1389,8 @@ if [ "$DRY" = 1 ]; then
         echo "boot config: the PWM backlight overlay only (--pwm-backlight, below); cmdline.txt left alone on a desktop board"
     elif [ "$SESSION" = desktop ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
+    elif [ "$BOOT_FW" = 0 ] && [ "$BOOT_CONFIG" = 1 ]; then
+        echo "boot configuration: skipped ($BOOT_FW_WHY); nothing changed"
     elif [ "$DECK_BOOT" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
     elif [ "$HP_PWM" = 1 ]; then
@@ -1705,6 +1728,7 @@ if [ -z "$BOARD" ]; then
     if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
     generic_hint
     [ "$FORCE" = 1 ] || { echo "stopping here (use --force to install anyway, without a board profile)" >&2; exit 1; }
+    echo "unknown board: using generic settings (--force: no board profile)"
 fi
 if [ "$SESSION" = desktop ]; then
     echo "session: desktop ($SESSION_WHY): the launcher is started from the applications menu"
@@ -1855,7 +1879,7 @@ if [ -n "$SYSFS_BL" ]; then
     chmod 644 "$UDEV_DIR/$SYSFS_BL_RULE"
     echo "backlight levels ($SYSFS_BL): /etc/udev/rules.d/$SYSFS_BL_RULE"
 fi
-udevadm control --reload
+udevadm control --reload || echo "WARNING: udevadm could not reload the rules (they apply after the next boot)" >&2
 udevadm trigger --subsystem-match=input --subsystem-match=misc --subsystem-match=backlight || true
 # netdev (the polkit rule for NetworkManager) is a Debian group that other distributions may not have
 if ! getent group netdev >/dev/null 2>&1; then groupadd -f netdev && echo "group netdev created (50-networkmanager-netdev.rules)"; fi
@@ -2004,6 +2028,12 @@ if [ "$IS_PC" = 1 ]; then
 elif [ "$SESSION" = desktop ]; then
     say "Boot configuration"
     echo "desktop board: config.txt and cmdline.txt left as they are"
+elif [ "$BOOT_CONFIG" = 1 ] && [ "$BOOT_FW" = 1 ] && { [ ! -f "$BOOT/config.txt" ] || [ ! -f "$BOOT/cmdline.txt" ]; }; then
+    say "Boot configuration"
+    echo "boot configuration: skipped (${BOOT#"$SYSROOT"}/config.txt or cmdline.txt not found); nothing changed"
+elif [ "$BOOT_CONFIG" = 1 ] && [ "$BOOT_FW" = 0 ]; then
+    say "Boot configuration"
+    echo "boot configuration: skipped ($BOOT_FW_WHY); nothing changed"
 elif [ "$BOOT_CONFIG" = 1 ]; then
     say "Boot configuration ($( { [ "$DECK_BOOT" = 1 ] || [ "$LF_SETUP" = 1 ]; } && echo 'PWM backlight, ' )hidden console cursor)"
     CONFIG="$BOOT/config.txt"
