@@ -9,6 +9,30 @@ called an Orange Pi Zero 2W (Armbian, no config.txt) the Raspberry Pi "zero2w" a
 detection now needs a Raspberry Pi device tree (compatible raspberrypi / brcm,bcm), and the boot configuration step is
 skipped, with a message, where there is no config.txt and cmdline.txt (section 4.3: Armbian boards use armbianEnv.txt).
 
+Addendum 2026-11-21 (installer follow-ups, branch installer-armbian-2, local; from the Orange Pi Zero 2W brought to a
+working state by hand, Armbian 26.11, kernel 6.18.64-current-sunxi64, panel Waveshare 3.5" RPi LCD (F)). Built and
+tested with fixtures only (M on the board for the hand-made set-up, I for install.sh doing it; board retest pending):
+- **Backlight with levels on boards that are not a Raspberry Pi.** `pi3a-luckfox35` knew only `backlight_gpio` or the
+  Pi `config.txt` PWM state (`LF_PWM`), so on the Orange Pi it ignored the working `backlight_pwm`. Now, without a
+  Raspberry Pi device tree, the profile takes what `/sys/class/backlight` has: a device with `max_brightness` above 1
+  (`backlight_pwm` first, else the only one) gives `APPLAUNCH_BACKLIGHT=sysfs:...`, `APPLAUNCH_DIM_PERCENT=10` and
+  `92-applaunch-backlight-sysfs.rules`; the on/off `backlight_gpio` keeps the `gpio:` form and its rule; none, no line.
+  The Raspberry Pi bodies are byte for byte as before (the checksum tests). Fixture `opizero2w-spi35-pwm`.
+- **`--spi-panel waveshare35f [--soft-pwm-backlight]`** (Allwinner H616 / H618 with `/boot/armbianEnv.txt` only; never a
+  Raspberry Pi): the hand-made set-up made repeatable: `/lib/firmware/st7796s.bin` (sha256 checked), `modules-load.d`,
+  the overlay compiled with `dtc -@` to `/boot/overlay-user/spi35-st7796s.dtbo` (gpio-backlight, or the software PWM
+  `pwm-gpio` DKMS module), always the DKMS module `drm-mipi-dbi-chunk` (the running kernel's `drm_mipi_dbi.c` fetched for
+  its upstream tag from git.kernel.org, `chunk.patch`: SPI transfers capped at 64 KiB for the H618's 4 GB DMA limit and
+  swiotlb's 256 KiB segments; `BUILD_EXCLUSIVE_KERNEL` for that series; no download when installed), `user_overlays=` in
+  `armbianEnv.txt` (dated backup), never `mem=`, the `pi3a-luckfox35` profile with the panel's framebuffer foreseen
+  (`/dev/fb0` when no framebuffer exists now: no HDMI monitor at boot means no sun4i-drm fbdev), reboot needed. Every
+  fallible step runs before any file is put in place; a failure removes this run's DKMS modules. This is section 4.3's
+  "Armbian `user_overlays`" route, for one known panel (the catalog of section 5 is still to come).
+- **`--network-manager [--yes]`**: the console recipe the install printed, done by install.sh at the end of the install
+  (apt `network-manager polkitd`, `/etc/netplan.bak-applaunch`, `90-applaunch-networkmanager.yaml`, `netplan generate`,
+  no apply), reboot needed; when the default route is over Wi-Fi a terminal is asked and a run without one needs `--yes`.
+  On the board (by hand) the netplan Wi-Fi came back under NetworkManager after the reboot (M).
+
 Markers: **V** verified (this repository at `github/main` e3f3d382, or a primary source fetched on 2026-11-18, cited),
 **M** measured on our boards (report 021 addenda, roadmap rows, the owner's board notes), **I** inferred, **[U]**
 unverified (not checked; do not build on it without a probe).
