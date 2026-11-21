@@ -2,7 +2,8 @@
 # with their grey chevrons and values, each choice list with its grey hint and notes, a pick stored and shown again.
 # Release build, a board profile (APPLAUNCH_BOARD: the Screen size row), a levels backlight (the Idle dim level row), the
 # installer's install.conf with --screen-size 7. Review only: no golden. The grid notes are the terminal's own: its font
-# cell measured with the real font, its clamps (20..80 columns, 8..24 rows).
+# cell measured with the real font, its clamps (20..255 columns x 8..255 rows: the grid fills the screen, no 80x24
+# cap).
 title settings screen prefs
 review
 sizes 480x320 640x480 800x480 720x720 480x480 1280x720

@@ -105,11 +105,11 @@ void UISTPage::init_geometry()
         if (advance > 0) char_w_ = advance;
         if (height > 0) char_h_ = height;
     }
-    // the grid limits Settings > Screen > Terminal text size shows its grids with
+    // the grid fills the screen (no 80x24 cap); the buffers hold the safety bound
     static_assert(MAX_COLS == st_viewport::kMaxCols && MAX_ROWS == st_viewport::kMaxRows,
-                  "st_viewport::kMaxCols / kMaxRows are the terminal's grid limits");
-    normal_cols_ = st_viewport::grid_cols(term_w_, char_w_, MAX_COLS);
-    normal_rows_ = st_viewport::grid_rows(term_h_, char_h_, MAX_ROWS);
+                  "st_viewport::kMaxCols / kMaxRows are the terminal's buffer size");
+    normal_cols_ = st_viewport::grid_cols(term_w_, char_w_);
+    normal_rows_ = st_viewport::grid_rows(term_h_, char_h_);
     term_cols_ = normal_cols_;
     term_rows_ = normal_rows_;
     scroll_bot_ = normal_rows_ - 1;

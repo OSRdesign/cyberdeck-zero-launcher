@@ -67,11 +67,39 @@ int main(int argc, char **argv)
         assert(font_px_resolved(480, 800, 14, "17") == 14);
         // the grid each choice shows on a 480x800 screen with the real JetBrains Mono Bold metrics the terminal
         // measures (advance 0.6 em, line 1.32 em, rounded: 14 px = 8x18, 17 px = 10x22, 20 px = 12x26, 24 px = 14x32)
-        assert(st_viewport::grid_cols(480, 8, st_viewport::kMaxCols) == 60);
-        assert(st_viewport::grid_cols(480, 10, st_viewport::kMaxCols) == 48);
-        assert(st_viewport::grid_cols(480, 12, st_viewport::kMaxCols) == 40);
-        assert(st_viewport::grid_cols(480, 14, st_viewport::kMaxCols) == 34);
-        assert(st_viewport::grid_rows(800, 32, st_viewport::kMaxRows) == 24); /* the terminal never has more than 24 rows */
+        assert(st_viewport::grid_cols(480, 8) == 60);
+        assert(st_viewport::grid_cols(480, 10) == 48);
+        assert(st_viewport::grid_cols(480, 12) == 40);
+        assert(st_viewport::grid_cols(480, 14) == 34);
+        assert(st_viewport::grid_rows(800, 32) == 25); /* no 80x24 cap: the rows the screen holds */
+    }
+    {
+        // no 80x24 cap (owner decision 2026-11-20): the grid is the whole screen over the cell, at least 20 x 8, at most
+        // 255 x 255. The grid each choice gives, Auto being 20 px on all of these.
+        struct CellPx { int px, w, h; };
+        const CellPx cells[] = {{14, 8, 18}, {17, 10, 22}, {20, 12, 26}, {24, 14, 32}};
+        struct Case { int w, h; int grid[4][2]; };
+        const Case cases[] = {
+            {800, 480, {{100, 26}, {80, 21}, {66, 18}, {57, 15}}},
+            {480, 800, {{60, 44}, {48, 36}, {40, 30}, {34, 25}}},     /* portrait */
+            {720, 720, {{90, 40}, {72, 32}, {60, 27}, {51, 22}}},     /* the HackBerry: fills the square */
+            {1024, 600, {{128, 33}, {102, 27}, {85, 23}, {73, 18}}},
+            {600, 1024, {{75, 56}, {60, 46}, {50, 39}, {42, 32}}},
+            {1280, 720, {{160, 40}, {128, 32}, {106, 27}, {91, 22}}},
+            {1920, 1080, {{240, 60}, {192, 49}, {160, 41}, {137, 33}}},
+            {1080, 1920, {{135, 106}, {108, 87}, {90, 73}, {77, 60}}},
+        };
+        for (const Case &c : cases) {
+            for (int i = 0; i < 4; ++i) {
+                const int cols = st_viewport::grid_cols(c.w, cells[i].w);
+                const int rows = st_viewport::grid_rows(c.h, cells[i].h);
+                if (cols != c.grid[i][0] || rows != c.grid[i][1])
+                    std::fprintf(stderr, "%dx%d %d px: %d x %d\n", c.w, c.h, cells[i].px, cols, rows);
+                assert(cols == c.grid[i][0] && rows == c.grid[i][1]);
+            }
+            /* Auto is 20 px on every one of these screens (none is a narrow portrait) */
+            assert(st_viewport::font_px_resolved(c.w, c.h, 0, nullptr) == 20);
+        }
     }
 
     // ---- screen size: the list, validation, mm
