@@ -1085,6 +1085,7 @@ for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backli
     cp "$D/$f" "$BUN/payload/etc/"
 done
 chmod 755 "$BUN/payload/etc/"*      # as in the real bundle (built from a Windows checkout: drvfs files are rwx)
+cp -R "$D/panels" "$BUN/payload/panels"      # install.sh --spi-panel's files, as build.sh copies them
 echo png > "$BUN/payload/share/share/images/setting_100.png"
 echo ofl > "$BUN/payload/share/share/font/JetBrainsMono-OFL.txt"
 ( cd "$BUN/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$BUN/payload/share.manifest"
@@ -1480,6 +1481,286 @@ check "orangepi --force install, second run: exit 0 again" '[ $RC = 0 ] && has "
 R=$(root zero2w)
 fullboot
 check "Pi Zero 2 W without config.txt: boot configuration skipped, install goes on" '[ $RC = 0 ] && has "boot configuration: skipped (/boot/config.txt or cmdline.txt not found); nothing changed" && called "systemctl --user enable cyberdeckzero.service"'
+
+# --- the 3.5" SPI panel's backlight on a board that is not a Raspberry Pi (pi3a-luckfox35 without config.txt): what
+# /sys/class/backlight has. Fixture opizero2w-spi35-pwm: the Orange Pi Zero 2W as set up by hand on 2026-11-21 (the panel on
+# fb0, HDMI not connected at boot, the software PWM backlight backlight_pwm with 10 levels: max_brightness 9). The SPI
+# connector on card2 is inferred (card0 sun4i-drm, card1 panfrost in the probe); the detection takes any card.
+LF_NONPI_KEYS='APPLAUNCH_BOARD=pi3a-luckfox35
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=480x320
+APPLAUNCH_ROTATE=90
+APPLAUNCH_COMPAT_SCALE=1
+APPLAUNCH_PANEL_MM=79x49
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm
+APPLAUNCH_DIM_PERCENT=10
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0'
+R=$(root opizero2w-spi35-pwm); P="$R/etc/applaunch/board.conf"
+run --dry-run --board pi3a-luckfox35
+check "orangepi backlight_pwm (max 9): the profile names it as sysfs: with the dim level 10, its udev rule, no gpio form" '[ $RC = 0 ] && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && has "APPLAUNCH_DIM_PERCENT=10" && has "92-applaunch-backlight-sysfs.rules (video group may set the brightness of backlight_pwm)" && ! has "APPLAUNCH_BACKLIGHT=gpio:" && ! has "92-applaunch-backlight-gpio"'
+check "orangepi backlight_pwm: the panel on fb0, boot configuration skipped, nothing written" 'has "APPLAUNCH_FB=/dev/fb0" && has "boot configuration: skipped (not a Raspberry Pi firmware board" && [ ! -e "$R/etc" ]'
+run --board-only --board pi3a-luckfox35
+check "orangepi backlight_pwm --board-only: the hand-made working profile's keys, exactly" '[ $RC = 0 ] && [ "$(grep -v "^#" "$P")" = "$LF_NONPI_KEYS" ]'
+check "orangepi backlight_pwm --board-only: the sysfs rule for backlight_pwm (chgrp video, chmod g+w), no gpio rule" 'grep -q "KERNEL==\"backlight_pwm\"" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" && grep -q "chgrp video /sys/class/backlight/%k/brightness; chmod g+w /sys/class/backlight/%k/brightness" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" && [ ! -e "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+SUM1=$(cksum < "$P")
+run --board-only --board pi3a-luckfox35
+check "orangepi backlight_pwm: second run idempotent" '[ $RC = 0 ] && has "already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && [ ! -e "$P.bak" ]'
+# on/off backlight_gpio (max_brightness 1): the gpio form and its rule, no dim line
+R=$(root opizero2w-spi35-pwm); rm -rf "$R/sys/class/backlight/backlight_pwm"; mkdir -p "$R/sys/class/backlight/backlight_gpio"
+echo 1 > "$R/sys/class/backlight/backlight_gpio/max_brightness"
+run --dry-run --board pi3a-luckfox35
+check "orangepi backlight_gpio (on/off): the gpio form, its rule, no dim level, no sysfs rule" '[ $RC = 0 ] && has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" && has "92-applaunch-backlight-gpio.rules" && ! has "APPLAUNCH_DIM_PERCENT" && ! has "92-applaunch-backlight-sysfs"'
+# no backlight at all: no brightness control (no line, no rule)
+rm -rf "$R/sys/class/backlight"
+run --dry-run --board pi3a-luckfox35
+check "orangepi without a backlight: no APPLAUNCH_BACKLIGHT, no dim level, no rule" '[ $RC = 0 ] && has "board: pi3a-luckfox35" && ! has "APPLAUNCH_BACKLIGHT=" && ! has "APPLAUNCH_DIM_PERCENT" && ! has "92-applaunch-backlight"'
+# another single backlight with levels: that one; an on/off one of another name: none
+mkdir -p "$R/sys/class/backlight/lcd-backlight"; echo 255 > "$R/sys/class/backlight/lcd-backlight/max_brightness"
+run --dry-run --board pi3a-luckfox35
+check "orangepi with one other backlight with levels (max 255): that one as sysfs:, its rule" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/lcd-backlight" && has "APPLAUNCH_DIM_PERCENT=10" && has "brightness of lcd-backlight"'
+echo 1 > "$R/sys/class/backlight/lcd-backlight/max_brightness"
+run --dry-run --board pi3a-luckfox35
+check "orangepi with an on/off backlight of another name (max 1): no brightness control" '[ $RC = 0 ] && ! has "APPLAUNCH_BACKLIGHT=" && ! has "92-applaunch-backlight"'
+# a Raspberry Pi keeps its config.txt rule: a levels device in sysfs does not change the on/off body of v0.9.3
+R=$(root pi3a-luckfox35); mkdir -p "$R/sys/class/backlight/backlight_pwm"; echo 15 > "$R/sys/class/backlight/backlight_pwm/max_brightness"
+run --board-only
+check "Pi 3A+ with a levels device but no PWM in config.txt: the on/off profile of v0.9.3, unchanged" '[ $RC = 0 ] && grep -qx "# applaunch-profile-sum: 724676656 664" "$R/etc/applaunch/board.conf"'
+
+# --- --spi-panel waveshare35f (Orange Pi Zero 2W, Armbian): the dry run of the plan, the refusals
+KREL=6.18.64-current-sunxi64
+export INSTALL_KERNEL_RELEASE=$KREL
+TODAY=$(date +%Y%m%d)
+CHUNK_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/gpu/drm/drm_mipi_dbi.c?h=v6.18.64"
+R=$(root opizero2w); ENV0=$(cat "$R/boot/armbianEnv.txt")
+run --dry-run --spi-panel waveshare35f
+check "spi dry-run: exit 0, the pi3a-luckfox35 profile from --spi-panel" '[ $RC = 0 ] && has "board: pi3a-luckfox35 (the profile of --spi-panel waveshare35f)" && has "pi3a-luckfox35: write"'
+check "spi dry-run: the HDMI fbdev there now (fb0): the panel foreseen on fb1, the reason given" 'has "APPLAUNCH_FB=/dev/fb1" && has "APPLAUNCH_FB=/dev/fb1 (foreseen: the framebuffers there now" && has "run install.sh again"'
+check "spi dry-run: on/off backlight by default (gpio form, its rule, the gpio-backlight overlay)" 'has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" && has "92-applaunch-backlight-gpio.rules" && has "dtc -@ of spi35-waveshare35f-gpio-backlight.dts" && ! has "APPLAUNCH_DIM_PERCENT"'
+check "spi dry-run: firmware, modules-load, overlay, the chunk module from the v6.18.64 source, armbianEnv.txt with backup" 'has "/lib/firmware/st7796s.bin: the panel'"'"'s init sequence (Waveshare'"'"'s file, sha256 17204e39...): installed" && has "/etc/modules-load.d/spi35.conf: panel-mipi-dbi" && has "/boot/overlay-user/spi35-st7796s.dtbo" && has "$CHUNK_URL" && has "built and installed for $KREL" && has "/boot/armbianEnv.txt: user_overlays=spi35-st7796s (armbianEnv.txt.bak-$TODAY first)"'
+check "spi dry-run: packages with the headers of the running kernel, no mem=, reboot needed, no pwm-gpio" 'has "packages, when missing: dkms gcc make libc6-dev patch linux-headers-current-sunxi64" && has "no mem= kernel argument" && has "reboot needed" && ! has "pwm-gpio"'
+check "spi dry-run: nothing written (no etc, armbianEnv.txt as it was, no firmware, no overlay)" '[ ! -e "$R/etc" ] && [ "$(cat "$R/boot/armbianEnv.txt")" = "$ENV0" ] && [ ! -e "$R/lib" ] && [ ! -e "$R/boot/overlay-user" ] && [ -z "$(ls "$R/boot" | grep bak)" ]'
+rm -rf "$R/sys/class/graphics/fb0"
+run --dry-run --spi-panel waveshare35f
+check "spi dry-run without a framebuffer now (no HDMI at boot): the panel will be fb0, the only one" '[ $RC = 0 ] && has "APPLAUNCH_FB=/dev/fb0 (no framebuffer now: the panel will be the only one after the reboot)" && has "LV_LINUX_FBDEV_DEVICE=/dev/fb0"'
+run --dry-run --spi-panel waveshare35f --soft-pwm-backlight
+check "spi dry-run --soft-pwm-backlight: softpwm overlay, pwm-gpio DKMS and modules-load, sysfs backlight_pwm with dim 10 and its rule" '[ $RC = 0 ] && has "dtc -@ of spi35-waveshare35f-softpwm.dts" && has "DKMS pwm-gpio/1.0" && has "/etc/modules-load.d/pwm-gpio.conf: pwm-gpio" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && has "APPLAUNCH_DIM_PERCENT=10" && has "brightness of backlight_pwm" && ! has "92-applaunch-backlight-gpio"'
+run --dry-run --spi-panel waveshare35f --board pi3a-luckfox35
+check "spi dry-run with --board pi3a-luckfox35: accepted, said as forced" '[ $RC = 0 ] && has "board: pi3a-luckfox35 (forced with --board)"'
+OUT=$(SYSROOT="$R" INSTALL_KERNEL_RELEASE=6.18.0-current-sunxi64 sh "$INSTALL" --dry-run --spi-panel waveshare35f 2>&1); RC=$?
+check "spi dry-run on a x.y.0 kernel: the tag v6.18" '[ $RC = 0 ] && has "drm_mipi_dbi.c?h=v6.18" && ! has "h=v6.18.0"'
+# armbianEnv.txt: other user overlays kept (the last line counts), already there, a mem= argument noted (never added)
+printf 'overlay_prefix=sun50i-h616\nuser_overlays=old\nuser_overlays=uart5 i2c3 \nextraargs=mem=3072M\n' > "$R/boot/armbianEnv.txt"
+run --dry-run --spi-panel waveshare35f
+check "spi dry-run: the last user_overlays line gets the overlay, its names kept; the mem= argument noted, left" 'has "/boot/armbianEnv.txt: user_overlays=uart5 i2c3 spi35-st7796s (armbianEnv.txt.bak-" && has "NOTE: armbianEnv.txt has a mem= kernel argument (extraargs): no longer needed"'
+printf 'user_overlays=uart5 spi35-st7796s\n' > "$R/boot/armbianEnv.txt"
+mkdir -p "$R/lib/modules/$KREL/updates/dkms"; : > "$R/lib/modules/$KREL/updates/dkms/drm_mipi_dbi.ko"
+run --dry-run --spi-panel waveshare35f
+check "spi dry-run with the overlay and the module there already: both kept, no download" '[ $RC = 0 ] && has "user_overlays already loads spi35-st7796s: left as it is" && has "installed for $KREL already: kept (no download)" && ! has "$CHUNK_URL"'
+# refusals: never a Raspberry Pi, only H616 / H618 with Armbian, a kernel release with a flavour; option combinations
+for fx in pi3a-luckfox35 zero2w pi5-dsi7; do
+    R=$(root "$fx")
+    run --dry-run --spi-panel waveshare35f
+    check "spi on a Raspberry Pi ($fx): refused, exit 1, nothing written" '[ $RC = 1 ] && has "never on a Raspberry Pi" && has "Nothing was changed." && [ ! -e "$R/etc" ]'
+done
+R=$(root opizero2w); printf 'xunlong,orangepi-3\0allwinner,sun50i-h6\0' > "$R/proc/device-tree/compatible"
+run --dry-run --spi-panel waveshare35f
+check "spi on another Allwinner SoC (H6): refused with the device tree named" '[ $RC = 1 ] && has "for Allwinner H616 / H618 boards with Armbian only (this device tree: xunlong,orangepi-3 allwinner,sun50i-h6)"'
+R=$(root opizero2w); printf 'xunlong,orangepi-zero3\0allwinner,sun50i-h618\0' > "$R/proc/device-tree/compatible"
+run --dry-run --spi-panel waveshare35f
+check "spi on another H618 board (Orange Pi Zero 3): accepted with a warning that the pins are the Zero 2W header's" '[ $RC = 0 ] && has "WARNING: the overlay'"'"'s pins are those of the Orange Pi Zero 2W'"'"'s 40-pin header" && has "this board (xunlong,orangepi-zero3 allwinner,sun50i-h618) is untested"'
+R=$(root opizero2w); rm -f "$R/boot/armbianEnv.txt"
+run --dry-run --spi-panel waveshare35f
+check "spi without /boot/armbianEnv.txt: refused (not an Armbian boot)" '[ $RC = 1 ] && has "no /boot/armbianEnv.txt: not an Armbian boot"'
+R=$(root opizero2w)
+OUT=$(SYSROOT="$R" INSTALL_KERNEL_RELEASE=6.18.64 sh "$INSTALL" --dry-run --spi-panel waveshare35f 2>&1); RC=$?
+check "spi with a kernel release without a flavour: refused (no headers package to tell)" '[ $RC = 1 ] && has "is not of the form <version>-<flavour>"'
+for opts in "--spi-panel" "--spi-panel ili9341" "--soft-pwm-backlight" "--spi-panel waveshare35f --board pi4b-dsi" \
+            "--spi-panel waveshare35f --board-only" "--spi-panel waveshare35f --no-boot-config" "--network-manager --board-only"; do
+    # shellcheck disable=SC2086
+    run --dry-run $opts
+    check "options $opts: refused, exit 2" '[ $RC = 2 ] && [ ! -e "$R/etc" ]'
+done
+
+# --- --network-manager: the dry run and the refusals (Debian / Ubuntu with netplan only)
+ROUTE_HDR='Iface	Destination	Gateway 	Flags	RefCnt	Use	Metric	Mask		MTU	Window	IRTT'
+nm_root() {  # nm_root FIXTURE IFACE: a Debian board with a netplan Wi-Fi entry, the default route over IFACE
+    R=$(root "$1"); mkdir -p "$R/etc/netplan" "$R/proc/net"
+    echo 13.2 > "$R/etc/debian_version"
+    printf 'network:\n  version: 2\n  wifis:\n    wlan0:\n      dhcp4: true\n      access-points:\n        "home": {password: "x"}\n' > "$R/etc/netplan/30-wifis-dhcp.yaml"
+    chmod 600 "$R/etc/netplan/30-wifis-dhcp.yaml"
+    printf '%s\n%s\t00000000\t0144A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0\n' "$ROUTE_HDR" "$2" > "$R/proc/net/route"
+}
+nm_root opizero2w-spi35-pwm wlan0
+run --dry-run --board pi3a-luckfox35 --network-manager
+check "nm dry-run: the steps planned (packages, backup, the netplan file, generate, reboot), nothing written" '[ $RC = 0 ] && has "NetworkManager (--network-manager), at the end of the install: apt install --no-install-recommends network-manager" && has "/etc/netplan copied to /etc/netplan.bak-applaunch" && has "/etc/netplan/90-applaunch-networkmanager.yaml: '"'"'network: {version: 2, renderer: NetworkManager}'"'"' (600); netplan generate" && has "reboot needed" && [ ! -e "$R/etc/netplan.bak-applaunch" ] && [ ! -e "$R/etc/netplan/90-applaunch-networkmanager.yaml" ]'
+check "nm dry-run, default route over wlan0: the ssh drop and --yes said" 'has "the default route is over Wi-Fi (wlan0): an ssh session over it drops at that reboot" && has "without a terminal only with --yes"'
+nm_root opizero2w-spi35-pwm eth0
+run --dry-run --board pi3a-luckfox35 --network-manager
+check "nm dry-run, default route over eth0: no Wi-Fi warning" '[ $RC = 0 ] && has "renderer: NetworkManager" && ! has "default route is over Wi-Fi"'
+rm -rf "$R/etc/netplan"
+run --dry-run --board pi3a-luckfox35 --network-manager
+check "nm without /etc/netplan: refused, exit 1, the manual way named" '[ $RC = 1 ] && has "this system has no /etc/netplan" && has "Nothing was changed."'
+nm_root opizero2w-spi35-pwm eth0; rm -f "$R/etc/debian_version"
+run --dry-run --board pi3a-luckfox35 --network-manager
+check "nm without /etc/debian_version: refused" '[ $RC = 1 ] && has "for Debian and Ubuntu systems only"'
+nm_root opizero2w-spi35-pwm eth0; mkdir -p "$R/usr/bin"; printf '#!/bin/sh\n' > "$R/usr/bin/nmcli"; chmod 755 "$R/usr/bin/nmcli"
+printf 'network: {version: 2, renderer: NetworkManager}\n' > "$R/etc/netplan/01-network-manager-all.yaml"
+run --dry-run --board pi3a-luckfox35 --network-manager
+check "nm with NetworkManager installed and the netplan renderer set: nothing to do, exit 0" '[ $RC = 0 ] && has "NetworkManager is installed and has the network already: --network-manager has nothing to do"'
+
+# --- --spi-panel and --network-manager in a whole install into a fake root: stand-ins for dtc (writes its -o file), dkms
+# (records add / install / remove under the fake root), curl (serves a drm_mipi_dbi.c made from chunk.patch's context, so the
+# real patch applies) and netplan; apt-get, dpkg and the rest as above. patch, sha256sum and cmp are the real ones.
+SPIBIN="$TMP/spibin"; mkdir -p "$SPIBIN"
+cat > "$SPIBIN/dtc" <<'EOF'
+#!/bin/sh
+printf 'dtc %s\n' "$*" >> "$FAKE_CALLS"
+[ "${FAKE_DTC_RC:-0}" = 0 ] || exit "$FAKE_DTC_RC"
+out=""; prev=""; for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; last=$a; done
+[ -z "$out" ] || printf 'dtbo of %s\n' "${last##*/}" > "$out"
+EOF
+cat > "$SPIBIN/dkms" <<'EOF'
+#!/bin/sh
+# stand-in dkms: add NAME/VER, build NAME/VER -k K (fails for the module named in FAKE_DKMS_FAIL), install NAME/VER -k K
+# (the BUILT_MODULE_NAME of /usr/src/NAME-VER/dkms.conf as K's updates/dkms/*.ko), remove NAME/VER --all, status
+printf 'dkms %s\n' "$*" >> "$FAKE_CALLS"
+cmd=$1; mv=${2:-}; name=${mv%/*}; ver=${mv#*/}; k=""
+[ "${3:-}" = -k ] && k=${4:-}
+case "$cmd" in
+    add) [ -d "$SYSROOT/usr/src/$name-$ver" ] || exit 1; mkdir -p "$SYSROOT/var/lib/dkms/$name/$ver" ;;
+    build) [ "${FAKE_DKMS_FAIL:-}" != "$name" ] || { echo "make: *** [Makefile] Error 2"; exit 10; }
+           [ -d "$SYSROOT/var/lib/dkms/$name/$ver" ] || exit 1 ;;
+    install) m=$(sed -n 's/^BUILT_MODULE_NAME\[0\]="\(.*\)"$/\1/p' "$SYSROOT/usr/src/$name-$ver/dkms.conf")
+             mkdir -p "$SYSROOT/lib/modules/$k/updates/dkms"; echo "$name" > "$SYSROOT/lib/modules/$k/updates/dkms/$m.ko" ;;
+    remove) [ -d "$SYSROOT/var/lib/dkms/$name/$ver" ] || exit 3
+            m=$(sed -n 's/^BUILT_MODULE_NAME\[0\]="\(.*\)"$/\1/p' "$SYSROOT/usr/src/$name-$ver/dkms.conf" 2>/dev/null)
+            rm -rf "$SYSROOT/var/lib/dkms/$name/$ver"; rmdir "$SYSROOT/var/lib/dkms/$name" 2>/dev/null; [ -z "$m" ] || rm -f "$SYSROOT"/lib/modules/*/updates/dkms/"$m".ko ;;
+esac
+exit 0
+EOF
+cat > "$SPIBIN/curl" <<'EOF'
+#!/bin/sh
+printf 'curl %s\n' "$*" >> "$FAKE_CALLS"
+[ "${FAKE_CURL_RC:-0}" = 0 ] || { echo "curl: (22) The requested URL returned error: 404" >&2; exit "$FAKE_CURL_RC"; }
+out=""; prev=""; for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
+cp "$FAKE_CURL_SRC" "$out"
+EOF
+printf '#!/bin/sh\nprintf "netplan %%s\\n" "$*" >> "$FAKE_CALLS"\nexit "${FAKE_NETPLAN_RC:-0}"\n' > "$SPIBIN/netplan"
+chmod 755 "$SPIBIN"/*
+PANEL="$D/panels/waveshare35f"
+# a drm_mipi_dbi.c with chunk.patch's context, a few lines off its numbers (the real patch applies with an offset)
+FAKE_SRC="$TMP/drm_mipi_dbi.c"
+{ echo "// SPDX-License-Identifier: GPL-2.0-or-later"; echo "/* stand-in of drivers/gpu/drm/drm_mipi_dbi.c */"
+  sed -n '/^@@/,$p' "$PANEL/dkms-drm-mipi-dbi-chunk/chunk.patch" | sed -n 's/^[ -]//p'; echo "}"; } > "$FAKE_SRC"
+FAKE_SRC_BAD="$TMP/drm_mipi_dbi-other.c"
+printf '// SPDX-License-Identifier: GPL-2.0-or-later\n/* a source without the chunk line */\n' > "$FAKE_SRC_BAD"
+export FAKE_CURL_SRC="$FAKE_SRC"
+# spi_root [FIXTURE]: the Orange Pi before the panel (fixture opizero2w), the running kernel's headers there
+spi_root() { R=$(root "${1:-opizero2w}"); mkdir -p "$R/lib/modules/$KREL/build"; ENV0=$(cat "$R/boot/armbianEnv.txt"); }
+spi_install() { : > "$CALLS"; OUT=$(PATH="$SPIBIN:$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \
+    sh "$BUN/install.sh" --user "$U" --no-default-source "$@" 2>&1); RC=$?; }
+spi_nothing() {  # nothing of the panel or the launcher in place
+    [ ! -e "$R/lib/firmware" ] && [ ! -e "$R/etc/modules-load.d" ] && [ ! -e "$R/boot/overlay-user" ] && [ "$(cat "$R/boot/armbianEnv.txt")" = "$ENV0" ] \
+        && [ -z "$(ls "$R/boot" | grep bak)" ] && [ -z "$(ls -A "$R/usr/src" 2>/dev/null)" ] && [ -z "$(ls -A "$R/var/lib/dkms" 2>/dev/null)" ] \
+        && [ -z "$(find "$R/lib/modules" -name "*.ko" 2>/dev/null)" ] && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc/applaunch" ]
+}
+spi_root
+spi_install --spi-panel waveshare35f
+CS="$R/usr/src/drm-mipi-dbi-chunk-1.0"
+check "spi install: exit 0, the panel step before the launcher's files" '[ $RC = 0 ] && has "== SPI panel (--spi-panel waveshare35f" && [ "$(printf "%s\n" "$OUT" | grep -n "== SPI panel" | cut -d: -f1)" -lt "$(printf "%s\n" "$OUT" | grep -n "== Installing the launcher" | cut -d: -f1)" ]'
+check "spi install: Waveshare's init file in /lib/firmware, modules-load spi35.conf, no pwm-gpio" 'cmp -s "$PANEL/st7796s.bin" "$R/lib/firmware/st7796s.bin" && [ "$(cat "$R/etc/modules-load.d/spi35.conf")" = panel-mipi-dbi ] && [ ! -e "$R/etc/modules-load.d/pwm-gpio.conf" ] && ! called "dkms add pwm-gpio"'
+check "spi install: the gpio-backlight overlay compiled with dtc -@ into /boot/overlay-user/spi35-st7796s.dtbo" 'called "dtc -@ -I dts -O dtb -o " && [ "$(cat "$R/boot/overlay-user/spi35-st7796s.dtbo")" = "dtbo of spi35-waveshare35f-gpio-backlight.dts" ]'
+check "spi install: drm_mipi_dbi.c of v6.18.64 fetched from git.kernel.org, chunk.patch applied (64 KiB cap), no .orig" 'called "curl -fsSL --retry 2 --max-time 120 -o " && called "$CHUNK_URL" && grep -q "min_t(size_t, spi_max_transfer_size(spi), 65536)" "$CS/drm_mipi_dbi.c" && ! grep -q "size_t max_chunk = spi_max_transfer_size(spi);" "$CS/drm_mipi_dbi.c" && [ -z "$(ls "$CS" | grep -e orig -e rej)" ]'
+check "spi install: the DKMS module added, built and installed for the running kernel, for this kernel series only" 'called "dkms add drm-mipi-dbi-chunk/1.0" && called "dkms build drm-mipi-dbi-chunk/1.0 -k $KREL" && called "dkms install drm-mipi-dbi-chunk/1.0 -k $KREL" && [ -f "$R/lib/modules/$KREL/updates/dkms/drm_mipi_dbi.ko" ] && grep -qx "BUILD_EXCLUSIVE_KERNEL=\"^6\\\\.18\\\\.\"" "$CS/dkms.conf" && [ "$(cat "$CS/Makefile")" = "obj-m += drm_mipi_dbi.o" ]'
+check "spi install: armbianEnv.txt loads the overlay, the original kept as armbianEnv.txt.bak-<date>, never mem=" '[ "$(cat "$R/boot/armbianEnv.txt")" = "$(printf "%s\nuser_overlays=spi35-st7796s" "$ENV0")" ] && [ "$(cat "$R/boot/armbianEnv.txt.bak-$TODAY")" = "$ENV0" ] && ! grep -q "mem=" "$R/boot/armbianEnv.txt"'
+check "spi install: the pi3a-luckfox35 profile (fb1 foreseen, on/off backlight) and the gpio rule" 'grep -qx "APPLAUNCH_BOARD=pi3a-luckfox35" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_FB=/dev/fb1" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$R/etc/applaunch/board.conf" && [ -f "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+check "spi install: the launcher enabled, not started before the reboot; reboot needed said; config.txt not made" 'called "systemctl --user enable cyberdeckzero.service" && ! called "systemctl --user restart cyberdeckzero.service" && has "not started now: the SPI panel comes with its overlay at the next boot" && has "Reboot needed: the SPI panel" && [ ! -e "$R/boot/config.txt" ]'
+check "spi install: install.conf keeps the profile for Settings > Updates (board=pi3a-luckfox35) and records the panel" 'grep -qx "board=pi3a-luckfox35" "$R/etc/applaunch/install.conf" && grep -qx "spi_panel=waveshare35f" "$R/etc/applaunch/install.conf" && grep -qx "soft_pwm_backlight=0" "$R/etc/applaunch/install.conf"'
+check "spi install: the DKMS packages and the headers checked with dpkg, none missing: no apt" 'called "dpkg -s dkms" && called "dpkg -s linux-headers-current-sunxi64" && called "dpkg -s patch" && ! called "apt-get"'
+SPI_STATE=$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src")
+spi_install --spi-panel waveshare35f
+check "spi second run: no download, no DKMS build, files up to date, armbianEnv.txt unchanged, no reboot, launcher started" '[ $RC = 0 ] && ! called "curl -fsSL" && ! called "dkms add" && ! called "dkms build" && has "DKMS drm-mipi-dbi-chunk/1.0: installed for $KREL already (no download)" && has "user_overlays already loads spi35-st7796s" && has "the panel'"'"'s set-up was in place already: nothing changed" && [ "$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src")" = "$SPI_STATE" ] && ! has "Reboot needed" && called "systemctl --user restart cyberdeckzero.service"'
+# after the reboot: the panel on fb1 with its on/off backlight; Settings > Updates runs install.sh --board pi3a-luckfox35
+cp -R "$FIX/opizero2w-spi35-pwm/sys/class/drm/card2-SPI-1" "$R/sys/class/drm/"
+cp -R "$FIX/opizero2w-spi35-pwm/sys/class/graphics/fb0" "$R/sys/class/graphics/fb1"
+mkdir -p "$R/sys/class/backlight/backlight_gpio"; echo 1 > "$R/sys/class/backlight/backlight_gpio/max_brightness"
+P="$R/etc/applaunch/board.conf"; SUM1=$(cksum < "$P")
+spi_install --board pi3a-luckfox35
+check "after the reboot, install.sh --board pi3a-luckfox35 (an update): the foreseen profile is the detected one, up to date" '[ $RC = 0 ] && has "pi3a-luckfox35: $P already up to date" && [ "$(cksum < "$P")" = "$SUM1" ] && grep -qx "spi_panel=waveshare35f" "$R/etc/applaunch/install.conf"'
+# --soft-pwm-backlight: the softpwm overlay, the pwm-gpio module (the bundle's 6.18 source) and its modules-load file
+spi_root; rm -rf "$R/sys/class/graphics/fb0"
+spi_install --spi-panel waveshare35f --soft-pwm-backlight
+check "spi --soft-pwm-backlight: exit 0, pwm-gpio built and installed from the bundle's source, modules-load pwm-gpio.conf" '[ $RC = 0 ] && called "dkms install pwm-gpio/1.0 -k $KREL" && cmp -s "$PANEL/dkms-pwm-gpio/pwm-gpio.c" "$R/usr/src/pwm-gpio-1.0/pwm-gpio.c" && [ -f "$R/lib/modules/$KREL/updates/dkms/pwm-gpio.ko" ] && [ "$(cat "$R/etc/modules-load.d/pwm-gpio.conf")" = pwm-gpio ]'
+check "spi --soft-pwm-backlight: the softpwm overlay; the profile on fb0 with backlight_pwm levels, dim 10 and the sysfs rule" '[ "$(cat "$R/boot/overlay-user/spi35-st7796s.dtbo")" = "dtbo of spi35-waveshare35f-softpwm.dts" ] && grep -qx "APPLAUNCH_FB=/dev/fb0" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_DIM_PERCENT=10" "$R/etc/applaunch/board.conf" && grep -q "KERNEL==\"backlight_pwm\"" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules" && grep -qx "soft_pwm_backlight=1" "$R/etc/applaunch/install.conf"'
+# other user overlays: kept, the overlay added to the last user_overlays line
+spi_root; printf 'overlay_prefix=sun50i-h616\nuser_overlays=uart5\n' > "$R/boot/armbianEnv.txt"
+spi_install --spi-panel waveshare35f
+check "spi install with other user overlays: kept, the overlay added to their line" '[ $RC = 0 ] && [ "$(cat "$R/boot/armbianEnv.txt")" = "$(printf "overlay_prefix=sun50i-h616\nuser_overlays=uart5 spi35-st7796s")" ]'
+# failures: nothing of the panel (nor the launcher) in place, a clear message
+spi_root
+FAKE_CURL_RC=22 spi_install --spi-panel waveshare35f
+check "spi: the download fails: exit 1, said with the URL, nothing in place" '[ $RC = 1 ] && has "the download of drm_mipi_dbi.c of v6.18.64 failed ($CHUNK_URL)" && has "Nothing of the panel set-up was put in place" && spi_nothing'
+spi_root
+FAKE_CURL_SRC="$FAKE_SRC_BAD" spi_install --spi-panel waveshare35f
+check "spi: a source chunk.patch does not fit: exit 1, nothing in place" '[ $RC = 1 ] && has "chunk.patch does not fit this kernel" && spi_nothing'
+spi_root
+FAKE_DKMS_FAIL=pwm-gpio spi_install --spi-panel waveshare35f --soft-pwm-backlight
+check "spi: the pwm-gpio build fails after the chunk module: both taken off again, the build log shown, nothing in place" '[ $RC = 1 ] && has "the DKMS module pwm-gpio/1.0 did not build or install" && has "Error 2" && called "dkms remove drm-mipi-dbi-chunk/1.0 --all" && has "DKMS module drm-mipi-dbi-chunk/1.0 taken off again" && spi_nothing'
+spi_root; rm -rf "$R/lib/modules/$KREL/build"
+spi_install --spi-panel waveshare35f
+check "spi: no headers for the running kernel: exit 1, what to do said, no download, no DKMS" '[ $RC = 1 ] && has "no kernel headers for the running kernel $KREL" && has "full-upgrade" && ! called "curl -fsSL" && ! called "dkms " && spi_nothing'
+spi_root
+FAKE_DTC_RC=1 spi_install --spi-panel waveshare35f
+check "spi: dtc fails: exit 1, nothing in place" '[ $RC = 1 ] && has "dtc could not compile spi35-waveshare35f-gpio-backlight.dts" && spi_nothing'
+spi_root
+FAKE_DPKG_MISSING="dkms" FAKE_APT_RC=1 spi_install --spi-panel waveshare35f
+check "spi: apt fails for a missing package: exit 1, nothing in place" '[ $RC = 1 ] && called "apt-get update" && has "apt-get update failed" && spi_nothing'
+spi_root; cp "$BUN/payload/panels/waveshare35f/st7796s.bin" "$TMP/st7796s.keep"; printf 'X' >> "$BUN/payload/panels/waveshare35f/st7796s.bin"
+spi_install --spi-panel waveshare35f
+cp "$TMP/st7796s.keep" "$BUN/payload/panels/waveshare35f/st7796s.bin"
+check "spi: a bundle whose init file is not Waveshare's: refused before any package or file" '[ $RC = 1 ] && has "st7796s.bin is not Waveshare'"'"'s init file" && ! called "dpkg -s" && spi_nothing'
+R=$(root pi3a-luckfox35)
+spi_install --spi-panel waveshare35f --board pi3a-luckfox35
+check "spi install on a Raspberry Pi: refused, nothing installed" '[ $RC = 1 ] && has "never on a Raspberry Pi" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc" ] && ! called "dtc "'
+check "build.sh puts the panels in the bundle" 'grep -q "cp -R \"\$HERE/panels\" \"\$OUT/payload/panels\"" "$D/build.sh"'
+check "the panel's init file in the repository is Waveshare's (sha256)" '[ "$(sha256sum < "$PANEL/st7796s.bin" | cut -d" " -f1)" = 17204e39cce35fba857ad2dff14243e1d3a958c4dac00283f8df9b7ad5147cc7 ]'
+
+# --network-manager in a whole install: at the end (the launcher is in place first), the netplan file, generate, reboot
+nm_install() { : > "$CALLS"; OUT=$(PATH="$SPIBIN:$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \
+    sh "$BUN/install.sh" --user "$U" --no-default-source --board pi3a-luckfox35 --screen-size 3.5 "$@" 2>&1); RC=$?; }
+NM_FILE='network: {version: 2, renderer: NetworkManager}'
+nm_root opizero2w-spi35-pwm eth0; NETPLAN0=$(snapshot "$R/etc/netplan")
+FAKE_DPKG_MISSING="network-manager" FAKE_APT_RC=0 nm_install --network-manager
+NMY="$R/etc/netplan/90-applaunch-networkmanager.yaml"
+check "nm install (route over eth0): exit 0, network-manager installed with apt (no recommends), polkitd with the launcher's packages" '[ $RC = 0 ] && called "apt-get install -y --no-install-recommends network-manager" && called "dpkg -s polkitd"'
+check "nm install: /etc/netplan backed up to /etc/netplan.bak-applaunch, the netplan file (600) with the NetworkManager renderer" '[ "$(snapshot "$R/etc/netplan.bak-applaunch")" = "$NETPLAN0" ] && [ "$(cat "$NMY")" = "$NM_FILE" ] && [ "$(stat -c %a "$NMY")" = 600 ] && [ ! -e "$NMY.tmp" ]'
+check "nm install: netplan generate (no apply) after the launcher was started; reboot needed with the ssh note; no recipe notice" 'called "netplan generate" && ! called "netplan apply" && [ "$(at "netplan generate")" -gt "$(at "systemctl --user restart cyberdeckzero.service")" ] && has "Reboot needed: NetworkManager takes the network over at the next boot" && has "An ssh session over Wi-Fi drops at the reboot" && ! has "NOTICE: network-manager is not installed"'
+mkdir -p "$R/usr/bin"; printf '#!/bin/sh\n' > "$R/usr/bin/nmcli"; chmod 755 "$R/usr/bin/nmcli"
+NM_STATE=$(snapshot "$R/etc")
+nm_install --network-manager
+check "nm second run (NetworkManager there, the renderer set): nothing to do, nothing changed, no reboot" '[ $RC = 0 ] && has "--network-manager has nothing to do" && ! called "netplan " && ! has "Reboot needed: NetworkManager" && [ "$(snapshot "$R/etc/netplan")" = "$(printf "%s\n" "$NM_STATE" | sed -n "s|^\./netplan/|./|p")" ]'
+# the default route over Wi-Fi: refused without a terminal unless --yes; asked on a terminal
+nm_root opizero2w-spi35-pwm wlan0
+nm_install --network-manager
+check "nm over Wi-Fi, no terminal, no --yes: refused before anything, exit 1" '[ $RC = 1 ] && has "the default route is over Wi-Fi (wlan0) and this is not a terminal: add --yes" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$NMY" ] && ! called "dpkg -s"'
+FAKE_DPKG_MISSING="network-manager" FAKE_APT_RC=0 nm_install --network-manager --yes
+check "nm over Wi-Fi with --yes: done" '[ $RC = 0 ] && [ "$(cat "$NMY")" = "$NM_FILE" ] && called "netplan generate"'
+nm_root opizero2w-spi35-pwm wlan0
+: > "$CALLS"; OUT=$(printf 'n\n' | PATH="$SPIBIN:$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 APPLAUNCH_INSTALL_ASSUME_TTY=1 \
+    sh "$BUN/install.sh" --user "$U" --no-default-source --board pi3a-luckfox35 --screen-size 3.5 --network-manager 2>&1); RC=$?
+check "nm over Wi-Fi on a terminal, answer n: not confirmed, nothing changed" '[ $RC = 1 ] && has "Go on? [y/N]" && has "not confirmed" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$NMY" ]'
+: > "$CALLS"; OUT=$(printf 'y\n' | PATH="$SPIBIN:$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 APPLAUNCH_INSTALL_ASSUME_TTY=1 \
+    FAKE_DPKG_MISSING="network-manager" FAKE_APT_RC=0 sh "$BUN/install.sh" --user "$U" --no-default-source --board pi3a-luckfox35 --screen-size 3.5 --network-manager 2>&1); RC=$?
+check "nm over Wi-Fi on a terminal, answer y: done" '[ $RC = 0 ] && [ "$(cat "$NMY")" = "$NM_FILE" ]'
+# apt cannot install network-manager: the launcher is installed, netplan left as it was, the recipe printed
+nm_root opizero2w-spi35-pwm eth0; NETPLAN0=$(snapshot "$R/etc/netplan")
+FAKE_DPKG_MISSING="network-manager" FAKE_APT_RC=1 nm_install --network-manager
+check "nm: apt fails: exit 0 (launcher installed), a warning, netplan untouched, the recipe notice" '[ $RC = 0 ] && has "WARNING: apt could not install network-manager: the network set-up is left as it was" && [ "$(snapshot "$R/etc/netplan")" = "$NETPLAN0" ] && [ ! -e "$R/etc/netplan.bak-applaunch" ] && ! called "netplan " && { has "NOTICE: network-manager is not installed" || command -v nmcli > /dev/null 2>&1; } && [ -x "$R/usr/share/APPLaunch/bin/cyberdeckzero" ]'
 
 # --screen-size and --panel-mm in a whole install: install.conf records them (empty when not given), a manual re-run keeps
 # them, and the question on a terminal. A terminal is faked with APPLAUNCH_INSTALL_ASSUME_TTY=1, a hook honoured only

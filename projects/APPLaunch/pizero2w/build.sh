@@ -153,6 +153,8 @@ for file in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-bac
             cyberdeckzero.desktop; do
     cp "$HERE/$file" "$OUT/payload/etc/"
 done
+# the SPI panels install.sh --spi-panel sets up (panels/<name>/: init file, overlays, DKMS module sources; README there)
+cp -R "$HERE/panels" "$OUT/payload/panels"
 # the text console helper the units run (install.sh puts it in /usr/share/APPLaunch/bin)
 cp "$HERE/cyberdeckzero-console" "$OUT/payload/bin/"
 chmod +x "$OUT/payload/bin/cyberdeckzero-console"

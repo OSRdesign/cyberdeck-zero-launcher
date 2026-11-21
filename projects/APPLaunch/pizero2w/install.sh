@@ -38,6 +38,16 @@
 #                          /etc/applaunch/board.conf (the old one is kept as board.conf.bak)
 #   --no-default-source    do not offer the apps repo (OSRdesign/cyberdeck-zero-apps) in Settings > Apps
 #                          (default: added once for the user if they have no source yet, see default-sources.sh)
+#   --spi-panel waveshare35f  Armbian on an Allwinner H616 / H618 board (Orange Pi Zero 2W) only, never a Raspberry Pi:
+#                          set up the Waveshare 3.5" RPi LCD (F) on the 40-pin header (its init file, the driver module,
+#                          a DKMS build of drm_mipi_dbi for the SoC's DMA limit, the overlay in /boot/armbianEnv.txt)
+#                          and write the pi3a-luckfox35 profile; then reboot (README.md, "Orange Pi Zero 2W: the 3.5" SPI panel")
+#   --soft-pwm-backlight   with --spi-panel: brightness levels by software PWM on header pin 12 (DKMS module pwm-gpio)
+#                          instead of the on/off backlight
+#   --network-manager      Debian / Ubuntu with netplan and no NetworkManager renderer yet: install NetworkManager and
+#                          polkitd (Settings > Wi-Fi) and hand the network to it at the next boot; then reboot
+#   --yes                  with --network-manager: go ahead when the network goes over Wi-Fi (asked on a terminal,
+#                          refused without a terminal)
 #
 # Each install records its options (keyboard name, --board, --screen-size, --panel-mm, --no-boot-config, --pwm-backlight, --no-default-source) in
 # /etc/applaunch/install.conf: Settings > Updates installs a newer release by running this script again with them.
@@ -46,8 +56,8 @@
 # Prerequisites that this script does NOT do:
 #   - the panel's overlay in config.txt (the deck: config.txt.snippet; other boards: README.md, "Boards");
 #   - pairing the Bluetooth keyboard (bluetoothctl);
-#   - on a PC: installing NetworkManager (Settings > Wi-Fi needs it, but it takes the network over from netplan /
-#     systemd-networkd: the end of the install prints a recipe to run on the console). polkitd and BlueZ are installed
+#   - on a PC: installing NetworkManager unless --network-manager (Settings > Wi-Fi needs it, but it takes the network over
+#     from netplan / systemd-networkd: the end of the install prints a recipe to run on the console). polkitd and BlueZ are installed
 #     on a PC (reboot / shutdown / the clock, and Settings > Bluetooth, need them). A PC's boot configuration (GRUB,
 #     kernel command line) is never changed.
 set -eu
@@ -64,6 +74,10 @@ SIZE_ARG=""
 MM_ARG=""
 DEFAULT_SOURCE=1
 PLAN=0
+SPI_PANEL=""        # --spi-panel NAME (waveshare35f)
+SOFT_PWM=0          # --soft-pwm-backlight
+NM_OPT=0            # --network-manager
+YES=0               # --yes
 # --screen-size and --panel-mm values: a diagonal 1.5 to 15 inches (digits and one point), WxH in mm (20 to 500 each)
 valid_size() {
     case "$1" in ""|*[!0-9.]*|.*|*.|*.*.*) return 1 ;; esac
@@ -77,7 +91,7 @@ valid_mm() {
 }
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,46p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,56p' "$0"; exit 0 ;;
         --dry-run|--plan) DRY=1 ;;
     esac
 done
@@ -104,9 +118,37 @@ while [ $# -gt 0 ]; do
         --plan) DRY=1; PLAN=1; shift ;;
         --force) FORCE=1; shift ;;
         --no-default-source) DEFAULT_SOURCE=0; shift ;;
+        --spi-panel) [ $# -ge 2 ] || { echo "--spi-panel needs the panel's name (waveshare35f)" >&2; exit 2; }
+                 case "$2" in
+                     waveshare35f) ;;
+                     *) echo "--spi-panel: unknown panel \"$2\" (known: waveshare35f, the Waveshare 3.5\" RPi LCD (F))" >&2; exit 2 ;;
+                 esac
+                 SPI_PANEL="$2"; shift 2 ;;
+        --soft-pwm-backlight) SOFT_PWM=1; shift ;;
+        --network-manager) NM_OPT=1; shift ;;
+        --yes) YES=1; shift ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
+# the new options' combinations (the board itself is checked after the detection)
+if [ "$SOFT_PWM" = 1 ] && [ -z "$SPI_PANEL" ]; then
+    echo "--soft-pwm-backlight goes with --spi-panel waveshare35f" >&2; exit 2
+fi
+if [ -n "$SPI_PANEL" ]; then
+    if [ "$BOARD_ONLY" = 1 ]; then
+        echo "--spi-panel sets up the panel's driver and boot files: a whole install (or --dry-run), not --board-only" >&2; exit 2
+    fi
+    if [ "$BOOT_CONFIG" = 0 ]; then
+        echo "--spi-panel adds its overlay to /boot/armbianEnv.txt: it does not go with --no-boot-config" >&2; exit 2
+    fi
+    case "$BOARD_ARG" in
+        ""|pi3a-luckfox35) ;;
+        *) echo "--spi-panel $SPI_PANEL writes the pi3a-luckfox35 profile: leave --board out (or give --board pi3a-luckfox35)" >&2; exit 2 ;;
+    esac
+fi
+if [ "$NM_OPT" = 1 ] && [ "$BOARD_ONLY" = 1 ]; then
+    echo "--network-manager installs packages and changes the network set-up: a whole install (or --dry-run), not --board-only" >&2; exit 2
+fi
 
 # SYSROOT is a test hook: board and desktop detection read $SYSROOT/proc, $SYSROOT/sys and $SYSROOT/etc, and the
 # profile and the backlight udev rule are written under $SYSROOT/etc. Leave it unset on a real board.
@@ -114,7 +156,7 @@ done
 # user's home are taken under it, and the test puts stand-ins for systemctl, runuser, loginctl, udevadm, usermod,
 # dpkg, chown, uname and pkaction first on PATH (tests/test-install-board.sh). Never set it on a real board.
 # INSTALL_GLIBC_VERSION is a test hook too: it replaces the glibc version read from the system; INSTALL_MACHINE
-# replaces "uname -m" (aarch64, x86_64) for the board detection.
+# replaces "uname -m" (aarch64, x86_64) for the board detection, INSTALL_KERNEL_RELEASE "uname -r" for --spi-panel.
 SYSROOT=${SYSROOT:-}
 if [ -n "$SYSROOT" ] && [ "$DRY" = 0 ] && [ "$BOARD_ONLY" = 0 ] && [ "${INSTALL_FAKE_SYSTEM:-0}" != 1 ]; then
     echo "SYSROOT is a test hook: use it only with --dry-run or --board-only" >&2; exit 2
@@ -226,6 +268,71 @@ DMI_VENDOR=$(rd "$DMI/sys_vendor" || true)
 DMI_PRODUCT=$(rd "$DMI/product_name" || true)
 DMI_CHASSIS=$(rd "$DMI/chassis_type" || true)
 
+# ---------------------------------------------------------------------------------------------------------
+# --spi-panel waveshare35f: the Waveshare 3.5" RPi LCD (F) (ST7796S 320x480 on SPI, Goodix GT911 touch on I2C, the
+# backlight on header pin 12) plugged on the 40-pin header of an Allwinner H616 / H618 board with Armbian (tested on an
+# Orange Pi Zero 2W, Armbian 26.11, kernel 6.18). A Raspberry Pi sets the same panel up in config.txt (pi3a-luckfox35):
+# never here. What is set up (the board's hand-made set-up of 2026-11-21, made repeatable):
+#   - /lib/firmware/st7796s.bin, the panel's init sequence (Waveshare's file, checked by its sha256);
+#   - /etc/modules-load.d/spi35.conf: panel-mipi-dbi (and pwm-gpio.conf with --soft-pwm-backlight);
+#   - /boot/overlay-user/spi35-st7796s.dtbo, compiled with dtc -@ from the bundle's .dts (the on/off gpio-backlight, or with
+#     --soft-pwm-backlight the software PWM backlight of the DKMS module pwm-gpio: the Armbian kernel has CONFIG_PWM_GPIO off,
+#     and header pin 12 (PI1) has no hardware PWM on the H618);
+#   - always the DKMS module drm-mipi-dbi-chunk: the kernel's own drm_mipi_dbi.c with each SPI transfer capped at 64 KiB
+#     (chunk.patch). The H618's SPI DMA cannot reach RAM above 4 GB, so a 4 GB board bounces through swiotlb, whose segments
+#     are 256 KiB at most; the 307200-byte frame then fails ("swiotlb buffer is full", "Failed to update display -5"). The
+#     source must match the running kernel: it is fetched for its upstream tag from git.kernel.org (plain file, https), and
+#     only when the module is not installed for this kernel yet, so a re-run needs no network. Never mem= on the kernel
+#     command line (the earlier workaround: it cost 1 GB of RAM);
+#   - user_overlays=spi35-st7796s in /boot/armbianEnv.txt (a dated backup first; the other user overlays kept).
+# Every step that can fail (packages, headers, download, patch, dtc, DKMS build) runs before any file is put in place; a
+# failure removes the DKMS modules this run added and stops the install with nothing of the panel changed.
+SPI_IMPLIED=0      # 1: the pi3a-luckfox35 profile comes from --spi-panel (no --board given)
+SPI_KREL=""        # the running kernel's release, 6.18.64-current-sunxi64
+SPI_TAG=""         # its upstream tag, v6.18.64 (v6.18 for x.y.0)
+SPI_HDR=""         # its headers package, linux-headers-current-sunxi64
+SPI_PIN_NOTE=""    # a warning on an H616 / H618 board other than the Orange Pi Zero 2W
+spi_refuse() {
+    echo "--spi-panel $SPI_PANEL: $1" >&2
+    echo "Nothing was changed." >&2
+    exit 1
+}
+if [ -n "$SPI_PANEL" ]; then
+    SPI_COMPAT=""
+    [ ! -r "$SYSROOT/proc/device-tree/compatible" ] || SPI_COMPAT=$(tr '\0' ' ' < "$SYSROOT/proc/device-tree/compatible" | sed 's/ *$//')
+    if [ "$IS_RPI" = 1 ]; then
+        spi_refuse "never on a Raspberry Pi: there the panel is set up in config.txt (README.md, \"Boards\": pi3a-luckfox35)."
+    fi
+    case " $SPI_COMPAT " in
+        *" allwinner,sun50i-h616 "*|*" allwinner,sun50i-h618 "*) ;;
+        *) spi_refuse "for Allwinner H616 / H618 boards with Armbian only (this device tree: ${SPI_COMPAT:-none})." ;;
+    esac
+    if [ ! -f "$SYSROOT/boot/armbianEnv.txt" ]; then
+        spi_refuse "no /boot/armbianEnv.txt: not an Armbian boot (the panel's overlay is loaded from there)."
+    fi
+    SPI_KREL=${INSTALL_KERNEL_RELEASE:-$(uname -r)}
+    spi_kver=${SPI_KREL%%-*}
+    spi_flavour=${SPI_KREL#*-}
+    case "$spi_kver" in
+        [0-9]*.[0-9]*) case "$spi_kver" in *[!0-9.]*|*..*|*.) spi_kver="" ;; esac ;;
+        *) spi_kver="" ;;
+    esac
+    case "$spi_flavour" in ""|"$SPI_KREL"|*[!A-Za-z0-9.+-]*) spi_flavour="" ;; esac
+    if [ -z "$spi_kver" ] || [ -z "$spi_flavour" ]; then
+        spi_refuse "the kernel release \"$SPI_KREL\" is not of the form <version>-<flavour> (6.18.64-current-sunxi64): its upstream source and headers package cannot be told."
+    fi
+    spi_mm=$(printf '%s\n' "$spi_kver" | cut -d. -f1-2)
+    spi_patch=$(printf '%s\n' "$spi_kver" | cut -d. -f3)
+    if [ -z "$spi_patch" ] || [ "$spi_patch" = 0 ]; then SPI_TAG="v$spi_mm"; else SPI_TAG="v$spi_mm.$spi_patch"; fi
+    SPI_HDR="linux-headers-$spi_flavour"
+    if [ -z "$BOARD_ARG" ]; then BOARD_ARG=pi3a-luckfox35; SPI_IMPLIED=1; fi
+    # the overlay's pins are the Orange Pi Zero 2W's 40-pin header (wired as on a Raspberry Pi): said on other H616 / H618 boards
+    case " $SPI_COMPAT " in
+        *" xunlong,orangepi-zero2w "*) ;;
+        *) SPI_PIN_NOTE="WARNING: the overlay's pins are those of the Orange Pi Zero 2W's 40-pin header (SPI1 on PH5-PH8, I2C1 on PI7/PI8, pin 12 = PI1); this board (${SPI_COMPAT}) is untested: check its header before rebooting" ;;
+    esac
+fi
+
 # the framebuffer device whose fbdev name starts with $1 and whose virtual_size is $2 (e.g. 320,480)
 find_fb() {
     for d in "$SYSROOT"/sys/class/graphics/fb[0-9]*; do
@@ -309,6 +416,21 @@ detect_panel() {
     PANEL_FB=$(find_fb "$1" "$2" || true)
     [ -n "$PANEL_FB" ] && drm_connected "$3" "$4"
 }
+# --spi-panel before the reboot: the panel's framebuffer does not exist yet. It takes the next number after the framebuffers
+# there now: /dev/fb0 when there is none (an H618 board without an HDMI monitor at boot: sun4i-drm makes no fbdev until a
+# monitor is connected, so the panel is the only framebuffer), else the one after them (an HDMI monitor connected at boot:
+# sun4i-drm's fbdev is built in and comes first). install.sh run again after the reboot finds the panel itself.
+SPI_FB_PREDICTED=0
+spi_predict_fb() {
+    n=0
+    for d in "$SYSROOT"/sys/class/graphics/fb[0-9]*; do
+        [ -d "$d" ] || continue
+        i=${d##*/fb}
+        case "$i" in ""|*[!0-9]*) continue ;; esac
+        [ "$i" -lt "$n" ] || n=$((i + 1))
+    done
+    echo "/dev/fb$n"
+}
 # The generic profile (a screen that has no profile of its own: untested hardware): the panel is the one connected internal
 # DRM connector (DSI, DPI, SPI, eDP, LVDS) whose first mode is the size of a framebuffer (either orientation); with LONE=1
 # (--board generic) the only framebuffer there is will do when there is no such connector. Sets GEN_FB, GEN_NW, GEN_NH
@@ -363,7 +485,10 @@ if [ -n "$BOARD_ARG" ]; then
         pi3a-luckfox35|pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-hyperpixel4|pi5-dsi7|hackberry-cm5)
             BOARD=$BOARD_ARG
             detect_panel "$BOARD" || true
-            if [ -z "$PANEL_FB" ]; then
+            if [ -z "$PANEL_FB" ] && [ -n "$SPI_PANEL" ]; then
+                # the panel comes with the overlay at the next boot: its framebuffer is foreseen (spi_predict_fb)
+                PANEL_FB=$(spi_predict_fb); SPI_FB_PREDICTED=1
+            elif [ -z "$PANEL_FB" ]; then
                 spec=$(panel_spec "$BOARD")
                 fbname=${spec%% *}; fbsize=${spec#* }; fbsize=${fbsize%% *}
                 echo "--board $BOARD: no ${fbsize%,*}x${fbsize#*,} \"$fbname\" framebuffer found (is the panel overlay loaded?)." >&2
@@ -684,6 +809,8 @@ profile_body_base() {
         # The backlight lines are the only ones that vary: the on/off backlight_gpio, or the overlay's PWM backlight_pwm
         # and its idle dim level when config.txt has it or this run sets it up (LF_PWM). The on/off body is byte for byte
         # the one of v0.9.3 and before, so a board without the PWM backlight keeps its generated profile as it is.
+        # On a board that is not a Raspberry Pi (no config.txt) the backlight is what /sys/class/backlight has, or what
+        # --spi-panel's overlay brings (LF_BL): levels (sysfs: and the dim level), on/off backlight_gpio, or none (no line).
         pi3a-luckfox35)
             cat <<EOF
 APPLAUNCH_BOARD=pi3a-luckfox35
@@ -697,6 +824,12 @@ APPLAUNCH_TOUCH_DEV=auto
 APPLAUNCH_TOUCH_ORIENT=buffer
 EOF
             if [ "$LF_PWM" = 1 ]; then echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"; dim_lines 10
+            elif [ "$IS_RPI" = 0 ]; then
+                case "$LF_BL" in
+                    "") ;;
+                    gpio) echo "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" ;;
+                    *) echo "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/$LF_BL"; dim_lines 10 ;;
+                esac
             else echo "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio"; fi
             cat <<EOF
 # same device for the code that still reads the LVGL name (the service sets it to /dev/fb0)
@@ -1073,9 +1206,37 @@ if [ "$BOARD" = pi3a-luckfox35 ]; then
         fi
     fi
 fi
+# The 3.5" SPI panel's backlight on a board that is not a Raspberry Pi (pi3a-luckfox35 with no config.txt, where LF_CFG and
+# LF_PWM do not apply): LF_BL is a backlight device with brightness levels (levels_backlight: sysfs: in the profile, the dim
+# level and the sysfs udev rule), "gpio" for the on/off backlight_gpio (the gpio: form and its rule), or "" (no backlight:
+# no line, the launcher shows no brightness control). With --spi-panel it is what the overlay brings at the next boot.
+# A backlight with levels: max_brightness above 1 (an on/off one has 1); backlight_pwm first, else the only one; none or
+# several others: nothing
+levels_backlight() {
+    lb_n=0; lb_one=""; lb_pwm=0
+    for d in "$SYSROOT"/sys/class/backlight/*; do
+        [ -e "$d" ] || continue
+        m=$(rd "$d/max_brightness" || true)
+        case "$m" in ""|*[!0-9]*) continue ;; esac
+        [ "$m" -gt 1 ] || continue
+        lb_n=$((lb_n + 1)); lb_one=${d##*/}
+        [ "$lb_one" != backlight_pwm ] || lb_pwm=1
+    done
+    if [ "$lb_pwm" = 1 ]; then echo backlight_pwm; elif [ "$lb_n" = 1 ]; then echo "$lb_one"; fi
+}
+LF_BL=""
+if [ "$BOARD" = pi3a-luckfox35 ] && [ "$IS_RPI" = 0 ]; then
+    if [ -n "$SPI_PANEL" ]; then
+        if [ "$SOFT_PWM" = 1 ]; then LF_BL=backlight_pwm; else LF_BL=gpio; fi
+    else
+        LF_BL=$(levels_backlight)
+        if [ -z "$LF_BL" ] && [ -d "$SYSROOT/sys/class/backlight/backlight_gpio" ]; then LF_BL=gpio; fi
+    fi
+fi
 # The on/off GPIO backlight of non-PWM boards (the deck has the PWM one, see 90-backlight-unblank.rules)
 GPIO_BL=0
 if [ "$BOARD" != zero2w ] && [ -d "$SYSROOT/sys/class/backlight/backlight_gpio" ]; then GPIO_BL=1; fi
+if [ "$LF_BL" = gpio ]; then GPIO_BL=1; fi
 gpio_bl_rule() {
     cat <<'EOF'
 # On/off GPIO backlight (boards without a PWM backlight): let the video group switch it.
@@ -1209,6 +1370,320 @@ check_user_name() {
     case "$1" in
         ""|-*|*[!A-Za-z0-9._-]*) echo "unusable user name \"$1\" for the polkit rules and the desktop unit" >&2; exit 1 ;;
     esac
+}
+# how the board was chosen, for the board: line
+board_how() {
+    if [ "$SPI_IMPLIED" = 1 ]; then echo " (the profile of --spi-panel $SPI_PANEL)"
+    elif [ -n "$BOARD_ARG" ]; then echo " (forced with --board)"; fi
+}
+
+# ---------------------------------------------------------------------------------------------------------
+# --spi-panel (what and why: above the board detection): the bundle's files (payload/panels/<panel>/, or panels/<panel>/
+# next to this script in the source tree), the dry run's plan and the set-up itself (spi_setup, a whole install only)
+# ---------------------------------------------------------------------------------------------------------
+SPI_OVL=spi35-st7796s
+SPI_FW_SHA=17204e39cce35fba857ad2dff14243e1d3a958c4dac00283f8df9b7ad5147cc7
+SPI_DTS=spi35-waveshare35f-gpio-backlight.dts
+[ "$SOFT_PWM" = 0 ] || SPI_DTS=spi35-waveshare35f-softpwm.dts
+# DKMS needs the compiler, make and the C library headers (the headers package builds its scripts at install) and patch
+SPI_PKGS="dkms gcc make libc6-dev patch $SPI_HDR"
+SPI_URL=""
+[ -z "$SPI_TAG" ] || SPI_URL="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/gpu/drm/drm_mipi_dbi.c?h=$SPI_TAG"
+SPI_ENV="$SYSROOT/boot/armbianEnv.txt"
+SPI_DTBO="$SYSROOT/boot/overlay-user/$SPI_OVL.dtbo"
+SPI_FW="$SYSROOT/lib/firmware/st7796s.bin"
+SPI_CHANGED=0; SPI_REBOOT=0; SPI_DKMS_NEW=""; SPI_WORK=""
+spi_src() {
+    if [ -d "$HERE/payload/panels/$SPI_PANEL" ]; then echo "$HERE/payload/panels/$SPI_PANEL"; else echo "$HERE/panels/$SPI_PANEL"; fi
+}
+# the panel's files in the bundle: nothing when they are all there and the init file is Waveshare's, else what is wrong
+spi_payload_problem() {
+    sp=$(spi_src)
+    sp_need="st7796s.bin $SPI_DTS dkms-drm-mipi-dbi-chunk/Makefile dkms-drm-mipi-dbi-chunk/dkms.conf dkms-drm-mipi-dbi-chunk/chunk.patch"
+    [ "$SOFT_PWM" = 0 ] || sp_need="$sp_need dkms-pwm-gpio/Makefile dkms-pwm-gpio/dkms.conf dkms-pwm-gpio/pwm-gpio.c"
+    for f in $sp_need; do
+        [ -f "$sp/$f" ] || { echo "the bundle has no panels/$SPI_PANEL/$f (unpack the whole bundle)"; return 0; }
+    done
+    sp_sum=$(sha256sum < "$sp/st7796s.bin" | cut -d' ' -f1)
+    [ "$sp_sum" = "$SPI_FW_SHA" ] || echo "panels/$SPI_PANEL/st7796s.bin is not Waveshare's init file (sha256 $sp_sum, expected $SPI_FW_SHA)"
+}
+# true when the DKMS module NAME/VERSION (kernel module MODULE) is installed for the running kernel
+spi_mod_installed() {
+    ls "$SYSROOT/lib/modules/$SPI_KREL/updates/dkms/$3".ko* > /dev/null 2>&1 && return 0
+    [ -z "$SYSROOT" ] && command -v dkms > /dev/null 2>&1 && dkms status "$1/$2" -k "$SPI_KREL" 2>/dev/null | grep -q ': installed'
+}
+# the user_overlays= list of armbianEnv.txt: its last such line (U-Boot's env import keeps the last one)
+spi_env_overlays() { sed -n 's/^user_overlays=//p' "$1" | tail -n 1; }
+spi_env_has() { case " $(spi_env_overlays "$1" | tr '\t' ' ') " in *" $SPI_OVL "*) return 0 ;; esac; return 1; }
+# armbianEnv.txt with SPI_OVL added to its last user_overlays= line (the names there kept), or a new line at the end
+spi_env_add() {
+    awk -v n="$SPI_OVL" '{ line[NR] = $0; if ($0 ~ /^user_overlays=/) last = NR }
+    END {
+        for (i = 1; i <= NR; i++) {
+            if (i == last) { v = substr(line[i], 15); sub(/[ \t]+$/, "", v); line[i] = "user_overlays=" (v == "" ? n : v " " n) }
+            print line[i]
+        }
+        if (!last) print "user_overlays=" n
+    }' "$1"
+}
+# the profile's framebuffer, and why that one
+spi_fb_note() {
+    if [ "$SPI_FB_PREDICTED" = 0 ]; then echo "$PANEL_FB (the panel's framebuffer, found: the panel works already)"
+    elif [ "$PANEL_FB" = /dev/fb0 ]; then echo "/dev/fb0 (no framebuffer now: the panel will be the only one after the reboot)"
+    else echo "$PANEL_FB (foreseen: the framebuffers there now, an HDMI monitor's at boot, come first; boot without that monitor and the panel is /dev/fb0: then run install.sh again, it finds the panel and updates the profile)"
+    fi
+}
+spi_plan() {
+    echo "SPI panel (--spi-panel $SPI_PANEL): the Waveshare 3.5\" RPi LCD (F), ST7796S 320x480 and Goodix GT911 touch, on the 40-pin header"
+    sp_p=$(spi_payload_problem)
+    [ -z "$sp_p" ] || echo "  WARNING: $sp_p: the install would stop here"
+    [ -z "$SPI_PIN_NOTE" ] || echo "  $SPI_PIN_NOTE"
+    echo "  kernel $SPI_KREL (upstream $SPI_TAG); packages, when missing: $SPI_PKGS (and the headers must be the running kernel's)"
+    if [ -f "$SPI_FW" ] && [ "$(sha256sum < "$SPI_FW" | cut -d' ' -f1)" = "$SPI_FW_SHA" ]; then sp_s="already there"; else sp_s="installed"; fi
+    echo "  /lib/firmware/st7796s.bin: the panel's init sequence (Waveshare's file, sha256 $(printf '%.8s' "$SPI_FW_SHA")...): $sp_s"
+    echo "  /etc/modules-load.d/spi35.conf: panel-mipi-dbi$( [ "$SOFT_PWM" = 0 ] || echo '; /etc/modules-load.d/pwm-gpio.conf: pwm-gpio')"
+    if [ "$SOFT_PWM" = 1 ]; then sp_b="10 brightness levels: software PWM on header pin 12 (DKMS module pwm-gpio), /sys/class/backlight/backlight_pwm"
+    else sp_b="on/off: gpio-backlight on header pin 12, /sys/class/backlight/backlight_gpio (--soft-pwm-backlight: 10 levels)"; fi
+    echo "  /boot/overlay-user/$SPI_OVL.dtbo: dtc -@ of $SPI_DTS (backlight $sp_b)"
+    if spi_mod_installed drm-mipi-dbi-chunk 1.0 drm_mipi_dbi; then
+        echo "  DKMS drm-mipi-dbi-chunk/1.0 (drm_mipi_dbi, SPI transfers of at most 64 KiB): installed for $SPI_KREL already: kept (no download)"
+    else
+        echo "  DKMS drm-mipi-dbi-chunk/1.0 (drm_mipi_dbi, SPI transfers of at most 64 KiB: the H618's DMA cannot reach RAM above"
+        echo "    4 GB and swiotlb takes 256 KiB at most): drm_mipi_dbi.c of $SPI_TAG downloaded from"
+        echo "    $SPI_URL"
+        echo "    and chunk.patch applied, then built and installed for $SPI_KREL (DKMS rebuilds it for kernel updates of the"
+        echo "    same $spi_mm series; for another series run install.sh --spi-panel again)"
+    fi
+    if [ "$SOFT_PWM" = 1 ]; then
+        if spi_mod_installed pwm-gpio 1.0 pwm-gpio; then echo "  DKMS pwm-gpio/1.0 (software PWM): installed for $SPI_KREL already: kept"
+        else echo "  DKMS pwm-gpio/1.0 (software PWM, Linux 6.18 drivers/pwm/pwm-gpio.c from the bundle): built and installed for $SPI_KREL"; fi
+    fi
+    if spi_env_has "$SPI_ENV"; then
+        echo "  /boot/armbianEnv.txt: user_overlays already loads $SPI_OVL: left as it is"
+    else
+        echo "  /boot/armbianEnv.txt: user_overlays=$(spi_env_add "$SPI_ENV" | sed -n 's/^user_overlays=//p' | tail -n 1) (armbianEnv.txt.bak-$(date +%Y%m%d) first)"
+    fi
+    echo "  no mem= kernel argument (the DKMS module makes it unnecessary)"
+    if grep -q '^extraargs=.*mem=' "$SPI_ENV" 2>/dev/null; then
+        echo "  NOTE: armbianEnv.txt has a mem= kernel argument (extraargs): no longer needed with the module; left as it is (remove it by hand for the RAM)"
+    fi
+    echo "  profile: pi3a-luckfox35, APPLAUNCH_FB=$(spi_fb_note)"
+    echo "  a failing step (packages, the headers of $SPI_KREL, the download, the patch, dtc, a DKMS build) stops the install"
+    echo "  before any file of the panel is put in place; then: reboot needed (the launcher is not started before it)"
+}
+# A failure of the set-up: the DKMS modules this run added go again, nothing of the panel is in place
+spi_fail() {
+    echo "ERROR: --spi-panel $SPI_PANEL: $1" >&2
+    for m in $SPI_DKMS_NEW; do
+        dkms remove "$m" --all > /dev/null 2>&1 || true
+        rm -rf "$SYSROOT/usr/src/${m%/*}-${m#*/}"
+        echo "  DKMS module $m taken off again" >&2
+    done
+    [ -z "$SPI_WORK" ] || rm -rf "$SPI_WORK"
+    echo "Nothing of the panel set-up was put in place (packages apt installed stay); the launcher was not installed." >&2
+    echo "Fix the cause and run install.sh again." >&2
+    exit 1
+}
+# spi_put SOURCE DEST: SOURCE in place as DEST (644) when it differs
+spi_put() {
+    if [ -f "$2" ] && cmp -s "$1" "$2"; then echo "${2#"$SYSROOT"}: already up to date"; return 0; fi
+    mkdir -p "${2%/*}"
+    install -m 644 "$1" "$2"
+    echo "${2#"$SYSROOT"}: installed"
+    SPI_CHANGED=1
+}
+# spi_dkms NAME VERSION SOURCE_DIR: the module's source in /usr/src/NAME-VERSION (an earlier one of that name removed first),
+# added, built and installed for the running kernel; a failure undoes this run's DKMS modules and stops
+spi_dkms() {
+    if [ -d "$SYSROOT/var/lib/dkms/$1/$2" ]; then dkms remove "$1/$2" --all > /dev/null 2>&1 || true; fi
+    rm -rf "$SYSROOT/usr/src/$1-$2"
+    mkdir -p "$SYSROOT/usr/src/$1-$2"
+    cp "$3"/* "$SYSROOT/usr/src/$1-$2/"
+    SPI_DKMS_NEW="$SPI_DKMS_NEW $1/$2"
+    echo "DKMS $1/$2: building for $SPI_KREL (a minute or more on a small board) ..."
+    if dkms add "$1/$2" > "$SPI_WORK/dkms.log" 2>&1 && dkms build "$1/$2" -k "$SPI_KREL" >> "$SPI_WORK/dkms.log" 2>&1 \
+            && dkms install "$1/$2" -k "$SPI_KREL" >> "$SPI_WORK/dkms.log" 2>&1; then
+        echo "DKMS $1/$2: installed for $SPI_KREL (/usr/src/$1-$2; DKMS rebuilds it for kernel updates)"
+        SPI_CHANGED=1
+        return 0
+    fi
+    tail -n 15 "$SPI_WORK/dkms.log" | sed 's/^/  | /' >&2
+    spi_fail "the DKMS module $1/$2 did not build or install for $SPI_KREL (full log: /var/lib/dkms/$1/$2/build/make.log)"
+}
+# The set-up itself (a whole install, after the launcher's packages: curl and dtc are there)
+spi_setup() {
+    SPI_WORK=$(mktemp -d)
+    sp=$(spi_src)
+    [ -z "$SPI_PIN_NOTE" ] || echo "$SPI_PIN_NOTE" >&2
+    sp_missing=""
+    for pkg in $SPI_PKGS; do dpkg -s "$pkg" > /dev/null 2>&1 || sp_missing="$sp_missing $pkg"; done
+    if [ -n "$sp_missing" ]; then
+        echo "packages:$sp_missing"
+        apt-get update || spi_fail "apt-get update failed (no network?)"
+        # shellcheck disable=SC2086
+        apt-get install -y --no-install-recommends $sp_missing || spi_fail "apt could not install$sp_missing"
+    else
+        echo "packages: all there ($SPI_PKGS)"
+    fi
+    if [ ! -d "$SYSROOT/lib/modules/$SPI_KREL/build" ]; then
+        spi_fail "no kernel headers for the running kernel $SPI_KREL (/lib/modules/$SPI_KREL/build): $SPI_HDR is another version's. Update the kernel (sudo apt update && sudo apt full-upgrade), reboot, and run install.sh again"
+    fi
+    dtc -@ -I dts -O dtb -o "$SPI_WORK/$SPI_OVL.dtbo" "$sp/$SPI_DTS" || spi_fail "dtc could not compile $SPI_DTS"
+    [ -s "$SPI_WORK/$SPI_OVL.dtbo" ] || spi_fail "dtc wrote no overlay from $SPI_DTS"
+    if spi_mod_installed drm-mipi-dbi-chunk 1.0 drm_mipi_dbi; then
+        echo "DKMS drm-mipi-dbi-chunk/1.0: installed for $SPI_KREL already (no download)"
+    else
+        mkdir "$SPI_WORK/chunk"
+        echo "drm_mipi_dbi.c of $SPI_TAG: $SPI_URL"
+        curl -fsSL --retry 2 --max-time 120 -o "$SPI_WORK/chunk/drm_mipi_dbi.c" "$SPI_URL" \
+            || spi_fail "the download of drm_mipi_dbi.c of $SPI_TAG failed ($SPI_URL): no network, or no such upstream tag"
+        grep -q 'size_t max_chunk = spi_max_transfer_size(spi);' "$SPI_WORK/chunk/drm_mipi_dbi.c" \
+            || spi_fail "the downloaded drm_mipi_dbi.c of $SPI_TAG has no 'max_chunk = spi_max_transfer_size(spi)' line: chunk.patch does not fit this kernel"
+        if ! patch --batch --forward --no-backup-if-mismatch "$SPI_WORK/chunk/drm_mipi_dbi.c" \
+                "$sp/dkms-drm-mipi-dbi-chunk/chunk.patch" > "$SPI_WORK/patch.log" 2>&1; then
+            sed 's/^/  | /' "$SPI_WORK/patch.log" >&2
+            spi_fail "chunk.patch does not apply to drm_mipi_dbi.c of $SPI_TAG"
+        fi
+        grep -q 'min_t(size_t, spi_max_transfer_size(spi), 65536)' "$SPI_WORK/chunk/drm_mipi_dbi.c" \
+            || spi_fail "chunk.patch left no 64 KiB cap in drm_mipi_dbi.c of $SPI_TAG"
+        rm -f "$SPI_WORK/chunk/"*.orig "$SPI_WORK/chunk/"*.rej
+        cp "$sp/dkms-drm-mipi-dbi-chunk/Makefile" "$sp/dkms-drm-mipi-dbi-chunk/dkms.conf" "$SPI_WORK/chunk/"
+        # this source fits this kernel series only: DKMS skips another one (the kernel's own module then loads)
+        { echo "# install.sh: drm_mipi_dbi.c of $SPI_TAG with chunk.patch; built for the kernel series $spi_mm only"
+          printf 'BUILD_EXCLUSIVE_KERNEL="^%s\\."\n' "$(printf '%s' "$spi_mm" | sed 's/\./\\./g')"; } >> "$SPI_WORK/chunk/dkms.conf"
+        spi_dkms drm-mipi-dbi-chunk 1.0 "$SPI_WORK/chunk"
+    fi
+    if [ "$SOFT_PWM" = 1 ]; then
+        if spi_mod_installed pwm-gpio 1.0 pwm-gpio; then echo "DKMS pwm-gpio/1.0: installed for $SPI_KREL already"
+        else spi_dkms pwm-gpio 1.0 "$sp/dkms-pwm-gpio"; fi
+    fi
+    # everything that can fail went well: the files
+    spi_put "$sp/st7796s.bin" "$SPI_FW"
+    printf 'panel-mipi-dbi\n' > "$SPI_WORK/spi35.conf"
+    spi_put "$SPI_WORK/spi35.conf" "$SYSROOT/etc/modules-load.d/spi35.conf"
+    if [ "$SOFT_PWM" = 1 ]; then
+        printf 'pwm-gpio\n' > "$SPI_WORK/pwm-gpio.conf"
+        spi_put "$SPI_WORK/pwm-gpio.conf" "$SYSROOT/etc/modules-load.d/pwm-gpio.conf"
+    fi
+    spi_put "$SPI_WORK/$SPI_OVL.dtbo" "$SPI_DTBO"
+    if spi_env_has "$SPI_ENV"; then
+        echo "/boot/armbianEnv.txt: user_overlays already loads $SPI_OVL"
+    else
+        sp_bak="$SPI_ENV.bak-$(date +%Y%m%d)"
+        [ -e "$sp_bak" ] || cp -p "$SPI_ENV" "$sp_bak"
+        spi_env_add "$SPI_ENV" > "$SPI_ENV.applaunch-new"
+        if spi_env_has "$SPI_ENV.applaunch-new"; then
+            chmod 644 "$SPI_ENV.applaunch-new"
+            mv "$SPI_ENV.applaunch-new" "$SPI_ENV"
+            echo "/boot/armbianEnv.txt: user_overlays=$(spi_env_overlays "$SPI_ENV") (the earlier file is ${sp_bak##*/})"
+            SPI_CHANGED=1
+        else
+            rm -f "$SPI_ENV.applaunch-new"
+            spi_fail "/boot/armbianEnv.txt could not be changed (the files above are in place; add user_overlays=$SPI_OVL by hand)"
+        fi
+    fi
+    if grep -q '^extraargs=.*mem=' "$SPI_ENV" 2>/dev/null; then
+        echo "NOTE: armbianEnv.txt has a mem= kernel argument (extraargs): no longer needed with the DKMS module; left as it is"
+        echo "      (remove it by hand to get the RAM back)"
+    fi
+    rm -rf "$SPI_WORK"; SPI_WORK=""
+    if [ "$SPI_CHANGED" = 1 ]; then
+        SPI_REBOOT=1
+        echo "the panel comes with the overlay at the next boot: REBOOT NEEDED (the launcher is not started before it)"
+    else
+        echo "the panel's set-up was in place already: nothing changed"
+    fi
+}
+
+# ---------------------------------------------------------------------------------------------------------
+# --network-manager: Settings > Wi-Fi needs NetworkManager, which Armbian and Ubuntu server images do not have (netplan
+# with systemd-networkd). The console steps install.sh printed before (README.md, "Install on a PC (amd64)"), done here:
+# network-manager and polkitd (apt, no recommends), /etc/netplan copied to /etc/netplan.bak-applaunch (once), the netplan
+# file 90-applaunch-networkmanager.yaml (renderer NetworkManager, 600) and "netplan generate". No "netplan apply": the
+# network switches at the next boot, where the netplan Wi-Fi entries come up under NetworkManager by themselves (tested on
+# the Orange Pi Zero 2W, 2026-11-21); netplan's own Wi-Fi supplicant would hold the interface until then anyway. Done at
+# the end of the install, once the launcher is in place. An ssh session over Wi-Fi drops at that reboot: when the default
+# route is over Wi-Fi, a terminal is asked first and a run without one needs --yes.
+# ---------------------------------------------------------------------------------------------------------
+NM_YAML=90-applaunch-networkmanager.yaml
+NM_SETUP=0; NM_NOTE=""; NM_IF=""; NM_WIFI=0; NM_REBOOT=0
+nm_installed() {
+    if [ -n "$SYSROOT" ]; then [ -x "$SYSROOT/usr/bin/nmcli" ]; else command -v nmcli > /dev/null 2>&1; fi
+}
+nm_renderer_set() { grep -qs 'renderer:[[:space:]]*"\{0,1\}NetworkManager' "$SYSROOT"/etc/netplan/*.yaml; }
+nm_refuse() {
+    echo "--network-manager: $1" >&2
+    echo "Nothing was changed." >&2
+    exit 1
+}
+if [ "$NM_OPT" = 1 ]; then
+    if nm_installed && { [ ! -d "$SYSROOT/etc/netplan" ] || nm_renderer_set; }; then
+        NM_NOTE="NetworkManager is installed and has the network already: --network-manager has nothing to do"
+    elif [ ! -f "$SYSROOT/etc/debian_version" ]; then
+        nm_refuse "for Debian and Ubuntu systems only (no /etc/debian_version)."
+    elif [ ! -d "$SYSROOT/etc/netplan" ]; then
+        nm_refuse "this system has no /etc/netplan: install.sh switches netplan systems only (Armbian, Ubuntu). By hand: sudo apt install network-manager, and let it manage the Wi-Fi interface (no ifupdown, networkd or wpa_supplicant of its own for it), then reboot."
+    else
+        NM_SETUP=1
+    fi
+    NM_IF=$(awk 'NR > 1 && $2 == "00000000" { print $1; exit }' "$SYSROOT/proc/net/route" 2>/dev/null || true)
+    case "$NM_IF" in wl*) NM_WIFI=1 ;; esac
+    if [ -n "$NM_IF" ] && [ -d "$SYSROOT/sys/class/net/$NM_IF/wireless" ]; then NM_WIFI=1; fi
+fi
+nm_plan() {
+    if [ "$NM_SETUP" = 0 ]; then echo "NetworkManager (--network-manager): $NM_NOTE"; return 0; fi
+    echo "NetworkManager (--network-manager), at the end of the install: apt install --no-install-recommends network-manager"
+    echo "  polkitd (when missing; polkitd with the launcher's packages); /etc/netplan copied to /etc/netplan.bak-applaunch$( [ ! -e "$SYSROOT/etc/netplan.bak-applaunch" ] || echo ' (there already: kept)');"
+    echo "  /etc/netplan/$NM_YAML: 'network: {version: 2, renderer: NetworkManager}' (600); netplan generate"
+    echo "  (no netplan apply): NetworkManager has the network from the next boot, the netplan Wi-Fi entries come up under it; reboot needed"
+    if [ "$NM_WIFI" = 1 ]; then
+        echo "  the default route is over Wi-Fi ($NM_IF): an ssh session over it drops at that reboot; asked first on a terminal,"
+        echo "  without a terminal only with --yes$( [ "$YES" = 0 ] || echo ' (given)')"
+    fi
+}
+# The confirmation (a whole install, before anything changes): the default route over Wi-Fi and no --yes
+nm_confirm() {
+    { [ "$NM_SETUP" = 1 ] && [ "$NM_WIFI" = 1 ] && [ "$YES" = 0 ]; } || return 0
+    if { [ "${APPLAUNCH_INSTALL_ASSUME_TTY:-0}" = 1 ] && [ -n "$SYSROOT" ]; } || { [ -t 0 ] && [ -t 1 ]; }; then
+        echo "--network-manager: the network goes over Wi-Fi ($NM_IF). NetworkManager takes it over at the next boot: an ssh"
+        echo "session over Wi-Fi drops then, and the Wi-Fi comes back under NetworkManager (the netplan entries) by itself."
+        printf "Go on? [y/N] "
+        nm_ans=""
+        read -r nm_ans || nm_ans=""
+        case "$nm_ans" in y|Y|yes|Yes|YES) ;; *) nm_refuse "not confirmed." ;; esac
+    else
+        nm_refuse "the default route is over Wi-Fi ($NM_IF) and this is not a terminal: add --yes to go ahead (an ssh session over Wi-Fi drops at the reboot that follows)."
+    fi
+}
+nm_setup() {
+    nm_missing=""
+    for pkg in network-manager polkitd; do dpkg -s "$pkg" > /dev/null 2>&1 || nm_missing="$nm_missing $pkg"; done
+    if [ -n "$nm_missing" ]; then
+        # shellcheck disable=SC2086
+        if ! { apt-get update && apt-get install -y --no-install-recommends $nm_missing; }; then
+            echo "WARNING: apt could not install$nm_missing: the network set-up is left as it was (netplan untouched)" >&2
+            return 0
+        fi
+        echo "installed:$nm_missing"
+    else
+        echo "network-manager and polkitd: there already"
+    fi
+    if [ -e "$SYSROOT/etc/netplan.bak-applaunch" ]; then
+        echo "/etc/netplan.bak-applaunch: there already (kept)"
+    else
+        cp -a "$SYSROOT/etc/netplan" "$SYSROOT/etc/netplan.bak-applaunch"
+        echo "/etc/netplan copied to /etc/netplan.bak-applaunch"
+    fi
+    printf 'network: {version: 2, renderer: NetworkManager}\n' > "$SYSROOT/etc/netplan/$NM_YAML.tmp"
+    chmod 600 "$SYSROOT/etc/netplan/$NM_YAML.tmp"
+    mv "$SYSROOT/etc/netplan/$NM_YAML.tmp" "$SYSROOT/etc/netplan/$NM_YAML"
+    echo "/etc/netplan/$NM_YAML: renderer NetworkManager (600)"
+    if netplan generate; then
+        echo "netplan generate: done (the network switches at the next boot)"
+    else
+        echo "WARNING: netplan generate failed: check the files in /etc/netplan (the backup is /etc/netplan.bak-applaunch)" >&2
+    fi
+    NM_REBOOT=1
 }
 
 # ---------------------------------------------------------------------------------------------------------
@@ -1359,7 +1834,7 @@ if [ "$DRY" = 1 ]; then
     echo "glibc: $GLIBC (ok)"
     echo "detected:"
     print_facts
-    echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
+    echo "board: ${BOARD:-unknown}$(board_how)"
     if [ -z "$BOARD" ]; then
         if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
         generic_hint
@@ -1391,6 +1866,7 @@ if [ "$DRY" = 1 ]; then
         echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
     elif [ "$BOOT_FW" = 0 ] && [ "$BOOT_CONFIG" = 1 ]; then
         echo "boot configuration: skipped ($BOOT_FW_WHY); nothing changed"
+        [ -z "$SPI_PANEL" ] || echo "  (config.txt and cmdline.txt only: the SPI panel's overlay goes into /boot/armbianEnv.txt, below)"
     elif [ "$DECK_BOOT" = 1 ]; then
         [ "$BOOT_CONFIG" = 1 ] && echo "boot config: PWM backlight overlay + cmdline cursor/consoleblank" || echo "boot config: skipped (--no-boot-config)"
     elif [ "$HP_PWM" = 1 ]; then
@@ -1415,6 +1891,8 @@ if [ "$DRY" = 1 ]; then
     elif [ -n "$LF_NOTE" ]; then
         echo "PWM backlight (3.5\" SPI panel): $LF_NOTE"
     fi
+    [ -z "$SPI_PANEL" ] || spi_plan
+    [ "$NM_OPT" = 0 ] || nm_plan
     if [ "$BOARD_ONLY" = 0 ]; then
         TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
         DRY_HOME=$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6 || true)
@@ -1434,7 +1912,8 @@ if [ "$DRY" = 1 ]; then
     if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
         if [ "$IS_PC" = 1 ]; then
             echo "packages (PC, when missing): $PC_PKGS kbd (chvt, for the desktop unit); bluetooth.service enabled and"
-            echo "  started; network-manager is not installed by install.sh"
+            if [ "$NM_SETUP" = 1 ]; then echo "  started; network-manager with --network-manager (above)"
+            else echo "  started; network-manager is not installed by install.sh"; fi
         fi
         echo "then: packages, launcher files, udev and polkit rules, Network Time service, as for the deck; the desktop variant:"
         echo "  - no user service, no lingering, getty@tty1 left as it is, no boot configuration change"
@@ -1450,10 +1929,12 @@ if [ "$DRY" = 1 ]; then
     elif [ "$BOARD_ONLY" = 0 ]; then
         if [ "$IS_PC" = 1 ]; then
             echo "packages (PC, when missing): $PC_PKGS; bluetooth.service enabled and started; network-manager is"
-            echo "  not installed (it takes the network over: the end of the install prints a recipe for the console)"
+            if [ "$NM_SETUP" = 1 ]; then echo "  installed with --network-manager (above)"
+            else echo "  not installed (it takes the network over: the end of the install prints a recipe for the console)"; fi
         fi
         echo "then: packages, launcher files, udev/polkit rules, services, user service (as for the deck): $USER_UNIT"
-        echo "  for $TARGET_USER (lingering on), enabled and started"
+        if [ -n "$SPI_PANEL" ]; then echo "  for $TARGET_USER (lingering on), enabled; started at the reboot when the panel's set-up changed (else now)"
+        else echo "  for $TARGET_USER (lingering on), enabled and started"; fi
         echo "console: $CONSOLE_UNIT frees the panel from the text console once the boot is done (the boot lines still show)"
     fi
     if [ "$BOARD_ONLY" = 0 ]; then
@@ -1468,7 +1949,7 @@ if [ "$DRY" = 1 ]; then
 fi
 
 if [ "$BOARD_ONLY" = 1 ]; then
-    echo "board: ${BOARD:-unknown}${BOARD_ARG:+ (forced with --board)}"
+    echo "board: ${BOARD:-unknown}$(board_how)"
     if [ -z "$BOARD" ]; then
         echo "detected:"; print_facts
         if [ -n "$BOARD_NOTE" ]; then echo "$BOARD_NOTE"; else echo "This board is not known to install.sh. Run tools/board-probe/probe-board.sh on it and send the report."; fi
@@ -1770,6 +2251,12 @@ if [ -z "$SYSROOT" ] && [ "$SWITCH" = to-desktop ] && grep -q -F "/$USER_UNIT" /
     echo "Nothing was changed." >&2
     exit 1
 fi
+# --spi-panel: the bundle's panel files first; --network-manager over Wi-Fi: asked (or --yes) before anything changes
+if [ -n "$SPI_PANEL" ]; then
+    SPI_PROBLEM=$(spi_payload_problem)
+    [ -z "$SPI_PROBLEM" ] || spi_refuse "$SPI_PROBLEM."
+fi
+nm_confirm
 
 say "Installing packages"
 if [ "$IS_PC" = 1 ]; then
@@ -1778,6 +2265,8 @@ if [ "$IS_PC" = 1 ]; then
     if [ "$SESSION" = desktop ]; then PKGS="$PKGS kbd"; fi
 else
     PKGS="libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler"
+    # --network-manager: polkitd now (the polkit check below), network-manager at the end (it takes the network over)
+    if [ "$NM_SETUP" = 1 ]; then PKGS="$PKGS polkitd"; fi
 fi
 MISSING=""
 for pkg in $PKGS; do
@@ -1804,6 +2293,12 @@ NEED_NM=0
 command -v nmcli >/dev/null 2>&1 || NEED_NM=1
 NEED_BLUEZ=0
 command -v bluetoothctl >/dev/null 2>&1 || NEED_BLUEZ=1
+
+# The SPI panel before the launcher's files: a failed step stops here, with nothing of the panel or the launcher in place
+if [ -n "$SPI_PANEL" ]; then
+    say "SPI panel (--spi-panel $SPI_PANEL: Waveshare 3.5\" RPi LCD (F)$( [ "$SOFT_PWM" = 0 ] || echo ', software PWM backlight'))"
+    spi_setup
+fi
 
 say "Installing the launcher into ${APP_ROOT#"$SYSROOT"}"
 mkdir -p "$APP_ROOT/bin" "$APP_ROOT/lib" "$APP_ROOT/applications"
@@ -2002,6 +2497,13 @@ apply_profile
 say "Install options"
 INSTALL_CONF="$PROFILE_DIR/install.conf"
 mkdir -p "$PROFILE_DIR"
+PREV_SPI=""; PREV_SOFT=""
+if [ -f "$INSTALL_CONF" ]; then
+    PREV_SPI=$(sed -n 's/^spi_panel=//p' "$INSTALL_CONF" | tail -n 1)
+    PREV_SOFT=$(sed -n 's/^soft_pwm_backlight=//p' "$INSTALL_CONF" | tail -n 1)
+    case "$PREV_SPI" in waveshare35f) ;; *) PREV_SPI="" ;; esac
+    case "$PREV_SOFT" in 1) ;; *) PREV_SOFT=0 ;; esac
+fi
 {
     echo "# The options of the last install.sh run, written by install.sh. Settings > Updates runs install.sh of a newer"
     echo "# release again with them (cyberdeckzero-update). board= is empty when the board was detected; screen_size= (inches)
@@ -2014,10 +2516,19 @@ mkdir -p "$PROFILE_DIR"
     echo "pwm_backlight=$PWM_BACKLIGHT"
     echo "default_source=$DEFAULT_SOURCE"
     echo "user=$TARGET_USER"
+    # --spi-panel is done once (its files stay; DKMS rebuilds its modules): recorded for information and kept by later runs,
+    # never run again by Settings > Updates, which keeps the profile through board= above
+    if [ -n "$SPI_PANEL" ]; then
+        echo "spi_panel=$SPI_PANEL"
+        echo "soft_pwm_backlight=$SOFT_PWM"
+    elif [ -n "$PREV_SPI" ]; then
+        echo "spi_panel=$PREV_SPI"
+        echo "soft_pwm_backlight=${PREV_SOFT:-0}"
+    fi
 } > "$INSTALL_CONF.tmp"
 chmod 644 "$INSTALL_CONF.tmp"
 mv "$INSTALL_CONF.tmp" "$INSTALL_CONF"
-echo "${INSTALL_CONF#"$SYSROOT"}: keyboard \"$KEYBOARD_NAME\"${BOARD_ARG:+, --board $BOARD_ARG}${SIZE_ARG:+, --screen-size $SIZE_ARG}${MM_ARG:+, --panel-mm $MM_ARG}$( [ "$BOOT_CONFIG" = 0 ] && echo ', --no-boot-config')$( [ "$PWM_BACKLIGHT" = 1 ] && echo ', --pwm-backlight')$( [ "$DEFAULT_SOURCE" = 0 ] && echo ', --no-default-source')"
+echo "${INSTALL_CONF#"$SYSROOT"}: keyboard \"$KEYBOARD_NAME\"${BOARD_ARG:+, --board $BOARD_ARG}${SIZE_ARG:+, --screen-size $SIZE_ARG}${MM_ARG:+, --panel-mm $MM_ARG}$( [ "$BOOT_CONFIG" = 0 ] && echo ', --no-boot-config')$( [ "$PWM_BACKLIGHT" = 1 ] && echo ', --pwm-backlight')$( [ "$DEFAULT_SOURCE" = 0 ] && echo ', --no-default-source')${SPI_PANEL:+ (spi_panel=$SPI_PANEL recorded for information)}"
 
 # The PWM backlight overlay is for the deck's Waveshare panel (DECK_BOOT, see the board detection); a board with its
 # own profile keeps its config.txt and only gets the cmdline arguments (never an fbcon= argument).
@@ -2034,6 +2545,7 @@ elif [ "$BOOT_CONFIG" = 1 ] && [ "$BOOT_FW" = 1 ] && { [ ! -f "$BOOT/config.txt"
 elif [ "$BOOT_CONFIG" = 1 ] && [ "$BOOT_FW" = 0 ]; then
     say "Boot configuration"
     echo "boot configuration: skipped ($BOOT_FW_WHY); nothing changed"
+    [ -z "$SPI_PANEL" ] || echo "(the SPI panel's overlay in /boot/armbianEnv.txt: the SPI panel step above)"
 elif [ "$BOOT_CONFIG" = 1 ]; then
     say "Boot configuration ($( { [ "$DECK_BOOT" = 1 ] || [ "$LF_SETUP" = 1 ]; } && echo 'PWM backlight, ' )hidden console cursor)"
     CONFIG="$BOOT/config.txt"
@@ -2144,9 +2656,17 @@ else
     elif [ "$SWITCH_KEPT_RUNNING" = 1 ]; then
         echo "not started now: the launcher started from the menu ($DESKTOP_UNIT) still runs; $USER_UNIT starts at the"
         echo "next boot: sudo reboot"
+    elif [ "$SPI_REBOOT" = 1 ]; then
+        echo "not started now: the SPI panel comes with its overlay at the next boot; $USER_UNIT starts then: sudo reboot"
     else
         as_user systemctl --user restart "$USER_UNIT" || echo "(could not start it now; it starts at the next boot)"
     fi
+fi
+
+# --network-manager last: the launcher is in place whatever happens to the network
+if [ "$NM_SETUP" = 1 ]; then
+    say "NetworkManager (--network-manager)"
+    nm_setup
 fi
 
 say "Done"
@@ -2173,8 +2693,9 @@ fi
 if [ "$NEED_BLUEZ" = 1 ]; then
     echo "NOTICE: bluez is not installed: Settings > Bluetooth will not work. Fix: sudo apt install bluez"
 fi
-if [ "$NEED_NM" = 1 ]; then
-    echo "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager. install.sh does not install it,"
+if [ "$NEED_NM" = 1 ] && [ "$NM_REBOOT" = 0 ]; then
+    echo "NOTICE: network-manager is not installed: Settings > Wi-Fi needs NetworkManager. install.sh does not install it"
+    echo "        without --network-manager (it does these steps, README.md, \"NetworkManager by install.sh\"),"
     echo "        because it takes the network over (from netplan / systemd-networkd here). Do it on the console, not"
     echo "        from an ssh session over Wi-Fi (the link drops while it switches):"
     if [ -d "$SYSROOT/etc/netplan" ]; then
@@ -2213,4 +2734,13 @@ if [ "${REBOOT:-0}" = 1 ]; then
     else
         echo "Boot configuration changed: reboot now so the $( { [ "$DECK_BOOT" = 1 ] || [ "$HP_PWM" = 1 ] || [ "$LF_SETUP" = 1 ]; } && echo 'PWM backlight and ' )console settings apply:  sudo reboot"
     fi
+fi
+if [ "$SPI_REBOOT" = 1 ]; then
+    echo "Reboot needed: the SPI panel, its touch and backlight come with the overlay at the next boot, then the launcher:  sudo reboot"
+fi
+if [ -n "$NM_NOTE" ]; then echo "$NM_NOTE"; fi
+if [ "$NM_REBOOT" = 1 ]; then
+    echo "Reboot needed: NetworkManager takes the network over at the next boot (Settings > Wi-Fi then works):  sudo reboot"
+    echo "  An ssh session over Wi-Fi drops at the reboot; the Wi-Fi of the netplan files comes back under NetworkManager by"
+    echo "  itself. Check: nmcli -t device status (the Wi-Fi line \":connected\"). Roll back: README.md, \"NetworkManager by install.sh\"."
 fi
