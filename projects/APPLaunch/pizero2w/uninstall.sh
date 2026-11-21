@@ -86,6 +86,8 @@ CONSOLE_UNIT=cyberdeckzero-console.service
 DESKTOP_UNIT=cyberdeckzero-desktop.service
 DESKTOP_RULES=52-cyberdeckzero-desktop.rules
 UDISKS_RULES=53-cyberdeckzero-udisks.rules
+POWERKEY_DROPIN=50-cyberdeckzero-powerkey.conf
+LOGIND_DIR="$ROOT/etc/systemd/logind.conf.d"
 DESKTOP_ENTRY_NAME=cyberdeckzero.desktop
 # branding-allow-begin: the binary name of v0.6.0 and before (a link to the new binary after a migration)
 OLD_LAUNCHER_BIN=M5CardputerZero-APPLaunch
@@ -387,6 +389,15 @@ echo "  - files of earlier bundles no longer shipped: $(echo $RETIRED_FILES | se
 echo "  - licences and notices $DOC_DIR"
 echo "  - udev rules 90-backlight-unblank, 91-applaunch-vkbd, 92-applaunch-backlight-gpio, 92-applaunch-backlight-sysfs, 93-applaunch-rfkill, 99-bt-keyboard"
 echo "  - board profile $PROFILE and the install options $INSTALL_CONF (and $PROFILE_DIR if it is then empty)"
+# the FZ-M1's power-key drop-in: only when install.sh made it (install.conf: powerkey_dropin=created) and it still has
+# the settings install.sh wrote; a hand-made or hand-edited one stays
+PK_REMOVE=0
+if [ -f "$INSTALL_CONF" ] && [ "$(sed -n 's/^powerkey_dropin=//p' "$INSTALL_CONF" | tail -n 1)" = created ] && [ -f "$LOGIND_DIR/$POWERKEY_DROPIN" ]; then
+    if [ "$(tr -d '\r' < "$LOGIND_DIR/$POWERKEY_DROPIN" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^#/d' -e '/^$/d')" = "$(printf '[Login]\nHandlePowerKey=suspend\nHandlePowerKeyLongPress=poweroff')" ]; then PK_REMOVE=1
+    else PK_EDITED=1; fi
+fi
+[ "$PK_REMOVE" = 0 ] || echo "  - $LOGIND_DIR/$POWERKEY_DROPIN (the FZ-M1 power-key drop-in install.sh wrote; logind re-reads its settings, not restarted)"
+[ -z "${PK_EDITED:-}" ] || echo "  - $LOGIND_DIR/$POWERKEY_DROPIN stays: install.sh wrote it, but it was edited since"
 echo "  - polkit rules 50-networkmanager-netdev, 51-launcher-time-power, ${UDISKS_RULES%.rules}, ${DESKTOP_RULES%.rules}, ${OLD_DESKTOP_RULES%.rules}"
 if [ "$BOOT_CONFIG" = 1 ]; then
     if [ "$RESTORE_OK" = 1 ]; then
@@ -530,6 +541,12 @@ done
 for f in 50-networkmanager-netdev.rules 51-launcher-time-power.rules "$UDISKS_RULES" "$DESKTOP_RULES" "$OLD_DESKTOP_RULES"; do
     rm_sys "$POLKIT_DIR/$f"
 done
+
+if [ "$PK_REMOVE" = 1 ]; then
+    say "Removing the power-key drop-in (FZ-M1)"
+    rm_sys "$LOGIND_DIR/$POWERKEY_DROPIN"
+    act_try $SUDO systemctl kill -s HUP systemd-logind
+fi
 
 say "Removing the board profile and the install options"
 rm_sys "$PROFILE"

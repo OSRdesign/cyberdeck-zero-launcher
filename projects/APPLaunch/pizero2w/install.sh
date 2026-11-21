@@ -185,6 +185,7 @@ CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the p
 DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
 DESKTOP_RULES=52-cyberdeckzero-desktop.rules     # desktop boards: the user may start and stop DESKTOP_UNIT
 UDISKS_RULES=53-cyberdeckzero-udisks.rules       # every variant: the user may mount removable drives (udisksctl)
+POWERKEY_DROPIN=50-cyberdeckzero-powerkey.conf   # Panasonic FZ-M1 only: logind drop-in, power key = standby (see pk_state)
 DESKTOP_ENTRY_NAME=cyberdeckzero.desktop         # desktop boards: "CyberdeckZero Launcher" in the menu
 DOC_NAME=cyberdeckzero-launcher                  # /usr/share/doc/cyberdeckzero-launcher: licences and notices
 # branding-allow-begin: the binary name of v0.6.0 and before (kept as a link for one release, then removed)
@@ -222,6 +223,7 @@ RETIRED_DIRS="adb"                               # removed when empty afterwards
 # System paths ($SYSROOT is empty on a real board)
 APP_ROOT="$SYSROOT/usr/share/APPLaunch"
 SYSTEMD_DIR="$SYSROOT/etc/systemd/system"
+LOGIND_DIR="$SYSROOT/etc/systemd/logind.conf.d"
 POLKIT_DIR="$SYSROOT/etc/polkit-1/rules.d"
 UDEV_DIR="$SYSROOT/etc/udev/rules.d"
 MENU_DIR="$SYSROOT/usr/share/applications"
@@ -609,6 +611,31 @@ pc_is_tablet() {
     case "$DMI_CHASSIS" in 30|32) return 0 ;; esac        # SMBIOS chassis: 30 tablet, 32 detachable
     case "$DMI_PRODUCT" in FZM1-2*|FZ-M1*) return 0 ;; esac
     return 1
+}
+# The Panasonic FZ-M1 (DMI FZM1-2* / FZ-M1*) alone gets the power-key drop-in; no other PC, no Pi.
+pc_is_fzm1() {
+    case "$DMI_PRODUCT" in FZM1-2*|FZ-M1*) return 0 ;; esac
+    return 1
+}
+# The drop-in: Armbian's logind default powers the tablet off on a short press of the power key; here a short press
+# suspends (standby) and a long press powers off. The same two keys the owner has applied by hand since v0.8.7.
+pk_text() {
+    echo "# Written by the CyberdeckZero launcher's install.sh (Panasonic FZ-M1 only): a short press of the power key"
+    echo "# suspends (standby), a long press powers off. Armbian's logind default powers off on a short press."
+    echo "# Remove this file (or run uninstall.sh) to go back to the default. Read by: systemctl kill -s HUP systemd-logind"
+    echo "[Login]"
+    echo "HandlePowerKey=suspend"
+    echo "HandlePowerKeyLongPress=poweroff"
+}
+# pk_keys FILE: the settings of a logind file, without comments, blank lines, spaces and CRs (what logind acts on)
+pk_keys() { tr -d '\r' < "$1" 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^#/d' -e '/^;/d' -e '/^$/d'; }
+# pk_state: absent, same (the file there has our settings, whatever its comments) or different (edited: never replaced
+# without --force)
+pk_state() {
+    f="$LOGIND_DIR/$POWERKEY_DROPIN"
+    if [ ! -e "$f" ]; then echo absent
+    elif [ "$(pk_keys "$f")" = "$(pk_text | pk_keys /dev/stdin)" ]; then echo same
+    else echo different; fi
 }
 IS_PC=0
 PC_CONN=""; PC_MM=""; PC_MM_FROM=""; PC_LOGICAL=""
@@ -2077,6 +2104,19 @@ if [ "$DRY" = 1 ]; then
         echo "removable drives: /etc/polkit-1/rules.d/$UDISKS_RULES: $TARGET_USER (only) may mount removable drives through udisks"
         echo "  (udisksctl mount -b, org.freedesktop.udisks2.filesystem-mount and -mount-other-seat) without a password, also from"
         echo "  the launcher's background session; fixed disks, encryption and everything else stay as they are"
+        if [ "$IS_PC" = 1 ] && pc_is_fzm1; then
+            case "$(pk_state)" in
+                absent) echo "power key (Panasonic FZ-M1): /etc/systemd/logind.conf.d/$POWERKEY_DROPIN will be written: a short press suspends"
+                    echo "  (HandlePowerKey=suspend), a long press powers off (HandlePowerKeyLongPress=poweroff); logind reloads its settings"
+                    echo "  (systemctl kill -s HUP systemd-logind, never a restart: ssh and desktop sessions stay)" ;;
+                same) echo "power key (Panasonic FZ-M1): /etc/systemd/logind.conf.d/$POWERKEY_DROPIN: already there, with these settings: left as it is" ;;
+                *) if [ "$FORCE" = 1 ]; then
+                       echo "power key (Panasonic FZ-M1): /etc/systemd/logind.conf.d/$POWERKEY_DROPIN is there with other settings: replaced (--force), the old one kept as $POWERKEY_DROPIN.bak"
+                   else
+                       echo "power key (Panasonic FZ-M1): /etc/systemd/logind.conf.d/$POWERKEY_DROPIN is there with other settings: kept as it is (--force replaces it, the old one kept as $POWERKEY_DROPIN.bak)"
+                   fi ;;
+            esac
+        fi
     fi
     if [ "$BOARD_ONLY" = 0 ] && [ "$SESSION" = desktop ]; then
         if [ "$IS_PC" = 1 ]; then
@@ -2592,6 +2632,39 @@ else
     echo "WARNING: polkit is not available (no polkitd, or it does not answer): Settings > Reboot, Shut down and the" >&2
     echo "         date and time settings will be refused. Install it: sudo apt install polkitd" >&2
 fi
+# The Panasonic FZ-M1's power key (logind drop-in). PK_CREATED=1 (recorded in install.conf) says this installer wrote the
+# file, so that uninstall.sh removes only a file it made; a hand-made one is never removed, a hand edit never replaced
+# without --force (the old file is then kept as .bak). logind is told to re-read its settings (SIGHUP, which is what
+# "systemctl reload" does); never restarted: an ssh or desktop session must survive.
+PK_CREATED=0
+if [ -f "$INSTALL_CONF" ] && [ "$(sed -n 's/^powerkey_dropin=//p' "$INSTALL_CONF" | tail -n 1)" = created ]; then PK_CREATED=1; fi
+if [ "$IS_PC" = 1 ] && pc_is_fzm1; then
+    PK_FILE="$LOGIND_DIR/$POWERKEY_DROPIN"
+    PK_WRITE=0
+    case "$(pk_state)" in
+        absent) PK_WRITE=1; PK_MSG="written" ;;
+        same) echo "power key: /etc/systemd/logind.conf.d/$POWERKEY_DROPIN: already there (short press suspends, long press powers off): left as it is" ;;
+        *) if [ "$FORCE" = 1 ]; then
+               cp -p "$PK_FILE" "$PK_FILE.bak"
+               PK_WRITE=1; PK_MSG="replaced (--force; the old one kept as $POWERKEY_DROPIN.bak)"
+           else
+               echo "power key: /etc/systemd/logind.conf.d/$POWERKEY_DROPIN is there with other settings: kept as it is (--force replaces it, the old one kept as $POWERKEY_DROPIN.bak)"
+           fi ;;
+    esac
+    if [ "$PK_WRITE" = 1 ]; then
+        mkdir -p "$LOGIND_DIR"
+        pk_text > "$PK_FILE.tmp"
+        chmod 644 "$PK_FILE.tmp"
+        mv "$PK_FILE.tmp" "$PK_FILE"
+        PK_CREATED=1
+        echo "power key: /etc/systemd/logind.conf.d/$POWERKEY_DROPIN $PK_MSG (Panasonic FZ-M1: a short press suspends, a long press powers off)"
+        if systemctl kill -s HUP systemd-logind >/dev/null 2>&1; then
+            echo "power key: logind told to re-read its settings (not restarted)"
+        else
+            echo "WARNING: logind could not be told to re-read its settings: the power key changes at the next boot" >&2
+        fi
+    fi
+fi
 if [ "$SESSION" = desktop ]; then
     # the menu entry starts the launcher's unit as the user, without a password
     render "$DESKTOP_RULES" > "$POLKIT_DIR/$DESKTOP_RULES.tmp"
@@ -2691,6 +2764,8 @@ fi
     echo "pwm_backlight=$PWM_BACKLIGHT"
     echo "default_source=$DEFAULT_SOURCE"
     echo "user=$TARGET_USER"
+    # the FZ-M1's power-key drop-in, when this installer wrote it (uninstall.sh removes only such a file)
+    if [ "${PK_CREATED:-0}" = 1 ]; then echo "powerkey_dropin=created"; fi
     # --spi-panel is done once (its files stay; DKMS rebuilds its modules): recorded for information and kept by later runs,
     # never run again by Settings > Updates, which keeps the profile through board= above
     if [ -n "$SPI_PANEL" ]; then
