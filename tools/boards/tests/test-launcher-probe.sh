@@ -54,7 +54,7 @@ run() {
 }
 tree_sum() { (cd "$FIX/$1" && find . -type f | sort | while read -r f; do cksum < "$f"; done | cksum); }
 
-REAL="hackberry-real palmpi-dsi5-real pi5-spi35-real fzm1-real pi4b-real pi3a-real zero8-real deck-real pi5-real opi-zero2w-real"
+REAL="hackberry-real palmpi-dsi5-real pi5-spi35-real fzm1-real pi4b-real pi3a-real zero8-real deck-real pi5-real opi-zero2w-real pi4b-dsi7-real"
 NAMES="pi4b-dsi-portrait pi3a-wsdsi43-forced hackberry-720 pc-hdmi-edid unknown-empty $REAL"
 mkdir -p "$GOLD"
 
@@ -165,6 +165,7 @@ check_pick pi3a-real pi3a-wsdsi43
 check_pick zero8-real zero2w                  # SURPRISING: a Zero 2 W with the 3.5-inch SPI panel; by design the Zero 2 W stays the deck unless --board / --spi-panel
 check_pick deck-real zero2w
 check_pick pi5-real pi5-hyperpixel4
+check_pick pi4b-dsi7-real pi4b-dsi            # the 7-inch DSI panel installed by hand from the README with --screen-size 7
 check_pick opi-zero2w-real unknown        # SURPRISING: an Orange Pi Zero 2W with the 3.5-inch SPI panel (320x480, panel-mipi-dbi, user overlay) is not known to install.sh without --spi-panel waveshare35f or --board; the dry run says it would stop
 run fzm1-real sh
 check "fzm1 (real): no device tree, DMI and the Intel backlight, glibc of the recording" 'has "unavailable: no /proc/device-tree" && has "dmi: Panasonic Corporation / FZM1-2" && has "intel_backlight" && has "glibc: 2.43"'
@@ -173,6 +174,9 @@ run hackberry-real sh
 check "hackberry (real): a Bluetooth input device has no name in the fixture" 'has "Bluetooth device (name not kept)"'
 run deck-real sh
 check "deck (real): two bcm2708 framebuffers, no DRM connector" 'has "drm: no connector" && has "/dev/fb1" && has "no DRM connector"'
+run pi4b-dsi7-real sh
+check "pi4b 7-inch (real): the recorded profile (screen_size=7, 154x86 mm) is what a fresh dry run would write" 'has "screen: panel size 154x86 mm" && has "profile: pi4b-dsi: /etc/applaunch/board.conf already up to date"' "$(printf '%s
+' "$OUT" | grep -E '^(screen|profile):')"
 run pi5-spi35-real sh
 check "pi5 SPI (real): the panel node and the PWM backlight" 'has "compatible: st7796s,panel-mipi-dbi-spi" && has "backlight_pwm: type raw, max 15"'
 

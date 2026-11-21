@@ -167,5 +167,5 @@ Not captured (so a replay differs from the board there): `/etc/netplan` and the 
 files of earlier bundles in `/usr/share/APPLaunch`, `/usr/bin/wireplumber`.
 
 The `*-real` fixtures are recorded boards (2026-11-21 and 22): `hackberry-real`, `palmpi-dsi5-real`, `pi5-spi35-real`,
-`fzm1-real`, `pi4b-real`, `pi3a-real`, `zero8-real`, `deck-real`, `pi5-real`, `opi-zero2w-real` (Armbian). The test also checks which board
+`fzm1-real`, `pi4b-real`, `pi3a-real`, `zero8-real`, `deck-real`, `pi5-real`, `opi-zero2w-real` (Armbian), `pi4b-dsi7-real` (installed by hand from the README). The test also checks which board
 install.sh picks from each of them.
