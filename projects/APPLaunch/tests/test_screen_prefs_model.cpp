@@ -94,8 +94,7 @@ int main(int argc, char **argv)
                 const int cols = st_viewport::grid_cols(c.w, cells[i].w);
                 const int rows = st_viewport::grid_rows(c.h, cells[i].h);
                 if (cols != c.grid[i][0] || rows != c.grid[i][1])
-                    std::fprintf(stderr, "%dx%d %d px: %d x %d
-", c.w, c.h, cells[i].px, cols, rows);
+                    std::fprintf(stderr, "%dx%d %d px: %d x %d\n", c.w, c.h, cells[i].px, cols, rows);
                 assert(cols == c.grid[i][0] && rows == c.grid[i][1]);
             }
             /* Auto is 20 px on every one of these screens (none is a narrow portrait) */
