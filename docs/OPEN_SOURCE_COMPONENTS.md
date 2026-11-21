@@ -23,6 +23,7 @@ Paths in the evidence column are relative to the repository root.
 | nlohmann/json 3.11.3 | the Store (`projects/AppStore`, credited on the Licenses page) | [MIT](../LICENSES/nlohmann-json-MIT.txt), Niels Lohmann; original SPDX preserved |
 | stb_image 2.30 | `ext_components/cp0_lvgl/third_party/stb/stb_image.h` (unmodified, provenance in its `README.md`), compiled only into the map engine (`src/map/cp0_map_stb.c`, `CONFIG_CP0_LVGL_MAP`, off by default; the launcher does not use it): PNG / JPEG tiles, the zlib inflater for PMTiles directories; built `STB_IMAGE_STATIC` | [public domain (Unlicense) or MIT](../LICENSES/stb_image-MIT-or-Unlicense.txt), Sean Barrett, at the user's choice |
 | JetBrains Mono | `projects/APPLaunch/APPLaunch/share/font` | [OFL-1.1](../projects/APPLaunch/APPLaunch/share/font/JetBrainsMono-OFL.txt) |
+| Linux `drivers/pwm/pwm-gpio.c` (6.18) | `projects/APPLaunch/pizero2w/panels/waveshare35f/dkms-pwm-gpio/`, shipped as source in the bundle and built on the board with DKMS only by `install.sh --spi-panel waveshare35f --soft-pwm-backlight` (provenance in that folder's `README.md`); not linked into the launcher. `drm_mipi_dbi.c` (GPL-2.0-or-later) is fetched on the board from git.kernel.org, not shipped | [GPL-2.0-only](../LICENSES/GPL-2.0.txt); its SPDX line and copyright notices kept |
 
 ## Fonts, images and sounds of the launcher (`projects/APPLaunch/APPLaunch/share`)
 

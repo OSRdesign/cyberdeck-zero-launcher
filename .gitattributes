@@ -6,3 +6,6 @@
 # shell scripts without the .sh extension
 projects/APPLaunch/pizero2w/cyberdeckzero-console text eol=lf
 projects/APPLaunch/pizero2w/cyberdeckzero-update text eol=lf
+# install.sh --spi-panel: kernel build files, the patch and the overlays go to the board as they are (LF); the init file is binary
+projects/APPLaunch/pizero2w/panels/** text eol=lf
+projects/APPLaunch/pizero2w/panels/**/*.bin binary

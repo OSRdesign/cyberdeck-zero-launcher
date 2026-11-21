@@ -1,0 +1,11 @@
+--- ../drm_mipi_dbi.c	2026-11-21 00:42:26.953090300 +0100
++++ drm_mipi_dbi.c	2026-11-21 00:42:50.380813600 +0100
+@@ -1334,7 +1334,7 @@
+ int mipi_dbi_spi_transfer(struct spi_device *spi, u32 speed_hz,
+ 			  u8 bpw, const void *buf, size_t len)
+ {
+-	size_t max_chunk = spi_max_transfer_size(spi);
++	size_t max_chunk = min_t(size_t, spi_max_transfer_size(spi), 65536); /* cyberdeck: H618 DMA bounce buffer limit */
+ 	struct spi_transfer tr = {
+ 		.bits_per_word = bpw,
+ 		.speed_hz = speed_hz,

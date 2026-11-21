@@ -1,0 +1,97 @@
+/dts-v1/;
+/plugin/;
+
+/* Waveshare 3.5" RPi LCD (F): ST7796S on SPI1 + Goodix GT911 on I2C1, Orange Pi Zero 2W header,
+   wired as on a Raspberry Pi. Numbers instead of #include: GPIO_ACTIVE_HIGH = 0, IRQ_TYPE_EDGE_FALLING = 2.
+   GPIO cells on sunxi: <&pio BANK PIN FLAGS>, bank H = 7, I = 8. */
+
+/ {
+	compatible = "xunlong,orangepi-zero2w", "allwinner,sun50i-h618";
+
+	fragment@0 {
+		target = <&pio>;
+		__overlay__ {
+			spi35_spi1_pins: spi35-spi1-pins {
+				pins = "PH5", "PH6", "PH7", "PH8";	/* CS0, CLK, MOSI, MISO: pins 24, 23, 19, 21 */
+				function = "spi1";
+			};
+			spi35_i2c1_pins: spi35-i2c1-pins {
+				pins = "PI7", "PI8";			/* SCL, SDA: pins 5, 3 */
+				function = "i2c1";
+				bias-pull-up;				/* the Pi has 1.8k pull-ups on board; see risk R3 */
+			};
+		};
+	};
+
+	fragment@1 {
+		target-path = "/";
+		__overlay__ {
+			/* software PWM on header pin 12 (PI1, no hardware PWM on the H618): out-of-tree DKMS module pwm-gpio */
+			soft_pwm: pwm-gpio {
+				compatible = "pwm-gpio";
+				#pwm-cells = <3>;
+				gpios = <&pio 8 1 0>;
+			};
+			backlight_pwm: backlight_pwm {
+				compatible = "pwm-backlight";
+				pwms = <&soft_pwm 0 500000 0>;			/* 2 kHz */
+				brightness-levels = <0 3 6 10 16 25 40 60 85 100>;
+				default-brightness-level = <9>;
+			};
+		};
+	};
+
+	fragment@2 {
+		target = <&spi1>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi35_spi1_pins>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			display@0 {
+				compatible = "st7796s", "panel-mipi-dbi-spi";	/* firmware: /lib/firmware/st7796s.bin */
+				reg = <0>;					/* CS0 */
+				spi-max-frequency = <48000000>;			/* Pi runs 48 MHz; start lower, see R4 */
+				dc-gpios = <&pio 8 5 0>;			/* PI5, pin 15 */
+				reset-gpios = <&pio 7 3 0>;			/* PH3, pin 13 (driver drives 0 = reset) */
+				backlight = <&backlight_pwm>;
+				width-mm = <49>;
+				height-mm = <79>;
+
+				panel-timing {
+					hactive = <320>;
+					vactive = <480>;
+					hback-porch = <0>;
+					vback-porch = <0>;
+					clock-frequency = <0>;
+					hfront-porch = <0>;
+					hsync-len = <0>;
+					vfront-porch = <0>;
+					vsync-len = <0>;
+				};
+			};
+		};
+	};
+
+	fragment@3 {
+		target = <&i2c1>;
+		__overlay__ {
+			pinctrl-names = "default";
+			pinctrl-0 = <&spi35_i2c1_pins>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			touchscreen@5d {
+				compatible = "goodix,gt911";
+				reg = <0x5d>;
+				interrupt-parent = <&pio>;
+				interrupts = <8 13 2>;				/* PI13, pin 7, falling edge */
+				irq-gpios = <&pio 8 13 0>;			/* PI13: also drives the address select at reset */
+				reset-gpios = <&pio 7 2 0>;			/* PH2, pin 11 */
+			};
+		};
+	};
+};
