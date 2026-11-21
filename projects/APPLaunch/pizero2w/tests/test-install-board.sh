@@ -2625,6 +2625,90 @@ check "the amd64 bundle on a Pi: refused" '[ $RC = 1 ] && has "this bundle is fo
 pcfull "$R" "$BUNARM" aarch64 --no-boot-config
 check "the arm64 bundle on a Pi: accepted as before" '[ $RC = 0 ] && has "profile pi3a-luckfox35"'
 
+# --- the FZ-M1 power key: install.sh writes the logind drop-in (suspend on a short press, power off on a long one),
+# on the Panasonic FZ-M1 alone; an existing file is never overwritten without --force; uninstall.sh removes only a file
+# install.sh made (install.conf: powerkey_dropin=created)
+PKF=etc/systemd/logind.conf.d/50-cyberdeckzero-powerkey.conf
+pkun() {  # pkun ROOT [options]: uninstall.sh of the amd64 bundle from ROOT
+    r=$1; shift; : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$r$UHOME" UNINSTALL_ROOT="$r" APPLAUNCH_SYSFS="$TMP/no-sys" \
+          sh "$BUN64/uninstall.sh" --no-boot-config "$@" 2>&1); RC=$?
+}
+PKBODY='[Login]
+HandlePowerKey=suspend
+HandlePowerKeyLongPress=poweroff'
+R=$(pc_root pk-dry)
+pcrun --dry-run --user "$U"
+check "power key dry-run on the FZ-M1: the drop-in will be written, the HUP (never a restart) said, nothing written" '[ $RC = 0 ] && has "power key (Panasonic FZ-M1): /etc/systemd/logind.conf.d/50-cyberdeckzero-powerkey.conf will be written: a short press suspends" && has "HandlePowerKeyLongPress=poweroff" && has "systemctl kill -s HUP systemd-logind, never a restart" && [ ! -e "$R/$PKF" ]'
+R=$(pc_root pk-fresh)
+pcfull "$R" "$BUN64" x86_64
+check "power key, fresh FZ-M1 install: the drop-in written (644), the two keys under [Login]" '[ $RC = 0 ] && [ -f "$R/$PKF" ] && [ "$(stat -c %a "$R/$PKF")" = 644 ] && [ "$(grep -v "^#" "$R/$PKF")" = "$PKBODY" ] && has "power key: /etc/systemd/logind.conf.d/50-cyberdeckzero-powerkey.conf written"'
+check "power key, fresh install: logind told to re-read (SIGHUP), never restarted" 'called "systemctl kill -s HUP systemd-logind" && ! called "restart systemd-logind" && ! called "stop systemd-logind" && has "logind told to re-read its settings (not restarted)"'
+check "power key, fresh install: install.conf records that the installer created it" 'grep -qx "powerkey_dropin=created" "$R/etc/applaunch/install.conf"'
+check "power key, fresh install: no stray file beside it" '[ -z "$(ls "$R/etc/systemd/logind.conf.d" | grep -v "^50-cyberdeckzero-powerkey.conf$")" ]'
+pcrun --dry-run --user "$U"
+check "power key dry-run, file there from the installer: already there, left as it is" '[ $RC = 0 ] && has "50-cyberdeckzero-powerkey.conf: already there, with these settings: left as it is" && ! has "will be written"'
+SNAP1=$(snapshot "$R")
+pcfull "$R" "$BUN64" x86_64
+check "power key, second run: already there, no HUP, same tree, marker kept" '[ $RC = 0 ] && has "50-cyberdeckzero-powerkey.conf: already there" && ! called "systemd-logind" && [ "$(snapshot "$R")" = "$SNAP1" ] && grep -qx "powerkey_dropin=created" "$R/etc/applaunch/install.conf"'
+pkun "$R" --dry-run
+check "power key, uninstall dry-run: the drop-in planned for removal, nothing removed" '[ $RC = 0 ] && has "rm -f $R/$PKF" && has "FZ-M1 power-key drop-in install.sh wrote" && [ -f "$R/$PKF" ]'
+pkun "$R" --yes
+check "power key, uninstall: the installer-made drop-in removed, logind re-reads (HUP, no restart)" '[ $RC = 0 ] && [ ! -e "$R/$PKF" ] && called "systemctl kill -s HUP systemd-logind" && ! called "restart systemd-logind"'
+# a hand-made file (the same two keys, its own comments): left, said "already there", not marked, not removed
+R=$(pc_root pk-hand); mkdir -p "$R/etc/systemd/logind.conf.d"
+printf '[Login]\nHandlePowerKey=suspend\nHandlePowerKeyLongPress=poweroff\n' > "$R/$PKF"; HSUM=$(cksum < "$R/$PKF")
+pcfull "$R" "$BUN64" x86_64
+check "power key, identical hand-made file: already there, left byte for byte, no HUP, not marked as ours" '[ $RC = 0 ] && has "50-cyberdeckzero-powerkey.conf: already there" && [ "$(cksum < "$R/$PKF")" = "$HSUM" ] && [ ! -e "$R/$PKF.bak" ] && ! called "systemd-logind" && ! grep -q powerkey_dropin "$R/etc/applaunch/install.conf"'
+pkun "$R" --yes
+check "power key, uninstall with a hand-made file: it stays" '[ $RC = 0 ] && [ "$(cksum < "$R/$PKF")" = "$HSUM" ] && ! called "systemd-logind"'
+# a file with other settings (a hand edit): kept, said so; --force replaces it and keeps the old one as .bak
+R=$(pc_root pk-diff); mkdir -p "$R/etc/systemd/logind.conf.d"
+printf '[Login]\nHandlePowerKey=hibernate\n' > "$R/$PKF"; DSUM=$(cksum < "$R/$PKF")
+pcrun --dry-run --user "$U"
+check "power key dry-run, other settings there: kept, --force named" '[ $RC = 0 ] && has "is there with other settings: kept as it is (--force replaces it"'
+pcfull "$R" "$BUN64" x86_64
+check "power key, other settings: kept as they are, said so, no HUP, not marked" '[ $RC = 0 ] && has "is there with other settings: kept as it is" && [ "$(cksum < "$R/$PKF")" = "$DSUM" ] && [ ! -e "$R/$PKF.bak" ] && ! called "systemd-logind" && ! grep -q powerkey_dropin "$R/etc/applaunch/install.conf"'
+pcrun --dry-run --force --user "$U"
+check "power key dry-run --force, other settings: replace planned, .bak named, nothing changed" 'has "other settings: replaced (--force), the old one kept as 50-cyberdeckzero-powerkey.conf.bak" && [ "$(cksum < "$R/$PKF")" = "$DSUM" ]'
+pcfull "$R" "$BUN64" x86_64 --force
+check "power key --force: replaced, the hand edit kept as .bak, HUP, marked" '[ $RC = 0 ] && [ "$(grep -v "^#" "$R/$PKF")" = "$PKBODY" ] && [ "$(cksum < "$R/$PKF.bak")" = "$DSUM" ] && called "systemctl kill -s HUP systemd-logind" && grep -qx "powerkey_dropin=created" "$R/etc/applaunch/install.conf"'
+# made by the installer, edited since: install.sh keeps it, uninstall.sh does not remove it
+printf '[Login]\nHandlePowerKey=lock\n' > "$R/$PKF"; DSUM=$(cksum < "$R/$PKF")
+pcfull "$R" "$BUN64" x86_64
+check "power key, made by install.sh and edited since: kept by a rerun, marker kept" '[ $RC = 0 ] && [ "$(cksum < "$R/$PKF")" = "$DSUM" ] && grep -qx "powerkey_dropin=created" "$R/etc/applaunch/install.conf"'
+pkun "$R" --yes
+check "power key, uninstall of an edited installer-made file: it stays" '[ $RC = 0 ] && [ "$(cksum < "$R/$PKF")" = "$DSUM" ] && ! called "systemd-logind"'
+# no other PC, no Pi
+R=$(pc_root pk-laptop "Some Laptop 14" 10)
+pcrun --dry-run --user "$U"
+check "power key dry-run on another PC: nothing about it" '[ $RC = 0 ] && ! has "power key"'
+pcfull "$R" "$BUN64" x86_64
+check "power key on another PC (Some Laptop 14): no drop-in, no logind call, no marker" '[ $RC = 0 ] && [ ! -e "$R/etc/systemd/logind.conf.d" ] && ! called "systemd-logind" && ! has "power key" && ! grep -q powerkey_dropin "$R/etc/applaunch/install.conf"'
+R=$(pc_root pk-panasonic "CF-33" 31)
+pcfull "$R" "$BUN64" x86_64
+check "power key on another Panasonic (CF-33): no drop-in" '[ $RC = 0 ] && [ ! -e "$R/etc/systemd/logind.conf.d" ] && ! called "systemd-logind"'
+R=$(root pi3a-luckfox35)
+pcfull "$R" "$BUNARM" aarch64 --no-boot-config
+check "power key on a Pi: no drop-in, no logind call, no marker" '[ $RC = 0 ] && [ ! -e "$R/etc/systemd/logind.conf.d" ] && ! called "systemd-logind" && ! has "power key" && ! grep -q powerkey_dropin "$R/etc/applaunch/install.conf"'
+R=$(pc_root pk-boardonly)
+pcrun --board-only
+check "power key: --board-only writes no drop-in" '[ $RC = 0 ] && [ ! -e "$R/etc/systemd/logind.conf.d" ]'
+# systemctl cannot signal logind: the install goes on, warned
+R=$(pc_root pk-nohup)
+PK_FAKE="$TMP/fake-pk-bin"; rm -rf "$PK_FAKE"; mkdir -p "$PK_FAKE"
+cp "$FAKEBIN"/* "$PK_FAKE"/
+cat > "$PK_FAKE/systemctl" <<'EOF'
+#!/bin/sh
+printf 'systemctl %s\n' "$*" >> "$FAKE_CALLS"
+case "$*" in "kill -s HUP"*) exit 1 ;; esac
+exit 0
+EOF
+FAKEBIN_SAVE=$FAKEBIN; FAKEBIN=$PK_FAKE
+pcfull "$R" "$BUN64" x86_64
+FAKEBIN=$FAKEBIN_SAVE
+check "power key, logind cannot be signalled: exit 0, file written, warned (next boot)" '[ $RC = 0 ] && [ -f "$R/$PKF" ] && has "WARNING: logind could not be told to re-read its settings: the power key changes at the next boot"'
+
 # --- switching between the variants: a desktop installed later on a board installed as an appliance, then install.sh
 # again, and back. The FZ-M1 tablet (pc profile, amd64) installed as an appliance, then XFCE as armbian-config sets it up
 # (lightdm enabled through display-manager.service, lightdm and Xorg running, graphical.target).

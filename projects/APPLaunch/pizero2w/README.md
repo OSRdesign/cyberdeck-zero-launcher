@@ -145,6 +145,16 @@ are arm64 only). A source given as a full registry address is used as typed.
   down or a clock change from the launcher's user service: without it they refuse, and the rules cannot apply) and
   `bluez` (Settings > Bluetooth), starts `bluetooth.service`, adds the user to the `bluetooth` group, and checks that
   polkit answers (a WARNING names what will not work otherwise). The power and clock rule allows the `sudo` group.
+- **Power key (Panasonic FZ-M1 only: DMI `FZM1-2*` / `FZ-M1*`; no other PC, no Pi).** Armbian's logind default powers
+  the tablet off on a short press of the power key. install.sh writes
+  `/etc/systemd/logind.conf.d/50-cyberdeckzero-powerkey.conf` (`[Login]`, `HandlePowerKey=suspend`,
+  `HandlePowerKeyLongPress=poweroff`: a short press is standby, a long press powers off) and tells logind to re-read its
+  settings (`systemctl kill -s HUP systemd-logind`; logind is never restarted, so an ssh or desktop session survives).
+  A file of that name that already has these two settings (a hand-made one, whatever its comments) is left as it is
+  ("already there"); one with other settings is kept and said so; `--force` replaces it and keeps the old one as
+  `50-cyberdeckzero-powerkey.conf.bak`. `install.conf` records `powerkey_dropin=created` when install.sh wrote the file,
+  and `uninstall.sh` removes it only then, and only while it still has the settings install.sh wrote; a hand-made or
+  edited file stays. `--dry-run` says which of these will happen; `--board-only` writes nothing.
 - **NetworkManager** for Settings > Wi-Fi: install it yourself (see below), or let `install.sh --network-manager` do it
   ([NetworkManager by install.sh](#networkmanager-by-installsh---network-manager)). Without that option install.sh does
   not: it takes the network over from netplan / systemd-networkd. The end of the install prints the recipe when `nmcli` is missing.

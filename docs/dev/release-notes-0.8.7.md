@@ -17,7 +17,8 @@
 **FZ-M1 notes** (settings of the tablet, not part of the bundle)
 
 - The power key suspends through a logind drop-in: `HandlePowerKey=suspend`, `HandlePowerKeyLongPress=poweroff`. It
-  was applied by hand; the owner checked standby and wake.
+  was applied by hand; the owner checked standby and wake. (Later: `install.sh` writes this drop-in on the FZ-M1 itself,
+  see the roadmap row "Installer: FZ-M1 power key" and the PC install section of the pizero2w README.)
 - BIOS: the volume buttons are set to volume (before they sent brightness keys). In mode "Application" the A button
   and the rotation lock send nothing. In mode "Rotation lock" the rotation lock sends Win+F14, which the launcher does
   not use.
