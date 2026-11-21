@@ -189,7 +189,7 @@ soc=$(printf '%s\n' "$comp" | tr ' ' '\n' | grep -E '^(brcm|rockchip|allwinner|a
 echo "SoC: ${soc:-unknown}"
 if [ -r "$R/proc/cpuinfo" ]; then
     cpun=$(grep -m1 -i -E '^(model name|Hardware)' "$R/proc/cpuinfo" | sed 's/^[^:]*: *//')
-    echo "cpu: ${cpun:-(no model name in /proc/cpuinfo: normal on a Raspberry Pi, see the device-tree model)} x$(grep -c '^processor' "$R/proc/cpuinfo")"
+    echo "cpu: ${cpun:-(no model name in /proc/cpuinfo: normal on ARM boards, see the device-tree model)} x$(grep -c '^processor' "$R/proc/cpuinfo")"
     grep -q -i '^Serial' "$R/proc/cpuinfo" && echo "cpu serial: redacted"
 else unavail "no /proc/cpuinfo"; fi
 [ -r "$dt/serial-number" ] && echo "board serial: redacted"

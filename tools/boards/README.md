@@ -166,6 +166,6 @@ temporary copy. The kernel log is stored as the lines the report prints plus fil
 Not captured (so a replay differs from the board there): `/etc/netplan` and the NetworkManager checks, the retired
 files of earlier bundles in `/usr/share/APPLaunch`, `/usr/bin/wireplumber`.
 
-The `*-real` fixtures are recorded boards (2026-11-22): `hackberry-real`, `palmpi-dsi5-real`, `pi5-spi35-real`,
-`fzm1-real`, `pi4b-real`, `pi3a-real`, `zero8-real`, `deck-real`, `pi5-real`. The test also checks which board
+The `*-real` fixtures are recorded boards (2026-11-21 and 22): `hackberry-real`, `palmpi-dsi5-real`, `pi5-spi35-real`,
+`fzm1-real`, `pi4b-real`, `pi3a-real`, `zero8-real`, `deck-real`, `pi5-real`, `opi-zero2w-real` (Armbian). The test also checks which board
 install.sh picks from each of them.

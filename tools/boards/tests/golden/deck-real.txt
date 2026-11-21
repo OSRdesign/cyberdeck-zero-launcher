@@ -7,7 +7,7 @@ running as: (test)
 device-tree model: Raspberry Pi Zero 2 W Rev 1.0
 compatible: raspberrypi,model-zero-2-w brcm,bcm2837
 SoC: brcm,bcm2837
-cpu: (no model name in /proc/cpuinfo: normal on a Raspberry Pi, see the device-tree model) x4
+cpu: (no model name in /proc/cpuinfo: normal on ARM boards, see the device-tree model) x4
 cpu serial: redacted
 board serial: redacted
 memory: 414 MB

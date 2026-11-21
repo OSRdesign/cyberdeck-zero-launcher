@@ -1,0 +1,9 @@
+ABS X               min 0 max 319 fuzz 0 flat 0 res 0
+ABS Y               min 0 max 479 fuzz 0 flat 0 res 0
+ABS MT_SLOT         min 0 max 4 fuzz 0 flat 0 res 0
+ABS MT_TOUCH_MAJOR  min 0 max 255 fuzz 0 flat 0 res 0
+ABS MT_WIDTH_MAJOR  min 0 max 255 fuzz 0 flat 0 res 0
+ABS MT_POSITION_X   min 0 max 319 fuzz 0 flat 0 res 0
+ABS MT_POSITION_Y   min 0 max 479 fuzz 0 flat 0 res 0
+ABS MT_TRACKING_ID  min 0 max 65535 fuzz 0 flat 0 res 0
+slots (ABS_MT_SLOT max + 1): 5

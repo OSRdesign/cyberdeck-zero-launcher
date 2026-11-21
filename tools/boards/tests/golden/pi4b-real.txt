@@ -7,7 +7,7 @@ running as: (test)
 device-tree model: Raspberry Pi 4 Model B Rev 1.5
 compatible: raspberrypi,4-model-b brcm,bcm2711
 SoC: brcm,bcm2711
-cpu: (no model name in /proc/cpuinfo: normal on a Raspberry Pi, see the device-tree model) x4
+cpu: (no model name in /proc/cpuinfo: normal on ARM boards, see the device-tree model) x4
 cpu serial: redacted
 board serial: redacted
 memory: 905 MB
