@@ -1561,11 +1561,11 @@ printf 'user_overlays=uart5 spi35-st7796s\n' > "$R/boot/armbianEnv.txt"
 mkdir -p "$R/lib/modules/$KREL/updates/dkms"; : > "$R/lib/modules/$KREL/updates/dkms/drm_mipi_dbi.ko"
 run --dry-run --spi-panel waveshare35f
 check "spi dry-run with the overlay and the module there already: both kept, no download" '[ $RC = 0 ] && has "user_overlays already loads spi35-st7796s: left as it is" && has "installed for $KREL already: kept (no download)" && ! has "$CHUNK_URL"'
-# refusals: never a Raspberry Pi, only H616 / H618 with Armbian, a kernel release with a flavour; option combinations
+# refusals: a Raspberry Pi needs its config.txt (it sets the panel up there, see below), only H616 / H618 with Armbian, a kernel release with a flavour; option combinations
 for fx in pi3a-luckfox35 zero2w pi5-dsi7; do
     R=$(root "$fx")
     run --dry-run --spi-panel waveshare35f
-    check "spi on a Raspberry Pi ($fx): refused, exit 1, nothing written" '[ $RC = 1 ] && has "never on a Raspberry Pi" && has "Nothing was changed." && [ ! -e "$R/etc" ]'
+    check "spi on a Raspberry Pi without config.txt ($fx): refused, exit 1, nothing written" '[ $RC = 1 ] && has "only on a Raspberry Pi with /boot/config.txt" && has "Nothing was changed." && [ ! -e "$R/etc" ]'
 done
 R=$(root opizero2w); printf 'xunlong,orangepi-3\0allwinner,sun50i-h6\0' > "$R/proc/device-tree/compatible"
 run --dry-run --spi-panel waveshare35f
@@ -1726,9 +1726,250 @@ cp "$TMP/st7796s.keep" "$BUN/payload/panels/waveshare35f/st7796s.bin"
 check "spi: a bundle whose init file is not Waveshare's: refused before any package or file" '[ $RC = 1 ] && has "st7796s.bin is not Waveshare'"'"'s init file" && ! called "dpkg -s" && spi_nothing'
 R=$(root pi3a-luckfox35)
 spi_install --spi-panel waveshare35f --board pi3a-luckfox35
-check "spi install on a Raspberry Pi: refused, nothing installed" '[ $RC = 1 ] && has "never on a Raspberry Pi" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc" ] && ! called "dtc "'
+check "spi install on a Raspberry Pi without config.txt: refused, nothing installed" '[ $RC = 1 ] && has "only on a Raspberry Pi with /boot/config.txt" && [ ! -e "$R/usr/share/APPLaunch" ] && [ ! -e "$R/etc" ] && ! called "dtc "'
 check "build.sh puts the panels in the bundle" 'grep -q "cp -R \"\$HERE/panels\" \"\$OUT/payload/panels\"" "$D/build.sh"'
 check "the panel's init file in the repository is Waveshare's (sha256)" '[ "$(sha256sum < "$PANEL/st7796s.bin" | cut -d" " -f1)" = 17204e39cce35fba857ad2dff14243e1d3a958c4dac00283f8df9b7ad5147cc7 ]'
+
+# --- The 3.5" SPI panel on a Raspberry Pi (a Pi 5 here: the owner's pi52, set up by hand first): detection without --board,
+# the PWM backlight of a Pi 5 (channel 2), --spi-panel luckfox35 (config.txt block, init file, profile) and its undo
+PI5_MODEL='Raspberry Pi 5 Model B Rev 1.0'
+CFG_PI5='# For more options see the documentation
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=1
+auto_initramfs=1
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+[cm4]
+otg_mode=1
+[all]
+arm_64bit=1'
+pi_root() {  # pi_root FIXTURE [MODEL] [CONFIG]: a Pi before the panel (no panel connector, framebuffer or backlight), boot files
+    R=$(root "$1")
+    [ -z "${2:-}" ] || printf '%s\n' "$2" > "$R/proc/device-tree/model"
+    rm -rf "$R/sys/class/drm/card2-SPI-1" "$R/sys/class/graphics/fb0" "$R/sys/class/backlight/backlight_pwm"
+    mkdir -p "$R/boot/firmware"
+    printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+    printf '%s\n' "${3-$CFG_PI5}" > "$R/boot/firmware/config.txt"
+}
+pi_cfg() { echo "$R/boot/firmware/config.txt"; }
+pi_uninstall() {
+    mkdir -p "$R$UHOME"
+    : > "$CALLS"
+    OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+          sh "$BUN/uninstall.sh" "$@" 2>&1); RC=$?
+}
+SPI_BEGIN='# >>> cyberdeckzero spi panel'
+SPI_END='# <<< cyberdeckzero spi panel'
+PI5_BLOCK='dtparam=spi=on
+dtparam=i2c_arm=on
+dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22
+dtparam=backlight-pwm
+dtparam=backlight-pwm-chan=2
+dtoverlay=goodix,addr=0x5d'
+# the block's lines in config.txt: from the begin marker to the end marker
+cfg_block() { sed -n "/^$SPI_BEGIN\$/,/^$SPI_END\$/p" "$(pi_cfg)" | sed '1,2d;$d'; }
+
+HAND_PWM='[all]
+dtparam=spi=on
+dtparam=i2c_arm=on
+dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22
+dtparam=backlight-pwm
+dtparam=backlight-pwm-chan=2
+dtoverlay=goodix,addr=0x5d'
+# A) detection: the panel connected on the SPI connector, its framebuffer panel-mipi-dbid, a Pi 5 (HDMI there or not); the
+# config.txt of the owner's pi52 (the hand-made set-up) is there, so the profile names the levels backlight
+R=$(root pi5-luckfox35); mkdir -p "$R/boot/firmware"; printf '%s\n' "$HAND_PWM" > "$R/boot/firmware/config.txt"
+run --dry-run
+check "pi5 + SPI panel (HDMI disconnected): detected as pi3a-luckfox35 without --board" '[ $RC = 0 ] && has "board: pi3a-luckfox35" && ! has "forced with --board" && has "APPLAUNCH_FB=/dev/fb0" && has "drm card2-SPI-1: connected, first mode 320x480"'
+check "pi5 + SPI panel: the levels backlight_pwm named by the profile, its udev rule, no gpio rule" 'has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && has "92-applaunch-backlight-sysfs.rules" && ! has "92-applaunch-backlight-gpio"'
+run --plan
+check "pi5 + SPI panel: --plan says board=pi3a-luckfox35, not forced" '[ $RC = 0 ] && has "board=pi3a-luckfox35" && has "board_forced=0"'
+printf 'connected\n' > "$R/sys/class/drm/card2-HDMI-A-1/status"; printf '1920x1080\n' > "$R/sys/class/drm/card2-HDMI-A-1/modes"
+run --dry-run
+check "pi5 + SPI panel with HDMI connected too: still detected (HDMI is not a second panel)" '[ $RC = 0 ] && has "board: pi3a-luckfox35"'
+mkdir -p "$R/sys/class/drm/card1-DSI-1"; printf 'connected\n' > "$R/sys/class/drm/card1-DSI-1/status"; printf '800x480\n' > "$R/sys/class/drm/card1-DSI-1/modes"
+run --dry-run
+check "pi5 + SPI panel + a DSI panel connected: not guessed, said, choose with --board" '[ $RC = 0 ] && has "board: unknown" && has "another panel connected (card1-DSI-1)" && has "choose one with --board"'
+R=$(root pi5-luckfox35); echo disconnected > "$R/sys/class/drm/card2-SPI-1/status"
+run --dry-run
+check "pi5 with the SPI connector disconnected: unknown" 'has "board: unknown"'
+R=$(root pi5-luckfox35); printf 'Raspberry Pi 4 Model B Rev 1.5\n' > "$R/proc/device-tree/model"
+run --dry-run
+check "Pi 4B + SPI panel (no DSI panel): detected as pi3a-luckfox35 too" '[ $RC = 0 ] && has "board: pi3a-luckfox35"'
+R=$(root pi5-luckfox35); printf 'Raspberry Pi Zero 2 W Rev 1.0\n' > "$R/proc/device-tree/model"
+run --dry-run
+check "Zero 2 W + SPI panel: still the deck (zero2w needs --board pi3a-luckfox35)" '[ $RC = 0 ] && has "board: zero2w" && ! has "board: pi3a-luckfox35"'
+R=$(root pi5-luckfox35); printf 'Raspberry Pi 3 Model A Plus Rev 1.1\n' > "$R/proc/device-tree/model"
+run --dry-run
+check "Pi 3A+ + SPI panel: pi3a-luckfox35 as before" '[ $RC = 0 ] && has "board: pi3a-luckfox35"'
+
+# B) the PWM backlight on a Pi 5: a hand-made config.txt with backlight-pwm and its channel 2 (the owner's pi52): the profile
+# names backlight_pwm, nothing to change; without the channel line a warning; backlight-gpio=18: converted (appliance), not on a desktop
+R=$(root pi5-luckfox35); mkdir -p "$R/boot/firmware"; printf '%s\n' "$HAND_PWM" > "$R/boot/firmware/config.txt"
+run --dry-run
+check "pi5 hand-made config.txt with backlight-pwm and -chan=2: classified pwm, the profile names backlight_pwm, config.txt left alone, no warning" '[ $RC = 0 ] && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && has "config.txt has it already (dtparam=backlight-pwm): left as it is" && ! has "WARNING"'
+printf '%s\n' "$HAND_PWM" | grep -v 'backlight-pwm-chan' > "$R/boot/firmware/config.txt"
+run --dry-run
+check "pi5 config.txt with backlight-pwm but no channel 2: a warning says why (GPIO18 is RP1 PWM0 channel 2), the profile still names backlight_pwm" '[ $RC = 0 ] && has "WARNING: Pi 5: config.txt has dtparam=backlight-pwm but no dtparam=backlight-pwm-chan=2" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"'
+R=$(root pi5-luckfox35); printf 'Raspberry Pi Zero 2 W Rev 1.0\n' > "$R/proc/device-tree/model"
+mkdir -p "$R/boot/firmware"; printf '%s\n' "$HAND_PWM" | grep -v 'backlight-pwm-chan' > "$R/boot/firmware/config.txt"
+run --dry-run --board pi3a-luckfox35
+check "Zero 2 W with backlight-pwm and no channel line: channel 0 is its default, no warning" '[ $RC = 0 ] && ! has "WARNING: Pi 5"'
+HAND_GPIO='[all]
+dtparam=spi=on
+dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18
+dtoverlay=goodix,addr=0x5d'
+HAND_GPIO_PWM='[all]
+dtparam=spi=on
+dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22
+dtparam=backlight-pwm
+dtparam=backlight-pwm-chan=2
+dtoverlay=goodix,addr=0x5d'
+R=$(root pi5-luckfox35); mkdir -p "$R/boot/firmware"; printf '%s\n' "$HAND_GPIO" > "$R/boot/firmware/config.txt"; printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+rm -rf "$R/sys/class/backlight/backlight_pwm"; mkdir -p "$R/sys/class/backlight/backlight_gpio"; echo 1 > "$R/sys/class/backlight/backlight_gpio/max_brightness"
+run --dry-run
+check "pi5 appliance, config.txt with backlight-gpio=18: the plan converts it to PWM with channel 2" '[ $RC = 0 ] && has "PWM backlight (3.5\" SPI panel): in config.txt, backlight-gpio=18 comes off line" && has "dtparam=backlight-pwm-chan=2 goes after it too" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm"'
+spi_install
+check "pi5 appliance install, backlight-gpio=18: config.txt converted (backlight-pwm, then channel 2), original kept, reboot asked" '[ $RC = 0 ] && [ "$(cat "$(pi_cfg)")" = "$HAND_GPIO_PWM" ] && [ "$(cat "$(pi_cfg).bak-applaunch")" = "$HAND_GPIO" ] && has "dtparam=backlight-pwm and dtparam=backlight-pwm-chan=2 added after it" && has "reboot now so the PWM backlight and console settings apply"'
+SUM_PI=$(cksum < "$(pi_cfg)")
+spi_install
+check "pi5 second install: config.txt unchanged" '[ $RC = 0 ] && [ "$(cksum < "$(pi_cfg)")" = "$SUM_PI" ]'
+R=$(root pi5-luckfox35); mkdir -p "$R/boot/firmware"; printf '%s\n' "$HAND_GPIO" > "$R/boot/firmware/config.txt"; printf '%s\n' "$CMD0" > "$R/boot/firmware/cmdline.txt"
+rm -rf "$R/sys/class/backlight/backlight_pwm"; mkdir -p "$R/sys/class/backlight/backlight_gpio"; echo 1 > "$R/sys/class/backlight/backlight_gpio/max_brightness"
+desktop "$R" lightdm.service lightdm labwc
+run --dry-run
+check "pi5 desktop board, config.txt with backlight-gpio=18: left as it is, on/off profile, the explicit option named" '[ $RC = 0 ] && has "session: desktop" && has "desktop board: config.txt left as it is (on/off backlight); install.sh --spi-panel luckfox35 changes config.txt" && has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio"'
+
+# C) --spi-panel luckfox35: the dry run of the plan (appliance, desktop), the refusals
+pi_root pi5-luckfox35
+SNAP=$(snapshot "$R")
+run --dry-run --spi-panel luckfox35
+check "pi5 --spi-panel luckfox35 dry-run: exit 0, board from --spi-panel, the profile with the PWM backlight, fb0 foreseen" '[ $RC = 0 ] && has "board: pi3a-luckfox35 (the profile of --spi-panel luckfox35)" && has "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" && has "APPLAUNCH_FB=/dev/fb0 (no framebuffer now: the panel will be the only one after the reboot)"'
+check "pi5 --spi-panel dry-run: the whole plan (init file, the block with markers, the literal \\0, channel 2, backup name)" 'has "/lib/firmware/st7796s.bin: the panel'"'"'s init sequence (Waveshare'"'"'s file, sha256 17204e39...): installed" && has "config.txt: appended to the [all] section (config.txt.bak-applaunch-spipanel first, once)" && has "    # >>> cyberdeckzero spi panel" && has "    # <<< cyberdeckzero spi panel" && has "    dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000" && has "    dtparam=compatible=st7796s\\0panel-mipi-dbi-spi" && has "    dtparam=backlight-pwm-chan=2" && has "    dtoverlay=goodix,addr=0x5d" && has "    dtparam=spi=on" && has "backlight: PWM, 16 levels" && has "GPIO18 is RP1 PWM0 channel 2"'
+check "pi5 --spi-panel dry-run: nothing written" '[ "$(snapshot "$R")" = "$SNAP" ]'
+run --dry-run --spi-panel waveshare35f
+check "pi5 --spi-panel waveshare35f: the same panel family, accepted on a Raspberry Pi (the same plan)" '[ $RC = 0 ] && has "(the profile of --spi-panel waveshare35f)" && has "    dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000" && ! has "DKMS"'
+desktop "$R" lightdm.service lightdm labwc
+run --dry-run --spi-panel luckfox35
+check "pi5 desktop board --spi-panel dry-run: the plan names the config.txt edit (explicit option), the desktop variant" '[ $RC = 0 ] && has "session: desktop" && has "also on a desktop board (the option is explicit)" && has "except the SPI panel block of --spi-panel, below" && has "    # >>> cyberdeckzero spi panel"'
+pi_root pi5-luckfox35 "Raspberry Pi Zero 2 W Rev 1.0"
+run --dry-run --spi-panel luckfox35
+check "Zero 2 W --spi-panel dry-run (no --board needed): PWM on the default channel 0, no channel line" '[ $RC = 0 ] && has "board: pi3a-luckfox35 (the profile of --spi-panel luckfox35)" && has "    dtparam=backlight-pwm" && ! has "backlight-pwm-chan" && ! has "RP1 PWM0"'
+pi_root pi5-luckfox35 "Raspberry Pi 3 Model A Plus Rev 1.1"
+run --dry-run --spi-panel luckfox35
+check "Pi 3A+ --spi-panel dry-run: the on/off backlight (backlight-gpio=18, no PWM: its PWM0 is the headphone jack's), its gpio rule" '[ $RC = 0 ] && has "    dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18" && ! has "dtparam=backlight-pwm" && has "backlight: on/off" && has "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" && has "92-applaunch-backlight-gpio.rules"'
+# refusals
+pi_root pi5-luckfox35; rm -rf "$R/boot"
+run --dry-run --spi-panel luckfox35
+check "--spi-panel luckfox35 on a Raspberry Pi without config.txt: refused, exit 1, nothing changed" '[ $RC = 1 ] && has "only on a Raspberry Pi with /boot/config.txt" && has "Nothing was changed."'
+pi_root pi5-luckfox35
+run --dry-run --spi-panel luckfox35 --soft-pwm-backlight
+check "--spi-panel luckfox35 --soft-pwm-backlight: refused (Armbian only), exit 1" '[ $RC = 1 ] && has "--soft-pwm-backlight is for Armbian" && has "Nothing was changed."'
+for opts in "--spi-panel luckfox35 --board-only" "--spi-panel luckfox35 --no-boot-config" "--spi-panel luckfox35 --board pi4b-dsi"; do
+    # shellcheck disable=SC2086
+    run --dry-run $opts
+    check "options $opts: refused, exit 2" '[ $RC = 2 ]'
+done
+R=$(root opizero2w)
+run --dry-run --spi-panel luckfox35
+check "--spi-panel luckfox35 on Armbian (not a Raspberry Pi): refused, waveshare35f named" '[ $RC = 1 ] && has "luckfox35 is the name for a Raspberry Pi" && has "use waveshare35f" && has "Nothing was changed."'
+
+# C) the set-up itself in a fake root, a Pi 5 desktop board like pi52 (labwc + lightdm): the block, the init file, the profile, install.conf
+pi_root pi5-luckfox35
+desktop "$R" lightdm.service lightdm labwc
+CFG0=$(cat "$(pi_cfg)")
+spi_install --spi-panel luckfox35
+check "pi5 desktop --spi-panel install: exit 0, the panel step before the launcher's files, the desktop variant" '[ $RC = 0 ] && has "== SPI panel (--spi-panel luckfox35" && [ "$(printf "%s\n" "$OUT" | grep -n "== SPI panel" | cut -d: -f1)" -lt "$(printf "%s\n" "$OUT" | grep -n "== Installing the launcher" | cut -d: -f1)" ] && has "session: desktop"'
+check "pi5 install: Waveshare's init file in /lib/firmware (the Luckfox file is the same bytes), no DKMS, dtc or download" 'cmp -s "$PANEL/st7796s.bin" "$R/lib/firmware/st7796s.bin" && ! called "dkms" && ! called "dtc " && ! called "curl -fsSL"'
+check "pi5 install: the block is appended after the existing lines (the original lines kept exactly), no [all] added (it is the last section)" '[ "$(head -n $(printf "%s\n" "$CFG0" | wc -l) "$(pi_cfg)")" = "$CFG0" ] && [ "$(grep -c "^\[all\]" "$(pi_cfg)")" = 1 ]'
+BLK=$(cfg_block)
+check "pi5 install: the block's lines are the proven hand set-up (spi, i2c, overlay, the literal \\0 compatible, size, pins, PWM and channel 2, goodix)" '[ "$BLK" = "$PI5_BLOCK" ]'
+check "pi5 install: the original config.txt kept once as config.txt.bak-applaunch-spipanel, no other backup, cmdline.txt untouched" '[ "$(cat "$(pi_cfg).bak-applaunch-spipanel")" = "$CFG0" ] && [ ! -e "$(pi_cfg).bak-applaunch" ] && [ "$(cat "$R/boot/firmware/cmdline.txt")" = "$CMD0" ]'
+check "pi5 install: the profile pi3a-luckfox35 (fb0, backlight_pwm sysfs, dim 10) and its udev rule" 'grep -qx "APPLAUNCH_BOARD=pi3a-luckfox35" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_FB=/dev/fb0" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_DIM_PERCENT=10" "$R/etc/applaunch/board.conf" && grep -q "backlight_pwm" "$R/etc/udev/rules.d/92-applaunch-backlight-sysfs.rules"'
+check "pi5 install: reboot asked, the desktop launcher not started" 'has "Reboot needed: the SPI panel" && ! called "systemctl start cyberdeckzero-desktop"'
+check "pi5 install: install.conf records the panel, the profile (board=), and that install.sh put the init file there" 'grep -qx "board=pi3a-luckfox35" "$R/etc/applaunch/install.conf" && grep -qx "spi_panel=luckfox35" "$R/etc/applaunch/install.conf" && grep -qx "spi_fw_added=1" "$R/etc/applaunch/install.conf"'
+STATE_PI=$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/etc/applaunch")
+spi_install --spi-panel luckfox35
+check "pi5 second run: nothing duplicated, nothing changed, no reboot, the block there already, spi_fw_added kept" '[ $RC = 0 ] && has "the block of --spi-panel is there already: left as it is" && has "the panel'"'"'s set-up was in place already: nothing changed" && ! has "Reboot needed: the SPI panel" && [ "$(grep -c "^# >>> cyberdeckzero spi panel" "$(pi_cfg)")" = 1 ] && [ "$(grep -c "^dtoverlay=mipi-dbi-spi" "$(pi_cfg)")" = 1 ] && [ "$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/etc/applaunch")" = "$STATE_PI" ]'
+# after the reboot: the panel is there; Settings > Updates re-runs install.sh --board pi3a-luckfox35 without --spi-panel: nothing changes
+cp -R "$FIX/pi5-luckfox35/sys/class/drm/card2-SPI-1" "$R/sys/class/drm/"; cp -R "$FIX/pi5-luckfox35/sys/class/graphics/fb0" "$R/sys/class/graphics/"
+cp -R "$FIX/pi5-luckfox35/sys/class/backlight/backlight_pwm" "$R/sys/class/backlight/"
+spi_install --board pi3a-luckfox35
+check "pi5 after the reboot, an update run (--board, no --spi-panel): config.txt untouched, the panel kept in install.conf with spi_fw_added" '[ $RC = 0 ] && [ "$(grep -c "^# >>> cyberdeckzero spi panel" "$(pi_cfg)")" = 1 ] && grep -qx "spi_panel=luckfox35" "$R/etc/applaunch/install.conf" && grep -qx "spi_fw_added=1" "$R/etc/applaunch/install.conf" && ! has "Reboot needed: the SPI panel"'
+spi_install
+check "pi5 after the reboot, plain install.sh: the panel is detected without --board, board.conf up to date" '[ $RC = 0 ] && has "-> profile pi3a-luckfox35" && ! has "Reboot needed"'
+
+# D) uninstall: the block (markers) goes, the init file goes (install.sh put it there, unchanged), the rest of config.txt stays
+pi_uninstall --dry-run
+check "pi5 uninstall dry-run: the block and the init file listed, nothing changed" '[ $RC = 0 ] && has "config.txt: the 3.5\" SPI panel block of install.sh --spi-panel" && has "(the panel'"'"'s init file, put there by install.sh)" && has "[dry-run]"'
+check "pi5 uninstall dry-run: files unchanged" 'grep -qx "$SPI_BEGIN" "$(pi_cfg)" && [ -f "$R/lib/firmware/st7796s.bin" ]'
+pi_uninstall --yes --no-boot-config
+check "pi5 uninstall --no-boot-config: config.txt and the init file stay" '[ $RC = 0 ] && grep -qx "$SPI_BEGIN" "$(pi_cfg)" && [ -f "$R/lib/firmware/st7796s.bin" ]'
+rm -f "$R/lib/firmware/st7796s.bin"      # the uninstall above removed install.conf: install.sh puts the file and records it again
+spi_install --spi-panel luckfox35 > /dev/null
+pi_uninstall --yes
+check "pi5 uninstall: exit 0, the block removed with its markers, the lines before it kept exactly" '[ $RC = 0 ] && ! grep -q "cyberdeckzero spi panel" "$(pi_cfg)" && ! grep -q "mipi-dbi-spi" "$(pi_cfg)" && [ "$(cat "$(pi_cfg)")" = "$CFG0" ]'
+check "pi5 uninstall: the init file removed, a timestamped backup of config.txt made, the spipanel backup kept" '[ ! -e "$R/lib/firmware/st7796s.bin" ] && ls "$R"/boot/firmware/config.txt.bak-uninstall-* > /dev/null 2>&1 && [ -f "$(pi_cfg).bak-applaunch-spipanel" ]'
+pi_uninstall --yes
+check "pi5 uninstall again: nothing to remove, exit 0" '[ $RC = 0 ] && has "no line of install.sh to remove"'
+# a hand-made block (no markers) is never touched, nor the init file install.sh did not put there
+pi_root pi5-luckfox35 "$PI5_MODEL" "$HAND_PWM"; mkdir -p "$R/lib/firmware"; cp "$PANEL/st7796s.bin" "$R/lib/firmware/st7796s.bin"
+spi_install --spi-panel luckfox35
+CFGH=$(cat "$(pi_cfg)"); pi_uninstall --yes
+check "uninstall with a hand-made panel block (no markers): config.txt and the init file untouched" '[ $RC = 0 ] && [ "$(cat "$(pi_cfg)")" = "$CFGH" ] && [ -f "$R/lib/firmware/st7796s.bin" ]'
+# only a begin marker: left as it is, said
+pi_root pi5-luckfox35 "$PI5_MODEL" "$(printf '[all]\n%s\ndtoverlay=mipi-dbi-spi\n' "$SPI_BEGIN")"
+CFGH=$(cat "$(pi_cfg)"); pi_uninstall --yes
+check "uninstall with a begin marker but no end marker: config.txt untouched, said" '[ $RC = 0 ] && [ "$(cat "$(pi_cfg)")" = "$CFGH" ] && has "but no \"$SPI_END\" after it"'
+# the init file changed since install.sh put it there: kept
+pi_root pi5-luckfox35; desktop "$R" lightdm.service lightdm labwc
+spi_install --spi-panel luckfox35 > /dev/null
+printf 'X' >> "$R/lib/firmware/st7796s.bin"
+pi_uninstall --yes
+check "uninstall: an init file changed since install.sh put it there is kept (the block still goes)" '[ $RC = 0 ] && [ -f "$R/lib/firmware/st7796s.bin" ] && has "was changed since install.sh put it there: kept" && ! grep -q "cyberdeckzero spi panel" "$(pi_cfg)"'
+
+# C) idempotence and respect for what config.txt has: spi / i2c / goodix lines there, no final newline, a hand-made panel overlay
+pi_root pi5-luckfox35 "$PI5_MODEL" "$(printf '[all]\ndtparam=spi=on\ndtparam=i2c_arm=on\ndtoverlay=goodix,addr=0x14')"
+spi_install --spi-panel luckfox35
+check "config.txt with spi, i2c and a goodix overlay already: not repeated, no [all] added (the last section is [all])" '[ $RC = 0 ] && [ "$(grep -c "^dtparam=spi=on" "$(pi_cfg)")" = 1 ] && [ "$(grep -c "^dtparam=i2c_arm=on" "$(pi_cfg)")" = 1 ] && [ "$(grep -c "^dtoverlay=goodix" "$(pi_cfg)")" = 1 ] && grep -qx "dtoverlay=goodix,addr=0x14" "$(pi_cfg)" && [ "$(grep -c "^\[all\]" "$(pi_cfg)")" = 1 ] && grep -qx "dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000" "$(pi_cfg)"'
+pi_root pi5-luckfox35 "$PI5_MODEL" "$(printf 'dtparam=audio=on\n[all]\narm_64bit=1\n[cm4]\notg_mode=1')"
+spi_install --spi-panel luckfox35
+check "config.txt whose last section is [cm4]: the block starts with [all] (inside the markers), the earlier lines kept" '[ $RC = 0 ] && [ "$(cfg_block | sed -n 1p)" = "[all]" ] && grep -qx "otg_mode=1" "$(pi_cfg)"'
+pi_root pi5-luckfox35; printf 'dtparam=audio=on\n[all]\narm_64bit=1' > "$R/boot/firmware/config.txt"
+spi_install --spi-panel luckfox35
+check "config.txt without a final newline: the block starts on its own line, the earlier text kept" '[ $RC = 0 ] && grep -qx "arm_64bit=1" "$(pi_cfg)" && grep -qx "$SPI_BEGIN" "$(pi_cfg)" && grep -qx "$SPI_END" "$(pi_cfg)"'
+pi_root pi5-luckfox35 "$PI5_MODEL" "$HAND_GPIO"; SUMH=$(cksum < "$(pi_cfg)")
+spi_install --spi-panel luckfox35
+check "config.txt with a hand-made panel overlay (no markers): left as it is, no backup, profile written, no reboot for config.txt, backlight kept on/off" '[ $RC = 0 ] && [ "$(cksum < "$(pi_cfg)")" = "$SUMH" ] && [ ! -e "$(pi_cfg).bak-applaunch-spipanel" ] && has "has a dtoverlay=mipi-dbi-spi line that install.sh did not write: left as it is" && grep -qx "APPLAUNCH_BOARD=pi3a-luckfox35" "$R/etc/applaunch/board.conf" && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$R/etc/applaunch/board.conf"'
+pi_root pi5-luckfox35 "Raspberry Pi 3 Model A Plus Rev 1.1"
+spi_install --spi-panel luckfox35
+check "Pi 3A+ install: the on/off block (backlight-gpio=18), no PWM lines, the gpio profile and rule" '[ $RC = 0 ] && cfg_block | grep -qx "dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18" && ! cfg_block | grep -q "backlight-pwm" && grep -qx "APPLAUNCH_BACKLIGHT=gpio:/sys/class/backlight/backlight_gpio" "$R/etc/applaunch/board.conf" && [ -f "$R/etc/udev/rules.d/92-applaunch-backlight-gpio.rules" ]'
+pi_root pi5-luckfox35 "Raspberry Pi Zero 2 W Rev 1.0"
+spi_install --spi-panel waveshare35f
+check "Zero 2 W install (the alias waveshare35f): the PWM block on the default channel (no channel line), spi_panel=waveshare35f recorded" '[ $RC = 0 ] && cfg_block | grep -qx "dtparam=backlight-pwm" && ! cfg_block | grep -q "backlight-pwm-chan" && grep -qx "spi_panel=waveshare35f" "$R/etc/applaunch/install.conf"'
+pi_root pi5-luckfox35; cp "$BUN/payload/panels/waveshare35f/st7796s.bin" "$TMP/st7796s.keep"; printf 'X' >> "$BUN/payload/panels/waveshare35f/st7796s.bin"
+spi_install --spi-panel luckfox35
+cp "$TMP/st7796s.keep" "$BUN/payload/panels/waveshare35f/st7796s.bin"
+check "pi5: a bundle whose init file is not Waveshare's: refused before anything, config.txt and /lib/firmware untouched" '[ $RC = 1 ] && has "st7796s.bin is not Waveshare'"'"'s init file" && [ "$(cat "$(pi_cfg)")" = "$CFG_PI5" ] && [ ! -e "$R/lib/firmware" ] && [ ! -e "$R/etc/applaunch" ]'
+# a Pi whose /lib/firmware already has the same init file (put there by hand): kept, not recorded as ours, uninstall leaves it
+pi_root pi5-luckfox35; mkdir -p "$R/lib/firmware"; cp "$PANEL/st7796s.bin" "$R/lib/firmware/st7796s.bin"
+spi_install --spi-panel luckfox35 > /dev/null
+check "init file there already (by hand): not recorded (no spi_fw_added)" '! grep -q "spi_fw_added" "$R/etc/applaunch/install.conf"'
+pi_uninstall --yes
+check "init file there already (by hand): uninstall removes the block and keeps the file" '[ $RC = 0 ] && ! grep -q "cyberdeckzero spi panel" "$(pi_cfg)" && [ -f "$R/lib/firmware/st7796s.bin" ]'
 
 # --network-manager in a whole install: at the end (the launcher is in place first), the netplan file, generate, reboot
 nm_install() { : > "$CALLS"; OUT=$(PATH="$SPIBIN:$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" INSTALL_FAKE_SYSTEM=1 \

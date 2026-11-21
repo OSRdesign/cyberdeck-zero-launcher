@@ -104,8 +104,9 @@ chooses the session itself.
 | `--plan` | The dry run as `key=value` lines for a program (Settings > Updates' helper). | [Settings > Updates](#settings--updates) |
 | `--force` | Continue on an unknown board (no profile is written); replace a hand-edited `board.conf` (the old one is kept as `board.conf.bak`). | [Boards](#boards) |
 | `--no-default-source` | Do not add the apps repo to Settings > Apps for a user who has no source yet. | "Default app source", below |
-| `--spi-panel waveshare35f` | Armbian on an Allwinner H616 / H618 board (Orange Pi Zero 2W) only, **never a Raspberry Pi**: set up the Waveshare 3.5" RPi LCD (F) on the 40-pin header (its init file, the driver module, a DKMS build of `drm_mipi_dbi` for the SoC's DMA limit, the overlay in `/boot/armbianEnv.txt`) and write the `pi3a-luckfox35` profile; then reboot. Refused elsewhere; not with `--board-only` or `--no-boot-config`. | [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel) |
-| `--soft-pwm-backlight` | With `--spi-panel`: 10 brightness levels by software PWM on header pin 12 (DKMS module `pwm-gpio`) instead of the on/off backlight. | [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel) |
+| `--spi-panel luckfox35` | A **Raspberry Pi** (a Pi 5, a Zero 2 W, a Pi 3A+, ...; `waveshare35f` is the same panel family and also accepted there): set up the Luckfox 3.5" RPi LCD (CTP) / Waveshare 3.5" RPi LCD (F) (ST7796S + GT911) in `/boot/firmware/config.txt` (a block between marker lines in `[all]`, the init file in `/lib/firmware`; PWM backlight on a Zero 2 W and a Pi 5, channel 2 there), write the `pi3a-luckfox35` profile, ask for a reboot. **Edits `config.txt` also on a desktop board** (the option is explicit); `uninstall.sh` undoes it. Refused without `/boot/firmware/config.txt`, with `--board-only`, `--no-boot-config` or `--soft-pwm-backlight`. | [Raspberry Pi: the 3.5" SPI panel](#raspberry-pi-the-35-spi-panel) |
+| `--spi-panel waveshare35f` | Armbian on an Allwinner H616 / H618 board (Orange Pi Zero 2W): set up the Waveshare 3.5" RPi LCD (F) on the 40-pin header (its init file, the driver module, a DKMS build of `drm_mipi_dbi` for the SoC's DMA limit, the overlay in `/boot/armbianEnv.txt`) and write the `pi3a-luckfox35` profile; then reboot. Refused elsewhere; not with `--board-only` or `--no-boot-config`. | [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel) |
+| `--soft-pwm-backlight` | With `--spi-panel waveshare35f` (Armbian; refused on a Raspberry Pi): 10 brightness levels by software PWM on header pin 12 (DKMS module `pwm-gpio`) instead of the on/off backlight. | [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel) |
 | `--network-manager` | Debian / Ubuntu with netplan and no NetworkManager renderer yet (Armbian, Ubuntu server): install `network-manager` and `polkitd`, hand the network to NetworkManager at the next boot (Settings > Wi-Fi); then reboot. | [NetworkManager by install.sh](#networkmanager-by-installsh---network-manager) |
 | `--yes` | With `--network-manager`: go ahead when the default route is over Wi-Fi (an ssh session over it drops at the reboot). Without it a terminal is asked, a run without one is refused. | [NetworkManager by install.sh](#networkmanager-by-installsh---network-manager) |
 | `-h`, `--help` | Print the option list. | |
@@ -114,7 +115,8 @@ Each install records its keyboard name, `--board`, `--screen-size`, `--panel-mm`
 `/etc/applaunch/install.conf` (`screen_size=` and `panel_mm=` are empty when none was given); Settings > Updates installs a newer release by running `install.sh` again with them.
 The other options (`--user`, `--board-only`, `--dry-run`, `--plan`, `--force`, `--network-manager`, `--yes`) are not recorded.
 `--spi-panel` records `board=pi3a-luckfox35` (so updates keep the profile) and, for information only, `spi_panel=` and
-`soft_pwm_backlight=`, which later runs keep; the panel's set-up is done once and is never run again by Settings > Updates.
+`soft_pwm_backlight=`, which later runs keep (on a Raspberry Pi also `spi_fw_added=1`, which tells `uninstall.sh` that `install.sh`
+put `/lib/firmware/st7796s.bin` there); the panel's set-up is done once and is never run again by Settings > Updates.
 
 **Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
 password). When that user has no app source yet (no `~/.local/share/cardputerzero-appstore/registries.json`, or one
@@ -383,7 +385,7 @@ the framebuffers (`/sys/class/graphics`); a PC from `uname -m` (x86_64, no devic
 | Board | Detected by | Profile |
 | --- | --- | --- |
 | `zero2w`: Pi Zero 2 W deck, Waveshare 2.8" DPI | model contains "Zero 2" | none: `cyberdeckzero.service` alone, exactly as before (a stale generated profile is moved to `board.conf.bak`) |
-| `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel; also a Pi Zero 2 W with the Waveshare 3.5" RPi LCD (F) (the same `mipi-dbi-spi` overlay) | model "Raspberry Pi 3 Model A Plus", connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*` (a Zero 2 W only with `--board pi3a-luckfox35`: it is detected as the deck) | `/etc/applaunch/board.conf` (below); the deck's PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio`. On a Zero 2 W the panel's own PWM backlight instead (brightness levels and `APPLAUNCH_DIM_PERCENT=10`, below). On a board that is not a Raspberry Pi (`--board pi3a-luckfox35`, or `--spi-panel waveshare35f` on an Orange Pi Zero 2W, [below](#orange-pi-zero-2w-the-35-spi-panel)) the backlight is what `/sys/class/backlight` has: one with levels (`max_brightness` above 1, `backlight_pwm` first) gives `APPLAUNCH_BACKLIGHT=sysfs:...`, `APPLAUNCH_DIM_PERCENT=10` and `92-applaunch-backlight-sysfs.rules`; the on/off `backlight_gpio` the `gpio:` line and its rule; none, no line (no brightness control) |
+| `pi3a-luckfox35`: Pi 3 Model A+ with the Luckfox 3.5" ST7796S SPI panel; also a Pi Zero 2 W with the Waveshare 3.5" RPi LCD (F) and a Pi 5 (or any other Raspberry Pi) with either panel (the same `mipi-dbi-spi` overlay; [Raspberry Pi: the 3.5" SPI panel](#raspberry-pi-the-35-spi-panel)) | a Raspberry Pi (a Pi 3A+, a Pi 5, a Pi 4B without its DSI panel, ...): connector `SPI-*` connected with mode 320x480, a 320x480 framebuffer named `panel-mipi-dbi*`, and no `DSI-*` / `DPI-*` connector connected as well (a Zero 2 W only with `--board pi3a-luckfox35` or `--spi-panel`: it is detected as the deck) | `/etc/applaunch/board.conf` (below); the deck's PWM backlight overlay is not added; a udev rule (`92-applaunch-backlight-gpio.rules`) lets the video group switch `backlight_gpio`. On a Zero 2 W the panel's own PWM backlight instead (brightness levels and `APPLAUNCH_DIM_PERCENT=10`, below). On a board that is not a Raspberry Pi (`--board pi3a-luckfox35`, or `--spi-panel waveshare35f` on an Orange Pi Zero 2W, [below](#orange-pi-zero-2w-the-35-spi-panel)) the backlight is what `/sys/class/backlight` has: one with levels (`max_brightness` above 1, `backlight_pwm` first) gives `APPLAUNCH_BACKLIGHT=sysfs:...`, `APPLAUNCH_DIM_PERCENT=10` and `92-applaunch-backlight-sysfs.rules`; the on/off `backlight_gpio` the `gpio:` line and its rule; none, no line (no brightness control) |
 | `pi3a-wsdsi43`: Pi 3 Model A+ with an 800x480 DSI panel, the Waveshare 4.3" one (overlay `vc4-kms-dsi-waveshare-800x480`, see below); the 4.3", 5" and 7" panels look the same to software: for another size use `--screen-size` ([Screen size](#screen-size)) | model "Raspberry Pi 3 Model A Plus", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` (config.txt and the overlay's name are not looked at) | `board.conf`: `/dev/fb0`, `APPLAUNCH_LOGICAL=800x480`, `APPLAUNCH_ROTATE=0`, `APPLAUNCH_COMPAT_SCALE=2`, `APPLAUNCH_PANEL_MM=94x56` (to be confirmed with a ruler), touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` (the overlay's backlight regulator, brightness levels; the only backlight device if that one is absent, none if there is none) with `APPLAUNCH_DIM_PERCENT=10` after it (no dim line without a backlight line) and a udev rule (`92-applaunch-backlight-sysfs.rules`) that lets the video group set it; config.txt is not edited (no PWM overlay), cmdline.txt gets `vt.global_cursor_default=0 consoleblank=0` only (no `fbcon=` argument) |
 | `pi3a-wsdsi43-portrait`: the same board and panel turned to portrait, the PDA profile ([below](#pda-portrait-on-the-43-dsi-panel)) | never detected: only `--board pi3a-wsdsi43-portrait` (the panel must be there, as for `pi3a-wsdsi43`) | `board.conf`: as `pi3a-wsdsi43` but `APPLAUNCH_LOGICAL=480x800`, `APPLAUNCH_ROTATE=90`, `APPLAUNCH_PDA=1` (the writing zone) and no `APPLAUNCH_COMPAT_SCALE`; the same backlight line and rule, config.txt and cmdline.txt as `pi3a-wsdsi43` |
 | `pi4b-dsi`: Pi 4 Model B with the Freenove 5" DSI panel (800x480, same family as the 4.3" one; for another size `--screen-size`) | model "Raspberry Pi 4 Model B", connector `DSI-*` connected with mode 800x480, an 800x480 framebuffer named `vc4drmfb` and the panel's backlight regulator `/sys/class/backlight/10-0045` (`rpi_panel_attiny_regulator`) | `board.conf`: as `pi3a-wsdsi43` (`/dev/fb0`, 800x480, rotate 0, compat scale 2, touch `auto` / `buffer`, `APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045` and its udev rule), with `APPLAUNCH_PANEL_MM=108x65` (a guess, to be checked with a ruler) and `APPLAUNCH_DIM_PERCENT=20` (10 % is black on this panel); config.txt is not edited (the tested board finds the panel with `display_auto_detect=1`), cmdline.txt gets the two console arguments only. Tip: this board logs undervoltage warnings with a weak supply; use the official 5.1 V 3 A one |
@@ -530,11 +532,84 @@ Every step that can fail (the packages, the headers, the download, the patch, `d
 of the panel is put in place, and before the launcher's files: a failure takes off the DKMS modules this run added and
 stops with a clear message, nothing of the panel changed (packages apt installed stay). A second run changes nothing
 and asks for no reboot. `--dry-run` prints the whole plan (the URL, the `armbianEnv.txt` line, the foreseen
-framebuffer). Refused, with nothing changed, on a Raspberry Pi (there the same panel is set up in `config.txt`), on
-another SoC, without `/boot/armbianEnv.txt`, or with a kernel release that is not `<version>-<flavour>`. Undo by hand:
+framebuffer). Refused, with nothing changed, on `luckfox35` (a Raspberry Pi's name: there the same panel is set up in
+`config.txt`, [below](#raspberry-pi-the-35-spi-panel)), on another SoC, without `/boot/armbianEnv.txt`, or with a kernel release that is not `<version>-<flavour>`. Undo by hand:
 take `spi35-st7796s` out of `user_overlays=` (or put the `.bak-<date>` file back), `sudo dkms remove
 drm-mipi-dbi-chunk/1.0 --all` (and `pwm-gpio/1.0`), remove the two files in `/etc/modules-load.d`, reboot;
 `uninstall.sh` does not touch them.
+
+### Raspberry Pi: the 3.5" SPI panel
+
+The same panel family as the Orange Pi's section above, on a **Raspberry Pi**: the Luckfox 3.5" RPi LCD (CTP) and the
+Waveshare 3.5" RPi LCD (F) (ST7796S 320x480 on SPI0 CE0, Goodix GT911 touch on I2C 0x5d; DC GPIO22, reset GPIO27,
+backlight GPIO18, touch interrupt GPIO4, touch reset GPIO17). Tested by hand on a **Pi 5** (Raspberry Pi OS trixie,
+kernel 6.18, labwc + lightdm desktop): screen, touch, launcher and 15-step brightness. Since this release the set-up is
+`install.sh --spi-panel luckfox35` (`waveshare35f` is accepted as a name too: the same panel family):
+
+```
+sudo ./install.sh --spi-panel luckfox35 --dry-run    # the plan: the init file, the exact config.txt lines
+sudo ./install.sh --spi-panel luckfox35              # then: sudo reboot
+sudo ./install.sh                                    # after the reboot, once: the profile finds the panel's framebuffer
+```
+
+What it does (a whole install; refused with a clear message, nothing changed, with `--board-only` or `--no-boot-config`,
+and on anything that is not a Raspberry Pi with `/boot/firmware/config.txt`; `--soft-pwm-backlight` is the Orange Pi's):
+
+- puts the panel's init sequence in `/lib/firmware/st7796s.bin` (Waveshare's file, checked by its sha256
+  `17204e39cce35fba857ad2dff14243e1d3a958c4dac00283f8df9b7ad5147cc7`; Luckfox's is byte-identical; it ships in the
+  bundle's `panels/waveshare35f/`);
+- **edits `/boot/firmware/config.txt`**, also on a desktop board: the option is explicit, so unlike the automatic
+  backlight change below it is made there too. A copy goes to `config.txt.bak-applaunch-spipanel` (once, before the first
+  change) and this block is appended to the `[all]` section (an `[all]` line goes in front of it when the file's last
+  section is another one). The marker lines are what `uninstall.sh` looks for:
+
+  ```
+  # >>> cyberdeckzero spi panel
+  dtparam=spi=on
+  dtparam=i2c_arm=on
+  dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000
+  dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+  dtparam=width=320,height=480,width-mm=49,height-mm=79
+  dtparam=reset-gpio=27,dc-gpio=22
+  dtparam=backlight-pwm
+  dtparam=backlight-pwm-chan=2
+  dtoverlay=goodix,addr=0x5d
+  # <<< cyberdeckzero spi panel
+  ```
+
+  (`\0` is a literal backslash and zero in the file.) `dtparam=spi=on`, `dtparam=i2c_arm=on` and the goodix overlay are
+  left out when `config.txt` has such a line already. A `config.txt` that already has a `dtoverlay=mipi-dbi-spi` line
+  that install.sh did not write (a hand-made set-up) is left as it is: nothing is added, the profile is still written.
+  A second run adds nothing;
+- **the backlight by model**: a Zero 2 W and a Pi 5 get the PWM backlight (`dtparam=backlight-pwm`, 16 levels at
+  `/sys/class/backlight/backlight_pwm`); every other model the on/off one (`backlight-gpio=18` on the `reset-gpio` line,
+  `backlight_gpio`), because the Pi 3A+'s PWM0 is the headphone jack's;
+- **a Pi 5 needs `dtparam=backlight-pwm-chan=2`.** GPIO18 is RP1 PWM0 channel 2 there; the overlay's default channel 0
+  binds the wrong one and brightness does nothing. A Zero 2 W's default channel 0 is right (no channel line). The
+  installer writes the channel line on a Pi 5 and warns when a `config.txt` has `backlight-pwm` without it;
+- writes the `pi3a-luckfox35` profile (`APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm` and the dim level
+  10 for the PWM backlight) and its udev rule, records `spi_panel=` and `spi_fw_added=1` (the init file was put there by
+  this install) in `/etc/applaunch/install.conf`, asks for a **reboot** (the launcher is not started before it) and keeps
+  the profile for Settings > Updates through `board=pi3a-luckfox35`. The panel's framebuffer does not exist before the
+  reboot: the profile names the one foreseen (`/dev/fb0` when there is none now), and `sudo ./install.sh` after the
+  reboot finds the panel and corrects it when the foreseen number was wrong (a desktop with an HDMI framebuffer).
+
+**Detection without `--board`.** A Raspberry Pi of any model (a Pi 3A+ as before; a Zero 2 W is still detected as the deck
+and needs `--board pi3a-luckfox35` or `--spi-panel`) with a connected `SPI-*` connector at 320x480 and a 320x480
+framebuffer named `panel-mipi-dbi*` is `pi3a-luckfox35`. A Pi 5 with HDMI connected is fine; another panel (a connected
+`DSI-*` or `DPI-*` connector) makes the detection refuse to guess: choose with `--board`.
+
+**The backlight of an existing config.txt** (set up by hand, as on the owner's Pi 5): `backlight-pwm` with or without the
+`-chan=` line is read as PWM (the profile names `backlight_pwm`); `backlight-gpio=18` on a whole install on an
+appliance board is converted to PWM as before (on a Pi 5 with the channel line too), on the same conditions as the Zero 2
+W. On a **desktop board** a whole install leaves `config.txt` alone (the dry run says so and names this option): to get
+the PWM backlight there, run `--spi-panel luckfox35`, which edits `config.txt` because you asked.
+
+**Undo.** `./uninstall.sh` removes the block between the two marker lines (a timestamped `config.txt.bak-uninstall-<time>`
+first, then a reboot) and `/lib/firmware/st7796s.bin` when `install.conf` says install.sh put it there and the file is
+still Waveshare's, unless `config.txt` still has a `dtoverlay=mipi-dbi-spi` line of its own. A hand-made block (no
+markers) is never touched, nor a block with only one marker line. `--no-boot-config` leaves both. `--dry-run` prints it.
+`config.txt.bak-applaunch-spipanel` stays. By hand: delete the lines between the markers and reboot.
 
 ### PDA: portrait on the 4.3" DSI panel
 
@@ -919,6 +994,9 @@ lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `
 `vt.global_cursor_default=0` / `consoleblank=0` arguments in `cmdline.txt` when the `*.bak-applaunch` backup shows that
 `install.sh` added them. Reboot afterwards. The 3.5" SPI panel's `dtparam=backlight-pwm` (a Zero 2 W with
 `pi3a-luckfox35`) stays in `config.txt`: the panel stays lit without the launcher ([Boards](#boards) says how to revert it).
+The block that `install.sh --spi-panel luckfox35` added to `config.txt` on a Raspberry Pi (between the `# >>> cyberdeckzero spi
+panel` and `# <<< cyberdeckzero spi panel` lines) is removed, and so is `/lib/firmware/st7796s.bin` when `install.sh` put it there
+and it is unchanged; a panel set up by hand is never touched ([Raspberry Pi: the 3.5" SPI panel](#raspberry-pi-the-35-spi-panel)).
 
 It keeps by default: `~/.config/cardputerzero`, the Settings > Apps sources and install records
 (`~/.local/share/cardputerzero-appstore`, with the default source and its marker), the download cache, every installed
@@ -932,7 +1010,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `--purge-config` | Also delete `~/.config/cardputerzero`, `~/.local/share/cardputerzero-appstore` and `~/.cache/cardputerzero-appstore`, and Settings > Updates' `~/.local/state/cyberdeckzero` and `~/.cache/cyberdeckzero`. |
 | `--remove-apps` | Also `apt-get remove` the app packages installed from Settings > Apps / the Store, taken from the launcher's `installed.json` and listed first. No record: skipped. With `--purge-config` the packages are purged. |
 | `--restore-config` | Restore `config.txt` from `config.txt.bak-before-pwm` instead of removing the two lines (loses any other later edit; the current file is backed up first). This works only where that file exists (the deck's own backup, made by hand before `install.sh` existed). `install.sh` itself writes `config.txt.bak-applaunch`, which this option does not use; without the file the option stops with an error. |
-| `--no-boot-config` | Leave `config.txt`, `cmdline.txt` and the overlay alone. |
+| `--no-boot-config` | Leave `config.txt` (also the 3.5" SPI panel's block), `cmdline.txt`, the overlay and the panel's init file alone. |
 | `--disable-linger` | Also run `loginctl disable-linger` (`install.sh` enabled it; it may have been on before). |
 | `--user NAME`, `--payload DIR` | The user that ran `install.sh`; where the bundle's `payload/` is, if it is not next to the script. |
 
@@ -949,7 +1027,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `config.txt.snippet` | Panel part of `config.txt` the port was tested with. |
 | `waveshare-pwm-backlight.dts` | Replaces the on/off GPIO18 backlight by a PWM one (Settings > Screen > Brightness). |
 | `hyperpixel4-pwm-backlight.dts` | Pi 5 + HyperPixel 4, only with `install.sh --pwm-backlight`: its on/off GPIO19 backlight becomes a PWM one with levels (RP1 PWM0). |
-| `panels/waveshare35f/` | `install.sh --spi-panel waveshare35f` (Orange Pi Zero 2W, Armbian): the panel's init file, its two overlays, the DKMS sources of `drm-mipi-dbi-chunk` and `pwm-gpio`; their origin and licences in its README ([Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel)). Copied to `payload/panels/` by `build.sh`; LF line ends (`.gitattributes`). |
+| `panels/waveshare35f/` | `install.sh --spi-panel waveshare35f` (Orange Pi Zero 2W, Armbian) and `--spi-panel luckfox35` (a Raspberry Pi: only the init file): the panel's init file, its two overlays, the DKMS sources of `drm-mipi-dbi-chunk` and `pwm-gpio`; their origin and licences in its README ([Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel)). Copied to `payload/panels/` by `build.sh`; LF line ends (`.gitattributes`). |
 | `90-backlight-unblank.rules` | The PWM backlight starts powered down: unblank it when it appears. |
 | `91-applaunch-vkbd.rules` | `uinput` permission and the `/dev/input/applaunch-vkbd` name used for legacy apps. |
 | `93-applaunch-rfkill.rules` | `/dev/rfkill` writable by the `netdev` group, so Settings > Bluetooth can run `rfkill unblock bluetooth` as the launcher user. |

@@ -38,12 +38,17 @@
 #                          /etc/applaunch/board.conf (the old one is kept as board.conf.bak)
 #   --no-default-source    do not offer the apps repo (OSRdesign/cyberdeck-zero-apps) in Settings > Apps
 #                          (default: added once for the user if they have no source yet, see default-sources.sh)
-#   --spi-panel waveshare35f  Armbian on an Allwinner H616 / H618 board (Orange Pi Zero 2W) only, never a Raspberry Pi:
-#                          set up the Waveshare 3.5" RPi LCD (F) on the 40-pin header (its init file, the driver module,
-#                          a DKMS build of drm_mipi_dbi for the SoC's DMA limit, the overlay in /boot/armbianEnv.txt)
-#                          and write the pi3a-luckfox35 profile; then reboot (README.md, "Orange Pi Zero 2W: the 3.5" SPI panel")
-#   --soft-pwm-backlight   with --spi-panel: brightness levels by software PWM on header pin 12 (DKMS module pwm-gpio)
-#                          instead of the on/off backlight
+#   --spi-panel waveshare35f  Armbian on an Allwinner H616 / H618 board (Orange Pi Zero 2W): set up the Waveshare 3.5" RPi LCD (F)
+#                          on the 40-pin header (its init file, the driver module, a DKMS build of drm_mipi_dbi for the
+#                          SoC's DMA limit, the overlay in /boot/armbianEnv.txt) and write the pi3a-luckfox35 profile;
+#                          then reboot (README.md, "Orange Pi Zero 2W: the 3.5" SPI panel")
+#   --spi-panel luckfox35  a Raspberry Pi (Pi 5, Zero 2 W, Pi 3A+, ...; waveshare35f is the same panel and also accepted
+#                          there): set up the Luckfox 3.5" RPi LCD (CTP) / Waveshare 3.5" RPi LCD (F) (ST7796S + GT911) in
+#                          /boot/firmware/config.txt (a marked block in [all], the init file in /lib/firmware) and write the
+#                          pi3a-luckfox35 profile, also on a desktop board (the option is explicit); then reboot (README.md,
+#                          "Raspberry Pi: the 3.5" SPI panel"). ./uninstall.sh takes the block off again
+#   --soft-pwm-backlight   with --spi-panel waveshare35f: brightness levels by software PWM on header pin 12 (DKMS module pwm-gpio)
+#                          instead of the on/off backlight (not on a Raspberry Pi)
 #   --network-manager      Debian / Ubuntu with netplan and no NetworkManager renderer yet: install NetworkManager and
 #                          polkitd (Settings > Wi-Fi) and hand the network to it at the next boot; then reboot
 #   --yes                  with --network-manager: go ahead when the network goes over Wi-Fi (asked on a terminal,
@@ -54,7 +59,7 @@
 # To remove everything this script adds, run ./uninstall.sh (see README.md, "Uninstall").
 #
 # Prerequisites that this script does NOT do:
-#   - the panel's overlay in config.txt (the deck: config.txt.snippet; other boards: README.md, "Boards");
+#   - the panel's overlay in config.txt (the deck: config.txt.snippet; other boards: README.md, "Boards"; the 3.5" SPI panel: --spi-panel);
 #   - pairing the Bluetooth keyboard (bluetoothctl);
 #   - on a PC: installing NetworkManager unless --network-manager (Settings > Wi-Fi needs it, but it takes the network over
 #     from netplan / systemd-networkd: the end of the install prints a recipe to run on the console). polkitd and BlueZ are installed
@@ -74,7 +79,7 @@ SIZE_ARG=""
 MM_ARG=""
 DEFAULT_SOURCE=1
 PLAN=0
-SPI_PANEL=""        # --spi-panel NAME (waveshare35f)
+SPI_PANEL=""        # --spi-panel NAME (waveshare35f, luckfox35: a Raspberry Pi only)
 SOFT_PWM=0          # --soft-pwm-backlight
 NM_OPT=0            # --network-manager
 YES=0               # --yes
@@ -91,7 +96,7 @@ valid_mm() {
 }
 for arg in "$@"; do
     case "$arg" in
-        -h|--help) sed -n '2,56p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,61p' "$0"; exit 0 ;;
         --dry-run|--plan) DRY=1 ;;
     esac
 done
@@ -118,10 +123,10 @@ while [ $# -gt 0 ]; do
         --plan) DRY=1; PLAN=1; shift ;;
         --force) FORCE=1; shift ;;
         --no-default-source) DEFAULT_SOURCE=0; shift ;;
-        --spi-panel) [ $# -ge 2 ] || { echo "--spi-panel needs the panel's name (waveshare35f)" >&2; exit 2; }
+        --spi-panel) [ $# -ge 2 ] || { echo "--spi-panel needs the panel's name (waveshare35f, luckfox35)" >&2; exit 2; }
                  case "$2" in
-                     waveshare35f) ;;
-                     *) echo "--spi-panel: unknown panel \"$2\" (known: waveshare35f, the Waveshare 3.5\" RPi LCD (F))" >&2; exit 2 ;;
+                     waveshare35f|luckfox35) ;;
+                     *) echo "--spi-panel: unknown panel \"$2\" (known: waveshare35f, the Waveshare 3.5\" RPi LCD (F); luckfox35, the same panel family on a Raspberry Pi)" >&2; exit 2 ;;
                  esac
                  SPI_PANEL="$2"; shift 2 ;;
         --soft-pwm-backlight) SOFT_PWM=1; shift ;;
@@ -132,14 +137,14 @@ while [ $# -gt 0 ]; do
 done
 # the new options' combinations (the board itself is checked after the detection)
 if [ "$SOFT_PWM" = 1 ] && [ -z "$SPI_PANEL" ]; then
-    echo "--soft-pwm-backlight goes with --spi-panel waveshare35f" >&2; exit 2
+    echo "--soft-pwm-backlight goes with --spi-panel waveshare35f (Armbian)" >&2; exit 2
 fi
 if [ -n "$SPI_PANEL" ]; then
     if [ "$BOARD_ONLY" = 1 ]; then
         echo "--spi-panel sets up the panel's driver and boot files: a whole install (or --dry-run), not --board-only" >&2; exit 2
     fi
     if [ "$BOOT_CONFIG" = 0 ]; then
-        echo "--spi-panel adds its overlay to /boot/armbianEnv.txt: it does not go with --no-boot-config" >&2; exit 2
+        echo "--spi-panel adds its overlay to the boot configuration (/boot/armbianEnv.txt, or config.txt on a Raspberry Pi): it does not go with --no-boot-config" >&2; exit 2
     fi
     case "$BOARD_ARG" in
         ""|pi3a-luckfox35) ;;
@@ -271,8 +276,8 @@ DMI_CHASSIS=$(rd "$DMI/chassis_type" || true)
 # ---------------------------------------------------------------------------------------------------------
 # --spi-panel waveshare35f: the Waveshare 3.5" RPi LCD (F) (ST7796S 320x480 on SPI, Goodix GT911 touch on I2C, the
 # backlight on header pin 12) plugged on the 40-pin header of an Allwinner H616 / H618 board with Armbian (tested on an
-# Orange Pi Zero 2W, Armbian 26.11, kernel 6.18). A Raspberry Pi sets the same panel up in config.txt (pi3a-luckfox35):
-# never here. What is set up (the board's hand-made set-up of 2026-11-21, made repeatable):
+# Orange Pi Zero 2W, Armbian 26.11, kernel 6.18). A Raspberry Pi sets the same panel up in config.txt (--spi-panel
+# luckfox35: "--spi-panel on a Raspberry Pi" below), not by the steps listed here. What is set up (the board's hand-made set-up of 2026-11-21, made repeatable):
 #   - /lib/firmware/st7796s.bin, the panel's init sequence (Waveshare's file, checked by its sha256);
 #   - /etc/modules-load.d/spi35.conf: panel-mipi-dbi (and pwm-gpio.conf with --soft-pwm-backlight);
 #   - /boot/overlay-user/spi35-st7796s.dtbo, compiled with dtc -@ from the bundle's .dts (the on/off gpio-backlight, or with
@@ -292,6 +297,7 @@ SPI_KREL=""        # the running kernel's release, 6.18.64-current-sunxi64
 SPI_TAG=""         # its upstream tag, v6.18.64 (v6.18 for x.y.0)
 SPI_HDR=""         # its headers package, linux-headers-current-sunxi64
 SPI_PIN_NOTE=""    # a warning on an H616 / H618 board other than the Orange Pi Zero 2W
+SPI_RPI=0          # 1: --spi-panel on a Raspberry Pi (config.txt, below), not the Armbian set-up
 spi_refuse() {
     echo "--spi-panel $SPI_PANEL: $1" >&2
     echo "Nothing was changed." >&2
@@ -301,36 +307,42 @@ if [ -n "$SPI_PANEL" ]; then
     SPI_COMPAT=""
     [ ! -r "$SYSROOT/proc/device-tree/compatible" ] || SPI_COMPAT=$(tr '\0' ' ' < "$SYSROOT/proc/device-tree/compatible" | sed 's/ *$//')
     if [ "$IS_RPI" = 1 ]; then
-        spi_refuse "never on a Raspberry Pi: there the panel is set up in config.txt (README.md, \"Boards\": pi3a-luckfox35)."
+        # a Raspberry Pi: the panel goes into config.txt (see "--spi-panel on a Raspberry Pi" below), no DKMS, no kernel checks
+        SPI_RPI=1
+        [ -f "$BOOT/config.txt" ] || spi_refuse "only on a Raspberry Pi with ${BOOT#"$SYSROOT"}/config.txt (not found: the panel's overlay goes there)."
+        [ "$SOFT_PWM" = 0 ] || spi_refuse "--soft-pwm-backlight is for Armbian (waveshare35f); on a Raspberry Pi the panel's PWM backlight is the overlay's own."
+        if [ -z "$BOARD_ARG" ]; then BOARD_ARG=pi3a-luckfox35; SPI_IMPLIED=1; fi
+    else
+        [ "$SPI_PANEL" != luckfox35 ] || spi_refuse "luckfox35 is the name for a Raspberry Pi with /boot/firmware/config.txt; on Armbian (Allwinner H616 / H618) use waveshare35f."
+        case " $SPI_COMPAT " in
+            *" allwinner,sun50i-h616 "*|*" allwinner,sun50i-h618 "*) ;;
+            *) spi_refuse "for Allwinner H616 / H618 boards with Armbian only (this device tree: ${SPI_COMPAT:-none})." ;;
+        esac
+        if [ ! -f "$SYSROOT/boot/armbianEnv.txt" ]; then
+            spi_refuse "no /boot/armbianEnv.txt: not an Armbian boot (the panel's overlay is loaded from there)."
+        fi
+        SPI_KREL=${INSTALL_KERNEL_RELEASE:-$(uname -r)}
+        spi_kver=${SPI_KREL%%-*}
+        spi_flavour=${SPI_KREL#*-}
+        case "$spi_kver" in
+            [0-9]*.[0-9]*) case "$spi_kver" in *[!0-9.]*|*..*|*.) spi_kver="" ;; esac ;;
+            *) spi_kver="" ;;
+        esac
+        case "$spi_flavour" in ""|"$SPI_KREL"|*[!A-Za-z0-9.+-]*) spi_flavour="" ;; esac
+        if [ -z "$spi_kver" ] || [ -z "$spi_flavour" ]; then
+            spi_refuse "the kernel release \"$SPI_KREL\" is not of the form <version>-<flavour> (6.18.64-current-sunxi64): its upstream source and headers package cannot be told."
+        fi
+        spi_mm=$(printf '%s\n' "$spi_kver" | cut -d. -f1-2)
+        spi_patch=$(printf '%s\n' "$spi_kver" | cut -d. -f3)
+        if [ -z "$spi_patch" ] || [ "$spi_patch" = 0 ]; then SPI_TAG="v$spi_mm"; else SPI_TAG="v$spi_mm.$spi_patch"; fi
+        SPI_HDR="linux-headers-$spi_flavour"
+        if [ -z "$BOARD_ARG" ]; then BOARD_ARG=pi3a-luckfox35; SPI_IMPLIED=1; fi
+        # the overlay's pins are the Orange Pi Zero 2W's 40-pin header (wired as on a Raspberry Pi): said on other H616 / H618 boards
+        case " $SPI_COMPAT " in
+            *" xunlong,orangepi-zero2w "*) ;;
+            *) SPI_PIN_NOTE="WARNING: the overlay's pins are those of the Orange Pi Zero 2W's 40-pin header (SPI1 on PH5-PH8, I2C1 on PI7/PI8, pin 12 = PI1); this board (${SPI_COMPAT}) is untested: check its header before rebooting" ;;
+        esac
     fi
-    case " $SPI_COMPAT " in
-        *" allwinner,sun50i-h616 "*|*" allwinner,sun50i-h618 "*) ;;
-        *) spi_refuse "for Allwinner H616 / H618 boards with Armbian only (this device tree: ${SPI_COMPAT:-none})." ;;
-    esac
-    if [ ! -f "$SYSROOT/boot/armbianEnv.txt" ]; then
-        spi_refuse "no /boot/armbianEnv.txt: not an Armbian boot (the panel's overlay is loaded from there)."
-    fi
-    SPI_KREL=${INSTALL_KERNEL_RELEASE:-$(uname -r)}
-    spi_kver=${SPI_KREL%%-*}
-    spi_flavour=${SPI_KREL#*-}
-    case "$spi_kver" in
-        [0-9]*.[0-9]*) case "$spi_kver" in *[!0-9.]*|*..*|*.) spi_kver="" ;; esac ;;
-        *) spi_kver="" ;;
-    esac
-    case "$spi_flavour" in ""|"$SPI_KREL"|*[!A-Za-z0-9.+-]*) spi_flavour="" ;; esac
-    if [ -z "$spi_kver" ] || [ -z "$spi_flavour" ]; then
-        spi_refuse "the kernel release \"$SPI_KREL\" is not of the form <version>-<flavour> (6.18.64-current-sunxi64): its upstream source and headers package cannot be told."
-    fi
-    spi_mm=$(printf '%s\n' "$spi_kver" | cut -d. -f1-2)
-    spi_patch=$(printf '%s\n' "$spi_kver" | cut -d. -f3)
-    if [ -z "$spi_patch" ] || [ "$spi_patch" = 0 ]; then SPI_TAG="v$spi_mm"; else SPI_TAG="v$spi_mm.$spi_patch"; fi
-    SPI_HDR="linux-headers-$spi_flavour"
-    if [ -z "$BOARD_ARG" ]; then BOARD_ARG=pi3a-luckfox35; SPI_IMPLIED=1; fi
-    # the overlay's pins are the Orange Pi Zero 2W's 40-pin header (wired as on a Raspberry Pi): said on other H616 / H618 boards
-    case " $SPI_COMPAT " in
-        *" xunlong,orangepi-zero2w "*) ;;
-        *) SPI_PIN_NOTE="WARNING: the overlay's pins are those of the Orange Pi Zero 2W's 40-pin header (SPI1 on PH5-PH8, I2C1 on PI7/PI8, pin 12 = PI1); this board (${SPI_COMPAT}) is untested: check its header before rebooting" ;;
-    esac
 fi
 
 # the framebuffer device whose fbdev name starts with $1 and whose virtual_size is $2 (e.g. 320,480)
@@ -521,6 +533,30 @@ else
             else PANEL_FB=""; fi ;;
         *"Compute Module 5"*) detect_panel hackberry-cm5 && BOARD=hackberry-cm5 ;;
     esac
+    # The 3.5" SPI panel on any other Raspberry Pi (a Pi 5, a Pi 4B without its DSI panel, ...): left over by the cases above.
+    # The Zero 2 W stays the deck (--board pi3a-luckfox35 or --spi-panel says otherwise) and the Pi 3A+ has its own case. A DSI or
+    # DPI connector connected as well is a second panel: not guessed (HDMI is fine).
+    if [ -z "$BOARD" ] && [ "$IS_RPI" = 1 ]; then
+        case "$MODEL" in
+            *"Zero 2"*|*"Raspberry Pi 3 Model A Plus"*) ;;
+            *)
+                if detect_panel pi3a-luckfox35; then
+                    SPI_OTHER=""; SPI_SEEN=$PANEL_FB
+                    for d in "$SYSROOT"/sys/class/drm/card[0-9]*-*; do
+                        case "${d##*/}" in *-DSI-*|*-DPI-*) ;; *) continue ;; esac
+                        if [ "$(rd "$d/status" || true)" = connected ]; then SPI_OTHER="$SPI_OTHER ${d##*/}"; fi
+                    done
+                    if [ -n "$SPI_OTHER" ]; then
+                        PANEL_FB=""
+                        BOARD_NOTE="SPI panel ($SPI_SEEN: pi3a-luckfox35) and another panel connected (${SPI_OTHER# }): choose one with --board."
+                    else
+                        BOARD=pi3a-luckfox35
+                    fi
+                else
+                    PANEL_FB=""
+                fi ;;
+        esac
+    fi
 fi
 
 # ---------------------------------------------------------------------------------------------------------
@@ -653,12 +689,20 @@ HP_PWM_NOTE=""
 HP_DTS=hyperpixel4-pwm-backlight.dts
 HP_DTBO=hyperpixel4-pwm-backlight.dtbo
 HP_LINE=dtoverlay=hyperpixel4-pwm-backlight
-# true on a model whose PWM0 has no other user (no headphone jack): there the 3.5" SPI panel (pi3a-luckfox35) gets its
-# PWM backlight by default (LF_SETUP below)
-lf_pwm_free() { [ "$IS_RPI" = 1 ] || return 1; case "$MODEL" in *"Zero 2"*) return 0 ;; esac; return 1; }
+# The PWM channel of GPIO18 (header pin 12) on a model whose PWM0 has no other user (no headphone jack): 0 on a Zero 2 W
+# (the overlay's default channel), 2 on a Pi 5 (GPIO18 is RP1 PWM0 channel 2: the overlay's default channel 0 binds the wrong
+# one, dtparam=backlight-pwm-chan=2 is required), nothing on the others (the Pi 3A+'s PWM0 is the headphone jack's). There the
+# 3.5" SPI panel (pi3a-luckfox35) gets its PWM backlight by default (LF_SETUP below)
+lf_pwm_chan() {
+    [ "$IS_RPI" = 1 ] || return 0
+    case "$MODEL" in *"Zero 2"*) echo 0 ;; *"Raspberry Pi 5"*) echo 2 ;; esac
+}
+lf_pwm_free() { [ -n "$(lf_pwm_chan)" ]; }
+LF_CHAN=""      # the dtparam=backlight-pwm-chan= value to write, only where it is not the default (a Pi 5: 2)
+[ "$(lf_pwm_chan)" != 2 ] || LF_CHAN=2
 if [ "$PWM_BACKLIGHT" = 1 ]; then
     if [ "$BOARD" = pi3a-luckfox35 ] && lf_pwm_free; then
-        HP_PWM_NOTE="--pwm-backlight: not needed on pi3a-luckfox35 on a Zero 2 W (its panel's PWM backlight needs no option): ignored"
+        HP_PWM_NOTE="--pwm-backlight: not needed on pi3a-luckfox35 on a Zero 2 W or a Pi 5 (its panel's PWM backlight needs no option): ignored"
     elif [ "$BOARD" != pi5-hyperpixel4 ]; then
         HP_PWM_NOTE="--pwm-backlight is for the Pi 5 + HyperPixel 4 (pi5-hyperpixel4) only: ignored on ${BOARD:-this board}"
     elif [ "$BOOT_CONFIG" = 0 ]; then
@@ -1141,10 +1185,11 @@ apply_profile() {
 # last overlay loaded). "lf_config state FILE" prints pwm (backlight-pwm, no backlight-gpio), gpio (one
 # backlight-gpio=18, no backlight-pwm) or nothing (no such overlay, several, another pin, both, no file);
 # "lf_config line FILE" the number of the line with backlight-gpio=18; "lf_config convert FILE" the file with
-# backlight-gpio=18 taken off its line (a dtparam= line left empty goes) and dtparam=backlight-pwm on the next line.
+# backlight-gpio=18 taken off its line (a dtparam= line left empty goes) and dtparam=backlight-pwm on the next line (and, on a
+# Pi 5, dtparam=backlight-pwm-chan=2 after it). A dtparam=backlight-pwm-chan= line is not a backlight-pwm parameter for the state.
 lf_config() {
     { [ -f "$2" ] && [ -r "$2" ]; } || return 0
-    awk -v mode="$1" '
+    awk -v mode="$1" -v chan="${LF_CHAN:-}" '
     { line[NR] = $0 }
     END {
         ov = 0; n = 0; bg = 0; nbg = 0; npwm = 0
@@ -1171,6 +1216,7 @@ lf_config() {
             for (j = 1; j <= k; j++) if (it[j] != "backlight-gpio=18" && it[j] != "") out = out (out == "" ? "" : ",") it[j]
             if (out != "") print p out
             print "dtparam=backlight-pwm"
+            if (chan != "") print "dtparam=backlight-pwm-chan=" chan
         }
     }' "$2"
 }
@@ -1186,17 +1232,36 @@ LF_CFG=""      # pwm | gpio | "": config.txt's panel backlight (lf_config state)
 LF_PWM=0       # 1: the profile names the PWM backlight
 LF_SETUP=0     # 1: this run turns backlight-gpio=18 into dtparam=backlight-pwm in config.txt (then a reboot)
 LF_NOTE=""     # why not, on a Zero 2 W
+LF_WARN=""     # a Pi 5 whose config.txt has backlight-pwm but not its channel 2
+SPI_BEGIN="# >>> cyberdeckzero spi panel"      # --spi-panel on a Raspberry Pi: the block install.sh adds to config.txt
+SPI_END="# <<< cyberdeckzero spi panel"
+SPI_RPI_MODE=""  # --spi-panel on a Raspberry Pi: block (ours there already), hand (a panel overlay not made by install.sh), new
+if [ "$SPI_RPI" = 1 ]; then
+    if grep -qxF "$SPI_BEGIN" "$BOOT/config.txt"; then SPI_RPI_MODE=block
+    elif grep -q '^dtoverlay=mipi-dbi-spi\(,\|$\)' "$BOOT/config.txt"; then SPI_RPI_MODE=hand
+    else SPI_RPI_MODE=new; fi
+fi
 if [ "$BOARD" = pi3a-luckfox35 ]; then
     LF_CFG=$(lf_config state "$BOOT/config.txt")
     if [ "$LF_CFG" = pwm ]; then
         LF_PWM=1
+        if [ "$LF_CHAN" = 2 ] && ! grep -q '^dtparam=.*backlight-pwm-chan=' "$BOOT/config.txt"; then
+            LF_WARN="Pi 5: config.txt has dtparam=backlight-pwm but no dtparam=backlight-pwm-chan=2: GPIO18 is RP1 PWM0 channel 2, the overlay's default channel 0 binds the wrong one (no working brightness); add the line after dtparam=backlight-pwm and reboot"
+        fi
+    elif [ "$SPI_RPI" = 1 ]; then
+        # --spi-panel: this run writes the block (new), or keeps what is there; never converts a hand-made backlight
+        if [ "$SPI_RPI_MODE" = new ]; then
+            if lf_pwm_free; then LF_PWM=1; else LF_NOTE="on/off backlight (a PWM backlight needs a model whose PWM0 has no other user: the Pi 3A+'s is the headphone jack's)"; fi
+        elif [ "$LF_CFG" = gpio ]; then
+            LF_NOTE="the panel's overlay in config.txt is kept as it is (on/off backlight)"
+        fi
     elif lf_pwm_free; then
         if [ "$LF_CFG" != gpio ]; then
             LF_NOTE="config.txt has no dtoverlay=mipi-dbi-spi with backlight-gpio=18 to change: left as it is (on/off backlight)"
         elif [ "$BOARD_ONLY" = 1 ]; then
             LF_NOTE="--board-only: config.txt left as it is (on/off backlight; a whole install sets up the PWM one)"
         elif [ "$SESSION" = desktop ]; then
-            LF_NOTE="desktop board: config.txt left as it is (on/off backlight)"
+            LF_NOTE="desktop board: config.txt left as it is (on/off backlight); install.sh --spi-panel luckfox35 changes config.txt for the PWM one (README.md)"
         elif [ "$BOOT_CONFIG" = 0 ]; then
             LF_NOTE="skipped (--no-boot-config): on/off backlight"
         elif [ "$(profile_state)" = edited ] && [ "$FORCE" = 0 ]; then
@@ -1237,6 +1302,8 @@ fi
 GPIO_BL=0
 if [ "$BOARD" != zero2w ] && [ -d "$SYSROOT/sys/class/backlight/backlight_gpio" ]; then GPIO_BL=1; fi
 if [ "$LF_BL" = gpio ]; then GPIO_BL=1; fi
+# --spi-panel on a Raspberry Pi with the on/off backlight (a Pi 3A+): the device does not exist before the reboot, its rule comes now
+if [ "$SPI_RPI_MODE" = new ] && [ "$LF_PWM" = 0 ]; then GPIO_BL=1; fi
 gpio_bl_rule() {
     cat <<'EOF'
 # On/off GPIO backlight (boards without a PWM backlight): let the video group switch it.
@@ -1384,6 +1451,7 @@ board_how() {
 SPI_OVL=spi35-st7796s
 SPI_FW_SHA=17204e39cce35fba857ad2dff14243e1d3a958c4dac00283f8df9b7ad5147cc7
 SPI_DTS=spi35-waveshare35f-gpio-backlight.dts
+SPI_DIR=waveshare35f      # the bundle's folder of the panel's files (luckfox35 on a Raspberry Pi is the same panel family)
 [ "$SOFT_PWM" = 0 ] || SPI_DTS=spi35-waveshare35f-softpwm.dts
 # DKMS needs the compiler, make and the C library headers (the headers package builds its scripts at install) and patch
 SPI_PKGS="dkms gcc make libc6-dev patch $SPI_HDR"
@@ -1394,18 +1462,19 @@ SPI_DTBO="$SYSROOT/boot/overlay-user/$SPI_OVL.dtbo"
 SPI_FW="$SYSROOT/lib/firmware/st7796s.bin"
 SPI_CHANGED=0; SPI_REBOOT=0; SPI_DKMS_NEW=""; SPI_WORK=""
 spi_src() {
-    if [ -d "$HERE/payload/panels/$SPI_PANEL" ]; then echo "$HERE/payload/panels/$SPI_PANEL"; else echo "$HERE/panels/$SPI_PANEL"; fi
+    if [ -d "$HERE/payload/panels/$SPI_DIR" ]; then echo "$HERE/payload/panels/$SPI_DIR"; else echo "$HERE/panels/$SPI_DIR"; fi
 }
 # the panel's files in the bundle: nothing when they are all there and the init file is Waveshare's, else what is wrong
 spi_payload_problem() {
     sp=$(spi_src)
     sp_need="st7796s.bin $SPI_DTS dkms-drm-mipi-dbi-chunk/Makefile dkms-drm-mipi-dbi-chunk/dkms.conf dkms-drm-mipi-dbi-chunk/chunk.patch"
     [ "$SOFT_PWM" = 0 ] || sp_need="$sp_need dkms-pwm-gpio/Makefile dkms-pwm-gpio/dkms.conf dkms-pwm-gpio/pwm-gpio.c"
+    [ "$SPI_RPI" = 0 ] || sp_need="st7796s.bin"      # a Raspberry Pi: the init file only
     for f in $sp_need; do
-        [ -f "$sp/$f" ] || { echo "the bundle has no panels/$SPI_PANEL/$f (unpack the whole bundle)"; return 0; }
+        [ -f "$sp/$f" ] || { echo "the bundle has no panels/$SPI_DIR/$f (unpack the whole bundle)"; return 0; }
     done
     sp_sum=$(sha256sum < "$sp/st7796s.bin" | cut -d' ' -f1)
-    [ "$sp_sum" = "$SPI_FW_SHA" ] || echo "panels/$SPI_PANEL/st7796s.bin is not Waveshare's init file (sha256 $sp_sum, expected $SPI_FW_SHA)"
+    [ "$sp_sum" = "$SPI_FW_SHA" ] || echo "panels/$SPI_DIR/st7796s.bin is not Waveshare's init file (sha256 $sp_sum, expected $SPI_FW_SHA)"
 }
 # true when the DKMS module NAME/VERSION (kernel module MODULE) is installed for the running kernel
 spi_mod_installed() {
@@ -1590,6 +1659,104 @@ spi_setup() {
     if [ "$SPI_CHANGED" = 1 ]; then
         SPI_REBOOT=1
         echo "the panel comes with the overlay at the next boot: REBOOT NEEDED (the launcher is not started before it)"
+    else
+        echo "the panel's set-up was in place already: nothing changed"
+    fi
+}
+
+# ---------------------------------------------------------------------------------------------------------
+# --spi-panel on a Raspberry Pi (luckfox35, or waveshare35f: the same panel family, the Luckfox 3.5" RPi LCD (CTP) and the
+# Waveshare 3.5" RPi LCD (F): ST7796S 320x480 on SPI0 CE0, DC GPIO22, RST GPIO27, backlight GPIO18, Goodix GT911 touch on
+# I2C 0x5d). Done by hand first on a Pi 5 (Raspberry Pi OS trixie, kernel 6.18) and made repeatable here:
+#   - /lib/firmware/st7796s.bin, the panel's init sequence (Waveshare's file, checked by its sha256; byte-identical to Luckfox's);
+#   - a block in config.txt's [all] section between SPI_BEGIN and SPI_END (the markers are what uninstall.sh looks for: a
+#     hand-made block is never touched): dtparam=spi=on, dtparam=i2c_arm=on (each only if config.txt has no such line),
+#     dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000 with its compatible / width / height / reset-gpio / dc-gpio parameters,
+#     the backlight, dtoverlay=goodix,addr=0x5d (unless config.txt has a goodix overlay);
+#   - the backlight by model: PWM (dtparam=backlight-pwm) on a Zero 2 W (PWM0 channel 0, the overlay's default) and on a Pi 5
+#     (dtparam=backlight-pwm-chan=2: GPIO18 is RP1 PWM0 channel 2, the default channel 0 binds the wrong one); on/off
+#     (backlight-gpio=18) elsewhere, a Pi 3A+'s PWM0 being the headphone jack's;
+#   - the pi3a-luckfox35 profile (the rest of the install), on a desktop board too: the option is explicit.
+# A config.txt that has the panel's mipi-dbi-spi overlay already (no marker: made by hand) is left as it is, as is one with
+# the marked block (a second run adds nothing). config.txt.bak-applaunch-spipanel is made once, before the first change.
+# No DKMS and no kernel checks: the kernel's drm_mipi_dbi and the Pi firmware's overlays are enough.
+# ---------------------------------------------------------------------------------------------------------
+SPI_RPI_BAK="$BOOT/config.txt.bak-applaunch-spipanel"
+SPI_FW_ADDED=0       # 1: this run created /lib/firmware/st7796s.bin (recorded in install.conf for uninstall.sh)
+# the lines of the block for this model and this config.txt (without the markers)
+spi_rpi_lines() {
+    sr_cfg="$BOOT/config.txt"
+    sr_last=$(grep '^\[.*\][[:space:]]*$' "$sr_cfg" | tail -n 1 | tr -d '[:space:]' || true)
+    if [ -n "$sr_last" ] && [ "$sr_last" != "[all]" ]; then echo "[all]"; fi
+    grep -qx 'dtparam=spi=on' "$sr_cfg" || echo "dtparam=spi=on"
+    grep -qx 'dtparam=i2c_arm=on' "$sr_cfg" || echo "dtparam=i2c_arm=on"
+    echo "dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000"
+    printf '%s\n' 'dtparam=compatible=st7796s\0panel-mipi-dbi-spi'
+    echo "dtparam=width=320,height=480,width-mm=49,height-mm=79"
+    if lf_pwm_free; then
+        echo "dtparam=reset-gpio=27,dc-gpio=22"
+        echo "dtparam=backlight-pwm"
+        [ -z "$LF_CHAN" ] || echo "dtparam=backlight-pwm-chan=$LF_CHAN"
+    else
+        echo "dtparam=reset-gpio=27,dc-gpio=22,backlight-gpio=18"
+    fi
+    grep -q '^dtoverlay=goodix\(,\|$\)' "$sr_cfg" || echo "dtoverlay=goodix,addr=0x5d"
+}
+spi_rpi_plan() {
+    echo "SPI panel (--spi-panel $SPI_PANEL): the Luckfox 3.5\" RPi LCD (CTP) / Waveshare 3.5\" RPi LCD (F), ST7796S 320x480 and Goodix GT911 touch, on the 40-pin header"
+    sp_p=$(spi_payload_problem)
+    [ -z "$sp_p" ] || echo "  WARNING: $sp_p: the install would stop here"
+    echo "  Raspberry Pi: ${MODEL:-unknown}; the panel is set up in ${BOOT#"$SYSROOT"}/config.txt, also on a desktop board (the option is explicit)"
+    if [ -f "$SPI_FW" ] && [ "$(sha256sum < "$SPI_FW" | cut -d' ' -f1)" = "$SPI_FW_SHA" ]; then sp_s="already there"; else sp_s="installed"; fi
+    echo "  /lib/firmware/st7796s.bin: the panel's init sequence (Waveshare's file, sha256 $(printf '%.8s' "$SPI_FW_SHA")...): $sp_s"
+    case "$SPI_RPI_MODE" in
+        block) echo "  config.txt: the block between \"$SPI_BEGIN\" and \"$SPI_END\" is there already: left as it is" ;;
+        hand) echo "  config.txt: has a dtoverlay=mipi-dbi-spi line (not made by install.sh): left as it is, nothing added" ;;
+        *)
+            echo "  config.txt: appended to the [all] section (config.txt.bak-applaunch-spipanel first, once):"
+            echo "    $SPI_BEGIN"
+            spi_rpi_lines | sed 's/^/    /'
+            echo "    $SPI_END" ;;
+    esac
+    if [ "$SPI_RPI_MODE" = new ]; then
+        if lf_pwm_free; then echo "  backlight: PWM, 16 levels at /sys/class/backlight/backlight_pwm$( [ -z "$LF_CHAN" ] || echo " (Pi 5: GPIO18 is RP1 PWM0 channel $LF_CHAN)")"
+        else echo "  backlight: on/off, /sys/class/backlight/backlight_gpio (this model's PWM0 is the headphone jack's)"; fi
+    fi
+    echo "  profile: pi3a-luckfox35, APPLAUNCH_FB=$(spi_fb_note)"
+    echo "  then: reboot needed when config.txt or the init file changed (the launcher is started after it); ./uninstall.sh takes the block off again"
+}
+spi_rpi_setup() {
+    sp=$(spi_src)
+    cfg="$BOOT/config.txt"
+    [ -e "$SPI_FW" ] || SPI_FW_ADDED=1
+    spi_put "$sp/st7796s.bin" "$SPI_FW"
+    case "$SPI_RPI_MODE" in
+        block) echo "${cfg#"$SYSROOT"}: the block of --spi-panel is there already: left as it is" ;;
+        hand) echo "${cfg#"$SYSROOT"}: has a dtoverlay=mipi-dbi-spi line that install.sh did not write: left as it is, nothing added" ;;
+        *)
+            [ -e "$SPI_RPI_BAK" ] || cp -p "$cfg" "$SPI_RPI_BAK"
+            { cat "$cfg"
+              # a file without a final newline: one before the block
+              [ -z "$(tail -c 1 "$cfg")" ] || echo
+              echo "$SPI_BEGIN"
+              echo "# added by install.sh --spi-panel (README.md, \"Raspberry Pi: the 3.5\" SPI panel\"); ./uninstall.sh removes this block"
+              spi_rpi_lines
+              echo "$SPI_END"; } > "$cfg.applaunch-new"
+            if grep -qxF "$SPI_BEGIN" "$cfg.applaunch-new" && grep -qxF "$SPI_END" "$cfg.applaunch-new" \
+                    && [ "$(grep -c '^dtoverlay=mipi-dbi-spi' "$cfg.applaunch-new")" = 1 ]; then
+                cat "$cfg.applaunch-new" > "$cfg"
+                rm -f "$cfg.applaunch-new"
+                echo "${cfg#"$SYSROOT"}: the panel's block appended to [all] (the original is ${SPI_RPI_BAK##*/})"
+                SPI_CHANGED=1
+            else
+                rm -f "$cfg.applaunch-new"
+                echo "ERROR: --spi-panel $SPI_PANEL: config.txt could not be changed (nothing written)" >&2
+                exit 1
+            fi ;;
+    esac
+    if [ "$SPI_CHANGED" = 1 ]; then
+        SPI_REBOOT=1
+        echo "the panel comes with its overlay at the next boot: REBOOT NEEDED (the launcher is not started before it)"
     else
         echo "the panel's set-up was in place already: nothing changed"
     fi
@@ -1863,7 +2030,7 @@ if [ "$DRY" = 1 ]; then
     elif [ "$SESSION" = desktop ] && [ "$HP_PWM" = 1 ]; then
         echo "boot config: the PWM backlight overlay only (--pwm-backlight, below); cmdline.txt left alone on a desktop board"
     elif [ "$SESSION" = desktop ]; then
-        echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone)"
+        echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone$( [ "$SPI_RPI" = 0 ] || echo ' except the SPI panel block of --spi-panel, below')"
     elif [ "$BOOT_FW" = 0 ] && [ "$BOOT_CONFIG" = 1 ]; then
         echo "boot configuration: skipped ($BOOT_FW_WHY); nothing changed"
         [ -z "$SPI_PANEL" ] || echo "  (config.txt and cmdline.txt only: the SPI panel's overlay goes into /boot/armbianEnv.txt, below)"
@@ -1886,12 +2053,14 @@ if [ "$DRY" = 1 ]; then
         echo "PWM backlight (3.5\" SPI panel): in config.txt, backlight-gpio=18 comes off line $(lf_config line "$BOOT/config.txt") and dtparam=backlight-pwm"
         echo "  goes after it (config.txt.bak-applaunch first; the mipi-dbi-spi overlay's PWM0 on GPIO18, 16 levels at"
         echo "  /sys/class/backlight/backlight_pwm in the profile); then reboot"
-    elif [ "$LF_PWM" = 1 ]; then
+        [ -z "$LF_CHAN" ] || echo "  Pi 5: dtparam=backlight-pwm-chan=$LF_CHAN goes after it too (GPIO18 is RP1 PWM0 channel $LF_CHAN; the default channel 0 binds the wrong one)"
+    elif [ "$LF_PWM" = 1 ] && [ "$SPI_RPI_MODE" != new ]; then
         echo "PWM backlight (3.5\" SPI panel): config.txt has it already (dtparam=backlight-pwm): left as it is"
     elif [ -n "$LF_NOTE" ]; then
         echo "PWM backlight (3.5\" SPI panel): $LF_NOTE"
     fi
-    [ -z "$SPI_PANEL" ] || spi_plan
+    [ -z "$LF_WARN" ] || echo "WARNING: $LF_WARN"
+    if [ "$SPI_RPI" = 1 ]; then spi_rpi_plan; elif [ -n "$SPI_PANEL" ]; then spi_plan; fi
     [ "$NM_OPT" = 0 ] || nm_plan
     if [ "$BOARD_ONLY" = 0 ]; then
         TARGET_USER=${TARGET_USER:-${SUDO_USER:-$(id -un 2>/dev/null || echo USER)}}
@@ -2295,7 +2464,10 @@ NEED_BLUEZ=0
 command -v bluetoothctl >/dev/null 2>&1 || NEED_BLUEZ=1
 
 # The SPI panel before the launcher's files: a failed step stops here, with nothing of the panel or the launcher in place
-if [ -n "$SPI_PANEL" ]; then
+if [ "$SPI_RPI" = 1 ]; then
+    say "SPI panel (--spi-panel $SPI_PANEL: 3.5\" RPi LCD (ST7796S, GT911), config.txt)"
+    spi_rpi_setup
+elif [ -n "$SPI_PANEL" ]; then
     say "SPI panel (--spi-panel $SPI_PANEL: Waveshare 3.5\" RPi LCD (F)$( [ "$SOFT_PWM" = 0 ] || echo ', software PWM backlight'))"
     spi_setup
 fi
@@ -2490,6 +2662,7 @@ fi
 
 say "Board profile"
 apply_profile
+[ -z "$LF_WARN" ] || echo "WARNING: $LF_WARN" >&2
 
 # The options of this run, for Settings > Updates (report 047 P2): its helper runs a newer release's install.sh with
 # them, so the keyboard link, a forced board profile (the PDA one is never detected) and the boot configuration stay as
@@ -2497,11 +2670,13 @@ apply_profile
 say "Install options"
 INSTALL_CONF="$PROFILE_DIR/install.conf"
 mkdir -p "$PROFILE_DIR"
-PREV_SPI=""; PREV_SOFT=""
+PREV_SPI=""; PREV_SOFT=""; PREV_FW=0
 if [ -f "$INSTALL_CONF" ]; then
     PREV_SPI=$(sed -n 's/^spi_panel=//p' "$INSTALL_CONF" | tail -n 1)
     PREV_SOFT=$(sed -n 's/^soft_pwm_backlight=//p' "$INSTALL_CONF" | tail -n 1)
-    case "$PREV_SPI" in waveshare35f) ;; *) PREV_SPI="" ;; esac
+    PREV_FW=$(sed -n 's/^spi_fw_added=//p' "$INSTALL_CONF" | tail -n 1)
+    case "$PREV_SPI" in waveshare35f|luckfox35) ;; *) PREV_SPI="" ;; esac
+    case "$PREV_FW" in 1) ;; *) PREV_FW=0 ;; esac
     case "$PREV_SOFT" in 1) ;; *) PREV_SOFT=0 ;; esac
 fi
 {
@@ -2521,9 +2696,12 @@ fi
     if [ -n "$SPI_PANEL" ]; then
         echo "spi_panel=$SPI_PANEL"
         echo "soft_pwm_backlight=$SOFT_PWM"
+        # a Raspberry Pi: the init file was put there by this install (uninstall.sh removes it only then, and unchanged)
+        if [ "$SPI_RPI" = 1 ] && { [ "$SPI_FW_ADDED" = 1 ] || [ "$PREV_FW" = 1 ]; }; then echo "spi_fw_added=1"; fi
     elif [ -n "$PREV_SPI" ]; then
         echo "spi_panel=$PREV_SPI"
         echo "soft_pwm_backlight=${PREV_SOFT:-0}"
+        [ "$PREV_FW" = 0 ] || echo "spi_fw_added=1"
     fi
 } > "$INSTALL_CONF.tmp"
 chmod 644 "$INSTALL_CONF.tmp"
@@ -2538,7 +2716,7 @@ if [ "$IS_PC" = 1 ]; then
     echo "PC: GRUB and the kernel command line are left as they are (the boot lines show, as on the deck)"
 elif [ "$SESSION" = desktop ]; then
     say "Boot configuration"
-    echo "desktop board: config.txt and cmdline.txt left as they are"
+    echo "desktop board: config.txt and cmdline.txt left as they are$( [ "$SPI_RPI" = 0 ] || echo ' (except the SPI panel block of --spi-panel, above)')"
 elif [ "$BOOT_CONFIG" = 1 ] && [ "$BOOT_FW" = 1 ] && { [ ! -f "$BOOT/config.txt" ] || [ ! -f "$BOOT/cmdline.txt" ]; }; then
     say "Boot configuration"
     echo "boot configuration: skipped (${BOOT#"$SYSROOT"}/config.txt or cmdline.txt not found); nothing changed"
@@ -2573,7 +2751,7 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
         LF_LINE=$(lf_config line "$CONFIG")
         if lf_config convert "$CONFIG" > "$CONFIG.applaunch-new" && [ "$(lf_config state "$CONFIG.applaunch-new")" = pwm ]; then
             mv "$CONFIG.applaunch-new" "$CONFIG"
-            echo "config.txt: backlight-gpio=18 taken off line $LF_LINE, dtparam=backlight-pwm added after it (the original is"
+            echo "config.txt: backlight-gpio=18 taken off line $LF_LINE, dtparam=backlight-pwm$( [ -z "$LF_CHAN" ] || echo " and dtparam=backlight-pwm-chan=$LF_CHAN") added after it (the original is"
             echo "config.txt.bak-applaunch): the panel's PWM backlight with 16 levels from the next boot. REBOOT for it: until"
             echo "then Settings > Screen > Brightness cannot set the panel"
             REBOOT=1
@@ -2581,6 +2759,8 @@ elif [ "$BOOT_CONFIG" = 1 ]; then
             rm -f "$CONFIG.applaunch-new"
             echo "WARNING: config.txt could not be changed, but board.conf names the PWM backlight: run install.sh again" >&2
         fi
+    elif [ "$LF_PWM" = 1 ] && [ "$SPI_RPI_MODE" = new ]; then
+        echo "$BOARD: the panel's PWM backlight was set up by --spi-panel (SPI panel step above)"
     elif [ "$LF_PWM" = 1 ]; then
         echo "$BOARD: config.txt already has the panel's PWM backlight (dtparam=backlight-pwm): left as it is"
     elif [ -n "$LF_NOTE" ]; then

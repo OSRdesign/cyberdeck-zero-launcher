@@ -21,7 +21,8 @@
 #                      With --purge-config the packages are purged (their config files go too)
 #   --restore-config   put back /boot/firmware/config.txt from config.txt.bak-before-pwm instead of removing
 #                      the two PWM lines (this also drops any other change made to config.txt since)
-#   --no-boot-config   do not touch config.txt, cmdline.txt and the overlay (counterpart of install.sh)
+#   --no-boot-config   do not touch config.txt, cmdline.txt and the overlay (counterpart of install.sh); the 3.5" SPI panel's
+#                      block and init file (install.sh --spi-panel luckfox35 on a Raspberry Pi) stay as well
 #   --disable-linger   also run "loginctl disable-linger" (install.sh enabled it; it may have been on before)
 #   --user NAME        user that ran install.sh (default: the current user, or the one who ran sudo)
 #   --payload DIR      bundle payload directory, to know which files install.sh copied into /usr/share/APPLaunch
@@ -49,7 +50,7 @@ while [ $# -gt 0 ]; do
         --disable-linger) DISABLE_LINGER=1; shift ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --payload) [ $# -ge 2 ] || { echo "--payload needs a directory" >&2; exit 2; }; PAYLOAD_ARG="$2"; shift 2 ;;
-        -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -302,6 +303,49 @@ if [ "$RESTORE_CONFIG" = 1 ]; then
     fi
 fi
 
+# The 3.5" SPI panel that install.sh --spi-panel luckfox35 set up on a Raspberry Pi: the block between two marker lines in
+# config.txt, and /lib/firmware/st7796s.bin when install.sh put it there (install.conf: spi_fw_added=1) and it is still
+# Waveshare's file. A panel set up by hand (no markers) is never touched; a block with only one marker is left alone.
+SPI_BEGIN="# >>> cyberdeckzero spi panel"
+SPI_END="# <<< cyberdeckzero spi panel"
+SPI_FW="$ROOT/lib/firmware/st7796s.bin"
+SPI_FW_SHA=17204e39cce35fba857ad2dff14243e1d3a958c4dac00283f8df9b7ad5147cc7
+spi_block_present() {
+    awk -v b="$SPI_BEGIN" -v e="$SPI_END" '$0 == b { s = 1; next } s && $0 == e { f = 1 } END { exit !f }' "$1"
+}
+# the file without the marked block (all of it when the block is not complete)
+spi_block_strip() {
+    awk -v b="$SPI_BEGIN" -v e="$SPI_END" '
+    { l[NR] = $0 }
+    END {
+        bi = 0; ei = 0
+        for (i = 1; i <= NR; i++) { if (!bi && l[i] == b) bi = i; else if (bi && !ei && l[i] == e) ei = i }
+        for (i = 1; i <= NR; i++) if (!(bi && ei && i >= bi && i <= ei)) print l[i]
+    }' "$1"
+}
+CFG_REMOVE_SPI=0
+SPI_FW_REMOVE=0
+SPI_NOTE=""
+if [ "$BOOT_CONFIG" = 1 ] && [ -f "$CONFIG" ] && [ "$RESTORE_OK" = 0 ]; then
+    if spi_block_present "$CONFIG"; then CFG_REMOVE_SPI=1
+    elif grep -qxF "$SPI_BEGIN" "$CONFIG"; then SPI_NOTE="config.txt has \"$SPI_BEGIN\" but no \"$SPI_END\" after it: the SPI panel block is left as it is"; fi
+fi
+if [ "$BOOT_CONFIG" = 1 ] && [ -f "$INSTALL_CONF" ] && [ "$(sed -n 's/^spi_fw_added=//p' "$INSTALL_CONF" | tail -n 1)" = 1 ] && exists "$SPI_FW"; then
+    if [ "$(sha256sum < "$SPI_FW" | cut -d' ' -f1)" != "$SPI_FW_SHA" ]; then
+        SPI_NOTE="${SPI_NOTE:+$SPI_NOTE; }$SPI_FW was changed since install.sh put it there: kept"
+    else
+        if [ "$RESTORE_OK" = 1 ]; then spi_left=$(cat "$CONFIG.bak-before-pwm")
+        elif [ -f "$CONFIG" ]; then spi_left=$(spi_block_strip "$CONFIG")
+        else spi_left=""; fi
+        if printf '%s
+' "$spi_left" | grep -q '^dtoverlay=mipi-dbi-spi\(,\|$\)'; then
+            SPI_NOTE="${SPI_NOTE:+$SPI_NOTE; }$SPI_FW kept: config.txt still has a dtoverlay=mipi-dbi-spi line (not install.sh's)"
+        else
+            SPI_FW_REMOVE=1
+        fi
+    fi
+fi
+
 # the anchor package (install.sh, report 047 P4): its dpkg state ("ii ", "" when dpkg does not know it)
 ANCHOR_STATE=$(dpkg-query -W -f='${db:Status-Abbrev}' "$ANCHOR_PKG" 2>/dev/null || true)
 
@@ -350,6 +394,8 @@ if [ "$BOOT_CONFIG" = 1 ]; then
     elif [ -n "$CFG_LINES" ]; then
         echo "  - config.txt lines: $CFG_LINES"
     fi
+    [ "$CFG_REMOVE_SPI" = 0 ] || echo "  - config.txt: the 3.5\" SPI panel block of install.sh --spi-panel (between \"$SPI_BEGIN\" and \"$SPI_END\")"
+    [ "$SPI_FW_REMOVE" = 0 ] || echo "  - $SPI_FW (the panel's init file, put there by install.sh)"
     [ "$DTBO_REMOVE" = 1 ] && echo "  - $OVERLAY"
     [ "$HP_DTBO_REMOVE" = 1 ] && echo "  - $HP_OVERLAY"
     [ -n "$CMD_TOKENS" ] && echo "  - cmdline.txt arguments:$CMD_TOKENS"
@@ -376,9 +422,9 @@ if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then :; else echo "  - installe
 echo "  - packages install.sh added with apt (libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler)"
 echo "  - group membership (input, video, netdev; audio with a sound card; i2c on the HackBerry) of $TARGET_USER"
 [ "$DISABLE_LINGER" = 1 ] || echo "  - lingering (add --disable-linger to turn it off)"
-echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm"
+echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm, $CONFIG.bak-applaunch-spipanel"
 echo "  - $PROFILE.bak if install.sh made one (a replaced or hand-edited profile)"
-[ "$BOOT_CONFIG" = 0 ] || [ -z "$CFG_NOTE$CMD_NOTE" ] || { echo "Notes:"; [ -z "$CFG_NOTE" ] || echo "  - $CFG_NOTE"; [ -z "$CMD_NOTE" ] || echo "  - $CMD_NOTE"; }
+[ "$BOOT_CONFIG" = 0 ] || [ -z "$CFG_NOTE$CMD_NOTE$SPI_NOTE" ] || { echo "Notes:"; [ -z "$CFG_NOTE" ] || echo "  - $CFG_NOTE"; [ -z "$CMD_NOTE" ] || echo "  - $CMD_NOTE"; [ -z "$SPI_NOTE" ] || echo "  - $SPI_NOTE"; }
 
 if [ "$DRY" = 0 ] && [ "$YES" = 0 ]; then
     if [ ! -t 0 ]; then echo "not a terminal: pass --yes to go ahead" >&2; exit 1; fi
@@ -593,8 +639,20 @@ if [ "$BOOT_CONFIG" = 1 ]; then
         rm -f "$EDIT_TMP"
         NEED_REBOOT=1
     else
-        note "config.txt: no line of install.sh to remove${CFG_NOTE:+ ($CFG_NOTE)}"
+        [ "$CFG_REMOVE_SPI" = 1 ] || note "config.txt: no line of install.sh to remove${CFG_NOTE:+ ($CFG_NOTE)}"
     fi
+    if [ "$CFG_REMOVE_SPI" = 1 ]; then
+        [ -e "$CONFIG.bak-uninstall-$STAMP" ] || { act $SUDO cp -p "$CONFIG" "$CONFIG.bak-uninstall-$STAMP"; note "backup: $CONFIG.bak-uninstall-$STAMP"; }
+        EDIT_TMP=$(mktemp)
+        spi_block_strip "$CONFIG" > "$EDIT_TMP"
+        act $SUDO cp "$EDIT_TMP" "$CONFIG"
+        rm -f "$EDIT_TMP"
+        note "config.txt: the 3.5\" SPI panel block (between the cyberdeckzero spi panel markers) removed"
+        NEED_REBOOT=1
+    elif [ -n "$SPI_NOTE" ]; then
+        note "SPI panel: $SPI_NOTE"
+    fi
+    if [ "$SPI_FW_REMOVE" = 1 ]; then rm_sys "$SPI_FW"; NEED_REBOOT=1; fi
     if [ "$DTBO_REMOVE" = 1 ]; then rm_sys "$OVERLAY"; NEED_REBOOT=1; else note "overlay file: nothing to remove"; fi
     if [ "$HP_DTBO_REMOVE" = 1 ]; then rm_sys "$HP_OVERLAY"; NEED_REBOOT=1; fi
     if [ -n "$CMD_TOKENS" ]; then
@@ -649,7 +707,7 @@ for p in "$CONF_DIR" "$STATE_DIR" "$CACHE_DIR" "$UPD_STATE_DIR" "$UPD_CACHE_DIR"
 if [ -d "$APP_ROOT" ]; then
     echo "  $APP_ROOT: $(find "$APP_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ') files left (installed apps and their entries)"
 fi
-for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm" "$PROFILE.bak"; do [ -f "$b" ] && echo "  backup kept: $b"; done
+for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm" "$CONFIG.bak-applaunch-spipanel" "$PROFILE.bak"; do [ -f "$b" ] && echo "  backup kept: $b"; done
 for b in "$BOOT"/config.txt.bak-uninstall-* "$BOOT"/cmdline.txt.bak-uninstall-*; do [ -f "$b" ] && echo "  backup made now: $b"; done
 echo "  apt packages added by install.sh, and the groups input/video/netdev (audio, i2c) of $TARGET_USER (not recorded by install.sh)"
 if [ "$DISABLE_LINGER" = 0 ]; then echo "  lingering stays on for $TARGET_USER (loginctl disable-linger $TARGET_USER to undo)"; fi
