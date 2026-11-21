@@ -109,28 +109,20 @@ int main()
     static_assert(st_viewport::font_px_valid(10) && st_viewport::font_px_valid(48));
     static_assert(!st_viewport::font_px_valid(9) && !st_viewport::font_px_valid(49));
 
-    // the grid (the terminal's own clamps: 20..80 columns, 8..24 rows)
-    static_assert(st_viewport::grid_cols(480, 8, st_viewport::kMaxCols) == 60);
-    static_assert(st_viewport::grid_cols(800, 8, st_viewport::kMaxCols) == 80);   /* clamped to BIG_COLS */
-    static_assert(st_viewport::grid_cols(100, 12, st_viewport::kMaxCols) == 20);  /* at least 20 */
-    static_assert(st_viewport::grid_rows(800, 18, st_viewport::kMaxRows) == 24);  /* clamped to BIG_ROWS */
-    static_assert(st_viewport::grid_rows(320, 26, st_viewport::kMaxRows) == 12);
-    static_assert(st_viewport::grid_rows(100, 26, st_viewport::kMaxRows) == 8);   /* at least 8 */
-    static_assert(st_viewport::grid_cols(480, 0, st_viewport::kMaxCols) == 20);   /* no cell: the minimum, no division */
+    // the grid (the terminal's own clamps: 20..255 columns, 8..255 rows; no 80x24 cap)
+    static_assert(st_viewport::grid_cols(480, 8) == 60);
+    static_assert(st_viewport::grid_cols(800, 8) == 100);  /* no 80 column cap */
+    static_assert(st_viewport::grid_cols(100, 12) == 20);  /* at least 20 */
+    static_assert(st_viewport::grid_rows(800, 18) == 44);  /* no 24 row cap */
+    static_assert(st_viewport::grid_rows(320, 26) == 12);
+    static_assert(st_viewport::grid_rows(100, 26) == 8);   /* at least 8 */
+    static_assert(st_viewport::grid_cols(480, 0) == 20);   /* no cell: the minimum, no division */
 
-    // the 80x24 cap only up to 720x720 px (owner decision 2026-11-20): 800x480 and 720x720 (and their portraits)
-    // capped, anything larger lifted up to the 255 x 255 safety bound
-    using st_viewport::grid_capped;
-    static_assert(grid_capped(800, 480) && grid_capped(480, 800) && grid_capped(720, 720));
-    static_assert(grid_capped(640, 480) && grid_capped(480, 320) && grid_capped(320, 170) && grid_capped(800, 600));
-    static_assert(grid_capped(721, 719) && !grid_capped(721, 720) && !grid_capped(720, 721));
-    static_assert(!grid_capped(1024, 600) && !grid_capped(600, 1024) && !grid_capped(1280, 720));
-    static_assert(!grid_capped(1280, 800) && !grid_capped(1920, 1080) && !grid_capped(1080, 1920));
-    static_assert(st_viewport::max_cols_for(800, 480) == 80 && st_viewport::max_rows_for(480, 800) == 24);
-    static_assert(st_viewport::max_cols_for(1024, 600) == 255 && st_viewport::max_rows_for(1024, 600) == 255);
-    static_assert(st_viewport::grid_cols(1920, 8, st_viewport::max_cols_for(1920, 1080)) == 240);
-    static_assert(st_viewport::grid_cols(4000, 8, st_viewport::max_cols_for(4000, 2000)) == 255); /* the safety bound */
-    static_assert(st_viewport::grid_rows(2000, 4, st_viewport::max_rows_for(4000, 2000)) == 255);
+    // the safety bound (the size of UISTPage's buffers) is the only maximum
+    static_assert(st_viewport::grid_cols(1920, 8) == 240);
+    static_assert(st_viewport::grid_cols(4000, 8) == 255);
+    static_assert(st_viewport::grid_rows(2000, 4) == 255);
+    static_assert(st_viewport::grid_cols(720, 8) == 90 && st_viewport::grid_rows(720, 18) == 40); /* 720x720 at 14 px */
 
     return 0;
 }

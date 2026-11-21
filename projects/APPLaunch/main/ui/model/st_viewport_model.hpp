@@ -59,30 +59,12 @@ inline int font_px_resolved(int w, int h, int stored, const char *env)
     return font_px(w, h);
 }
 
-/* The grid of the full screen for a font cell: the terminal's own clamps (UISTPage::init_geometry: at least 20 columns
- * and 8 rows, at most max_cols x max_rows, see max_cols_for / max_rows_for). */
-constexpr int kMaxCols = 80; /* the capped grid: UISTPage::BIG_COLS x BIG_ROWS (static_assert in ui_app_st.cpp) */
-constexpr int kMaxRows = 24;
-
-/* The 80x24 cap holds on screens up to and including 800x480 or 720x720 (either orientation): a screen of at most
- * 720 * 720 px. Larger screens (1024x600, 1280x720, 1920x1080, ...) get the grid the text size gives, up to
- * kLiftedMaxCols x kLiftedMaxRows (a safety bound; UISTPage::MAX_COLS x MAX_ROWS, the size of its buffers). w and h are
- * the display's logical resolution (after rotation), the one the terminal lays out on. (Owner decision 2026-11-20.) */
-constexpr long kCapScreenPx = 720L * 720L;
-constexpr int kLiftedMaxCols = 255;
-constexpr int kLiftedMaxRows = 255;
-constexpr bool grid_capped(int w, int h)
-{
-    return static_cast<long>(w) * static_cast<long>(h) <= kCapScreenPx;
-}
-constexpr int max_cols_for(int w, int h)
-{
-    return grid_capped(w, h) ? kMaxCols : kLiftedMaxCols;
-}
-constexpr int max_rows_for(int w, int h)
-{
-    return grid_capped(w, h) ? kMaxRows : kLiftedMaxRows;
-}
+/* The grid of the full screen for a font cell: the whole screen divided by the cell (UISTPage::init_geometry), at least
+ * kMinCols x kMinGridRows, at most kMaxCols x kMaxRows (a safety bound: the size of UISTPage's buffers, MAX_COLS x
+ * MAX_ROWS). No 80x24 cap: the terminal fills the screen on every board (owner decision 2026-11-20; the F6 80x24 view,
+ * UISTPage::BIG_COLS x BIG_ROWS, is a separate view and unchanged). */
+constexpr int kMaxCols = 255;
+constexpr int kMaxRows = 255;
 
 constexpr int kMinCols = 20;
 constexpr int kMinGridRows = 8;
@@ -90,13 +72,13 @@ constexpr int clamp_to(int value, int low, int high)
 {
     return value < low ? low : value > high ? high : value;
 }
-constexpr int grid_cols(int screen_w, int cell_w, int max_cols)
+constexpr int grid_cols(int screen_w, int cell_w)
 {
-    return clamp_to(cell_w > 0 ? screen_w / cell_w : kMinCols, kMinCols, max_cols);
+    return clamp_to(cell_w > 0 ? screen_w / cell_w : kMinCols, kMinCols, kMaxCols);
 }
-constexpr int grid_rows(int screen_h, int cell_h, int max_rows)
+constexpr int grid_rows(int screen_h, int cell_h)
 {
-    return clamp_to(cell_h > 0 ? screen_h / cell_h : kMinGridRows, kMinGridRows, max_rows);
+    return clamp_to(cell_h > 0 ? screen_h / cell_h : kMinGridRows, kMinGridRows, kMaxRows);
 }
 
 /* fewest rows a terminal is given above the keyboard (a prompt line and the line under it) */
