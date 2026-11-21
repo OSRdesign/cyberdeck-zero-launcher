@@ -1,0 +1,2 @@
+serial number: not read, file recorded empty (proc/device-tree/serial-number)
+input name of event10: a Bluetooth device, name not kept

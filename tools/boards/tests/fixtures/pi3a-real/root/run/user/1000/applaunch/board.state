@@ -1,0 +1,17 @@
+v=1
+gen=4
+pid=12538
+launcher=0.10.7
+board=pi3a-wsdsi43
+arch=aarch64
+ram_mb=415
+battery=0
+backlight=levels
+backlight_steps=10
+sound=1
+sound_kind=alsa
+sound_guess=0
+requests=hello,caps,toast,beep,volume,brightness,screen
+bt_audio=none
+bt_hfp=0
+bt_le_audio=0

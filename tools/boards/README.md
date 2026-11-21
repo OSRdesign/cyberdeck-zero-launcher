@@ -141,3 +141,31 @@ layout) and `eventN.absinfo` (the text it prints for the ABS ranges and slots). 
 The fixtures (`tests/fixtures/<name>/{probe.env,root/}`) are written by `tests/gen-launcher-probe-fixtures.py` and are
 committed; to add a board, add a function there, run it, run the test with `UPDATE_GOLDEN=1` and read the golden
 file. A real board's report is a fixture candidate: its files go under `root/` as they are.
+
+**Real boards as fixtures (`--capture-fixture`).** `sh launcher-probe --capture-fixture DIR` writes no report: it
+snapshots exactly what the probe, and the installer's board detection that the probe runs with `--dry-run`, read
+(device-tree model and compatible, DMI, DRM connectors with modes and the first 256 EDID bytes, framebuffers and their
+pixel layout, the panel lines of the kernel log, boot configuration, input capabilities and touch ranges, backlights,
+unit-file names, the installed profile) into a `PROBE_ROOT`-shaped tree below `DIR`, plus `probe.env`
+(`PROBE_MACHINE`, `PROBE_USER`, `PROBE_DATE`, `PROBE_WORD_BITS`, `PROBE_GLIBC`) and `probe-fixtures/` (`kernel.log`,
+`fbN.vinfo`, `eventN.absinfo`, `capture-notes.txt`, `links`). `DIR` must be new or empty; nothing else is written, no
+root is needed, and nothing is changed on the system. To capture a board over ssh:
+`scp tools/boards/launcher-probe USER@BOARD:/tmp/lp`, `ssh USER@BOARD sh /tmp/lp --capture-fixture /tmp/lp-cap`,
+`ssh USER@BOARD 'cd /tmp/lp-cap && tar cf - .' | tar xf - -C tools/boards/tests/fixtures/NAME/root`, move `probe.env`
+up to `fixtures/NAME/`, then `ssh USER@BOARD rm -rf /tmp/lp /tmp/lp-cap`. Touch ranges need read access to
+`/dev/input` (the `input` group): an unreadable one is recorded as the "unavailable" line, which is the real result.
+
+Redaction while copying: MAC and IPv4 addresses are replaced by `redacted`, the host name by `probehost`, the user name
+(3 characters or more, not root) by `pilot`; serial numbers are never read (their files are recorded empty), the EDID
+serial bytes and serial text are blanked (the checksum byte moves so a good EDID stays good), the name of a Bluetooth
+input device is not kept, `config.txt` keeps its line numbers but every comment becomes a bare `#`, `armbianEnv.txt`
+keeps a list of non-identifying keys, and any line of the installed files that mentions a password, token, secret, psk or
+SSID is dropped. Kept as they are: `cmdline.txt` (PARTUUID, the Wi-Fi regulatory country) and the install options.
+Symbolic links cannot live in git on Windows: they are listed in `probe-fixtures/links` and the test makes them in a
+temporary copy. The kernel log is stored as the lines the report prints plus filler lines up to the real line count.
+Not captured (so a replay differs from the board there): `/etc/netplan` and the NetworkManager checks, the retired
+files of earlier bundles in `/usr/share/APPLaunch`, `/usr/bin/wireplumber`.
+
+The `*-real` fixtures are recorded boards (2026-11-22): `hackberry-real`, `palmpi-dsi5-real`, `pi5-spi35-real`,
+`fzm1-real`, `pi4b-real`, `pi3a-real`, `zero8-real`, `deck-real`, `pi5-real`. The test also checks which board
+install.sh picks from each of them.

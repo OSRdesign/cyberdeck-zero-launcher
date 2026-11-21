@@ -1,0 +1,241 @@
+launcher-probe 1: a read-only board and screen probe (nothing was changed on this system)
+date: 2026-11-21
+mode: PROBE_ROOT test root
+running as: (test)
+
+==== 1. BOARD ====
+device-tree model: unavailable: no /proc/device-tree/model (not a device-tree board, or /proc not readable)
+compatible: unavailable: no device-tree compatible
+SoC: unknown
+cpu: Intel(R) Core(TM) m5-6Y57 CPU @ 1.10GHz x4
+memory: 3804 MB
+kernel: 6.18.62-current-x86
+arch: x86_64
+OS: Armbian 26.11.3 resolute
+OS id: ubuntu 26.04
+dmi: Panasonic Corporation / FZM1-2, chassis type 10, bios American Megatrends Inc.
+
+==== 2. DISPLAY SESSION AND LAUNCHER SERVICES ====
+default target: graphical.target
+display manager: lightdm.service
+display processes running: cyberdeckzero 
+session type: unset (of this shell; ssh gives tty or unset)
+active virtual console: tty7
+fbcon rotate: 0
+verdict: no compositor running: the console or the launcher owns the display
+
+-- launcher service names that exist (files; current name first) --
+user unit cyberdeckzero.service: not found
+user unit APPLaunch.service: not found
+system unit cyberdeckzero-desktop.service: /etc/systemd/system/cyberdeckzero-desktop.service
+system unit cyberdeckzero-console.service: not found
+system unit APPLaunch-desktop.service: not found
+system unit applaunch-desktop.service: not found
+system unit applaunch-console.service: not found
+unavailable: systemctl not used (not present, or test root)
+installed bundle: /usr/share/APPLaunch (M5CardputerZero-APPLaunch M5CardputerZero-AppStore applaunch-console cassette cassette-probe cyberdeckzero cyberdeckzero-console cyberdeckzero-ctl cyberdeckzero-update deck-atlas klondike-solitaire markdown-notes mesh-hop mine-field mmwave-radar net-toolbox net-walk rss-reader serial-console system-monitor vhs vinyl )
+
+==== 3. DRM CONNECTORS ====
+
+connector card1-eDP-1
+  status: connected  enabled: enabled  dpms: On
+  modes: 1; preferred (first listed): 1280x800
+  mode list: 1280x800 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+-- optional tools --
+unavailable: kmsprint not installed
+unavailable: modetest not installed (package libdrm-tests)
+
+==== 4. FRAMEBUFFERS ====
+
+/dev/fb0
+  name: i915drmfb  size: 1280,800  bpp: 32  stride: 5120  rotate: 0
+  vinfo: visible 1280x800 virtual 1280x800 bpp 32 red 16/8 green 8/8 blue 0/8 transp 0/0, driver mm 150x90 (width x height)
+(fbset not installed: fine)
+
+==== 5. PANEL DRIVER (kernel log and device tree) ====
+
+-- kernel log lines about the display and the touch (first 40) --
+Nov 21 20:32:50 redacted kernel: ledtrig-cpu: registered to indicate activity on CPUs
+Nov 21 20:32:50 redacted kernel: ACPI: bus type drm_connector registered
+Nov 21 20:32:50 redacted kernel: [drm] Initialized simpledrm 1.0.0 for simple-framebuffer.0 on minor 0
+Nov 21 20:32:50 redacted kernel: simple-framebuffer simple-framebuffer.0: [drm] fb0: simpledrmdrmfb frame buffer device
+Nov 21 20:32:50 redacted kernel: input: Sharp Corp.   07EA0004 Touchscreen as /devices/pci0000:00/0000:00:14.0/usb1/1-9/1-9.1/1-9.1:1.0/0003:04DD:9762.0001/input/input4
+Nov 21 20:32:50 redacted kernel: i915 0000:00:02.0: [drm] Found skylake/ulx (device ID 191e) integrated display version 9.00 stepping H0
+Nov 21 20:32:50 redacted kernel: i915 0000:00:02.0: [drm] VT-d active for gfx access
+Nov 21 20:32:50 redacted kernel: i915 0000:00:02.0: [drm] Using Transparent Hugepages
+Nov 21 20:32:50 redacted kernel: i915 0000:00:02.0: [drm] Finished loading DMC firmware i915/skl_dmc_ver1_27.bin (v1.27)
+Nov 21 20:32:50 redacted kernel: [drm] Initialized i915 1.6.0 for 0000:00:02.0 on minor 1
+Nov 21 20:32:50 redacted kernel: fbcon: i915drmfb (fb0) is primary device
+Nov 21 20:32:50 redacted kernel: i915 0000:00:02.0: [drm] fb0: i915drmfb frame buffer device
+Nov 21 20:32:50 redacted systemd[1]: modprobe@drm.service - Load Kernel Module drm skipped, unmet condition check ConditionKernelModuleLoaded=!drm
+Nov 21 20:32:50 redacted systemd[1]: Created slice system-systemd\x2dbacklight.slice - Slice /system/systemd-backlight.
+Nov 21 20:32:50 redacted systemd[1]: Starting systemd-backlight@backlight:intel_backlight.service - Load/Save Screen Backlight Brightness of backlight:intel_backlight...
+Nov 21 20:32:50 redacted systemd[1]: Finished systemd-backlight@backlight:intel_backlight.service - Load/Save Screen Backlight Brightness of backlight:intel_backlight.
+(kernel log: whole log has 1145 lines)
+
+-- device-tree nodes of panels, touch controllers and backlights --
+unavailable: no /proc/device-tree
+
+==== 6. BOOT CONFIGURATION (read only; comments left out) ====
+unavailable: no config.txt in /boot (not a Raspberry Pi firmware board, or not readable)
+
+unavailable: no cmdline.txt
+armbianEnv.txt (overlay and display lines):
+unavailable: no overlays folder in /boot
+unavailable: vcgencmd not installed (not a Raspberry Pi OS board)
+
+==== 7. INPUT DEVICES ====
+
+event0: "Power Button"
+  bus 0019 vendor 0000 product 0001; kind: other
+  ev bits:0 1 ; properties: none
+
+event1: "Power Button"
+  bus 0019 vendor 0000 product 0001; kind: other
+  ev bits:0 1 ; properties: none
+
+event2: "AT Translated Set 2 keyboard"
+  bus 0011 vendor 0001 product 0001; kind: keyboard
+  ev bits:0 1 4 17 20 ; properties: none
+
+event3: "Sharp Corp.   07EA0004"
+  bus 0003 vendor 04dd product 9762; kind: touchscreen
+  ev bits:0 1 3 4 ; properties:1 (INPUT_PROP_DIRECT: a screen)
+  abs axes: X Y MT_SLOT MT_POSITION_X MT_POSITION_Y MT_TRACKING_ID
+  ABS X               min 0 max 15360 fuzz 0 flat 0 res 102
+  ABS Y               min 0 max 8640 fuzz 0 flat 0 res 92
+  ABS MT_SLOT         min 0 max 9 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_X   min 0 max 15360 fuzz 0 flat 0 res 102
+  ABS MT_POSITION_Y   min 0 max 8640 fuzz 0 flat 0 res 92
+  ABS MT_TRACKING_ID  min 0 max 65535 fuzz 0 flat 0 res 0
+  slots (ABS_MT_SLOT max + 1): 10
+
+event4: "Video Bus"
+  bus 0019 vendor 0000 product 0006; kind: other
+  ev bits:0 1 ; properties: none
+
+event5: "Panasonic Laptop Support"
+  bus 0019 vendor 0001 product 0001; kind: other
+  ev bits:0 1 4 ; properties: none
+
+event6: "Intel Virtual Buttons"
+  bus 0019 vendor 0000 product 0000; kind: other
+  ev bits:0 1 4 ; properties: none
+
+event7: "HDA Intel PCH Headphone"
+  bus 0000 vendor 0000 product 0000; kind: switch
+  ev bits:0 5 ; properties: none
+
+event8: "Intel Virtual Switches"
+  bus 0019 vendor 0000 product 0000; kind: switch
+  ev bits:0 5 ; properties: none
+unavailable: udevadm not used (not installed, or test root)
+
+==== 8. BACKLIGHT ====
+intel_backlight: type raw, max 937, brightness 93, actual 93, bl_power 0
+  levels (0..937); the launcher's profile logic would name it APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+  writable by this user: n/a (test root)
+
+==== 9. WHAT install.sh WOULD PICK (--dry-run, nothing written) ====
+using: install.sh (dry run)
+glibc: 2.43 (ok)
+detected:
+  model: unknown
+  dmi: Panasonic Corporation / FZM1-2, chassis type 10, x86_64
+  drm card1-eDP-1: connected, first mode 1280x800
+  /dev/fb0: name "i915drmfb", size 1280,800, 32 bpp
+  backlight: intel_backlight
+board: pc-fzm1-2
+screen: panel size 150x93 mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)
+session: desktop (display manager lightdm.service enabled)
+profile: pc-fzm1-2: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)
+udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of intel_backlight)
+audio group: the user joins it (sound card: 0 [PCH            ]: HDA-Intel - HDA Intel PCH)
+boot config: none on a PC (GRUB and the kernel command line are left alone)
+(install.sh --dry-run exit status 0)
+
+==== 10. INSTALLED LAUNCHER FILES (if present) ====
+--- /etc/applaunch/board.conf
+# Board profile for the launcher, written by install.sh (board: pc-fzm1-2).
+# Loaded by the launcher unit (EnvironmentFile). Edit freely: install.sh then leaves it alone unless --force.
+# applaunch-profile-sum: 2904715111 905
+APPLAUNCH_BOARD=pc-fzm1-2
+APPLAUNCH_DISPLAY=dpi-scaled
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x1280
+APPLAUNCH_ROTATE=90
+# panel size in mm, from the EDID of eDP-1: the layout's density
+APPLAUNCH_PANEL_MM=152x94
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+# the tablet's built-in keyboard device (i8042, bus 0011) is always there: it does not count as a
+# connected keyboard (the on-screen keyboard shows without a USB or Bluetooth one); its keys still work
+APPLAUNCH_KBD_IGNORE=bus:0011
+# the Store tile starts hidden (the Store's hub has arm64 packages only); Settings > Launcher can show it
+APPLAUNCH_HIDE_TILES=app_Store
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+APPLAUNCH_PDA=1
+--- /etc/applaunch/install.conf
+# The options of the last install.sh run, written by install.sh. Settings > Updates runs install.sh of a newer
+# release again with them (cyberdeckzero-update). board= is empty when the board was detected; screen_size= (inches)
+# and panel_mm= (WxH) when no screen size was given (--screen-size, --panel-mm, the install question): the profile's own.
+keyboard_name=M4 Keyboard
+board=
+screen_size=
+panel_mm=
+boot_config=1
+pwm_backlight=0
+default_source=1
+user=redacted
+--- /run/user/UID/applaunch/board.state
+v=1
+gen=6
+pid=17681
+launcher=0.10.7
+board=pc-fzm1-2
+arch=x86_64
+ram_mb=3804
+battery=1
+battery_source=power_supply:BAT1
+backlight=levels
+backlight_steps=10
+sound=1
+sound_kind=alsa
+sound_guess=0
+requests=hello,caps,toast,beep,volume,brightness,dim,screen
+bt_audio=pulseaudio
+bt_hfp=1
+bt_le_audio=0
+--- /run/user/UID/applaunch/screen.state
+v=1
+w=1280
+h=800
+rot=0
+ppmm=847
+density=panel_mm
+class=large
+compat=0,12,1280,680
+scale=4
+toolbar=96
+fb=/dev/fb0
+bpp=32
+touch=/dev/input/event3
+touch_slots=10
+space=10,16,24
+radius=10,20,28
+header=64
+row=59
+target=59
+dialog_max_w=720
+text=36,30,26,20
+kb_inset=0
+gen=12
+
+==== END OF REPORT ====

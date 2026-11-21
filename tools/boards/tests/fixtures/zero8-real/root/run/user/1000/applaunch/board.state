@@ -1,0 +1,15 @@
+v=1
+gen=2
+pid=823
+launcher=0.10.6
+board=pi3a-luckfox35
+arch=aarch64
+ram_mb=415
+battery=0
+backlight=levels
+backlight_steps=10
+sound=0
+requests=hello,caps,toast,beep,brightness,screen
+bt_audio=none
+bt_hfp=0
+bt_le_audio=0

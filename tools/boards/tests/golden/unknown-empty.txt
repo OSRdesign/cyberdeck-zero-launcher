@@ -80,7 +80,7 @@ This board is not known to install.sh. Run tools/board-probe/probe-board.sh on i
 install.sh would stop here (--force installs without a profile).
 session: appliance (no display manager enabled or running: the launcher starts at boot)
 profile: unknown board: no profile written
-boot config: PWM backlight overlay + cmdline cursor/consoleblank
+boot configuration: skipped (not a Raspberry Pi firmware board: /boot/config.txt not found); nothing changed
 (install.sh --dry-run exit status 0)
 
 ==== 10. INSTALLED LAUNCHER FILES (if present) ====

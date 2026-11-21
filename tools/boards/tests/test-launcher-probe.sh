@@ -25,17 +25,37 @@ ko() { FAIL=$((FAIL + 1)); printf 'FAIL %s\n' "$1"; [ -z "${2:-}" ] || printf '%
 check() { if eval "$2"; then ok "$1"; else ko "$1" "${3:-}"; fi; }
 has() { case "$OUT" in *"$1"*) return 0 ;; esac; return 1; }
 
+# a copy of the root of fixture $1 where the symbolic links of probe-fixtures/links exist (git on Windows cannot keep links);
+# the path of the root to use is printed
+linkroot() {
+    [ -f "$FIX/$1/root/probe-fixtures/links" ] || { printf '%s' "$FIX/$1/root"; return; }
+    if [ ! -d "$TMP/lr-$1" ]; then
+        mkdir -p "$TMP/lr-$1"
+        cp -R "$FIX/$1/root/." "$TMP/lr-$1/"
+        while IFS= read -r l; do
+            lp=${l%% -> *}; lt=${l#* -> }
+            mkdir -p "$TMP/lr-$1/$(dirname "$lp")"
+            ln -sfn "$lt" "$TMP/lr-$1/$lp"
+        done < "$FIX/$1/root/probe-fixtures/links"
+    fi
+    printf '%s' "$TMP/lr-$1"
+}
+
 # run the probe on fixture $1 with shell $2 (sh or bash); extra options after; output in $OUT, status in $RC
 run() {
     name=$1; shell=$2; shift 2
+    PROBE_WORD_BITS=""; PROBE_GLIBC=""
     # shellcheck disable=SC1090
     . "$FIX/$name/probe.env"
-    OUT=$(PROBE_ROOT="$FIX/$name/root" PROBE_MACHINE=$PROBE_MACHINE PROBE_USER=$PROBE_USER PROBE_DATE=$PROBE_DATE "$shell" "$PROBE" "$@" 2>"$TMP/err")
+    root=$(linkroot "$name")
+    # an empty PROBE_WORD_BITS / PROBE_GLIBC (not recorded) leaves the probe's own default
+    OUT=$(env PROBE_ROOT="$root" PROBE_MACHINE=$PROBE_MACHINE PROBE_USER=$PROBE_USER PROBE_DATE=$PROBE_DATE         ${PROBE_WORD_BITS:+PROBE_WORD_BITS=$PROBE_WORD_BITS} ${PROBE_GLIBC:+INSTALL_GLIBC_VERSION=$PROBE_GLIBC} "$shell" "$PROBE" "$@" 2>"$TMP/err")
     RC=$?
 }
 tree_sum() { (cd "$FIX/$1" && find . -type f | sort | while read -r f; do cksum < "$f"; done | cksum); }
 
-NAMES="pi4b-dsi-portrait pi3a-wsdsi43-forced hackberry-720 pc-hdmi-edid unknown-empty"
+REAL="hackberry-real palmpi-dsi5-real pi5-spi35-real fzm1-real pi4b-real pi3a-real zero8-real deck-real pi5-real"
+NAMES="pi4b-dsi-portrait pi3a-wsdsi43-forced hackberry-720 pc-hdmi-edid unknown-empty $REAL"
 mkdir -p "$GOLD"
 
 for n in $NAMES; do
@@ -128,6 +148,54 @@ run hackberry-720 sh --installer "$TMP/none.sh"
 check "--installer with a missing file: unavailable, not an abort" 'has "unavailable: install.sh not found"'
 OUT=$(PROBE_ROOT="$FIX/hackberry-720/root" PROBE_MACHINE=aarch64 PROBE_USER=hbuser sh "$PROBE" --installer "$TMP/none.sh" 2>&1)
 check "9 section: nothing written by the dry run into the fixture root" '[ ! -e "$FIX/hackberry-720/root/etc/udev" ]'
+
+# --- the real boards (captured with launcher-probe --capture-fixture): what install.sh picks from each one's data.
+# The "board:" line of section 9 is the expectation; where it is surprising the comment says so (report 031, PR notes).
+check_pick() { # fixture, expected board
+    run "$1" sh
+    pick=$(printf '%s\n' "$OUT" | sed -n 's/^board: //p' | head -n 1)
+    check "$1 (real): install.sh picks $2" "[ \"\$pick\" = \"$2\" ]" "picked: $pick"
+}
+check_pick hackberry-real hackberry-cm5
+check_pick palmpi-dsi5-real pi3a-wsdsi43      # a 5-inch panel: the 4.3-inch Waveshare profile is the closest listed one (same 800x480)
+check_pick pi5-spi35-real pi3a-luckfox35      # the 3.5-inch SPI panel on a Pi 5 (the Pi 5 itself is not a profile)
+check_pick fzm1-real pc-fzm1-2
+check_pick pi4b-real pi4b-dsi
+check_pick pi3a-real pi3a-wsdsi43
+check_pick zero8-real zero2w                  # SURPRISING: a Zero 2 W with the 3.5-inch SPI panel; by design the Zero 2 W stays the deck unless --board / --spi-panel
+check_pick deck-real zero2w
+check_pick pi5-real pi5-hyperpixel4
+run fzm1-real sh
+check "fzm1 (real): no device tree, DMI and the Intel backlight, glibc of the recording" 'has "unavailable: no /proc/device-tree" && has "dmi: Panasonic Corporation / FZM1-2" && has "intel_backlight" && has "glibc: 2.43"'
+check "fzm1 (real): the touch range is not the screen size (the digitizer reports 15360 x 8640 for 1280 x 800)" 'has "max 15360" && has "max 8640"'
+run hackberry-real sh
+check "hackberry (real): a Bluetooth input device has no name in the fixture" 'has "Bluetooth device (name not kept)"'
+run deck-real sh
+check "deck (real): two bcm2708 framebuffers, no DRM connector" 'has "drm: no connector" && has "/dev/fb1" && has "no DRM connector"'
+run pi5-spi35-real sh
+check "pi5 SPI (real): the panel node and the PWM backlight" 'has "compatible: st7796s,panel-mipi-dbi-spi" && has "backlight_pwm: type raw, max 15"'
+
+# --- --capture-fixture: read only on the system, writes only below DIR, refuses a used folder, replays
+CAP="$TMP/capture"
+OUT=$(sh "$PROBE" --capture-fixture "$CAP" 2>&1); rc=$?
+check "--capture-fixture: exit 0 and a summary" '[ $rc = 0 ] && has "--capture-fixture:" && has "files written below"' "$OUT"
+check "--capture-fixture: probe.env and capture-notes.txt written" '[ -s "$CAP/probe.env" ] && [ -f "$CAP/probe-fixtures/capture-notes.txt" ]'
+check "--capture-fixture: the host name is probehost in the tree" '[ "$(cat "$CAP/etc/hostname")" = probehost ]'
+hn=$(hostname 2>/dev/null)
+leaks=""
+if [ -n "$hn" ] && [ "${#hn}" -ge 3 ] && [ "$hn" != probehost ]; then leaks=$(grep -r -l -F "$hn" "$CAP" 2>/dev/null || true); fi
+check "--capture-fixture: the real host name is nowhere in the tree" '[ -z "$leaks" ]' "$leaks"
+leaks=$(grep -r -I -l -E '([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}|[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' "$CAP" 2>/dev/null || true)
+check "--capture-fixture: no MAC or IPv4 address anywhere in the tree" '[ -z "$leaks" ]' "$leaks"
+sh "$PROBE" --capture-fixture "$CAP" >/dev/null 2>&1; rc=$?
+check "--capture-fixture: a folder that is not empty is refused (exit 2)" '[ $rc = 2 ]'
+sh "$PROBE" --capture-fixture >/dev/null 2>&1; rc=$?
+check "--capture-fixture without a folder: exit 2" '[ $rc = 2 ]'
+PROBE_ROOT="$CAP" sh "$PROBE" --capture-fixture "$TMP/cap2" >/dev/null 2>&1; rc=$?
+check "--capture-fixture with PROBE_ROOT: exit 2, nothing written" '[ $rc = 2 ] && [ ! -e "$TMP/cap2" ]'
+. "$CAP/probe.env"
+OUT=$(env PROBE_ROOT="$CAP" PROBE_MACHINE="$PROBE_MACHINE" PROBE_USER="$PROBE_USER" PROBE_DATE="$PROBE_DATE" ${PROBE_WORD_BITS:+PROBE_WORD_BITS=$PROBE_WORD_BITS} sh "$PROBE" 2>&1); rc=$?
+check "--capture-fixture: the captured tree replays (exit 0, 11 sections)" '[ $rc = 0 ] && [ "$(printf "%s\n" "$OUT" | grep -c "^==== ")" = 11 ]'
 
 # --- the probe without PROBE_ROOT on this machine: runs, exits 0, has every section, no stray files
 before=$(ls -A "$TMP" | wc -l)
