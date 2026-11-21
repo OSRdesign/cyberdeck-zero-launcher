@@ -1,0 +1,16 @@
+# For more options and information see
+# http://rptl.io/configtxt
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=0
+auto_initramfs=1
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+disable_fw_kms_setup=1
+arm_64bit=1
+disable_overscan=1
+[cm4]
+otg_mode=1
+[all]
+dtoverlay=vc4-kms-dsi-waveshare-panel,4_0_inch
+dtparam=i2c_arm=on

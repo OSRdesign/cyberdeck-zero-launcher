@@ -1,0 +1,156 @@
+launcher-probe 1: a read-only board and screen probe (nothing was changed on this system)
+date: 2026-11-19
+mode: PROBE_ROOT test root
+running as: (test)
+
+==== 1. BOARD ====
+device-tree model: unavailable: no /proc/device-tree/model (not a device-tree board, or /proc not readable)
+compatible: unavailable: no device-tree compatible
+SoC: unknown
+cpu: Fixture CPU @ 2.00GHz x2
+memory: 15625 MB
+kernel: 6.12.48+deb13-amd64
+arch: x86_64
+OS: Debian GNU/Linux 13 (trixie)
+OS id: debian 13
+dmi: FixtureCorp / Fixture Desktop 100, chassis type 3, bios FixBIOS
+dmi serial: redacted
+
+==== 2. DISPLAY SESSION AND LAUNCHER SERVICES ====
+default target: unavailable: no default.target link
+display manager: none enabled
+display processes running: Xorg gdm3 
+session type: unset (of this shell; ssh gives tty or unset)
+active virtual console: unavailable
+fbcon rotate: n/a
+verdict: a desktop or compositor owns the display
+
+-- launcher service names that exist (files; current name first) --
+user unit cyberdeckzero.service: not found
+user unit APPLaunch.service: not found
+system unit cyberdeckzero-desktop.service: not found
+system unit cyberdeckzero-console.service: not found
+system unit APPLaunch-desktop.service: not found
+system unit applaunch-desktop.service: not found
+system unit applaunch-console.service: not found
+unavailable: systemctl not used (not present, or test root)
+installed bundle: /usr/share/APPLaunch not present
+
+==== 3. DRM CONNECTORS ====
+
+connector card0-DP-1
+  status: disconnected  enabled: disabled  dpms: Off
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card0-HDMI-A-1
+  status: connected  enabled: enabled  dpms: On
+  modes: 7; preferred (first listed): 1920x1080
+  mode list: 1920x1080 1920x1080 1280x720 1024x768 800x600 720x480 640x480 
+  EDID: 128 bytes, vendor FIX, product code 0x1234, version 1.4, week 12 of 2023, serial redacted
+  EDID checksum ok, 0 extension block(s)
+  basic size block: 60 x 34 cm
+  preferred (first detailed) timing: 1920x1080, pixel clock 148.50 MHz, image size 598 x 336 mm
+  monitor name: FIXTURE-27
+  edid-decode: not installed (the decoder above is built in)
+
+connector card0-eDP-1
+  status: disconnected  enabled: disabled  dpms: Off
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+-- optional tools --
+unavailable: kmsprint not installed
+unavailable: modetest not installed (package libdrm-tests)
+
+==== 4. FRAMEBUFFERS ====
+
+/dev/fb0
+  name: i915drmfb  size: 1920,1080  bpp: 32  stride: 7680  rotate: 0
+  vinfo: visible 1920x1080 virtual 1920x1080 bpp 32 red 16/8 green 8/8 blue 0/8 transp 24/8, driver mm 598x336 (width x height)
+(fbset not installed: fine)
+
+==== 5. PANEL DRIVER (kernel log and device tree) ====
+
+-- kernel log lines about the display and the touch (first 40) --
+[    2.000000] i915 0000:00:02.0: [drm] fb0: i915drmfb frame buffer device
+[    2.500000] i915 0000:00:02.0: drm display link up addr redacted hw redacted on redacted
+(kernel log: whole log has 2 lines)
+
+-- device-tree nodes of panels, touch controllers and backlights --
+unavailable: no /proc/device-tree
+
+==== 6. BOOT CONFIGURATION (read only; comments left out) ====
+unavailable: no config.txt in /boot (not a Raspberry Pi firmware board, or not readable)
+
+unavailable: no cmdline.txt
+unavailable: no overlays folder in /boot
+unavailable: vcgencmd not installed (not a Raspberry Pi OS board)
+
+==== 7. INPUT DEVICES ====
+
+event0: "AT Translated Set 2 keyboard"
+  bus 0011 vendor 0001 product 0001; kind: keyboard
+  ev bits:0 1 ; properties: none
+
+event1: "Fixture USB Optical Mouse"
+  bus 0003 vendor 046d product c077; kind: mouse-or-trackpoint
+  ev bits:0 1 2 ; properties: none
+unavailable: udevadm not used (not installed, or test root)
+
+==== 8. BACKLIGHT ====
+intel_backlight: type raw, max 96000, brightness 48000, actual 48000, bl_power n/a
+  levels (0..96000); the launcher's profile logic would name it APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+  writable by this user: n/a (test root)
+
+==== 9. WHAT install.sh WOULD PICK (--dry-run, nothing written) ====
+using: install.sh (dry run)
+glibc: 2.41 (ok)
+detected:
+  model: unknown
+  dmi: FixtureCorp / Fixture Desktop 100, chassis type 3, x86_64
+  drm card0-DP-1: disconnected
+  drm card0-HDMI-A-1: connected, first mode 1920x1080
+  drm card0-eDP-1: disconnected
+  /dev/fb0: name "i915drmfb", size 1920,1080, 32 bpp
+  backlight: intel_backlight
+board: pc-fixture-desktop-100
+screen: panel size 598x336 mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)
+session: desktop (running: Xorg+gdm3)
+WARNING: no display manager is enabled for boot (no /etc/systemd/system/display-manager.service): the desktop may not come up at boot, and the launcher no longer starts at boot either. Check: systemctl status display-manager
+profile: pc-fixture-desktop-100: write /etc/applaunch/board.conf
+--- /etc/applaunch/board.conf
+# Board profile for the launcher, written by install.sh (board: pc-fixture-desktop-100).
+# Loaded by the launcher unit (EnvironmentFile). Edit freely: install.sh then leaves it alone unless --force.
+# applaunch-profile-sum: 3761842903 798
+APPLAUNCH_BOARD=pc-fixture-desktop-100
+APPLAUNCH_DISPLAY=dpi-scaled
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=1920x1080
+APPLAUNCH_ROTATE=0
+# panel size in mm, from the EDID of HDMI-A-1: the layout's density
+APPLAUNCH_PANEL_MM=598x336
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/intel_backlight
+# idle dim level, percent of the backlight: 1..100 (the launcher's default is 10)
+APPLAUNCH_DIM_PERCENT=10
+# the Store tile starts hidden (the Store's hub has arm64 packages only); Settings > Launcher can show it
+APPLAUNCH_HIDE_TILES=app_Store
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+# the deck's legacy touch axes (set in its user service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of intel_backlight)
+boot config: none on a PC (GRUB and the kernel command line are left alone)
+(install.sh --dry-run exit status 0)
+
+==== 10. INSTALLED LAUNCHER FILES (if present) ====
+--- /etc/applaunch/board.conf: not present
+--- /etc/applaunch/install.conf: not present
+(no launcher installed or running: this is the state of a board before the first install)
+
+==== END OF REPORT ====

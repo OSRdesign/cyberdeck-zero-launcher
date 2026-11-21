@@ -1,0 +1,1 @@
+console=tty1 root=PARTUUID=cccccccc-02 rootfstype=ext4 rootwait quiet splash

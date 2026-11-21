@@ -1,0 +1,313 @@
+launcher-probe 1: a read-only board and screen probe (nothing was changed on this system)
+date: 2026-11-21
+mode: PROBE_ROOT test root
+running as: (test)
+
+==== 1. BOARD ====
+device-tree model: Raspberry Pi 5 Model B Rev 1.0
+compatible: raspberrypi,5-model-b brcm,bcm2712
+SoC: brcm,bcm2712
+cpu: (no model name in /proc/cpuinfo: normal on ARM boards, see the device-tree model) x4
+cpu serial: redacted
+board serial: redacted
+memory: 4048 MB
+kernel: 6.18.60+rpt-rpi-2712
+arch: aarch64
+OS: Debian GNU/Linux 13 (trixie)
+OS id: debian 13
+dmi: none (not a PC)
+
+==== 2. DISPLAY SESSION AND LAUNCHER SERVICES ====
+default target: graphical.target
+display manager: lightdm.service
+display processes running: cyberdeckzero 
+session type: unset (of this shell; ssh gives tty or unset)
+active virtual console: tty7
+fbcon rotate: 0
+verdict: no compositor running: the console or the launcher owns the display
+
+-- launcher service names that exist (files; current name first) --
+user unit cyberdeckzero.service: not found
+user unit APPLaunch.service: not found
+system unit cyberdeckzero-desktop.service: /etc/systemd/system/cyberdeckzero-desktop.service
+system unit cyberdeckzero-console.service: not found
+system unit APPLaunch-desktop.service: not found
+system unit applaunch-desktop.service: not found
+system unit applaunch-console.service: not found
+unavailable: systemctl not used (not present, or test root)
+installed bundle: /usr/share/APPLaunch (M5CardputerZero-APPLaunch M5CardputerZero-AppStore applaunch-console cyberdeckzero cyberdeckzero-console cyberdeckzero-ctl cyberdeckzero-update )
+
+==== 3. DRM CONNECTORS ====
+
+connector card1-HDMI-A-1
+  status: disconnected  enabled: disabled  dpms: On
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card1-HDMI-A-2
+  status: disconnected  enabled: disabled  dpms: On
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card1-Writeback-1
+  status: unknown  enabled: disabled  dpms: On
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card1-Writeback-2
+  status: unknown  enabled: disabled  dpms: On
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card2-SPI-1
+  status: connected  enabled: enabled  dpms: On
+  modes: 1; preferred (first listed): 320x480
+  mode list: 320x480 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+-- optional tools --
+unavailable: kmsprint not installed
+unavailable: modetest not installed (package libdrm-tests)
+
+==== 4. FRAMEBUFFERS ====
+
+/dev/fb0
+  name: panel-mipi-dbid  size: 320,480  bpp: 16  stride: 640  rotate: 0
+  vinfo: visible 320x480 virtual 320x480 bpp 16 red 11/5 green 5/6 blue 0/5 transp 0/0, driver mm 49x79 (width x height)
+(fbset not installed: fine)
+
+==== 5. PANEL DRIVER (kernel log and device tree) ====
+
+-- kernel log lines about the display and the touch (first 40) --
+[    0.231832] ledtrig-cpu: registered to indicate activity on CPUs
+[    1.004258] v3d 1002000000.v3d: [drm] Transparent Hugepage support is recommended for optimal performance on this platform!
+[    1.010204] [drm] Initialized v3d 1.0.0 for 1002000000.v3d on minor 0
+[    1.038363] vc4-drm axi:gpu: bound 107c580000.hvs (ops vc4_hvs_ops [vc4])
+[    1.043897] rc rc0: vc4-hdmi-0 as /devices/platform/soc@107c000000/107c701400.hdmi/rc/rc0
+[    1.043933] input: vc4-hdmi-0 as /devices/platform/soc@107c000000/107c701400.hdmi/rc/rc0/input0
+[    1.044383] input: vc4-hdmi-0 HDMI Jack as /devices/platform/soc@107c000000/107c701400.hdmi/sound/card0/input1
+[    1.048259] vc4-drm axi:gpu: bound 107c701400.hdmi (ops vc4_hdmi_ops [vc4])
+[    1.051237] rc rc1: vc4-hdmi-1 as /devices/platform/soc@107c000000/107c706400.hdmi/rc/rc1
+[    1.051271] input: vc4-hdmi-1 as /devices/platform/soc@107c000000/107c706400.hdmi/rc/rc1/input2
+[    1.051875] input: vc4-hdmi-1 HDMI Jack as /devices/platform/soc@107c000000/107c706400.hdmi/sound/card1/input3
+[    1.055574] vc4-drm axi:gpu: bound 107c706400.hdmi (ops vc4_hdmi_ops [vc4])
+[    1.055671] vc4-drm axi:gpu: bound 107c500000.mop (ops vc4_txp_ops [vc4])
+[    1.055723] vc4-drm axi:gpu: bound 107c501000.moplet (ops vc4_txp_ops [vc4])
+[    1.055776] vc4-drm axi:gpu: bound 107c410000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.055816] vc4-drm axi:gpu: bound 107c411000.pixelvalve (ops vc4_crtc_ops [vc4])
+[    1.056381] [drm] Initialized vc4 0.0.0 for axi:gpu on minor 1
+[    1.060722] vc4-drm axi:gpu: [drm] Cannot find any crtc or sizes
+[    1.071439] vc4-drm axi:gpu: [drm] Cannot find any crtc or sizes
+[    1.078715] vc4-drm axi:gpu: [drm] Cannot find any crtc or sizes
+[    1.885364] systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...
+[    1.922249] systemd[1]: modprobe@drm.service: Deactivated successfully.
+[    1.922350] systemd[1]: Finished modprobe@drm.service - Load Kernel Module drm.
+[    2.327809] Goodix-TS 1-005d: supply AVDD28 not found, using dummy regulator
+[    2.327849] Goodix-TS 1-005d: supply VDDIO not found, using dummy regulator
+[    2.421750] Goodix-TS 1-005d: ID 911, version: 1060
+[    2.422119] Goodix-TS 1-005d: Direct firmware load for goodix_911_cfg.bin failed with error -2
+[    2.473719] input: 1-005d Goodix Capacitive TouchScreen as /devices/platform/axi/1000120000.pcie/1f00074000.i2c/i2c-1/1-005d/input/input5
+[    2.603598] panel-mipi-dbi-spi spi0.0: supply power not found, using dummy regulator
+[    2.613103] panel-mipi-dbi-spi spi0.0: supply io not found, using dummy regulator
+[    2.631356] [drm] Initialized panel-mipi-dbi 1.0.0 for spi0.0 on minor 2
+[    2.644156] panel-mipi-dbi-spi spi0.0: [drm] fb0: panel-mipi-dbid frame buffer device
+(kernel log: whole log has 658 lines)
+
+-- device-tree nodes of panels, touch controllers and backlights --
+node /axi/pcie@1000120000/rp1/dpi@148000
+  compatible: raspberrypi,rp1dpi
+  status: disabled
+node /axi/pcie@1000120000/rp1/dsi@110000
+  compatible: raspberrypi,rp1dsi
+  status: disabled
+node /axi/pcie@1000120000/rp1/dsi@128000
+  compatible: raspberrypi,rp1dsi
+  status: disabled
+node /axi/pcie@1000120000/rp1/i2c@74000/gt9271@5d
+  compatible: goodix,gt9271
+  reg: 93
+node /axi/pcie@1000120000/rp1/spi@50000/panel@0
+  compatible: st7796s,panel-mipi-dbi-spi
+  width-mm: 49
+  height-mm: 79
+  reg: 0
+node /backlight_pwm
+  compatible: pwm-backlight
+
+==== 6. BOOT CONFIGURATION (read only; comments left out) ====
+file: /boot/firmware/config.txt
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=1
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+disable_fw_kms_setup=1
+arm_64bit=1
+disable_overscan=1
+arm_boost=1
+[cm4]
+[cm5]
+dtoverlay=dwc2,dr_mode=host
+[pi5]
+dtoverlay=nospi10
+[all]
+dtparam=spi=on
+dtparam=i2c_arm=on
+dtoverlay=mipi-dbi-spi,spi0-0,speed=48000000
+dtparam=compatible=st7796s\0panel-mipi-dbi-spi
+dtparam=width=320,height=480,width-mm=49,height-mm=79
+dtparam=reset-gpio=27,dc-gpio=22
+dtparam=backlight-pwm
+dtparam=backlight-pwm-chan=2
+dtoverlay=goodix,addr=0x5d
+
+cmdline.txt (display words only): console=serial0,115200 console=tty1 quiet splash plymouth.ignore-serial-consoles 
+display overlays shipped: ads7846 edt-ft5406 goodix ilitek-ts-i2c ilitek251x mipi-dbi-spi rpi-ft5406 vc4-fkms-v3d-pi4 vc4-fkms-v3d vc4-kms-dpi-generic vc4-kms-dpi-hyperpixel2r vc4-kms-dpi-hyperpixel4 vc4-kms-dpi-hyperpixel4sq vc4-kms-dpi-panel vc4-kms-dsi-7inch vc4-kms-dsi-edatec-panel-070c vc4-kms-dsi-edatec-panel-101c vc4-kms-dsi-generic vc4-kms-dsi-ili79600-10-1inch vc4-kms-dsi-ili9881-5inch vc4-kms-dsi-ili9881-7inch vc4-kms-dsi-lt070me05000-v2 vc4-kms-dsi-lt070me05000 vc4-kms-dsi-tdo-panel vc4-kms-dsi-waveshare-800x480 vc4-kms-dsi-waveshare-panel-v2 vc4-kms-dsi-waveshare-panel vc4-kms-v3d-pi4 vc4-kms-v3d-pi5 vc4-kms-v3d waveshare-can-fd-hat-mode-a waveshare-can-fd-hat-mode-b 
+unavailable: vcgencmd not installed (not a Raspberry Pi OS board)
+
+==== 7. INPUT DEVICES ====
+
+event0: "vc4-hdmi-0"
+  bus 001e vendor 0000 product 0000; kind: other
+  ev bits:0 1 2 4 20 ; properties:5
+
+event1: "vc4-hdmi-0 HDMI Jack"
+  bus 0000 vendor 0000 product 0000; kind: switch
+  ev bits:0 5 ; properties: none
+
+event2: "vc4-hdmi-1"
+  bus 001e vendor 0000 product 0000; kind: other
+  ev bits:0 1 2 4 20 ; properties:5
+
+event3: "vc4-hdmi-1 HDMI Jack"
+  bus 0000 vendor 0000 product 0000; kind: switch
+  ev bits:0 5 ; properties: none
+
+event4: "pwr_button"
+  bus 0019 vendor 0001 product 0001; kind: other
+  ev bits:0 1 ; properties: none
+
+event5: "1-005d Goodix Capacitive TouchScreen"
+  bus 0018 vendor 0416 product 038f; kind: touchscreen
+  ev bits:0 1 3 ; properties:1 (INPUT_PROP_DIRECT: a screen)
+  abs axes: X Y MT_SLOT MT_TOUCH_MAJOR MT_WIDTH_MAJOR MT_POSITION_X MT_POSITION_Y MT_TRACKING_ID
+  ABS X               min 0 max 319 fuzz 0 flat 0 res 0
+  ABS Y               min 0 max 479 fuzz 0 flat 0 res 0
+  ABS MT_SLOT         min 0 max 4 fuzz 0 flat 0 res 0
+  ABS MT_TOUCH_MAJOR  min 0 max 255 fuzz 0 flat 0 res 0
+  ABS MT_WIDTH_MAJOR  min 0 max 255 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_X   min 0 max 319 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_Y   min 0 max 479 fuzz 0 flat 0 res 0
+  ABS MT_TRACKING_ID  min 0 max 65535 fuzz 0 flat 0 res 0
+  slots (ABS_MT_SLOT max + 1): 5
+unavailable: udevadm not used (not installed, or test root)
+
+==== 8. BACKLIGHT ====
+backlight_pwm: type raw, max 15, brightness 1, actual 1, bl_power 0
+  levels (0..15); the launcher's profile logic would name it APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm
+  writable by this user: n/a (test root)
+
+==== 9. WHAT install.sh WOULD PICK (--dry-run, nothing written) ====
+using: install.sh (dry run)
+glibc: 2.41 (ok)
+detected:
+  model: Raspberry Pi 5 Model B Rev 1.0
+  drm card1-HDMI-A-1: disconnected
+  drm card1-HDMI-A-2: disconnected
+  drm card1-Writeback-1: unknown
+  drm card1-Writeback-2: unknown
+  drm card2-SPI-1: connected, first mode 320x480
+  /dev/fb0: name "panel-mipi-dbid", size 320,480, 16 bpp
+  backlight: backlight_pwm
+board: pi3a-luckfox35
+screen: panel size 79x49 mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)
+session: desktop (display manager lightdm.service enabled)
+profile: pi3a-luckfox35: /etc/applaunch/board.conf already up to date
+udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of backlight_pwm)
+boot config: none on a desktop board (config.txt and cmdline.txt left alone
+PWM backlight (3.5" SPI panel): config.txt has it already (dtparam=backlight-pwm): left as it is
+(install.sh --dry-run exit status 0)
+
+==== 10. INSTALLED LAUNCHER FILES (if present) ====
+--- /etc/applaunch/board.conf
+# Board profile for the launcher, written by install.sh (board: pi3a-luckfox35).
+# Loaded by the launcher unit (EnvironmentFile). Edit freely: install.sh then leaves it alone unless --force.
+# applaunch-profile-sum: 3425273834 771
+APPLAUNCH_BOARD=pi3a-luckfox35
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=480x320
+APPLAUNCH_ROTATE=90
+APPLAUNCH_COMPAT_SCALE=1
+# landscape panel size in mm (the overlay's width-mm=49 height-mm=79, portrait): the layout's density
+APPLAUNCH_PANEL_MM=79x49
+APPLAUNCH_TOUCH_DEV=auto
+APPLAUNCH_TOUCH_ORIENT=buffer
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/backlight_pwm
+# idle dim level, percent of the backlight: 1..100 (the launcher's default is 10)
+APPLAUNCH_DIM_PERCENT=10
+# same device for the code that still reads the LVGL name (the service sets it to /dev/fb0)
+LV_LINUX_FBDEV_DEVICE=/dev/fb0
+# the deck's legacy touch axes (set in APPLaunch.service) must not apply here: neutral values
+APPLAUNCH_TOUCH_SWAP_XY=0
+APPLAUNCH_TOUCH_INVERT_X=0
+APPLAUNCH_TOUCH_INVERT_Y=0
+--- /etc/applaunch/install.conf
+# The options of the last install.sh run, written by install.sh. Settings > Updates runs install.sh of a newer
+# release again with them (cyberdeckzero-update). board= is empty when the board was detected; screen_size= (inches)
+# and panel_mm= (WxH) when no screen size was given (--screen-size, --panel-mm, the install question): the profile's own.
+keyboard_name=M4 Keyboard
+board=pi3a-luckfox35
+screen_size=
+panel_mm=
+boot_config=1
+pwm_backlight=0
+default_source=1
+user=redacted
+spi_panel=luckfox35
+soft_pwm_backlight=0
+spi_fw_added=1
+--- /run/user/UID/applaunch/board.state
+v=1
+gen=2
+pid=1716
+launcher=0.10.6
+board=pi3a-luckfox35
+arch=aarch64
+ram_mb=4048
+battery=0
+backlight=levels
+backlight_steps=10
+sound=0
+requests=hello,caps,toast,beep,brightness,screen
+bt_audio=pipewire
+bt_hfp=1
+bt_le_audio=0
+--- /run/user/UID/applaunch/screen.state
+v=1
+w=480
+h=320
+rot=90
+ppmm=630
+density=panel_mm
+class=compact
+compat=80,25,320,170
+scale=1
+toolbar=100
+fb=/dev/fb0
+bpp=16
+touch=/dev/input/event5
+space=5,10,14
+radius=6,14,20
+header=40
+row=44
+target=44
+dialog_max_w=440
+text=24,20,18,14
+kb_inset=0
+gen=1
+
+==== END OF REPORT ====

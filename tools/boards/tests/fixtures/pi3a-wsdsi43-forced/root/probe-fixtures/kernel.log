@@ -1,0 +1,3 @@
+[    3.100000] panel-simple-dsi 10.panel@0: probing panel raspberrypi,7inch-dsi
+[    3.300000] edt_ft5x06 1-0038: touchscreen probe
+[    3.900000] vc4-drm soc:gpu: [drm] fb0: vc4drmfb frame buffer device

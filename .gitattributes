@@ -9,3 +9,10 @@ projects/APPLaunch/pizero2w/cyberdeckzero-update text eol=lf
 # install.sh --spi-panel: kernel build files, the patch and the overlays go to the board as they are (LF); the init file is binary
 projects/APPLaunch/pizero2w/panels/** text eol=lf
 projects/APPLaunch/pizero2w/panels/**/*.bin binary
+# the board probe and its recorded fixture trees and golden reports: LF everywhere (the fake /proc and /sys files must
+# not get a CR: a real board's files have none), no text conversion at all
+tools/boards/launcher-probe text eol=lf
+tools/boards/tests/test-launcher-probe.sh text eol=lf
+tools/boards/tests/gen-launcher-probe-fixtures.py text eol=lf
+tools/boards/tests/fixtures/** -text
+tools/boards/tests/golden/** -text

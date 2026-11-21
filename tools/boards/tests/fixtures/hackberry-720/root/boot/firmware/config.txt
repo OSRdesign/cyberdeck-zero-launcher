@@ -1,0 +1,10 @@
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=0
+auto_initramfs=1
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+arm_64bit=1
+[all]
+dtoverlay=hackberrypicm5
+dtparam=rotate=0

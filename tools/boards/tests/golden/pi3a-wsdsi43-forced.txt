@@ -1,0 +1,163 @@
+launcher-probe 1: a read-only board and screen probe (nothing was changed on this system)
+date: 2026-11-19
+mode: PROBE_ROOT test root
+running as: (test)
+
+==== 1. BOARD ====
+device-tree model: Raspberry Pi 3 Model A Plus Rev 1.1
+compatible: raspberrypi,3-model-a-plus brcm,bcm2837
+SoC: brcm,bcm2837
+cpu: ARMv8 Processor rev 4 (v8l) x4
+cpu serial: redacted
+board serial: redacted
+memory: 416 MB
+kernel: 6.12.47+rpt-rpi-v8
+arch: aarch64
+OS: Debian GNU/Linux 13 (trixie)
+OS id: debian 13
+dmi: none (not a PC)
+
+==== 2. DISPLAY SESSION AND LAUNCHER SERVICES ====
+default target: unavailable: no default.target link
+display manager: none enabled
+display processes running: cyberdeckzero 
+session type: unset (of this shell; ssh gives tty or unset)
+active virtual console: unavailable
+fbcon rotate: n/a
+verdict: no compositor running: the console or the launcher owns the display
+
+-- launcher service names that exist (files; current name first) --
+user unit cyberdeckzero.service: /home/redacted/.config/systemd/user/cyberdeckzero.service
+user unit APPLaunch.service: not found
+system unit cyberdeckzero-desktop.service: not found
+system unit cyberdeckzero-console.service: /etc/systemd/system/cyberdeckzero-console.service
+system unit APPLaunch-desktop.service: not found
+system unit applaunch-desktop.service: not found
+system unit applaunch-console.service: not found
+unavailable: systemctl not used (not present, or test root)
+installed bundle: /usr/share/APPLaunch (cyberdeckzero )
+
+==== 3. DRM CONNECTORS ====
+
+connector card0-DSI-1
+  status: connected  enabled: enabled  dpms: On
+  modes: 1; preferred (first listed): 800x480
+  mode list: 800x480 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card0-HDMI-A-1
+  status: disconnected  enabled: disabled  dpms: Off
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+connector card0-Writeback-1
+  status: unknown  enabled: disabled  dpms: Off
+  modes: 0; preferred (first listed): 
+  mode list: 
+  EDID: none (DSI, DPI and SPI panels have none; or a disconnected connector)
+
+-- optional tools --
+unavailable: kmsprint not installed
+unavailable: modetest not installed (package libdrm-tests)
+
+==== 4. FRAMEBUFFERS ====
+
+/dev/fb0
+  name: vc4drmfb  size: 800,480  bpp: 16  stride: 1600  rotate: 0
+  vinfo: visible 800x480 virtual 800x480 bpp 16 red 11/5 green 5/6 blue 0/5 transp 0/0, driver mm 154x86 (width x height)
+(fbset not installed: fine)
+
+==== 5. PANEL DRIVER (kernel log and device tree) ====
+
+-- kernel log lines about the display and the touch (first 40) --
+[    3.100000] panel-simple-dsi 10.panel@0: probing panel raspberrypi,7inch-dsi
+[    3.300000] edt_ft5x06 1-0038: touchscreen probe
+[    3.900000] vc4-drm soc:gpu: [drm] fb0: vc4drmfb frame buffer device
+(kernel log: whole log has 3 lines)
+
+-- device-tree nodes of panels, touch controllers and backlights --
+node /soc/dsi@7e700000/panel@0
+  compatible: raspberrypi,7inch-dsi
+node /soc/i2c@7e205000/regulator@45
+  compatible: raspberrypi,7inch-touchscreen-panel-regulator
+node /soc/i2c@7e205000/touchscreen@38
+  compatible: edt,edt-ft5406
+  reg: 56
+
+==== 6. BOOT CONFIGURATION (read only; comments left out) ====
+file: /boot/firmware/config.txt
+dtparam=audio=on
+camera_auto_detect=1
+display_auto_detect=0
+dtoverlay=vc4-kms-v3d
+max_framebuffers=2
+disable_fw_kms_setup=1
+arm_64bit=1
+disable_overscan=1
+[all]
+dtoverlay=vc4-kms-dsi-waveshare-800x480
+
+cmdline.txt (display words only): console=serial0,115200 console=tty1 consoleblank=0 
+display overlays shipped: vc4-kms-dsi-7inch vc4-kms-dsi-waveshare-800x480 
+unavailable: vcgencmd not installed (not a Raspberry Pi OS board)
+
+==== 7. INPUT DEVICES ====
+
+event0: "generic ft5x06 (79)"
+  bus 0018 vendor 0000 product 0000; kind: touchscreen
+  ev bits:0 1 3 ; properties:1 (INPUT_PROP_DIRECT: a screen)
+  abs axes: X Y MT_SLOT MT_TOUCH_MAJOR MT_POSITION_X MT_POSITION_Y MT_TRACKING_ID
+  ABS X               min 0 max 799 fuzz 0 flat 0 res 0
+  ABS Y               min 0 max 479 fuzz 0 flat 0 res 0
+  ABS MT_SLOT         min 0 max 9 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_X   min 0 max 799 fuzz 0 flat 0 res 0
+  ABS MT_POSITION_Y   min 0 max 479 fuzz 0 flat 0 res 0
+  ABS MT_TRACKING_ID  min 0 max 65535 fuzz 0 flat 0 res 0
+  slots (ABS_MT_SLOT max + 1): 10
+unavailable: udevadm not used (not installed, or test root)
+
+==== 8. BACKLIGHT ====
+10-0045: type raw, max 255, brightness 255, actual 255, bl_power 0
+  levels (0..255); the launcher's profile logic would name it APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+  writable by this user: n/a (test root)
+
+==== 9. WHAT install.sh WOULD PICK (--dry-run, nothing written) ====
+using: install.sh (dry run)
+glibc: 2.41 (ok)
+detected:
+  model: Raspberry Pi 3 Model A Plus Rev 1.1
+  drm card0-DSI-1: connected, first mode 800x480
+  drm card0-HDMI-A-1: disconnected
+  drm card0-Writeback-1: unknown
+  /dev/fb0: name "vc4drmfb", size 800,480, 16 bpp
+  backlight: 10-0045
+board: pi3a-wsdsi43
+screen: panel size 94x56 mm (--screen-size 4.3)
+session: appliance (no display manager enabled or running: the launcher starts at boot)
+profile: pi3a-wsdsi43: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)
+udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of 10-0045)
+boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)
+(install.sh --dry-run exit status 0)
+
+==== 10. INSTALLED LAUNCHER FILES (if present) ====
+--- /etc/applaunch/board.conf
+# Board profile for the launcher, written by install.sh (board: pi3a-wsdsi43).
+APPLAUNCH_BOARD=pi3a-wsdsi43
+APPLAUNCH_FB=/dev/fb0
+APPLAUNCH_LOGICAL=800x480
+APPLAUNCH_BACKLIGHT=sysfs:/sys/class/backlight/10-0045
+--- /etc/applaunch/install.conf
+board=pi3a-wsdsi43
+screen_size=4.3
+keyboard_name=Fixture Keyboard
+--- /run/user/UID/applaunch/board.state
+version=0.10.5
+board=pi3a-wsdsi43
+backlight=levels
+ip=redacted
+--- /run/user/UID/applaunch/screen.state
+canvas=800x480
+touch_slots=10
+
+==== END OF REPORT ====

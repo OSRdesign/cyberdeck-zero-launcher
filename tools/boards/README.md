@@ -83,3 +83,89 @@ python board.py status     deck
 - `python -I board.py -h` and `--dry-run` need nothing beyond the standard library. For a real run paramiko must be
   importable: if it is in the user site-packages, run without `-I`.
 - Only the device operator (the Controller or the user) touches boards; workers hand off a test plan.
+
+## launcher-probe
+
+`tools/boards/launcher-probe` is a read-only board and screen probe (report 031, phase P0): one POSIX shell file that
+prints ONE plain-text report of what a board looks like to the launcher's installer. It is for a board nobody has
+looked at yet, or whose screen is wrong. It needs no package, no `sudo` and no network. (The older
+`projects/APPLaunch/tools/board-probe/probe-board.sh` is a Markdown report of the whole system and stays; this one
+adds the pieces the installer decides on: EDID size in mm, the device-tree panel nodes, touch ranges and contact
+counts, what `install.sh` would pick.)
+
+**Run it on a board** (as the normal user; `sudo` is not needed, and adds only read access to `/dev/input` for the
+touch ranges):
+
+```
+scp launcher-probe pi@BOARD:/tmp/          # or copy it any way you like; it is one file
+ssh pi@BOARD sh /tmp/launcher-probe --out /tmp/probe-BOARDNAME.txt
+```
+
+then paste the output (or send `/tmp/probe-BOARDNAME.txt`). About 5 seconds. To let it say what the installer would
+pick, run it from a checkout or an unpacked release (it finds `pizero2w/install.sh` in the checkout layout), or give
+`--installer PATH/install.sh`; it only ever runs `install.sh --dry-run`.
+
+Options: `--out FILE` (also save the report; the only file it writes), `--installer PATH`, `--edid-hex` (also the EDID
+as hex, with the serial bytes blanked), `-h`. Exit status 0 always, 2 for a wrong option.
+
+**What it reads** (11 delimited sections): the device-tree model, compatible, SoC, kernel, OS release, DMI (a PC);
+the display session (default target, display manager, compositor processes) and which launcher unit files exist
+(`cyberdeckzero.service` user unit, `cyberdeckzero-desktop.service`, `cyberdeckzero-console.service`, and the
+pre-v0.7.0 names); every DRM connector (status, modes, the first mode as the preferred one, the EDID decoded: vendor,
+product code, basic size in cm, the first detailed timing with its size in mm, the monitor name); every framebuffer
+(name, size, bpp, stride, rotate, and the pixel layout and driver mm through `FBIOGET_VSCREENINFO` when `python3` is
+there); the kernel log lines about panels and touch; the device-tree nodes of panels, touch controllers and
+backlights (compatible, `width-mm`, `height-mm`, `reg`); the display lines of `config.txt` (`dtoverlay`, `dtparam`,
+`display_auto_detect`, `rotate` and related; comments left out), the display words of `cmdline.txt`, the
+`armbianEnv.txt` overlay lines, the overlays shipped; every input device with its kind, capability bits,
+INPUT_PROP_DIRECT, ABS axes and, when `python3` is installed and `/dev/input/eventN` is readable (user in the `input`
+group, or root), the ABS ranges and the contact count (`ABS_MT_SLOT` max + 1); every backlight (type, max, level,
+whether the user may write it, what the profile logic would call it); the `install.sh --dry-run` verdict; and the
+installed `board.conf`, `install.conf`, `board.state` and `screen.state` when present.
+
+Optional tools are used only when present and reported when missing (`unavailable: ... not installed`): `kmsprint`,
+`modetest`, `edid-decode`, `fbset`, `vcgencmd`, `udevadm`, `systemctl`, `python3`. Nothing in it needs them.
+
+**What it redacts** (printed as `redacted`): MAC addresses, IPv4 addresses, the host name, the user name, CPU, board
+and DMI serial numbers, the EDID serial (number and text), and in the installed files any line mentioning a password,
+token, secret, psk or SSID. It never reads Wi-Fi settings, ssh keys or the environment. Look the report over before
+pasting it anyway.
+
+**Tests.** `sh tools/boards/tests/test-launcher-probe.sh` (also the `probe` step of `tools/dev/check-all.sh`) runs the
+real script against recorded fixture trees and compares the output with golden files, in `sh` and in `bash`.
+`PROBE_ROOT=DIR` (test only) makes the probe read `/proc`, `/sys`, `/boot`, `/etc`, `/run`, `/home` and
+`/usr/share/APPLaunch` below `DIR`, run no external tool, and take what only a device node can give from
+`DIR/probe-fixtures/`: `kernel.log` (the kernel log), `fbN.vinfo` (the text the python helper prints for the pixel
+layout) and `eventN.absinfo` (the text it prints for the ABS ranges and slots). `PROBE_MACHINE`, `PROBE_DATE`,
+`PROBE_USER` and `PROBE_WORD_BITS` replace `uname -m`, the date, the user name and the kernel's bitmap word size.
+The fixtures (`tests/fixtures/<name>/{probe.env,root/}`) are written by `tests/gen-launcher-probe-fixtures.py` and are
+committed; to add a board, add a function there, run it, run the test with `UPDATE_GOLDEN=1` and read the golden
+file. A real board's report is a fixture candidate: its files go under `root/` as they are.
+
+**Real boards as fixtures (`--capture-fixture`).** `sh launcher-probe --capture-fixture DIR` writes no report: it
+snapshots exactly what the probe, and the installer's board detection that the probe runs with `--dry-run`, read
+(device-tree model and compatible, DMI, DRM connectors with modes and the first 256 EDID bytes, framebuffers and their
+pixel layout, the panel lines of the kernel log, boot configuration, input capabilities and touch ranges, backlights,
+unit-file names, the installed profile) into a `PROBE_ROOT`-shaped tree below `DIR`, plus `probe.env`
+(`PROBE_MACHINE`, `PROBE_USER`, `PROBE_DATE`, `PROBE_WORD_BITS`, `PROBE_GLIBC`) and `probe-fixtures/` (`kernel.log`,
+`fbN.vinfo`, `eventN.absinfo`, `capture-notes.txt`, `links`). `DIR` must be new or empty; nothing else is written, no
+root is needed, and nothing is changed on the system. To capture a board over ssh:
+`scp tools/boards/launcher-probe USER@BOARD:/tmp/lp`, `ssh USER@BOARD sh /tmp/lp --capture-fixture /tmp/lp-cap`,
+`ssh USER@BOARD 'cd /tmp/lp-cap && tar cf - .' | tar xf - -C tools/boards/tests/fixtures/NAME/root`, move `probe.env`
+up to `fixtures/NAME/`, then `ssh USER@BOARD rm -rf /tmp/lp /tmp/lp-cap`. Touch ranges need read access to
+`/dev/input` (the `input` group): an unreadable one is recorded as the "unavailable" line, which is the real result.
+
+Redaction while copying: MAC and IPv4 addresses are replaced by `redacted`, the host name by `probehost`, the user name
+(3 characters or more, not root) by `pilot`; serial numbers are never read (their files are recorded empty), the EDID
+serial bytes and serial text are blanked (the checksum byte moves so a good EDID stays good), the name of a Bluetooth
+input device is not kept, `config.txt` keeps its line numbers but every comment becomes a bare `#`, `armbianEnv.txt`
+keeps a list of non-identifying keys, and any line of the installed files that mentions a password, token, secret, psk or
+SSID is dropped. Kept as they are: `cmdline.txt` (PARTUUID, the Wi-Fi regulatory country) and the install options.
+Symbolic links cannot live in git on Windows: they are listed in `probe-fixtures/links` and the test makes them in a
+temporary copy. The kernel log is stored as the lines the report prints plus filler lines up to the real line count.
+Not captured (so a replay differs from the board there): `/etc/netplan` and the NetworkManager checks, the retired
+files of earlier bundles in `/usr/share/APPLaunch`, `/usr/bin/wireplumber`.
+
+The `*-real` fixtures are recorded boards (2026-11-21 and 22): `hackberry-real`, `palmpi-dsi5-real`, `pi5-spi35-real`,
+`fzm1-real`, `pi4b-real`, `pi3a-real`, `zero8-real`, `deck-real`, `pi5-real`, `opi-zero2w-real` (Armbian), `pi4b-dsi7-real` (installed by hand from the README). The test also checks which board
+install.sh picks from each of them.

@@ -1,0 +1,6 @@
+etc/systemd/system/default.target -> /usr/lib/systemd/system/graphical.target
+usr/lib/systemd/system/default.target -> graphical.target
+lib/systemd/system/default.target -> graphical.target
+etc/systemd/system/display-manager.service -> /lib/systemd/system/lightdm.service
+usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch -> cyberdeckzero
+usr/share/APPLaunch/bin/applaunch-console -> cyberdeckzero-console

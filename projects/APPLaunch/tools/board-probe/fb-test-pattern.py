@@ -9,7 +9,8 @@ Usage:
 The pattern shows orientation (a big "F" and "TOP-LEFT" in the top-left corner, TOP and RIGHT
 arrows), colour order (R G B W K bars, labelled), depth (grey gradient: visible steps = 16 bpp),
 and cropping (1 px white border on the whole virtual screen, red frame 20 px inside, tick marks
-every 100 px with their coordinate). Stop the launcher first: systemctl --user stop APPLaunch.service
+every 100 px with their coordinate). Stop the launcher first: systemctl --user stop cyberdeckzero.service
+(desktop boards: sudo systemctl stop cyberdeckzero-desktop.service; APPLaunch.service was the name before v0.7.0).
 Python 3.9+ standard library only. The previous screen contents are restored on exit when possible.
 """
 import argparse
@@ -417,12 +418,18 @@ def on_sigterm(*_):
 
 
 def launcher_running():
-    try:
-        out = subprocess.run(["systemctl", "--user", "is-active", "APPLaunch.service"],
-                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
-        return out.stdout.strip() == b"active"
-    except (OSError, subprocess.SubprocessError):
-        return False
+    # the user service (appliance boards) or the system service of the desktop variant; the third is the name before
+    # v0.7.0 (APPLaunch.service, v0.7.0 renamed it)
+    for cmd in (["systemctl", "--user", "is-active", "cyberdeckzero.service"],
+                ["systemctl", "is-active", "cyberdeckzero-desktop.service"],
+                ["systemctl", "--user", "is-active", "APPLaunch.service"]):  # before v0.7.0
+        try:
+            out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=5)
+            if out.stdout.strip() == b"active":
+                return True
+        except (OSError, subprocess.SubprocessError):
+            pass
+    return False
 
 
 DESKTOP_PROCS = ("labwc", "wayfire", "sway", "weston", "Xorg", "Xwayland", "lightdm", "sddm", "gdm", "gdm3")
@@ -485,9 +492,9 @@ def main():
     if not args.no_desktop_check:
         desktop_warning()
 
-    print("NOTE: the launcher owns the screen; stop it first:  systemctl --user stop APPLaunch.service")
+    print("NOTE: the launcher owns the screen; stop it first:  systemctl --user stop cyberdeckzero.service (desktop boards: sudo systemctl stop cyberdeckzero-desktop.service)")
     if launcher_running():
-        print("APPLaunch.service is RUNNING and will draw over the pattern. Continuing in 3 s (Ctrl-C to abort).")
+        print("The launcher is RUNNING and will draw over the pattern. Continuing in 3 s (Ctrl-C to abort).")
         time.sleep(3)
     if args.rotate_hint:
         print(ROTATE_HINT)

@@ -1,0 +1,15 @@
+v=1
+gen=2
+pid=1794
+launcher=0.10.3-knock.1
+board=pi5-hyperpixel4
+arch=aarch64
+ram_mb=4048
+battery=0
+backlight=levels
+backlight_steps=10
+sound=0
+requests=hello,caps,toast,beep,brightness,screen
+bt_audio=pipewire
+bt_hfp=1
+bt_le_audio=0

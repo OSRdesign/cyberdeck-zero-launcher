@@ -1,0 +1,6 @@
+verbosity=1
+bootlogo=false
+console=both
+disp_mode=1920x1080p60
+overlay_prefix=sun50i-h616
+user_overlays=spi35-st7796s

@@ -40,7 +40,7 @@ Then paste the file's contents (or attach the file) in the chat.
 Stop the launcher first if it is installed, because it owns the screen:
 
 ```
-systemctl --user stop APPLaunch.service
+systemctl --user stop cyberdeckzero.service   # desktop boards: sudo systemctl stop cyberdeckzero-desktop.service
 python3 fb-test-pattern.py --rotate-hint          # shows the pattern on /dev/fb0 for 20 s
 python3 fb-test-pattern.py --fb /dev/fb1          # another framebuffer (the probe lists them)
 ```
@@ -63,7 +63,7 @@ python3 fb-test-pattern.py --calibrate            # tap the 4 numbered crosses i
 `--calibrate` prints lines like `APPLAUNCH_TOUCH_SWAP_XY=1`, `APPLAUNCH_TOUCH_INVERT_X=0`,
 `APPLAUNCH_TOUCH_INVERT_Y=1` and a `LIBINPUT_CALIBRATION_MATRIX`: copy them into the chat.
 
-Restart the launcher afterwards: `systemctl --user start APPLaunch.service`
+Restart the launcher afterwards: `systemctl --user start cyberdeckzero.service` (desktop boards: `sudo systemctl start cyberdeckzero-desktop.service`; `APPLaunch.service` was the name before v0.7.0)
 
 ## Boards with a desktop (Raspberry Pi OS desktop images)
 

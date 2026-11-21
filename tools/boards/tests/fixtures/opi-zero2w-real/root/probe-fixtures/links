@@ -1,0 +1,6 @@
+usr/lib/systemd/system/default.target -> graphical.target
+lib/systemd/system/default.target -> graphical.target
+home/pilot/.config/systemd/user/default.target.wants/cyberdeckzero.service -> /home/pilot/.config/systemd/user/cyberdeckzero.service
+etc/systemd/system/multi-user.target.wants/cyberdeckzero-console.service -> /etc/systemd/system/cyberdeckzero-console.service
+usr/share/APPLaunch/bin/M5CardputerZero-APPLaunch -> cyberdeckzero
+usr/share/APPLaunch/bin/applaunch-console -> cyberdeckzero-console

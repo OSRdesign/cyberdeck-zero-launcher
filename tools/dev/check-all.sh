@@ -17,6 +17,7 @@
 #     header          run.sh header    (page headers against the home grid)
 #     contract        run.sh contract  (app contract: the host app-contract-probe against the metrics scene)
 #     branding        sh tools/dev/check-branding.sh on the checkout itself (brand words outside the allow-list, see its -h)
+#     probe           sh tools/boards/tests/test-launcher-probe.sh on the checkout (the read-only board probe against fixture trees)
 #   and prints "PASS|FAIL <step> (<seconds>s)" per step; for a failing step also the last 40 lines of its output.
 #   Every step runs even after a failure. Exit status 1 when any step failed.
 #
@@ -89,5 +90,6 @@ step twice bash "$render" twice
 step header bash "$render" header
 step contract bash "$render" contract
 step branding sh "$src/tools/dev/check-branding.sh" "$src"   # needs git: runs on the checkout, not the build tree
+step probe sh "$src/tools/boards/tests/test-launcher-probe.sh"   # reads the checkout's own fixtures (LF, see .gitattributes)
 echo "logs: $logs/"
 exit "$failed"
