@@ -29,3 +29,7 @@ docs/dev/tasks/**
 # Credits, derivation and the disclaimer shown to the user (these are the places where M5Stack must be named):
 projects/APPLaunch/main/ui/settings/settings_about_help_model.cpp   # About/Licenses text: credits, disclaimer, Store credit
 projects/APPLaunch/tests/test_settings_models.cpp                   # asserts on that text
+
+# --- Captured data of the launcher-probe tests: real board captures (legacy bundle names, CPU model names) and the golden reports made from them ---
+tools/boards/tests/fixtures/**            # real captures from boards; the text is the board's, not ours
+tools/boards/tests/golden/**              # reports generated from those captures

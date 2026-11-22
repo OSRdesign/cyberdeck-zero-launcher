@@ -1198,6 +1198,11 @@ size_guess_note() {
     case "$BOARD" in pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-dsi7) ;; *) return 0 ;; esac
     [ -z "$SCREEN_NOTE" ] && [ -n "$PANEL_IN_USE" ] || return 0
     case "$BOARD" in pi3a-wsdsi43*) sg_eg="5 or 7" ;; pi4b-dsi) sg_eg="4.3 or 7" ;; *) sg_eg="4.3 or 5" ;; esac
+    if [ "$PROFILE_ACTION" = keep ] && [ "$(profile_state)" = edited ]; then
+        # a hand-edited board.conf stays (no --force): its own APPLAUNCH_PANEL_MM is the size in use, this run's guess is not written
+        echo "screen size 4.3\"/5\"/7\" cannot be detected; $PROFILE was edited by hand and is kept: its APPLAUNCH_PANEL_MM decides the screen size (a new profile would assume $(profile_diag)\" ($PANEL_IN_USE mm)); --screen-size only applies when the profile is replaced (--force --screen-size INCHES; the old one is kept as board.conf.bak)"
+        return 0
+    fi
     echo "screen size 4.3\"/5\"/7\" cannot be detected: assuming $(profile_diag)\" ($PANEL_IN_USE mm); for another size run again with --screen-size INCHES (e.g. $sg_eg)"
 }
 # PROFILE_ACTION: what apply_profile will do, as one word, plus PROFILE_MSG for the user
@@ -1516,6 +1521,8 @@ SPI_ENV="$SYSROOT/boot/armbianEnv.txt"
 SPI_DTBO="$SYSROOT/boot/overlay-user/$SPI_OVL.dtbo"
 SPI_FW="$SYSROOT/lib/firmware/st7796s.bin"
 SPI_CHANGED=0; SPI_REBOOT=0; SPI_DKMS_NEW=""; SPI_WORK=""
+SPI_NEW=""         # the files this run created (they did not exist), as paths without the sysroot: recorded in install.conf for uninstall.sh
+SPI_ENV_ADDED=""   # token: this run added its name to a user_overlays= line; line: it wrote a user_overlays= line of its own
 spi_src() {
     if [ -d "$HERE/payload/panels/$SPI_DIR" ]; then echo "$HERE/payload/panels/$SPI_DIR"; else echo "$HERE/panels/$SPI_DIR"; fi
 }
@@ -1612,6 +1619,7 @@ spi_fail() {
 spi_put() {
     if [ -f "$2" ] && cmp -s "$1" "$2"; then echo "${2#"$SYSROOT"}: already up to date"; return 0; fi
     mkdir -p "${2%/*}"
+    [ -e "$2" ] || SPI_NEW="$SPI_NEW ${2#"$SYSROOT"}"
     install -m 644 "$1" "$2"
     echo "${2#"$SYSROOT"}: installed"
     SPI_CHANGED=1
@@ -1695,11 +1703,13 @@ spi_setup() {
     else
         sp_bak="$SPI_ENV.bak-$(date +%Y%m%d)"
         [ -e "$sp_bak" ] || cp -p "$SPI_ENV" "$sp_bak"
+        if grep -q '^user_overlays=' "$SPI_ENV"; then sp_how=token; else sp_how=line; fi
         spi_env_add "$SPI_ENV" > "$SPI_ENV.applaunch-new"
         if spi_env_has "$SPI_ENV.applaunch-new"; then
             chmod 644 "$SPI_ENV.applaunch-new"
             mv "$SPI_ENV.applaunch-new" "$SPI_ENV"
             echo "/boot/armbianEnv.txt: user_overlays=$(spi_env_overlays "$SPI_ENV") (the earlier file is ${sp_bak##*/})"
+            SPI_ENV_ADDED=$sp_how
             SPI_CHANGED=1
         else
             rm -f "$SPI_ENV.applaunch-new"
@@ -2802,14 +2812,27 @@ apply_profile
 say "Install options"
 INSTALL_CONF="$PROFILE_DIR/install.conf"
 mkdir -p "$PROFILE_DIR"
-PREV_SPI=""; PREV_SOFT=""; PREV_FW=0
+PREV_SPI=""; PREV_SOFT=""; PREV_FW=0; PREV_AFILES=""; PREV_ADKMS=""; PREV_AENV=""
 if [ -f "$INSTALL_CONF" ]; then
     PREV_SPI=$(sed -n 's/^spi_panel=//p' "$INSTALL_CONF" | tail -n 1)
     PREV_SOFT=$(sed -n 's/^soft_pwm_backlight=//p' "$INSTALL_CONF" | tail -n 1)
     PREV_FW=$(sed -n 's/^spi_fw_added=//p' "$INSTALL_CONF" | tail -n 1)
+    PREV_AFILES=$(sed -n 's/^spi_armbian_files=//p' "$INSTALL_CONF" | tail -n 1)
+    PREV_ADKMS=$(sed -n 's/^spi_armbian_dkms=//p' "$INSTALL_CONF" | tail -n 1)
+    PREV_AENV=$(sed -n 's/^spi_armbian_env=//p' "$INSTALL_CONF" | tail -n 1)
     case "$PREV_SPI" in waveshare35f|luckfox35) ;; *) PREV_SPI="" ;; esac
+    case "$PREV_AENV" in token|line) ;; *) PREV_AENV="" ;; esac
     case "$PREV_FW" in 1) ;; *) PREV_FW=0 ;; esac
     case "$PREV_SOFT" in 1) ;; *) PREV_SOFT=0 ;; esac
+fi
+# Armbian (--spi-panel waveshare35f): what this install made, for uninstall.sh, which removes only these (a name there
+# is checked against a fixed list). Earlier runs' records are kept (a second run finds its files there and creates none).
+A_FILES=""; A_DKMS=""; A_ENV=$PREV_AENV
+if [ "$SPI_PANEL" = waveshare35f ] || { [ -z "$SPI_PANEL" ] && [ "$PREV_SPI" = waveshare35f ]; }; then
+    A_FILES=$PREV_AFILES; A_DKMS=$PREV_ADKMS
+    for sp_f in $SPI_NEW; do case " $A_FILES " in *" $sp_f "*) ;; *) A_FILES="${A_FILES:+$A_FILES }$sp_f" ;; esac; done
+    for sp_m in $SPI_DKMS_NEW; do case " $A_DKMS " in *" $sp_m "*) ;; *) A_DKMS="${A_DKMS:+$A_DKMS }$sp_m" ;; esac; done
+    [ -z "$SPI_ENV_ADDED" ] || A_ENV=$SPI_ENV_ADDED
 fi
 {
     echo "# The options of the last install.sh run, written by install.sh. Settings > Updates runs install.sh of a newer"
@@ -2832,10 +2855,16 @@ fi
         echo "soft_pwm_backlight=$SOFT_PWM"
         # a Raspberry Pi: the init file was put there by this install (uninstall.sh removes it only then, and unchanged)
         if [ "$SPI_RPI" = 1 ] && { [ "$SPI_FW_ADDED" = 1 ] || [ "$PREV_FW" = 1 ]; }; then echo "spi_fw_added=1"; fi
+        [ -z "$A_FILES" ] || echo "spi_armbian_files=$A_FILES"
+        [ -z "$A_DKMS" ] || echo "spi_armbian_dkms=$A_DKMS"
+        [ -z "$A_ENV" ] || echo "spi_armbian_env=$A_ENV"
     elif [ -n "$PREV_SPI" ]; then
         echo "spi_panel=$PREV_SPI"
         echo "soft_pwm_backlight=${PREV_SOFT:-0}"
         [ "$PREV_FW" = 0 ] || echo "spi_fw_added=1"
+        [ -z "$A_FILES" ] || echo "spi_armbian_files=$A_FILES"
+        [ -z "$A_DKMS" ] || echo "spi_armbian_dkms=$A_DKMS"
+        [ -z "$A_ENV" ] || echo "spi_armbian_env=$A_ENV"
     fi
 } > "$INSTALL_CONF.tmp"
 chmod 644 "$INSTALL_CONF.tmp"

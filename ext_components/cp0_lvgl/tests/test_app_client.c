@@ -48,7 +48,7 @@ static int listen_at(const char *path)
 }
 
 /* Child: accepts one connection, reads a line, answers per `mode`: 'e' echoes "ok <line>", 'x' "err nosound", 's' says
- * nothing for 2 s, 'g' garbage without newline, 'l' a reply line of 400 bytes. */
+ * nothing for 2 s, 'd' answers "ok" after 600 ms (a busy UI loop), 'g' garbage without newline, 'l' a reply line of 400 bytes. */
 static pid_t fake_server(int lfd, char mode)
 {
     const pid_t pid = fork();
@@ -71,6 +71,9 @@ static pid_t fake_server(int lfd, char mode)
         else (void)!write(c, "err bad\n", 8);
     } else if (mode == 'x') {
         (void)!write(c, "err nosound\n", 12);
+    } else if (mode == 'd') {
+        usleep(600 * 1000);
+        (void)!write(c, "ok\n", 3);
     } else if (mode == 's') {
         sleep(2);
     } else if (mode == 'g') {
@@ -151,6 +154,26 @@ int main(void)
     waitpid(child, NULL, 0);
     child = fake_server(fd, 'x');
     CHECK(cp0_app_backlight(0) == 1);
+    waitpid(child, NULL, 0);
+
+    /* a slow launcher: the default 200 ms wait gives up on a 600 ms answer, cp0_app_backlight's 1500 ms wait does not */
+    child = fake_server(fd, 'd');
+    t = now_ms();
+    CHECK(cp0_app_client_call("screen off", reply, sizeof(reply), 0) == -1);
+    CHECK(now_ms() - t < 500);
+    kill(child, SIGKILL);
+    waitpid(child, NULL, 0);
+    child = fake_server(fd, 'd');
+    t = now_ms();
+    CHECK(cp0_app_backlight(0) == 0);
+    CHECK(now_ms() - t >= 500 && now_ms() - t < 1400);
+    waitpid(child, NULL, 0);
+    CHECK(CP0_APP_BACKLIGHT_TIMEOUT_MS > CP0_APP_CLIENT_TIMEOUT_MS);
+    child = fake_server(fd, 's'); /* silent: gives up after its own wait */
+    t = now_ms();
+    CHECK(cp0_app_backlight(1) == -1);
+    CHECK(now_ms() - t >= 1400 && now_ms() - t < 1900);
+    kill(child, SIGKILL);
     waitpid(child, NULL, 0);
 
     /* a reply without a newline, a reply that is too long, a silent server: -1, within the timeout */

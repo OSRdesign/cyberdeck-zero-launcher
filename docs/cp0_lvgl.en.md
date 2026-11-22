@@ -284,10 +284,10 @@ int cp0_app_bt_audio_dev_get(const cp0_app_status_t *s, int i, cp0_app_bt_audio_
 int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_ms);
 int cp0_app_beep(const char *name);     /* NULL = "notify"; 1 = "err nosound" (board.state sound=0) */
 int cp0_app_toast(const char *text);    /* shown on the launcher's toast when the launcher is in front */
-int cp0_app_backlight(int on);             /* 0 = backlight fully off, nonzero = back; not saved; 1 = err busy / absent (board.state requests= has no "screen"); the launcher restores it by itself when the app hides, exits or dies */
+int cp0_app_backlight(int on);             /* 0 = backlight fully off, nonzero = back; not saved; 1 = err busy / absent (board.state requests= has no "screen"); the launcher restores it by itself when the app hides, exits or dies; waits up to CP0_APP_BACKLIGHT_TIMEOUT_MS = 1500 ms (beep and toast: 200 ms) */
 ```
 
-Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).
+Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. `cp0_app_backlight` is the one call with a longer wait (1500 ms): the launcher answers `screen` on its UI loop, which a slow board (Pi Zero 2 W) or a frame being drawn can keep busy for more than 200 ms, so it may block that long and must not be called from the UI thread's hot path (use a worker, or accept the short wait); a nonzero return means refused (`1`) or no answer (`-1`, the request may still be carried out). Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).
 
 ### Lifecycle helper (`include/cp0_app_lifecycle.h`)
 

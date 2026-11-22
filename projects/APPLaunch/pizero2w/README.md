@@ -116,7 +116,7 @@ Each install records its keyboard name, `--board`, `--screen-size`, `--panel-mm`
 The other options (`--user`, `--board-only`, `--dry-run`, `--plan`, `--force`, `--network-manager`, `--yes`) are not recorded.
 `--spi-panel` records `board=pi3a-luckfox35` (so updates keep the profile) and, for information only, `spi_panel=` and
 `soft_pwm_backlight=`, which later runs keep (on a Raspberry Pi also `spi_fw_added=1`, which tells `uninstall.sh` that `install.sh`
-put `/lib/firmware/st7796s.bin` there); the panel's set-up is done once and is never run again by Settings > Updates.
+put `/lib/firmware/st7796s.bin` there; on Armbian `spi_armbian_files=`, `spi_armbian_dkms=` and `spi_armbian_env=`, what `install.sh` made, for the same purpose, see [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel)); the panel's set-up is done once and is never run again by Settings > Updates.
 
 **Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
 password). When that user has no app source yet (no `~/.local/share/cardputerzero-appstore/registries.json`, or one
@@ -427,7 +427,8 @@ with the Freenove 5" panel is detected as `pi3a-wsdsi43`, the 4.3" profile. The 
 density (`APPLAUNCH_PANEL_MM`). The dry run and the install say so on every run that was given no size: *screen size
 4.3"/5"/7" cannot be detected: assuming 4.3" (94x56 mm); for another size run again with --screen-size INCHES* (the
 profile's own size is named: 4.3" for `pi3a-wsdsi43`, 5" for `pi4b-dsi`, 7" for `pi5-dsi7`; not in `--plan`, whose
-lines are for Settings > Updates). Say which screen it is:
+lines are for Settings > Updates). When a hand-edited `/etc/applaunch/board.conf` is kept (no `--force`) the note says that this file decides the size
+(its `APPLAUNCH_PANEL_MM`) and that `--screen-size` only applies when the profile is replaced with `--force`. Say which screen it is:
 
 ```
 sudo ./install.sh --screen-size 5            # the Pi 3A+ with the Freenove 5" panel (the board is detected as before)
@@ -550,6 +551,15 @@ framebuffer). Refused, with nothing changed, on `luckfox35` (a Raspberry Pi's na
 take `spi35-st7796s` out of `user_overlays=` (or put the `.bak-<date>` file back), `sudo dkms remove
 drm-mipi-dbi-chunk/1.0 --all` (and `pwm-gpio/1.0`), remove the two files in `/etc/modules-load.d`, reboot;
 `uninstall.sh` does not touch them.
+
+**Undo.** `./uninstall.sh` removes only what `install.conf` records as made by `install.sh --spi-panel waveshare35f`
+(`spi_armbian_files=`, `spi_armbian_dkms=`, `spi_armbian_env=`; each name is checked against a fixed list): `"spi35-st7796s"` taken off the
+last `user_overlays=` line of `/boot/armbianEnv.txt` (the line goes too when `install.sh` wrote it; a timestamped
+`armbianEnv.txt.bak-uninstall-<time>` first), `/lib/firmware/st7796s.bin`, `/etc/modules-load.d/spi35.conf` (and `pwm-gpio.conf`),
+`/boot/overlay-user/spi35-st7796s.dtbo` (each only when `install.sh` created it and, for the first three, it is still unchanged), and
+the DKMS modules `drm-mipi-dbi-chunk` and `pwm-gpio` it built (`dkms remove --all`, their `/usr/src` folders), then a reboot is needed.
+A file that was there before `install.sh`, a panel set up by hand (no `install.conf`) and the packages (`dkms`, the kernel headers,
+...) stay. `--no-boot-config` leaves all of it; `--dry-run` prints it. The `armbianEnv.txt.bak-<date>` of `install.sh` stays.
 
 ### Raspberry Pi: the 3.5" SPI panel
 
@@ -1048,8 +1058,8 @@ unit, to a mount point or to a credentials file (`err exists`). `list` shows onl
 | `nomodule` | the kernel has no `cifs` module (`cifs filesystem not supported`) |
 | `nohelper` | `mount.cifs` is not installed (package `cifs-utils`) |
 | `unreachable` | the host name does not resolve, no route, connection refused or host down |
-| `notfound` | the share (or the subfolder) does not exist on the server (`mount error(2)` with `BAD_NETWORK_NAME` in the kernel log, or with the kernel log unreadable) |
-| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`; also `mount error(2)` when the kernel log of that attempt has only `cifs_mount failed`, as ZimaOS does for a share that needs a login: reason `wrong share name, or it needs a login`) |
+| `notfound` | the server names the missing share or subfolder (`NT_STATUS_BAD_NETWORK_NAME`, `NT_STATUS_OBJECT_NAME_NOT_FOUND`, `NT_STATUS_OBJECT_PATH_NOT_FOUND`, or `mount error(6)`) |
+| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`); also every `mount error(2)` (No such file or directory) without an `NT_STATUS` word, which a wrong share name and a share that needs a login both cause (the kernel logs the telling line only once per boot, so the helper no longer reads it): reason `wrong share name, or it needs a login`, or `wrong share or folder name, or it needs a login` with `--subfolder` |
 | `timeout` | no answer within the 10 s limit, or `ETIMEDOUT` |
 | `other` | anything else (also a refused `remove`, a failed `systemctl`), with the first line of the message as the reason (printable ASCII, 160 characters at most, the password and `key=value` credential text removed) |
 

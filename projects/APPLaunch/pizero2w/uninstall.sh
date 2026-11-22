@@ -22,7 +22,8 @@
 #   --restore-config   put back /boot/firmware/config.txt from config.txt.bak-before-pwm instead of removing
 #                      the two PWM lines (this also drops any other change made to config.txt since)
 #   --no-boot-config   do not touch config.txt, cmdline.txt and the overlay (counterpart of install.sh); the 3.5" SPI panel's
-#                      block and init file (install.sh --spi-panel luckfox35 on a Raspberry Pi) stay as well
+#                      block and init file (install.sh --spi-panel luckfox35 on a Raspberry Pi) and the Armbian panel set-up
+#                      (--spi-panel waveshare35f: overlay name, files, DKMS modules) stay as well
 #   --disable-linger   also run "loginctl disable-linger" (install.sh enabled it; it may have been on before)
 #   --remove-shares    also remove the network shares made with the share helper (cyberdeckzero-share): unmount, units and
 #                      credentials files. Without it the user's shares are left alone (they keep working: they need only
@@ -55,7 +56,7 @@ while [ $# -gt 0 ]; do
         --remove-shares) REMOVE_SHARES=1; shift ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --payload) [ $# -ge 2 ] || { echo "--payload needs a directory" >&2; exit 2; }; PAYLOAD_ARG="$2"; shift 2 ;;
-        -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,34p' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -357,6 +358,62 @@ if [ "$BOOT_CONFIG" = 1 ] && [ -f "$INSTALL_CONF" ] && [ "$(sed -n 's/^spi_fw_ad
     fi
 fi
 
+# The 3.5" SPI panel that install.sh --spi-panel waveshare35f set up on an Armbian board (Orange Pi Zero 2W): only what
+# install.conf records as made by install.sh (spi_armbian_files, spi_armbian_dkms, spi_armbian_env; every name is checked
+# against the fixed lists below, so a hand-edited record cannot name another file). A file that existed before install.sh
+# is not recorded and stays; one that was changed since is kept. Like config.txt, these stay with --no-boot-config.
+A_ENVFILE="$ROOT/boot/armbianEnv.txt"
+A_OVL=spi35-st7796s
+A_FILES_KNOWN="/lib/firmware/st7796s.bin /etc/modules-load.d/spi35.conf /etc/modules-load.d/pwm-gpio.conf /boot/overlay-user/$A_OVL.dtbo"
+A_DKMS_KNOWN="drm-mipi-dbi-chunk/1.0 pwm-gpio/1.0"
+A_FILES_RM=""      # recorded files to remove
+A_DKMS_RM=""       # recorded DKMS modules to remove
+A_ENV_RM=""        # token | line: take the overlay name off the last user_overlays= line of armbianEnv.txt
+A_NOTE=""
+a_conf() { sed -n "s/^$1=//p" "$INSTALL_CONF" | tail -n 1; }
+a_env_last() { sed -n 's/^user_overlays=//p' "$A_ENVFILE" | tail -n 1; }
+# armbianEnv.txt without the overlay name in its last user_overlays= line (the line goes when nothing is left in it and
+# install.sh wrote the line itself)
+a_env_strip() { # how(token|line)
+    awk -v n="$A_OVL" -v how="$1" '{ line[NR] = $0; if ($0 ~ /^user_overlays=/) last = NR }
+    END {
+        for (i = 1; i <= NR; i++) {
+            if (i == last) {
+                v = substr(line[i], 15); m = split(v, w, /[ 	]+/); out = ""
+                for (k = 1; k <= m; k++) if (w[k] != "" && w[k] != n) out = out (out == "" ? "" : " ") w[k]
+                if (out == "" && how == "line") continue
+                line[i] = "user_overlays=" out
+            }
+            print line[i]
+        }
+    }' "$A_ENVFILE"
+}
+if [ "$BOOT_CONFIG" = 1 ] && [ -f "$INSTALL_CONF" ] && [ "$(a_conf spi_panel)" = waveshare35f ]; then
+    for a_f in $(a_conf spi_armbian_files); do
+        case " $A_FILES_KNOWN " in *" $a_f "*) ;; *) continue ;; esac
+        exists "$ROOT$a_f" || continue
+        case "$a_f" in
+            /lib/firmware/st7796s.bin) a_ok=$([ "$(sha256sum < "$ROOT$a_f" | cut -d' ' -f1)" = "$SPI_FW_SHA" ] && echo 1 || echo 0) ;;
+            /etc/modules-load.d/spi35.conf) a_ok=$([ "$(cat "$ROOT$a_f")" = panel-mipi-dbi ] && echo 1 || echo 0) ;;
+            /etc/modules-load.d/pwm-gpio.conf) a_ok=$([ "$(cat "$ROOT$a_f")" = pwm-gpio ] && echo 1 || echo 0) ;;
+            *) a_ok=1 ;;
+        esac
+        if [ "$a_ok" = 1 ]; then A_FILES_RM="$A_FILES_RM $a_f"
+        else A_NOTE="${A_NOTE:+$A_NOTE; }$a_f was changed since install.sh made it: kept"; fi
+    done
+    for a_m in $(a_conf spi_armbian_dkms); do
+        case " $A_DKMS_KNOWN " in *" $a_m "*) ;; *) continue ;; esac
+        if [ -d "$ROOT/usr/src/${a_m%/*}-${a_m#*/}" ] || [ -d "$ROOT/var/lib/dkms/$a_m" ]; then A_DKMS_RM="$A_DKMS_RM $a_m"; fi
+    done
+    a_how=$(a_conf spi_armbian_env)
+    case "$a_how" in
+        token|line)
+            if [ -f "$A_ENVFILE" ]; then
+                case " $(a_env_last | tr '	' ' ') " in *" $A_OVL "*) A_ENV_RM=$a_how ;; esac
+            fi ;;
+    esac
+fi
+
 # the anchor package (install.sh, report 047 P4): its dpkg state ("ii ", "" when dpkg does not know it)
 ANCHOR_STATE=$(dpkg-query -W -f='${db:Status-Abbrev}' "$ANCHOR_PKG" 2>/dev/null || true)
 
@@ -440,6 +497,9 @@ if [ "$BOOT_CONFIG" = 1 ]; then
     fi
     [ "$CFG_REMOVE_SPI" = 0 ] || echo "  - config.txt: the 3.5\" SPI panel block of install.sh --spi-panel (between \"$SPI_BEGIN\" and \"$SPI_END\")"
     [ "$SPI_FW_REMOVE" = 0 ] || echo "  - $SPI_FW (the panel's init file, put there by install.sh)"
+    [ -z "$A_ENV_RM" ] || echo "  - $A_ENVFILE: \"$A_OVL\" taken off the user_overlays= line (install.sh --spi-panel waveshare35f)$( [ "$A_ENV_RM" != line ] || echo '; the line install.sh wrote goes with it')"
+    for a_f in $A_FILES_RM; do echo "  - $ROOT$a_f (the SPI panel set-up of install.sh --spi-panel waveshare35f)"; done
+    for a_m in $A_DKMS_RM; do echo "  - DKMS module $a_m (dkms remove --all) and /usr/src/${a_m%/*}-${a_m#*/} (made by install.sh --spi-panel waveshare35f)"; done
     [ "$DTBO_REMOVE" = 1 ] && echo "  - $OVERLAY"
     [ "$HP_DTBO_REMOVE" = 1 ] && echo "  - $HP_OVERLAY"
     [ -n "$CMD_TOKENS" ] && echo "  - cmdline.txt arguments:$CMD_TOKENS"
@@ -466,9 +526,10 @@ if [ "$REMOVE_APPS" = 1 ] && [ -s "$APPS_TMP" ]; then :; else echo "  - installe
 echo "  - packages install.sh added with apt (libinput10 libxkbcommon0 libfreetype6 curl device-tree-compiler)"
 echo "  - group membership (input, video, netdev; audio with a sound card; i2c on the HackBerry) of $TARGET_USER"
 [ "$DISABLE_LINGER" = 1 ] || echo "  - lingering (add --disable-linger to turn it off)"
-echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm, $CONFIG.bak-applaunch-spipanel"
+echo "  - the *.bak-applaunch backups next to config.txt and cmdline.txt, $CONFIG.bak-before-pwm, $CONFIG.bak-applaunch-spipanel, $A_ENVFILE.bak-*"
+[ "$BOOT_CONFIG" = 0 ] || [ -z "$A_ENV_RM$A_FILES_RM$A_DKMS_RM" ] || echo "  - the packages of the SPI panel set-up (dkms gcc make libc6-dev patch, the kernel headers) stay"
 echo "  - $PROFILE.bak if install.sh made one (a replaced or hand-edited profile)"
-[ "$BOOT_CONFIG" = 0 ] || [ -z "$CFG_NOTE$CMD_NOTE$SPI_NOTE" ] || { echo "Notes:"; [ -z "$CFG_NOTE" ] || echo "  - $CFG_NOTE"; [ -z "$CMD_NOTE" ] || echo "  - $CMD_NOTE"; [ -z "$SPI_NOTE" ] || echo "  - $SPI_NOTE"; }
+[ "$BOOT_CONFIG" = 0 ] || [ -z "$CFG_NOTE$CMD_NOTE$SPI_NOTE$A_NOTE" ] || { echo "Notes:"; [ -z "$CFG_NOTE" ] || echo "  - $CFG_NOTE"; [ -z "$CMD_NOTE" ] || echo "  - $CMD_NOTE"; [ -z "$SPI_NOTE" ] || echo "  - $SPI_NOTE"; [ -z "$A_NOTE" ] || echo "  - $A_NOTE"; }
 
 if [ "$DRY" = 0 ] && [ "$YES" = 0 ]; then
     if [ ! -t 0 ]; then echo "not a terminal: pass --yes to go ahead" >&2; exit 1; fi
@@ -728,6 +789,22 @@ if [ "$BOOT_CONFIG" = 1 ]; then
         note "SPI panel: $SPI_NOTE"
     fi
     if [ "$SPI_FW_REMOVE" = 1 ]; then rm_sys "$SPI_FW"; NEED_REBOOT=1; fi
+    if [ -n "$A_ENV_RM" ]; then
+        [ -e "$A_ENVFILE.bak-uninstall-$STAMP" ] || { act $SUDO cp -p "$A_ENVFILE" "$A_ENVFILE.bak-uninstall-$STAMP"; note "backup: $A_ENVFILE.bak-uninstall-$STAMP"; }
+        EDIT_TMP=$(mktemp)
+        a_env_strip "$A_ENV_RM" > "$EDIT_TMP"
+        act $SUDO cp "$EDIT_TMP" "$A_ENVFILE"
+        rm -f "$EDIT_TMP"
+        note "armbianEnv.txt: \"$A_OVL\" taken off user_overlays"
+        NEED_REBOOT=1
+    fi
+    for a_f in $A_FILES_RM; do rm_sys "$ROOT$a_f"; NEED_REBOOT=1; done
+    for a_m in $A_DKMS_RM; do
+        if command -v dkms > /dev/null 2>&1; then act_try $SUDO dkms remove "$a_m" --all
+        else note "dkms is not installed: the module $a_m stays in /lib/modules (remove /var/lib/dkms/$a_m by hand)"; fi
+        act $SUDO rm -rf "$ROOT/usr/src/${a_m%/*}-${a_m#*/}"
+        CHANGED_SYS=1; NEED_REBOOT=1
+    done
     if [ "$DTBO_REMOVE" = 1 ]; then rm_sys "$OVERLAY"; NEED_REBOOT=1; else note "overlay file: nothing to remove"; fi
     if [ "$HP_DTBO_REMOVE" = 1 ]; then rm_sys "$HP_OVERLAY"; NEED_REBOOT=1; fi
     if [ -n "$CMD_TOKENS" ]; then
