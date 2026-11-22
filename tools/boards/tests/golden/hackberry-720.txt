@@ -138,7 +138,7 @@ screen: panel size not set (the launcher's default density; --screen-size INCHES
 session: desktop (running: labwc+lightdm)
 profile: hackberry-cm5: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)
 i2c group: the user joins it, if the system has one (battery gauge)
-boot config: none on a desktop board (config.txt and cmdline.txt left alone
+boot config: none on a desktop board (config.txt and cmdline.txt left alone)
 (install.sh --dry-run exit status 0)
 
 ==== 10. INSTALLED LAUNCHER FILES (if present) ====

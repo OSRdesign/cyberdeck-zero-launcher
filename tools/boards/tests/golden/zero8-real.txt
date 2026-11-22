@@ -206,10 +206,13 @@ detected:
   drm card1-Writeback-1: unknown
   /dev/fb1: name "panel-mipi-dbid", size 320,480, 16 bpp
   backlight: backlight_pwm
-board: zero2w
+board: pi3a-luckfox35
+screen: panel size 79x49 mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)
 session: appliance (no display manager enabled or running: the launcher starts at boot)
-profile: zero2w: /etc/applaunch/board.conf was edited by hand: kept (it overrides the service; --force moves it away)
-boot config: PWM backlight overlay + cmdline cursor/consoleblank
+profile: pi3a-luckfox35: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)
+udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of backlight_pwm)
+boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)
+PWM backlight (3.5" SPI panel): config.txt has it already (dtparam=backlight-pwm): left as it is
 (install.sh --dry-run exit status 0)
 
 ==== 10. INSTALLED LAUNCHER FILES (if present) ====

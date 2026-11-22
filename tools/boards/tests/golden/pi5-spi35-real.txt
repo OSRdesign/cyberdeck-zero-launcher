@@ -228,7 +228,7 @@ screen: panel size 79x49 mm (the profile's own; --screen-size INCHES or --panel-
 session: desktop (display manager lightdm.service enabled)
 profile: pi3a-luckfox35: /etc/applaunch/board.conf already up to date
 udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of backlight_pwm)
-boot config: none on a desktop board (config.txt and cmdline.txt left alone
+boot config: none on a desktop board (config.txt and cmdline.txt left alone)
 PWM backlight (3.5" SPI panel): config.txt has it already (dtparam=backlight-pwm): left as it is
 (install.sh --dry-run exit status 0)
 

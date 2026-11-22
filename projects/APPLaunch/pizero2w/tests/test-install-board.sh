@@ -419,6 +419,23 @@ size_case "hackberry" hackberry-cm5 "" "--screen-size 4" 72x72 ""
 R=$(root pi3a-wsdsi43); P="$R/etc/applaunch/board.conf"
 run --board-only --screen-size 5
 check "Pi 3A+ with the Freenove 5\" panel: board pi3a-wsdsi43, the 5\" size and dim level of the pi4b-dsi profile" '[ $RC = 0 ] && grep -qx "APPLAUNCH_BOARD=pi3a-wsdsi43" "$P" && [ "$(mm_in "$P")" = 108x65 ] && [ "$(dim_in "$P")" = 20 ] && grep -qx "APPLAUNCH_LOGICAL=800x480" "$P" && grep -qx "APPLAUNCH_COMPAT_SCALE=2" "$P"'
+# the size cannot be detected: the dry run and the real run say which size is assumed, unless a size was given
+for SG in "pi3a-wsdsi43:4.3\" (94x56 mm)" "pi4b-dsi:5\" (108x65 mm)" "pi5-dsi7:7\" (154x86 mm)"; do
+    SG_FIX=${SG%%:*}; SG_TXT=${SG#*:}
+    R=$(root "$SG_FIX"); run --dry-run
+    check "$SG_FIX dry-run: says the screen size cannot be detected and assumes $SG_TXT" 'has "screen size 4.3\"/5\"/7\" cannot be detected: assuming $SG_TXT; for another size run again with --screen-size INCHES (e.g. "'
+    run --board-only
+    check "$SG_FIX real run: the same note" 'has "screen size 4.3\"/5\"/7\" cannot be detected: assuming $SG_TXT"'
+    run --plan
+    check "$SG_FIX --plan: key=value lines only (no note)" '[ $RC = 0 ] && ! has "cannot be detected" && ! printf "%s
+" "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
+    R=$(root "$SG_FIX"); run --dry-run --screen-size 5
+    check "$SG_FIX dry-run with --screen-size: no note" '! has "cannot be detected"'
+    run --board-only --panel-mm 100x60
+    check "$SG_FIX real run with --panel-mm: no note" '! has "cannot be detected"'
+done
+R=$(root pi3a-luckfox35); run --dry-run
+check "luckfox35 dry-run: no screen size note" '! has "cannot be detected"'
 # without a backlight device there is no dim line to set
 R=$(root pi3a-wsdsi43); rm -rf "$R/sys/class/backlight/"*
 P="$R/etc/applaunch/board.conf"
@@ -1805,7 +1822,18 @@ run --dry-run
 check "Pi 4B + SPI panel (no DSI panel): detected as pi3a-luckfox35 too" '[ $RC = 0 ] && has "board: pi3a-luckfox35"'
 R=$(root pi5-luckfox35); printf 'Raspberry Pi Zero 2 W Rev 1.0\n' > "$R/proc/device-tree/model"
 run --dry-run
-check "Zero 2 W + SPI panel: still the deck (zero2w needs --board pi3a-luckfox35)" '[ $RC = 0 ] && has "board: zero2w" && ! has "board: pi3a-luckfox35"'
+check "Zero 2 W + SPI panel (SPI-1 connected 320x480, panel-mipi-dbi fb): detected as pi3a-luckfox35 (zero8)" '[ $RC = 0 ] && has "board: pi3a-luckfox35" && ! has "board: zero2w"'
+R=$(root pi5-luckfox35); printf 'Raspberry Pi Zero 2 W Rev 1.0
+' > "$R/proc/device-tree/model"; rm -rf "$R"/sys/class/drm/card*-SPI-*
+run --dry-run
+check "Zero 2 W with no SPI connector: the deck" '[ $RC = 0 ] && has "board: zero2w" && ! has "board: pi3a-luckfox35"'
+R=$(root pi5-luckfox35); printf 'Raspberry Pi Zero 2 W Rev 1.0
+' > "$R/proc/device-tree/model"
+mkdir -p "$R/sys/class/drm/card2-DSI-1"; printf 'connected
+' > "$R/sys/class/drm/card2-DSI-1/status"; printf '800x480
+' > "$R/sys/class/drm/card2-DSI-1/modes"
+run --dry-run
+check "Zero 2 W with the SPI panel and a DSI panel connected as well: not guessed, stays the deck" '[ $RC = 0 ] && has "board: zero2w"'
 R=$(root pi5-luckfox35); printf 'Raspberry Pi 3 Model A Plus Rev 1.1\n' > "$R/proc/device-tree/model"
 run --dry-run
 check "Pi 3A+ + SPI panel: pi3a-luckfox35 as before" '[ $RC = 0 ] && has "board: pi3a-luckfox35"'
@@ -2024,7 +2052,7 @@ ASKED="What is the screen's diagonal in inches? (for example 2.8, 3.5, 4.3, 5, 7
 
 panel_root pi3a-wsdsi43
 panel_install '5\n' 0
-check "install without a terminal: not asked (the answer waiting on stdin is not read), the profile's own size, screen_size= and panel_mm= empty in install.conf" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf" && grep -qx "panel_mm=" "$R/etc/applaunch/install.conf" && ! has "--screen-size"'
+check "install without a terminal: not asked (the answer waiting on stdin is not read), the profile's own size, screen_size= and panel_mm= empty in install.conf" '[ $RC = 0 ] && ! has "diagonal" && [ "$(mm_of)" = 94x56 ] && grep -qx "screen_size=" "$R/etc/applaunch/install.conf" && grep -qx "panel_mm=" "$R/etc/applaunch/install.conf" && has "cannot be detected: assuming 4.3"'
 panel_root pi3a-wsdsi43
 panel_install '' 0 --screen-size 5
 check "install --screen-size 5: 108x65 and dim 20, screen_size=5 in install.conf, the options line says it" '[ $RC = 0 ] && [ "$(mm_of)" = 108x65 ] && grep -qx "APPLAUNCH_DIM_PERCENT=20" "$R/etc/applaunch/board.conf" && [ "$(conf_get screen_size)" = 5 ] && [ -z "$(conf_get panel_mm)" ] && has "--screen-size 5" && ! has "diagonal"'
