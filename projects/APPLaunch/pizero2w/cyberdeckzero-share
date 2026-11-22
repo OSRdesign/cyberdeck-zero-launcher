@@ -13,6 +13,9 @@
 # Reply on stdout (stderr is silent): "ok", "ok 1", "ok path=/mnt/cyberdeck/<name>", the share lines of list and then a
 # last line "ok", or "err <word> [reason]". Exit status 0 only on ok; 2 for err usage; 1 for every other err.
 # Words: usage exists nomodule nohelper unreachable notfound denied timeout other.
+# The add word comes from the test mount's output; "mount error(2)" with no NT_STATUS word is settled by the kernel log
+# lines of that attempt (dmesg): BAD_NETWORK_NAME -> notfound; only "cifs_mount failed" -> denied, reason "wrong share
+# name, or it needs a login"; dmesg unreadable or silent -> notfound.
 #
 # Rules: stdin is never read (sudo's password may arrive there: the first line closes it); no password is ever an
 # argument, echoed or logged; every argument is checked by an allow-list before anything else; no caller text reaches
@@ -20,7 +23,7 @@
 # file is read only from /run/user/<SUDO_UID>/cyberdeckzero-share/<random>.cred, after checks, copied into
 # /etc/cyberdeckzero/shares/<name>.cred (0600 root) and deleted. Only units carrying the marker line below are ever
 # touched. Test hook: CDZ_SHARE_SYSROOT (honoured only when NOT root) puts every path under it; CDZ_SHARE_PATH then
-# comes first on PATH (stand-ins for mount, systemctl, ...); CDZ_SHARE_MOUNT_TIMEOUT sets the test mount's timeout.
+# comes first on PATH (stand-ins for mount, dmesg, systemctl, ...); CDZ_SHARE_MOUNT_TIMEOUT sets the test mount's timeout.
 exec < /dev/null
 umask 077
 LC_ALL=C
@@ -308,6 +311,20 @@ else
 fi
 WHAT="//$HOST/$SHARE${SUBF:+/$SUBF}"
 
+# the kernel log before the test mount: its last line marks where this attempt's lines start. mount.cifs says
+# "error(2): No such file or directory" both for a wrong share name and for a share that wants a login; only the kernel
+# log tells them apart (BAD_NETWORK_NAME for the first). Read only to match words, never copied into a reply.
+KLOG_OK=0
+KLOG_LAST=""
+if dmesg > "$T/klog0" 2> /dev/null; then KLOG_OK=1; KLOG_LAST=$(tail -n 1 "$T/klog0"); fi
+rm -f "$T/klog0"
+klog_new() { # stdout: the kernel log lines that came after KLOG_LAST (nothing if dmesg fails or the mark rotated out)
+    [ "$KLOG_OK" = 1 ] || return 0
+    dmesg 2> /dev/null | CDZ_LAST=$KLOG_LAST awk 'BEGIN { m = ENVIRON["CDZ_LAST"]; n = 0; found = (m == "") }
+        { l[++n] = $0; if (m != "" && $0 == m) { at = n; found = 1 } }
+        END { if (!found) exit; for (i = at + 1; i <= n; i++) print l[i] }'
+}
+
 # the test mount: fails cleanly, leaves nothing behind (cleanup removes $T)
 timeout -k 2 "$MOUNT_TIMEOUT" mount -t cifs "$WHAT" "$T/mnt" -o "$TEST_OPTS" > "$T/out" 2>&1
 rc=$?
@@ -325,6 +342,14 @@ if [ "$rc" -ne 0 ]; then
         || has "nt_status_account"; then word=denied
     elif has "nt_status_bad_network_name" || has "nt_status_object_name_not_found" || has "nt_status_object_path_not_found" \
         || has "error(2)" || has "error(6)" || has "no such file or directory" || has "no such device or address"; then word=notfound
+        # error(2) without an NT_STATUS word: a wrong share name logs BAD_NETWORK_NAME in the kernel log; a share
+        # that refuses the guest or the given login logs only "cifs_mount failed" (seen with ZimaOS, kernel 6.18)
+        if ! has "nt_status_" && { has "error(2)" || has "no such file or directory"; }; then
+            knew=$(klog_new | tr 'A-Z' 'a-z' | grep -F cifs)
+            if ! printf '%s\n' "$knew" | grep -Fq bad_network_name && printf '%s\n' "$knew" | grep -Fq "cifs_mount failed"; then
+                word=denied; reason="wrong share name, or it needs a login"
+            fi
+        fi
     else word=other; [ -n "$reason" ] || reason="mount failed (status $rc)"; fi
     fail "$word" "$reason"
 fi

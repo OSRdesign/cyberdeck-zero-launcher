@@ -1048,8 +1048,8 @@ unit, to a mount point or to a credentials file (`err exists`). `list` shows onl
 | `nomodule` | the kernel has no `cifs` module (`cifs filesystem not supported`) |
 | `nohelper` | `mount.cifs` is not installed (package `cifs-utils`) |
 | `unreachable` | the host name does not resolve, no route, connection refused or host down |
-| `notfound` | the share (or the subfolder) does not exist on the server |
-| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`) |
+| `notfound` | the share (or the subfolder) does not exist on the server (`mount error(2)` with `BAD_NETWORK_NAME` in the kernel log, or with the kernel log unreadable) |
+| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`; also `mount error(2)` when the kernel log of that attempt has only `cifs_mount failed`, as ZimaOS does for a share that needs a login: reason `wrong share name, or it needs a login`) |
 | `timeout` | no answer within the 10 s limit, or `ETIMEDOUT` |
 | `other` | anything else (also a refused `remove`, a failed `systemctl`), with the first line of the message as the reason (printable ASCII, 160 characters at most, the password and `key=value` credential text removed) |
 

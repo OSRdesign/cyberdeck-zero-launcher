@@ -43,8 +43,16 @@ case "$6" in *credentials=*) f=${6#*credentials=}; f=${f%%,*}; if grep -q '^pass
 case ${FAKE_MOUNT:-ok} in
     ok) echo "$4" >> "$FAKE_STATE/mounted"; exit 0 ;;
     hang) exec sleep 30 ;;
-    err) cat "$FAKE_MOUNT_ERR" >&2; exit "${FAKE_MOUNT_RC:-32}" ;;
+    err) cat "$FAKE_MOUNT_ERR" >&2; if [ -n "${FAKE_KLOG_NEW:-}" ]; then cat "$FAKE_KLOG_NEW" >> "$FAKE_STATE/kmsg"; fi
+         exit "${FAKE_MOUNT_RC:-32}" ;;
 esac
+EOF
+cat > "$BIN/dmesg" <<'EOF'
+#!/bin/sh
+# stand-in dmesg: FAKE_DMESG=ok prints the fake kernel log; otherwise it is unreadable (as for a normal user)
+echo "dmesg $*" >> "$FAKE_LOG"
+[ "${FAKE_DMESG:-}" = ok ] || { echo "dmesg: read kernel buffer failed: Operation not permitted" >&2; exit 1; }
+cat "$FAKE_STATE/kmsg"
 EOF
 cat > "$BIN/umount" <<'EOF'
 #!/bin/sh
@@ -86,7 +94,9 @@ reset() {
     rm -rf "$R" "$ST"
     mkdir -p "$R/etc/systemd/system" "$R/run" "$R/mnt" "$ST"
     : > "$LOG"; : > "$ST/mounted"; : > "$ST/active"; : > "$ST/failed"
-    unset FAKE_MOUNT FAKE_MOUNT_ERR FAKE_MOUNT_RC FAKE_UMOUNT_BUSY FAKE_SYSTEMCTL_FAIL FAKE_ID_UID
+    # an older attempt's lines are already in the kernel log: only the lines of this attempt may count
+    printf '%s\n' '[  100.000001] CIFS: VFS: BAD_NETWORK_NAME: \\192.168.1.5\old' '[  100.000002] CIFS: VFS: cifs_mount failed w/return code = -2' > "$ST/kmsg"
+    unset FAKE_MOUNT FAKE_MOUNT_ERR FAKE_MOUNT_RC FAKE_UMOUNT_BUSY FAKE_SYSTEMCTL_FAIL FAKE_ID_UID FAKE_DMESG FAKE_KLOG_NEW
     RUNENV=""; RUNUNSET=""; STDIN_DATA="nothing"
 }
 # run the helper: output $OUT, status $RC, stderr in $TMP/stderr. RUNENV "A=b C=d" (no spaces in values), RUNUNSET one variable name
@@ -366,6 +376,40 @@ failcase denied 32 "CIFS: VFS: Send error in SessSetup = -13 NT_STATUS_ACCESS_DE
 failcase notfound 32 "mount error(2): No such file or directory"
 failcase notfound 32 "CIFS: VFS: BAD_NETWORK_NAME: \\\\192.168.1.5\\nope NT_STATUS_BAD_NETWORK_NAME"
 failcase notfound 32 "mount error(6): No such device or address"
+# error(2): the kernel log lines of this attempt tell a wrong share name (BAD_NETWORK_NAME) from a share that wants a login
+klogcase() { # DMESG(ok|no) NEW-KERNEL-LINES [credfile]
+    reset
+    FAKE_MOUNT=err; FAKE_MOUNT_RC=32; FAKE_MOUNT_ERR="$TMP/err.txt"; export FAKE_MOUNT FAKE_MOUNT_RC FAKE_MOUNT_ERR
+    if [ -n "${KLOG_ERR:-}" ]; then printf '%s\n' "$KLOG_ERR" > "$TMP/err.txt"
+    else printf 'mount error(2): No such file or directory\nRefer to the mount.cifs(8) manual page (e.g. man mount.cifs) and kernel log messages (dmesg)\n' > "$TMP/err.txt"; fi
+    if [ "$1" = ok ]; then export FAKE_DMESG=ok; fi
+    if [ -n "$2" ]; then printf '%s\n' "$2" > "$TMP/klog.txt"; export FAKE_KLOG_NEW="$TMP/klog.txt"; fi
+    if [ -n "${3:-}" ]; then mkcred abcdef12 "$3"; add_guest --user bob --credfile "$CRED"; else add_guest; fi
+}
+klogcase ok '[  200.100000] CIFS: VFS: BAD_NETWORK_NAME: \\192.168.1.5\music
+[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2'
+check "error(2) with a new BAD_NETWORK_NAME kernel line: err notfound with the mount error as reason, nothing left" '[ $RC = 1 ] && [ "$OUT" = "err notfound mount error(2): No such file or directory" ] && nothing_left'
+check "error(2): dmesg was read before and after the test mount" '[ "$(grep -c "^dmesg" "$LOG")" = 2 ] && [ "$(grep -n "^dmesg" "$LOG" | head -n 1 | cut -d: -f1)" -lt "$(grep -n "^mount " "$LOG" | cut -d: -f1)" ]'
+klogcase ok '[  200.100000] cifs: VFS: bad_network_name: \\192.168.1.5\music
+[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2'
+check "error(2): BAD_NETWORK_NAME is matched in any case: err notfound" '[ $RC = 1 ] && has "err notfound"'
+klogcase ok '[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2'
+check "error(2) with only a new cifs_mount failed line (share wants a login): err denied with the login reason, nothing left" '[ $RC = 1 ] && [ "$OUT" = "err denied wrong share name, or it needs a login" ] && nothing_left && ! grep -q enable "$LOG"'
+klogcase ok '[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2' "username=bob
+password=Kx7-zimapw
+"
+check "error(2) with a user and a wrong password: err denied, the password in no output, log or stderr" '[ $RC = 1 ] && [ "$OUT" = "err denied wrong share name, or it needs a login" ] && ! has Kx7-zimapw && ! grep -rqF Kx7-zimapw "$R" "$LOG" "$TMP/stderr"'
+klogcase ok ''
+check "error(2) and no new kernel line (the old BAD_NETWORK_NAME and cifs_mount lines do not count): err notfound" '[ $RC = 1 ] && has "err notfound"'
+klogcase no '[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2'
+check "error(2) with dmesg unreadable: err notfound as before, nothing left" '[ $RC = 1 ] && [ "$OUT" = "err notfound mount error(2): No such file or directory" ] && nothing_left'
+KLOG_ERR='mount error(2): No such file or directory NT_STATUS_OBJECT_PATH_NOT_FOUND'
+klogcase ok '[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2'
+check "error(2) with an explicit NT_STATUS word: the kernel log does not change it, err notfound" '[ $RC = 1 ] && has "err notfound"'
+KLOG_ERR='mount error(6): No such device or address'
+klogcase ok '[  200.100100] CIFS: VFS: cifs_mount failed w/return code = -2'
+check "error(6) with a cifs_mount failed line: stays err notfound" '[ $RC = 1 ] && has "err notfound"'
+unset KLOG_ERR
 failcase other 32 "mount error(95): Operation not supported"
 failcase other 1 "" "(no message, status 1)"
 failcase timeout 124 "" "(status 124)"
