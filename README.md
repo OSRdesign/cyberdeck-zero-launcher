@@ -59,14 +59,15 @@ upscaled window for the legacy 320x170 apps, and has since grown into the launch
 
 ## Screenshots
 
-Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2 W, 640x480) on the left and the
-Raspberry Pi 3A+ with the Waveshare 4.3" DSI panel (800x480) on the right: one code base, two screens. Network names
-are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed. These
-captures are older than v0.9.0, which removed the Store tile, Snake, Tank and IP Panel from main (see
-[Branches](#branches-main-and-small-screen)); LAN Scan and Wi-Fi Survey in the Settings > Apps pictures are 320x170
-apps of the `small-screen` branch now. They are also older than v0.8.12, whose status strip keeps a place for the SSH
-indicator (the Esc button and the page titles sit further left), and than v0.10.0, whose Settings > Apps shows the line
-of its update check under the title.
+The deck pictures (640x480, left) are renders made by the launcher's render harness at v0.10.10 (the home grid, Settings,
+Bluetooth, Calculator and the SSH form; the sample data is made up). The Raspberry Pi 3A+ pictures (Waveshare 4.3" DSI
+panel, 800x480, right) and the Wi-Fi and Settings > Apps pictures of the deck are captures from the boards' own
+framebuffers; network names are pixelated. These captures are older than v0.9.0, which removed the Store tile, Snake,
+Tank and IP Panel from main (see [Branches](#branches-main-and-small-screen)); LAN Scan and Wi-Fi Survey in the
+Settings > Apps pictures are 320x170 apps of the `small-screen` branch now. They are also older than v0.8.12, whose
+status strip keeps a place for the SSH indicator (the Esc button and the page titles sit further left), than v0.10.0,
+whose Settings > Apps shows the line of its update check under the title, and than the shorter page titles of later
+versions (Settings > Wi-Fi is just "Wi-Fi" now).
 
 | Deck, 640x480 | Raspberry Pi 3A+, 800x480 |
 | --- | --- |
@@ -97,9 +98,8 @@ is only on the `small-screen` branch; main keeps the Store program as the engine
 ## The PDA profile in pictures
 
 Renders of the portrait profile (480x800), made by the launcher's own render harness, not photographs of the board.
-The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md). They were made with v0.8.8 to v0.8.11; since then the
-Store tile is gone (v0.9.0), a long tile name stays on one line (v0.9.3) and the status strip keeps a place for the SSH
-indicator (v0.8.12).
+The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md). They were
+re-rendered with v0.10.10.
 
 | Home grid | Text field and band | Pen ink | Terminal, Ctrl armed |
 | --- | --- | --- | --- |
@@ -115,7 +115,7 @@ Since v0.8.11 apps built for it draw the band too (the Serial Console first; see
 
 | Keyboard | Keyboard setting | Strokes training | Glyph picker |
 | --- | --- | --- | --- |
-| ![Standard keyboard with its close cross](docs/images/pda/pda-keyboard-cross.png) | ![Settings, On-screen keyboard](docs/images/pda/pda-setting-keyboard.png) | ![Strokes training page](docs/images/pda/pda-training.png) | ![Glyph picker](docs/images/pda/pda-training-picker.png) |
+| ![Standard keyboard with its close cross](docs/images/pda/pda-keyboard-cross.png) | ![Settings, Screen keyboard](docs/images/pda/pda-setting-keyboard.png) | ![Strokes training page](docs/images/pda/pda-training.png) | ![Glyph picker](docs/images/pda/pda-training-picker.png) |
 | Keyb shows it; the cross closes it | Auto, On, Handwriting + keyboard | A glyph with its chart stroke, four attempts | Grey, green and amber glyphs |
 
 ## Inspiration and credits

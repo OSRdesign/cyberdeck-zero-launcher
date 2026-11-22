@@ -3,9 +3,7 @@
 Since v0.8.8 the launcher can run upright, as a small handheld with a pen: a portrait screen, a handwriting band at the
 bottom for text, and a single-stroke handwriting alphabet you can train on your own hand. This page says what it is,
 how to turn it on and how to write with it. The pictures are renders made by the launcher's render harness at 480x800,
-not photographs of the board. They were made with v0.8.8 to v0.8.11: since then the Store tile is gone (v0.9.0), a long
-tile name stays on one line (v0.9.3), the status strip keeps a place for the SSH indicator, so Esc and the page titles
-sit further left, and two titles are shorter ("Key test", "Screen keyboard"; v0.8.12).
+not photographs of the board. They were re-rendered with v0.10.10.
 
 ## What it is
 
@@ -80,7 +78,7 @@ Settings > System > On-screen keyboard has three values:
 
 Off no longer exists. A stored Off reads as Auto.
 
-![Settings, On-screen keyboard](images/pda/pda-setting-keyboard.png)
+![Settings, Screen keyboard](images/pda/pda-setting-keyboard.png)
 
 ## Apps with the band
 
