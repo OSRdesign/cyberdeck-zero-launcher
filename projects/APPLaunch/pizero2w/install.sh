@@ -1198,6 +1198,11 @@ size_guess_note() {
     case "$BOARD" in pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-dsi7) ;; *) return 0 ;; esac
     [ -z "$SCREEN_NOTE" ] && [ -n "$PANEL_IN_USE" ] || return 0
     case "$BOARD" in pi3a-wsdsi43*) sg_eg="5 or 7" ;; pi4b-dsi) sg_eg="4.3 or 7" ;; *) sg_eg="4.3 or 5" ;; esac
+    if [ "$PROFILE_ACTION" = keep ] && [ "$(profile_state)" = edited ]; then
+        # a hand-edited board.conf stays (no --force): its own APPLAUNCH_PANEL_MM is the size in use, this run's guess is not written
+        echo "screen size 4.3\"/5\"/7\" cannot be detected; $PROFILE was edited by hand and is kept: its APPLAUNCH_PANEL_MM decides the screen size (a new profile would assume $(profile_diag)\" ($PANEL_IN_USE mm)); --screen-size only applies when the profile is replaced (--force --screen-size INCHES; the old one is kept as board.conf.bak)"
+        return 0
+    fi
     echo "screen size 4.3\"/5\"/7\" cannot be detected: assuming $(profile_diag)\" ($PANEL_IN_USE mm); for another size run again with --screen-size INCHES (e.g. $sg_eg)"
 }
 # PROFILE_ACTION: what apply_profile will do, as one word, plus PROFILE_MSG for the user

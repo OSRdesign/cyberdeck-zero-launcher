@@ -436,6 +436,14 @@ for SG in "pi3a-wsdsi43:4.3\" (94x56 mm)" "pi4b-dsi:5\" (108x65 mm)" "pi5-dsi7:7
     run --board-only --panel-mm 100x60
     check "$SG_FIX real run with --panel-mm: no note" '! has "cannot be detected"'
 done
+# a hand-edited board.conf is kept (no --force): its size counts, the note says so and does not send the user to --screen-size alone
+R=$(root pi4b-dsi); P="$R/etc/applaunch/board.conf"; run --board-only; printf '# my own comment\n' >> "$P"; HAND=$(cksum < "$P")
+run --dry-run
+check "pi4b-dsi dry-run with a hand-edited board.conf: the note says the kept board.conf decides the size, --screen-size only with --force" 'has "cannot be detected; $P was edited by hand and is kept: its APPLAUNCH_PANEL_MM decides the screen size (a new profile would assume 5\" (108x65 mm))" && has "--screen-size only applies when the profile is replaced (--force --screen-size INCHES" && ! has "run again with --screen-size INCHES (e.g."'
+run --board-only
+check "pi4b-dsi real run with a hand-edited board.conf: the same note, the file untouched" 'has "its APPLAUNCH_PANEL_MM decides the screen size" && [ "$(cksum < "$P")" = "$HAND" ]'
+run --board-only --force
+check "pi4b-dsi real run with --force over a hand-edited board.conf: the profile replaced, the plain note again" 'has "assuming 5\" (108x65 mm); for another size run again with --screen-size INCHES" && ! has "was edited by hand and is kept" && [ -f "$P.bak" ]'
 R=$(root pi3a-luckfox35); run --dry-run
 check "luckfox35 dry-run: no screen size note" '! has "cannot be detected"'
 # without a backlight device there is no dim line to set

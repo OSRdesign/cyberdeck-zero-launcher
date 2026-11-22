@@ -427,7 +427,8 @@ with the Freenove 5" panel is detected as `pi3a-wsdsi43`, the 4.3" profile. The 
 density (`APPLAUNCH_PANEL_MM`). The dry run and the install say so on every run that was given no size: *screen size
 4.3"/5"/7" cannot be detected: assuming 4.3" (94x56 mm); for another size run again with --screen-size INCHES* (the
 profile's own size is named: 4.3" for `pi3a-wsdsi43`, 5" for `pi4b-dsi`, 7" for `pi5-dsi7`; not in `--plan`, whose
-lines are for Settings > Updates). Say which screen it is:
+lines are for Settings > Updates). When a hand-edited `/etc/applaunch/board.conf` is kept (no `--force`) the note says that this file decides the size
+(its `APPLAUNCH_PANEL_MM`) and that `--screen-size` only applies when the profile is replaced with `--force`. Say which screen it is:
 
 ```
 sudo ./install.sh --screen-size 5            # the Pi 3A+ with the Freenove 5" panel (the board is detected as before)
