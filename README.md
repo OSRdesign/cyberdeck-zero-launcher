@@ -17,11 +17,15 @@ machines with a touch screen and a keyboard. One code base adapts its layout to 
 | Raspberry Pi 3A+ | Waveshare 4.3" DSI panel, or Luckfox 3.5" SPI panel | 800x480, or 480x320 |
 | Raspberry Pi Zero 2 W | Waveshare 3.5" RPi LCD (F) | 480x320 |
 | Raspberry Pi 4 B | Freenove 5" DSI panel | 800x480 |
-| Raspberry Pi 5 | Pimoroni HyperPixel 4" DPI panel, or the official 7-inch DSI Touch Display | 800x480 |
+| Raspberry Pi 5 | Pimoroni HyperPixel 4" DPI panel, or the official 7-inch DSI Touch Display, or the Luckfox or Waveshare 3.5" SPI panel (set up by `install.sh --spi-panel luckfox35`) | 800x480, or 480x320 |
 | HackBerry CM5 | 720x720 DPI panel | 720x720 |
+| Orange Pi Zero 2W (Armbian) | Waveshare 3.5" RPi LCD (F), set up by `install.sh --spi-panel waveshare35f` | 480x320 |
 | x86 PC (amd64), e.g. the Panasonic FZ-M1 tablet | the PC's own screen | 1280x800 on the tablet |
 
 How each board is detected, its profile and its backlight: [Pi port README, Boards](projects/APPLaunch/pizero2w/README.md#boards).
+The 4.3", 5" and 7" DSI panels look the same to software: give the size with `install.sh --screen-size` or Settings >
+Screen > Screen size. A screen with no profile can be tried with `install.sh --board generic` (untested hardware):
+[My screen is not listed](projects/APPLaunch/pizero2w/README.md#my-screen-is-not-listed).
 
 Since v0.8.8 a PDA profile turns the 4.3" DSI panel to portrait (480x800) with a handwriting band and a single-stroke handwriting alphabet you can train (Settings > System > Strokes training; see [the PDA profile](docs/PDA-PROFILE.md)); since v0.8.9 Settings > Screen > PDA mode turns it on for any screen where portrait fits, among them the 7-inch tablet, which then runs 800x1280 (see [Large screens: the tablet](docs/PDA-PROFILE.md#large-screens-the-tablet)). It has a full-screen terminal, a Calculator, Wi-Fi / Bluetooth / time settings (Network Time, a
 time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyboard that shows only when no physical keyboard is present, a small
@@ -29,6 +33,13 @@ time zone picker, the clock by hand), a PWM backlight, a fallback on-screen keyb
 ([cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps)) offered by default in Settings > Apps.
 Since v0.8.0 it also keeps apps open in the background, with a touch-first app switcher (see
 [Multitasking](#multitasking)).
+Since v0.8.12 you can arrange the home grid (hold a tile 3 s, or press Ctrl+O on it, then move it; Settings > Launcher >
+Reset app order goes back), and the status strip shows a terminal glyph while someone is connected over SSH (Settings >
+System > SSH indicator). Since v0.8.13 Settings > Updates updates the launcher itself, and since v0.9.2 the system's apt
+packages too (see [Updating the launcher](#updating-the-launcher)). Since v0.10.5 Settings > Screen also sets the idle
+dim level, the terminal text size and the screen size. For apps, the installer lets them mount removable drives without
+a password (v0.10.3) and ships a helper with which an app adds a read-only SMB network share after asking for the sudo
+password (v0.10.8).
 
 ## How it started
 
@@ -48,11 +59,15 @@ upscaled window for the legacy 320x170 apps, and has since grown into the launch
 
 ## Screenshots
 
-Captured from each board's own framebuffer: the deck (Raspberry Pi Zero 2 W, 640x480) on the left and the
-Raspberry Pi 3A+ with the Waveshare 4.3" DSI panel (800x480) on the right: one code base, two screens. Network names
-are pixelated. The home grid of the deck has Store and 2048 on its first page; the 3A+ has neither installed. These
-captures are older than v0.9.0, which removed the Store tile, Snake, Tank and IP Panel from main (see
-[Branches](#branches-main-and-small-screen)).
+The deck pictures (640x480, left) are renders made by the launcher's render harness at v0.10.10 (the home grid, Settings,
+Bluetooth, Calculator and the SSH form; the sample data is made up). The Raspberry Pi 3A+ pictures (Waveshare 4.3" DSI
+panel, 800x480, right) and the Wi-Fi and Settings > Apps pictures of the deck are captures from the boards' own
+framebuffers; network names are pixelated. These captures are older than v0.9.0, which removed the Store tile, Snake,
+Tank and IP Panel from main (see [Branches](#branches-main-and-small-screen)); LAN Scan and Wi-Fi Survey in the
+Settings > Apps pictures are 320x170 apps of the `small-screen` branch now. They are also older than v0.8.12, whose
+status strip keeps a place for the SSH indicator (the Esc button and the page titles sit further left), than v0.10.0,
+whose Settings > Apps shows the line of its update check under the title, and than the shorter page titles of later
+versions (Settings > Wi-Fi is just "Wi-Fi" now).
 
 | Deck, 640x480 | Raspberry Pi 3A+, 800x480 |
 | --- | --- |
@@ -83,7 +98,8 @@ is only on the `small-screen` branch; main keeps the Store program as the engine
 ## The PDA profile in pictures
 
 Renders of the portrait profile (480x800), made by the launcher's own render harness, not photographs of the board.
-The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md).
+The full guide is [docs/PDA-PROFILE.md](docs/PDA-PROFILE.md). They were
+re-rendered with v0.10.10.
 
 | Home grid | Text field and band | Pen ink | Terminal, Ctrl armed |
 | --- | --- | --- | --- |
@@ -99,7 +115,7 @@ Since v0.8.11 apps built for it draw the band too (the Serial Console first; see
 
 | Keyboard | Keyboard setting | Strokes training | Glyph picker |
 | --- | --- | --- | --- |
-| ![Standard keyboard with its close cross](docs/images/pda/pda-keyboard-cross.png) | ![Settings, On-screen keyboard](docs/images/pda/pda-setting-keyboard.png) | ![Strokes training page](docs/images/pda/pda-training.png) | ![Glyph picker](docs/images/pda/pda-training-picker.png) |
+| ![Standard keyboard with its close cross](docs/images/pda/pda-keyboard-cross.png) | ![Settings, Screen keyboard](docs/images/pda/pda-setting-keyboard.png) | ![Strokes training page](docs/images/pda/pda-training.png) | ![Glyph picker](docs/images/pda/pda-training-picker.png) |
 | Keyb shows it; the cross closes it | Auto, On, Handwriting + keyboard | A glyph with its chart stroke, four attempts | Grey, green and amber glyphs |
 
 ## Inspiration and credits
@@ -173,14 +189,14 @@ puts its last picture back at once and it carries on where it was.
 **Settings > Apps** installs and removes apps from any public GitHub repository you add as a source
 (`owner/repo`), so you can sideload your own. Our apps (Cassette, Deck Atlas, Home Assistant, Klondike Solitaire,
 Markdown Notes, Mesh Hop, Mine Field, mmWave Radar, Net Toolbox, Net Walk, RSS Reader, Serial Console, System
-Monitor, viz1090) are in
+Monitor, VHS, Vinyl, viz1090) are in
 [cyberdeck-zero-apps](https://github.com/OSRdesign/cyberdeck-zero-apps), which is also the template to host your own:
 see [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
 Settings > Apps shows the installed and the available version of each app (an update is marked in yellow, for
 example `0.1.2>0.1.3`), with **Update** for one app and **Update all** when several have one. An upgraded app
 keeps its tile where it was on the home grid (the order is stored in `~/.config/cardputerzero/config.json` as
-`app_order`); a new app goes last. Opening Settings > Apps **checks for updates by itself**: it shows the saved
+`app_order`; an order you set yourself by moving tiles, since v0.8.12, is kept as `home_order` and wins); a new app goes last. Opening Settings > Apps **checks for updates by itself**: it shows the saved
 lists at once and downloads again, in the background, every enabled source whose list is older than 10 minutes, with a
 short line (`Checking for updates...`, `Up to date (just now)`, `Updated 3 min ago` or `Offline: showing the list from
 2 h ago`, or `Updated just now (1 failed)` when one source did not answer); **Auto-check updates** (On / Off) at the
@@ -191,7 +207,8 @@ removals show the step and the seconds taken, then a plain success or failure me
 page with Description and **Install** before an available app is installed (the text is cut at 500 characters with
 dots; the long documentation is the app's README in its repository). Since v0.9.2 **Available lists only the apps that
 fit the screen** (the registry's `min_size`, a portrait screen judged turned; installed apps always stay listed), and an
-app's page shows its Screen and Minimum size. With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
+app's page shows its Screen and Minimum size. Since v0.10.2 the libraries an app needs that are not on the board yet
+are installed without apt's recommended packages, so an app lists everything it needs in `depends`. With a keyboard: `U` update all, `S` sync, `A` add a source, `D` remove a source,
 plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`](docs/HOSTING-APPS.md).
 
 ## What is in this repository
@@ -216,7 +233,7 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
   Available lists only the apps that fit the screen. Since v0.9.4 main also runs 480x320 panels upright in PDA mode.
   Its apps are the built-in Settings, CLI, Python, SSH and Calculator, and from the apps repository Cassette, Deck
   Atlas, Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, mmWave Radar, Net Toolbox, Net
-  Walk, RSS Reader, Serial Console, System Monitor and viz1090.
+  Walk, RSS Reader, Serial Console, System Monitor, VHS, Vinyl and viz1090.
 - **`small-screen`** (created at v0.8.13, commit 5ddd2e9f) is the long-lived fork for 480x320-only screens. It keeps
   the Store screen and the 320x170 apps that main removed after v0.8.13 (the Store tile, Snake, Tank, IP Panel). There
   is no release from it for now. Changes flow from main to it by cherry-pick only (never a merge, which would bring
@@ -231,17 +248,21 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
    [releases](https://github.com/OSRdesign/cyberdeck-zero-launcher/releases) (the older name `pizero2w-bundle.tar.gz` is not
    published any more), or build it on Linux x86_64 or WSL with
    `projects/APPLaunch/pizero2w/build.sh --with-store`.
-3. Copy it to the Pi, unpack it and run `sudo ./install.sh` in the unpacked folder.
+3. Copy it to the Pi, check it against its `.sha256` asset (`sha256sum -c <file>.sha256`), unpack it and run
+   `sudo ./install.sh` in the unpacked folder. A board that is not detected by itself takes an option (`--board`,
+   `--spi-panel`, `--screen-size`, ...): see [Install options](projects/APPLaunch/pizero2w/README.md#install-options).
 
 **x86 PCs (amd64).** The same launcher also runs on x86_64 PCs with a touch panel, with no display server (report 028;
 reference: the Panasonic FZ-M1 tablet): take `cyberdeckzero-launcher-<version>-amd64.tar.gz` (or build it with
 `build.sh --arch amd64`) and run the same `sudo ./install.sh`. It needs glibc 2.38 or newer (Debian 13, Ubuntu 24.04
-or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Every app of the apps repository has an amd64 package (14 today), so Settings > Apps lists them all. Since v0.8.1:
+or later), NetworkManager and BlueZ installed by you, and changes no boot configuration. Every app of the apps repository has an amd64 package (16 today), so Settings > Apps lists them all. Since v0.8.1:
 the tablet's battery (v0.8.3); every board detects its battery, brightness and sound at run time (v0.8.4); a status
 feed apps can read (v0.8.5); sounds, notices and volume for apps through launcher.sock (v0.8.6); volume and brightness
 buttons on devices that are not keyboards, and a double tap of the Windows key for the app switcher (v0.8.7); a portrait
 PDA profile with handwriting input, and the Pi 4 B board profile (v0.8.8); Settings > Screen > PDA mode (Off / On rotate
-left / On rotate right) on any screen where portrait fits (v0.8.9).
+left / On rotate right) on any screen where portrait fits (v0.8.9); the screen repaints at once after a wake from sleep
+(v0.9.1); on the FZ-M1 the installer sets the power key, a short press suspends and a long press powers off (v0.10.7, not
+yet tested on the tablet).
 See [Install on a PC](projects/APPLaunch/pizero2w/README.md#install-on-a-pc-amd64).
 
 ## Updating the launcher
@@ -252,7 +273,8 @@ Since v0.8.13, **Settings > Updates** updates the launcher from the device:
   version once), and shows **What's new**: the release notes of every version you skipped.
 - **Install** downloads the bundle with a progress bar, checks its sha256, asks for the sudo password, makes a backup
   and installs it with the options of the first install (recorded in `/etc/applaunch/install.conf`). If the new version
-  does not start within 90 s, the old one is put back by itself.
+  does not start within 90 s, the old one is put back by itself. When the new version would change the board profile
+  (`/etc/applaunch/board.conf`), the update stops and asks for `sudo ./install.sh` from the bundle by hand.
 - Only release-channel builds offer the install; a development or test build shows the notes only.
 - The first install of v0.8.13 over v0.8.12 or older is by hand (`sudo ./install.sh` from the bundle, as in Quick
   start); after that, Settings > Updates does it.
