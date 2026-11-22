@@ -1779,6 +1779,55 @@ check "spi --soft-pwm-backlight: the softpwm overlay; the profile on fb0 with ba
 spi_root; printf 'overlay_prefix=sun50i-h616\nuser_overlays=uart5\n' > "$R/boot/armbianEnv.txt"
 spi_install --spi-panel waveshare35f
 check "spi install with other user overlays: kept, the overlay added to their line" '[ $RC = 0 ] && [ "$(cat "$R/boot/armbianEnv.txt")" = "$(printf "overlay_prefix=sun50i-h616\nuser_overlays=uart5 spi35-st7796s")" ]'
+# --- uninstall.sh of the Armbian panel set-up: only what install.conf says install.sh made (files, DKMS modules, the overlay name)
+a_uninstall() {
+    mkdir -p "$R$UHOME"
+    : > "$CALLS"
+    OUT=$(PATH="$SPIBIN:$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" SYSROOT="$R" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+          sh "$BUN/uninstall.sh" "$@" 2>&1); RC=$?
+}
+spi_root; spi_install --spi-panel waveshare35f --soft-pwm-backlight; IC="$R/etc/applaunch/install.conf"
+check "spi install: install.conf records what install.sh made (files, both DKMS modules, the overlay line)" 'grep -qx "spi_armbian_files=/lib/firmware/st7796s.bin /etc/modules-load.d/spi35.conf /etc/modules-load.d/pwm-gpio.conf /boot/overlay-user/spi35-st7796s.dtbo" "$IC" && grep -qx "spi_armbian_dkms=drm-mipi-dbi-chunk/1.0 pwm-gpio/1.0" "$IC" && grep -qx "spi_armbian_env=line" "$IC"'
+REC=$(grep '^spi_armbian' "$IC")
+spi_install --spi-panel waveshare35f --soft-pwm-backlight
+check "spi second run: the records are kept as they were (it made nothing new)" '[ $RC = 0 ] && [ "$(grep "^spi_armbian" "$IC")" = "$REC" ]'
+cp -R "$FIX/opizero2w-spi35-pwm/sys/class/drm/card2-SPI-1" "$R/sys/class/drm/"
+cp -R "$FIX/opizero2w-spi35-pwm/sys/class/graphics/fb0" "$R/sys/class/graphics/fb1"
+mkdir -p "$R/sys/class/backlight/backlight_pwm"; echo 10 > "$R/sys/class/backlight/backlight_pwm/max_brightness"
+spi_install --board pi3a-luckfox35
+check "an update run without --spi-panel: the records are kept" '[ $RC = 0 ] && [ "$(grep "^spi_armbian" "$IC")" = "$REC" ]'
+ASTATE=$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src"; snapshot "$R/etc/modules-load.d")
+a_uninstall --dry-run
+check "spi uninstall dry-run: lists the overlay name, the four files and both DKMS modules; nothing changed" '[ $RC = 0 ] && has "taken off the user_overlays= line" && has "the line install.sh wrote goes with it" && has "$R/lib/firmware/st7796s.bin (the SPI panel set-up" && has "$R/etc/modules-load.d/spi35.conf" && has "$R/etc/modules-load.d/pwm-gpio.conf" && has "$R/boot/overlay-user/spi35-st7796s.dtbo" && has "DKMS module drm-mipi-dbi-chunk/1.0 (dkms remove --all)" && has "DKMS module pwm-gpio/1.0" && [ "$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src"; snapshot "$R/etc/modules-load.d")" = "$ASTATE" ]'
+a_uninstall --yes --no-boot-config
+check "spi uninstall --no-boot-config: the panel set-up stays" '[ $RC = 0 ] && [ "$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src"; snapshot "$R/etc/modules-load.d")" = "$ASTATE" ] && ! called "dkms remove"'
+spi_root; spi_install --spi-panel waveshare35f --soft-pwm-backlight
+a_uninstall --yes
+check "spi uninstall: exit 0, armbianEnv.txt back to the original (the line install.sh wrote gone), a timestamped backup, the install.sh backup kept" '[ $RC = 0 ] && [ "$(cat "$R/boot/armbianEnv.txt")" = "$ENV0" ] && ls "$R"/boot/armbianEnv.txt.bak-uninstall-* > /dev/null 2>&1 && [ -f "$R/boot/armbianEnv.txt.bak-$TODAY" ]'
+check "spi uninstall: the init file, both modules-load files and the overlay removed" '[ ! -e "$R/lib/firmware/st7796s.bin" ] && [ ! -e "$R/etc/modules-load.d/spi35.conf" ] && [ ! -e "$R/etc/modules-load.d/pwm-gpio.conf" ] && [ ! -e "$R/boot/overlay-user/spi35-st7796s.dtbo" ]'
+check "spi uninstall: both DKMS modules removed (dkms remove --all) with their /usr/src folders and kernel modules" 'called "dkms remove drm-mipi-dbi-chunk/1.0 --all" && called "dkms remove pwm-gpio/1.0 --all" && [ -z "$(ls -A "$R/usr/src" 2>/dev/null)" ] && [ -z "$(ls -A "$R/var/lib/dkms" 2>/dev/null)" ] && [ -z "$(find "$R/lib/modules" -name "*.ko" 2>/dev/null)" ]'
+check "spi uninstall: reboot needed said, the packages stay (said), the profile gone" 'has "reboot so the overlay" && has "the packages of the SPI panel set-up" && [ ! -e "$R/etc/applaunch/board.conf" ]'
+a_uninstall --yes
+check "spi uninstall again: nothing of the panel left to remove, exit 0" '[ $RC = 0 ] && ! called "dkms remove"'
+# the overlay name added to a user's own user_overlays line: only the name goes (the others, their order, the line stay)
+spi_root; printf 'overlay_prefix=sun50i-h616\nuser_overlays=uart5 i2c3\nextraargs=x\n' > "$R/boot/armbianEnv.txt"; ENV0=$(cat "$R/boot/armbianEnv.txt")
+spi_install --spi-panel waveshare35f; IC="$R/etc/applaunch/install.conf"
+check "spi install with a user_overlays line: recorded as token" 'grep -qx "spi_armbian_env=token" "$IC"'
+a_uninstall --yes
+check "spi uninstall: the user's other overlays and lines stay exactly" '[ $RC = 0 ] && [ "$(cat "$R/boot/armbianEnv.txt")" = "$ENV0" ]'
+# files that were there before install.sh (not recorded) stay; a file changed since stays; a record cannot name another file
+spi_root; mkdir -p "$R/etc/modules-load.d" "$R/lib/firmware"; printf 'panel-mipi-dbi\n' > "$R/etc/modules-load.d/spi35.conf"
+spi_install --spi-panel waveshare35f; IC="$R/etc/applaunch/install.conf"
+check "spi install: a modules-load file there before is not recorded as made by install.sh" '[ $RC = 0 ] && ! grep -q "spi35.conf" "$IC" && grep -q "spi_armbian_files=/lib/firmware/st7796s.bin /boot/overlay-user/spi35-st7796s.dtbo" "$IC"'
+printf 'tampered\n' > "$R/lib/firmware/st7796s.bin"
+sed -i 's|^spi_armbian_files=.*|& /etc/passwd ../etc/hosts|' "$IC"; echo "root:x" > "$R/etc/passwd"
+a_uninstall --yes
+check "spi uninstall: a file there before install.sh stays; a changed init file stays, said; a name outside the fixed list is never removed" '[ $RC = 0 ] && [ -f "$R/etc/modules-load.d/spi35.conf" ] && [ -f "$R/lib/firmware/st7796s.bin" ] && has "/lib/firmware/st7796s.bin was changed since install.sh made it: kept" && [ -f "$R/etc/passwd" ] && [ ! -e "$R/boot/overlay-user/spi35-st7796s.dtbo" ]'
+# a panel set up by hand (no install.conf): nothing of it is touched
+spi_root; spi_install --spi-panel waveshare35f
+rm -f "$R/etc/applaunch/install.conf"; ASTATE=$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src"; snapshot "$R/etc/modules-load.d")
+a_uninstall --yes
+check "spi uninstall without install.conf (set up by hand): armbianEnv.txt, files and DKMS modules untouched" '[ $RC = 0 ] && ! called "dkms remove" && [ "$(snapshot "$R/boot"; snapshot "$R/lib"; snapshot "$R/usr/src"; snapshot "$R/etc/modules-load.d")" = "$ASTATE" ] && grep -q "spi35-st7796s" "$R/boot/armbianEnv.txt"'
 # failures: nothing of the panel (nor the launcher) in place, a clear message
 spi_root
 FAKE_CURL_RC=22 spi_install --spi-panel waveshare35f

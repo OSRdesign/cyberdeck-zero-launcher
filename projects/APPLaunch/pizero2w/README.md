@@ -116,7 +116,7 @@ Each install records its keyboard name, `--board`, `--screen-size`, `--panel-mm`
 The other options (`--user`, `--board-only`, `--dry-run`, `--plan`, `--force`, `--network-manager`, `--yes`) are not recorded.
 `--spi-panel` records `board=pi3a-luckfox35` (so updates keep the profile) and, for information only, `spi_panel=` and
 `soft_pwm_backlight=`, which later runs keep (on a Raspberry Pi also `spi_fw_added=1`, which tells `uninstall.sh` that `install.sh`
-put `/lib/firmware/st7796s.bin` there); the panel's set-up is done once and is never run again by Settings > Updates.
+put `/lib/firmware/st7796s.bin` there; on Armbian `spi_armbian_files=`, `spi_armbian_dkms=` and `spi_armbian_env=`, what `install.sh` made, for the same purpose, see [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel)); the panel's set-up is done once and is never run again by Settings > Updates.
 
 **Default app source.** `install.sh` runs `default-sources.sh` as the launcher user (the user's own file, no root, no
 password). When that user has no app source yet (no `~/.local/share/cardputerzero-appstore/registries.json`, or one
@@ -550,6 +550,15 @@ framebuffer). Refused, with nothing changed, on `luckfox35` (a Raspberry Pi's na
 take `spi35-st7796s` out of `user_overlays=` (or put the `.bak-<date>` file back), `sudo dkms remove
 drm-mipi-dbi-chunk/1.0 --all` (and `pwm-gpio/1.0`), remove the two files in `/etc/modules-load.d`, reboot;
 `uninstall.sh` does not touch them.
+
+**Undo.** `./uninstall.sh` removes only what `install.conf` records as made by `install.sh --spi-panel waveshare35f`
+(`spi_armbian_files=`, `spi_armbian_dkms=`, `spi_armbian_env=`; each name is checked against a fixed list): `"spi35-st7796s"` taken off the
+last `user_overlays=` line of `/boot/armbianEnv.txt` (the line goes too when `install.sh` wrote it; a timestamped
+`armbianEnv.txt.bak-uninstall-<time>` first), `/lib/firmware/st7796s.bin`, `/etc/modules-load.d/spi35.conf` (and `pwm-gpio.conf`),
+`/boot/overlay-user/spi35-st7796s.dtbo` (each only when `install.sh` created it and, for the first three, it is still unchanged), and
+the DKMS modules `drm-mipi-dbi-chunk` and `pwm-gpio` it built (`dkms remove --all`, their `/usr/src` folders), then a reboot is needed.
+A file that was there before `install.sh`, a panel set up by hand (no `install.conf`) and the packages (`dkms`, the kernel headers,
+...) stay. `--no-boot-config` leaves all of it; `--dry-run` prints it. The `armbianEnv.txt.bak-<date>` of `install.sh` stays.
 
 ### Raspberry Pi: the 3.5" SPI panel
 
