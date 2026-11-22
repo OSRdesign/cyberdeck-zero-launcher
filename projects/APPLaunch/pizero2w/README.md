@@ -1048,8 +1048,8 @@ unit, to a mount point or to a credentials file (`err exists`). `list` shows onl
 | `nomodule` | the kernel has no `cifs` module (`cifs filesystem not supported`) |
 | `nohelper` | `mount.cifs` is not installed (package `cifs-utils`) |
 | `unreachable` | the host name does not resolve, no route, connection refused or host down |
-| `notfound` | the share (or the subfolder) does not exist on the server (`mount error(2)` with `BAD_NETWORK_NAME` in the kernel log, or with the kernel log unreadable) |
-| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`; also `mount error(2)` when the kernel log of that attempt has only `cifs_mount failed`, as ZimaOS does for a share that needs a login: reason `wrong share name, or it needs a login`) |
+| `notfound` | the server names the missing share or subfolder (`NT_STATUS_BAD_NETWORK_NAME`, `NT_STATUS_OBJECT_NAME_NOT_FOUND`, `NT_STATUS_OBJECT_PATH_NOT_FOUND`, or `mount error(6)`) |
+| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`); also every `mount error(2)` (No such file or directory) without an `NT_STATUS` word, which a wrong share name and a share that needs a login both cause (the kernel logs the telling line only once per boot, so the helper no longer reads it): reason `wrong share name, or it needs a login`, or `wrong share or folder name, or it needs a login` with `--subfolder` |
 | `timeout` | no answer within the 10 s limit, or `ETIMEDOUT` |
 | `other` | anything else (also a refused `remove`, a failed `systemctl`), with the first line of the message as the reason (printable ASCII, 160 characters at most, the password and `key=value` credential text removed) |
 
