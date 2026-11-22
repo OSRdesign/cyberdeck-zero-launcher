@@ -162,7 +162,7 @@ check_pick pi5-spi35-real pi3a-luckfox35      # the 3.5-inch SPI panel on a Pi 5
 check_pick fzm1-real pc-fzm1-2
 check_pick pi4b-real pi4b-dsi
 check_pick pi3a-real pi3a-wsdsi43
-check_pick zero8-real zero2w                  # SURPRISING: a Zero 2 W with the 3.5-inch SPI panel; by design the Zero 2 W stays the deck unless --board / --spi-panel
+check_pick zero8-real pi3a-luckfox35         # a Zero 2 W with the 3.5-inch SPI panel (SPI-1 connected 320x480, panel-mipi-dbi fb): the SPI panel profile; the deck has no SPI connector and stays zero2w
 check_pick deck-real zero2w
 check_pick pi5-real pi5-hyperpixel4
 check_pick pi4b-dsi7-real pi4b-dsi            # the 7-inch DSI panel installed by hand from the README with --screen-size 7

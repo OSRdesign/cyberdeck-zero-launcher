@@ -514,7 +514,23 @@ if [ -n "$BOARD_ARG" ]; then
     esac
 else
     case "$MODEL" in
-        *"Zero 2"*) if [ "$IS_RPI" = 1 ]; then BOARD=zero2w; fi ;;
+        *"Zero 2"*)
+            # The deck (no SPI panel: its Waveshare 2.8" is a DPI panel) stays zero2w; a Zero 2 W with a connected SPI connector
+            # at 320x480 and a panel-mipi-dbi framebuffer (the 3.5" panel of zero8) is the SPI panel's board, as on a Pi 5 below.
+            if [ "$IS_RPI" = 1 ]; then
+                BOARD=zero2w
+                # a DSI or DPI connector connected as well is a second panel: not guessed, the deck stays
+                z_other=0
+                for d in "$SYSROOT"/sys/class/drm/card[0-9]*-*; do
+                    case "${d##*/}" in *-DSI-*|*-DPI-*) ;; *) continue ;; esac
+                    if [ "$(rd "$d/status" || true)" = connected ]; then z_other=1; fi
+                done
+                if [ "$z_other" = 0 ] && detect_panel pi3a-luckfox35; then
+                    BOARD=pi3a-luckfox35
+                else
+                    PANEL_FB=""
+                fi
+            fi ;;
         *"Raspberry Pi 3 Model A Plus"*)
             # one panel or the other; both connected at once is not guessed
             SPI_FB=""; DSI_FB=""
@@ -536,7 +552,7 @@ else
         *"Compute Module 5"*) detect_panel hackberry-cm5 && BOARD=hackberry-cm5 ;;
     esac
     # The 3.5" SPI panel on any other Raspberry Pi (a Pi 5, a Pi 4B without its DSI panel, ...): left over by the cases above.
-    # The Zero 2 W stays the deck (--board pi3a-luckfox35 or --spi-panel says otherwise) and the Pi 3A+ has its own case. A DSI or
+    # The Zero 2 W (deck unless an SPI panel is connected, see its case above) and the Pi 3A+ have their own cases. A DSI or
     # DPI connector connected as well is a second panel: not guessed (HDMI is fine).
     if [ -z "$BOARD" ] && [ "$IS_RPI" = 1 ]; then
         case "$MODEL" in
@@ -1173,6 +1189,14 @@ generic_note() {
     else echo "  no panel size (the launcher's default density, large controls): --screen-size INCHES sets it"; fi
     echo "  check the home grid, touch and rotation; edit /etc/applaunch/board.conf by hand if needed (README.md, \"My screen is not listed\")"
 }
+# The 4.3" / 5" / 7" 800x480 DSI panels look the same to software (same fbdev, same connector mode): the profile assumes
+# one size. Said on every run that was not given a size (--screen-size / --panel-mm, or one recorded in install.conf).
+size_guess_note() {
+    case "$BOARD" in pi3a-wsdsi43|pi3a-wsdsi43-portrait|pi4b-dsi|pi5-dsi7) ;; *) return 0 ;; esac
+    [ -z "$SCREEN_NOTE" ] && [ -n "$PANEL_IN_USE" ] || return 0
+    case "$BOARD" in pi3a-wsdsi43*) sg_eg="5 or 7" ;; pi4b-dsi) sg_eg="4.3 or 7" ;; *) sg_eg="4.3 or 5" ;; esac
+    echo "screen size 4.3\"/5\"/7\" cannot be detected: assuming $(profile_diag)\" ($PANEL_IN_USE mm); for another size run again with --screen-size INCHES (e.g. $sg_eg)"
+}
 # PROFILE_ACTION: what apply_profile will do, as one word, plus PROFILE_MSG for the user
 plan_profile() {
     st=$(profile_state)
@@ -1206,6 +1230,7 @@ apply_profile() {
     esac
     echo "$PROFILE_MSG"
     generic_note
+    size_guess_note
 }
 # The 3.5" SPI panel's backlight in config.txt (pi3a-luckfox35): the parameters of the one dtoverlay=mipi-dbi-spi line,
 # on that line and on the dtparam= lines after it, up to the next dtoverlay= line or [section] (a dtparam applies to the
@@ -2046,6 +2071,7 @@ if [ "$DRY" = 1 ]; then
     [ -z "$DESKTOP_BOOT_WARN" ] || echo "WARNING: $DESKTOP_BOOT_WARN"
     echo "profile: $PROFILE_MSG"
     generic_note
+    size_guess_note
     case "$PROFILE_ACTION" in write|replace) echo "--- $PROFILE"; profile_content ;; esac
     if [ "$GPIO_BL" = 1 ]; then echo "udev: install /etc/udev/rules.d/$GPIO_BL_RULE (video group may switch backlight_gpio)"; fi
     if [ -n "$SYSFS_BL" ]; then echo "udev: install /etc/udev/rules.d/$SYSFS_BL_RULE (video group may set the brightness of $SYSFS_BL)"; fi
@@ -2057,7 +2083,7 @@ if [ "$DRY" = 1 ]; then
     elif [ "$SESSION" = desktop ] && [ "$HP_PWM" = 1 ]; then
         echo "boot config: the PWM backlight overlay only (--pwm-backlight, below); cmdline.txt left alone on a desktop board"
     elif [ "$SESSION" = desktop ]; then
-        echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone$( [ "$SPI_RPI" = 0 ] || echo ' except the SPI panel block of --spi-panel, below')"
+        echo "boot config: none on a desktop board (config.txt and cmdline.txt left alone$( [ "$SPI_RPI" = 0 ] || echo ' except the SPI panel block of --spi-panel, below'))"
     elif [ "$BOOT_FW" = 0 ] && [ "$BOOT_CONFIG" = 1 ]; then
         echo "boot configuration: skipped ($BOOT_FW_WHY); nothing changed"
         [ -z "$SPI_PANEL" ] || echo "  (config.txt and cmdline.txt only: the SPI panel's overlay goes into /boot/armbianEnv.txt, below)"

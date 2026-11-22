@@ -230,7 +230,7 @@ board: pi5-hyperpixel4
 screen: panel size not set (the launcher's default density; --screen-size INCHES or --panel-mm WxH sets it)
 session: desktop (display manager lightdm.service enabled)
 profile: pi5-hyperpixel4: /etc/applaunch/board.conf already up to date
-boot config: none on a desktop board (config.txt and cmdline.txt left alone
+boot config: none on a desktop board (config.txt and cmdline.txt left alone)
 (install.sh --dry-run exit status 0)
 
 ==== 10. INSTALLED LAUNCHER FILES (if present) ====

@@ -190,6 +190,7 @@ board: pi3a-wsdsi43
 screen: panel size 94x56 mm (the profile's own; --screen-size INCHES or --panel-mm WxH sets another)
 session: appliance (no display manager enabled or running: the launcher starts at boot)
 profile: pi3a-wsdsi43: /etc/applaunch/board.conf was edited by hand: kept (use --force to replace it)
+screen size 4.3"/5"/7" cannot be detected: assuming 4.3" (94x56 mm); for another size run again with --screen-size INCHES (e.g. 5 or 7)
 udev: install /etc/udev/rules.d/92-applaunch-backlight-sysfs.rules (video group may set the brightness of 10-0045)
 audio group: the user joins it (sound card: 0 [Headphones     ]: bcm2835_headpho - bcm2835 Headphones)
 boot config: cmdline cursor/consoleblank only (the deck's PWM backlight overlay is not for this board)
