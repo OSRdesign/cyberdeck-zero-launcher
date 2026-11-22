@@ -1014,8 +1014,8 @@ cyberdeckzero-share remove --name N
 | --- | --- |
 | `--name` | 1-32 characters of `A-Za-z0-9_-`, not starting with `-` |
 | `--host` | an IPv4 address (no leading zeros) or a host name (labels of `A-Za-z0-9-`, dots, 253 characters at most, so `nas.local` works; no IPv6, no port) |
-| `--share` | 1-80 characters of `A-Za-z0-9_.$-`, not `.`, no `..` (so no spaces, `/`, `\` or commas) |
-| `--subfolder` | relative path of segments of `A-Za-z0-9_.$@+=-` separated by single `/`, no `..`, 200 characters at most |
+| `--share` | 1-80 characters of `A-Za-z0-9_.$-` and single inner spaces (no leading or trailing space, no two in a row; no tab), not `.`, no `..` (so no `/`, `\` or commas) |
+| `--subfolder` | relative path of segments of `A-Za-z0-9_.$@+=-` (each with single inner spaces, as in `--share`) separated by single `/`, no `..`, 200 characters at most |
 | `--user` | 1-64 characters of `A-Za-z0-9_.@-`, not starting with `-`; goes with `--credfile` (both or neither) |
 | `--credfile` | exactly `/run/user/<SUDO_UID>/cyberdeckzero-share/<random>.cred`, `<random>` 8-64 characters of `A-Za-z0-9_-` |
 
@@ -1033,7 +1033,7 @@ the add fails later. A file that fails the owner, mode or type check is refused 
 **What `add` does.** A test mount (10 s limit) with the final options into a private work folder; on failure nothing is left
 behind. On success it writes, each with a first line that marks it as the helper's:
 
-- `/etc/systemd/system/mnt-cyberdeck-<escaped>.mount` (`What=//host/share[/subfolder]`, `Where=/mnt/cyberdeck/<name>`, `Type=cifs`,
+- `/etc/systemd/system/mnt-cyberdeck-<escaped>.mount` (`What=//host/share[/subfolder]`, a space written as a plain space, `Where=/mnt/cyberdeck/<name>`, `Type=cifs`,
   `TimeoutSec=10`, `Options=ro,nosuid,nodev,noexec,uid=,gid=,forceuid,forcegid,file_mode=0444,dir_mode=0555,soft,echo_interval=10`
   plus `guest` or `credentials=/etc/cyberdeckzero/shares/<name>.cred`; no `vers=`: the kernel negotiates, SMB1 is not offered),
 - `/etc/systemd/system/mnt-cyberdeck-<escaped>.automount` (`TimeoutIdleSec=60`, `WantedBy=remote-fs.target`),
@@ -1047,7 +1047,8 @@ It refuses a name whose unit was not made by the helper (`err other`), and `add`
 unit, to a mount point or to a credentials file (`err exists`). `list` shows only units with the marker; other units are never touched.
 
 **Reply** (stdout; stderr stays empty; the **last line** is the answer): `ok` (remove), `ok 1` (version, the protocol level),
-`ok path=/mnt/cyberdeck/<name>` (add), for `list` one line `<name> <host> <share> [<subfolder>] <state>` per share (state
+`ok path=/mnt/cyberdeck/<name>` (add), for `list` one line `<name> <host> <share> [<subfolder>] <state>` per share (a space inside the share or subfolder is
+written `\040`, so each field is one token; state
 `mounted`, `idle`, `failed` or `inactive`) and then a line that is exactly `ok`, or `err <word> [reason]`. Exit status 0 only on
 `ok`; 2 for `err usage`; 1 for any other `err`.
 
