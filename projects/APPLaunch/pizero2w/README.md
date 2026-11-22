@@ -980,6 +980,97 @@ disable lightdm by name), then `sudo ./install.sh` again from ssh:
 it switches back (a `display-manager.service` link left pointing to the removed lightdm counts as no display manager),
 and the launcher starts at once and at every boot.
 
+## Network shares helper
+
+`install.sh` installs `/usr/libexec/cyberdeckzero/cyberdeckzero-share` (root:root 0755, a POSIX `sh` script) and the package
+`cifs-utils` (apt, no recommended packages; the anchor package keeps it, so `apt autoremove` never takes it away; if it
+cannot be installed, for example without a network, the install only prints a warning and goes on). An app (Vinyl is the
+first) uses it to add and remove an SMB share from its own screen. **The launcher never grants passwordless sudo for it:
+there is no sudoers rule.** The app runs it through the toolkit's shared sudo password prompt (`sudo -k`, then
+`sudo <helper> ...`), so the user types the password at every Add and Remove. The contract for apps is in
+[`docs/APP-CONTRACT.md`](../../../docs/APP-CONTRACT.md) ("Network shares (SMB)").
+
+**Grammar.** Every argument is checked against an allow-list before anything else; unknown verbs and flags are `err usage`.
+No option for `mount` is ever taken from the caller.
+
+```
+cyberdeckzero-share version
+cyberdeckzero-share list
+cyberdeckzero-share add --name N --host H --share S [--subfolder P] [--user U --credfile PATH]
+cyberdeckzero-share remove --name N
+```
+
+| Argument | Allowed |
+| --- | --- |
+| `--name` | 1-32 characters of `A-Za-z0-9_-`, not starting with `-` |
+| `--host` | an IPv4 address (no leading zeros) or a host name (labels of `A-Za-z0-9-`, dots, 253 characters at most, so `nas.local` works; no IPv6, no port) |
+| `--share` | 1-80 characters of `A-Za-z0-9_.$-`, not `.`, no `..` (so no spaces, `/`, `\` or commas) |
+| `--subfolder` | relative path of segments of `A-Za-z0-9_.$@+=-` separated by single `/`, no `..`, 200 characters at most |
+| `--user` | 1-64 characters of `A-Za-z0-9_.@-`, not starting with `-`; goes with `--credfile` (both or neither) |
+| `--credfile` | exactly `/run/user/<SUDO_UID>/cyberdeckzero-share/<random>.cred`, `<random>` 8-64 characters of `A-Za-z0-9_-` |
+
+**Who is calling.** `add` takes the user from `SUDO_UID`, `SUDO_GID` and `SUDO_USER` (it refuses when they are missing,
+when the user is root or when `id` does not agree), and mounts with `uid=`/`gid=` of that user. The helper never reads stdin (the
+sudo password may arrive there) and never logs, echoes or passes a password as an argument. `list` and `version` need no root;
+`remove` needs root but not a calling user.
+
+**The credentials file** (only with `--user`). The app writes `username=`, `password=` and optionally `domain=` lines
+(`key=value`, no other key, no empty or control line, at most 1024 bytes, the password 1-256 bytes) into the path above:
+owned by the calling user, mode 0600, a regular file, not a symlink. The helper opens it, checks what it opened, copies it into
+`/etc/cyberdeckzero/shares/<name>.cred` (0600 root, folder 0700, made on the first use) and deletes the app's file, also when
+the add fails later. A file that fails the owner, mode or type check is refused with `err usage` and left where it is.
+
+**What `add` does.** A test mount (10 s limit) with the final options into a private work folder; on failure nothing is left
+behind. On success it writes, each with a first line that marks it as the helper's:
+
+- `/etc/systemd/system/mnt-cyberdeck-<escaped>.mount` (`What=//host/share[/subfolder]`, `Where=/mnt/cyberdeck/<name>`, `Type=cifs`,
+  `TimeoutSec=10`, `Options=ro,nosuid,nodev,noexec,uid=,gid=,forceuid,forcegid,file_mode=0444,dir_mode=0555,soft,echo_interval=10`
+  plus `guest` or `credentials=/etc/cyberdeckzero/shares/<name>.cred`; no `vers=`: the kernel negotiates, SMB1 is not offered),
+- `/etc/systemd/system/mnt-cyberdeck-<escaped>.automount` (`TimeoutIdleSec=60`, `WantedBy=remote-fs.target`),
+- the mount point `/mnt/cyberdeck/<name>` (the folder `/mnt/cyberdeck` is 0755 root and never a symlink),
+- the credentials file, then `systemctl daemon-reload` and `systemctl enable --now` of the **automount** only. The share is
+  mounted on first use and again after a reboot; the boot never waits for the server. The unit name is made with `systemd-escape`.
+
+`remove` stops and disables the units, unmounts (lazily when busy), deletes the units and the credentials file, reloads systemd
+and removes the mount point when it is an empty folder under `/mnt/cyberdeck`; it is idempotent (a name that is not there is `ok`).
+It refuses a name whose unit was not made by the helper (`err other`), and `add` refuses a name that already maps to such a
+unit, to a mount point or to a credentials file (`err exists`). `list` shows only units with the marker; other units are never touched.
+
+**Reply** (stdout; stderr stays empty; the **last line** is the answer): `ok` (remove), `ok 1` (version, the protocol level),
+`ok path=/mnt/cyberdeck/<name>` (add), for `list` one line `<name> <host> <share> [<subfolder>] <state>` per share (state
+`mounted`, `idle`, `failed` or `inactive`) and then a line that is exactly `ok`, or `err <word> [reason]`. Exit status 0 only on
+`ok`; 2 for `err usage`; 1 for any other `err`.
+
+| Word | Meaning |
+| --- | --- |
+| `usage` | a bad verb, flag or value, a missing or refused credentials file, `SUDO_*` missing or root |
+| `exists` | the name, the mount point or its credentials file is taken (also by something the helper did not make) |
+| `nomodule` | the kernel has no `cifs` module (`cifs filesystem not supported`) |
+| `nohelper` | `mount.cifs` is not installed (package `cifs-utils`) |
+| `unreachable` | the host name does not resolve, no route, connection refused or host down |
+| `notfound` | the share (or the subfolder) does not exist on the server |
+| `denied` | the server refused the user, or the guest (`EACCES`, `NT_STATUS_LOGON_FAILURE`, `NT_STATUS_ACCESS_DENIED`) |
+| `timeout` | no answer within the 10 s limit, or `ETIMEDOUT` |
+| `other` | anything else (also a refused `remove`, a failed `systemctl`), with the first line of the message as the reason (printable ASCII, 160 characters at most, the password and `key=value` credential text removed) |
+
+**Undo by hand** (`<name>` as given to `add`; the escaped unit name is `systemd-escape --path /mnt/cyberdeck/<name>`):
+
+```
+sudo systemctl disable --now "$(systemd-escape --path /mnt/cyberdeck/<name>).automount"
+sudo systemctl stop "$(systemd-escape --path /mnt/cyberdeck/<name>).mount"
+sudo rm "/etc/systemd/system/$(systemd-escape --path /mnt/cyberdeck/<name>)".mount "/etc/systemd/system/$(systemd-escape --path /mnt/cyberdeck/<name>)".automount
+sudo rm -f /etc/cyberdeckzero/shares/<name>.cred
+sudo systemctl daemon-reload
+sudo umount -l /mnt/cyberdeck/<name>; sudo rmdir /mnt/cyberdeck/<name>
+```
+
+**Install and uninstall.** `install.sh --dry-run` prints a "network shares" paragraph and `--plan` the keys `share_helper=` and
+`optional_packages=`. `uninstall.sh` removes the helper (and its folders when empty) but **leaves the user's shares alone**
+by default, says which ones, and prints the way to remove them by hand; `uninstall.sh --remove-shares` removes them first through the
+helper (only units with the helper's marker). `cifs-utils` stays installed, as every package `install.sh` adds.
+
+Tests: `tests/test-share-helper.sh` (fake root, stand-ins for `mount`, `systemctl`, ...; see "Files in this folder").
+
 ## Uninstall
 
 `uninstall.sh` (in the bundle next to `install.sh`) removes what `install.sh` added. Run it as the deck user over
@@ -1024,6 +1115,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `--restore-config` | Restore `config.txt` from `config.txt.bak-before-pwm` instead of removing the two lines (loses any other later edit; the current file is backed up first). This works only where that file exists (the deck's own backup, made by hand before `install.sh` existed). `install.sh` itself writes `config.txt.bak-applaunch`, which this option does not use; without the file the option stops with an error. |
 | `--no-boot-config` | Leave `config.txt` (also the 3.5" SPI panel's block), `cmdline.txt`, the overlay and the panel's init file alone. |
 | `--disable-linger` | Also run `loginctl disable-linger` (`install.sh` enabled it; it may have been on before). |
+| `--remove-shares` | Also remove the network shares made with the share helper (unmount, units, credentials files). Without it they stay and keep working; the way to remove them by hand is printed ([Network shares helper](#network-shares-helper)). |
 | `--user NAME`, `--payload DIR` | The user that ran `install.sh`; where the bundle's `payload/` is, if it is not next to the script. |
 
 ## Files in this folder
@@ -1032,6 +1124,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | --- | --- |
 | `build.sh` / `install.sh` / `uninstall.sh` | Build the bundle (host; `--arch arm64` by default, `--arch amd64` natively for PCs) / install it (Pi or PC) / remove it again. |
 | `cyberdeckzero-update` | Settings > Updates' root helper, installed in `/usr/share/APPLaunch/bin` (`apply`, `resume`, `plan`, `options`, `status`, `apt-refresh`, `apt-upgrade`, `apt-repair`; [Settings > Updates](#settings--updates)). |
+| `cyberdeckzero-share` | The network share helper, installed in `/usr/libexec/cyberdeckzero` (`version`, `list`, `add`, `remove`; run by an app through the sudo password prompt, no sudoers rule; [Network shares helper](#network-shares-helper)). |
 | `default-sources.sh` | Adds the apps repo to Settings > Apps once for a user with no source yet (run by `install.sh` as that user; see "Default app source"). |
 | `cyberdeckzero.service` | systemd **user** service: display, touch axes, keyboard device, working directory, optional board profile (`EnvironmentFile=-/etc/applaunch/board.conf`). |
 | `cyberdeckzero-console`, `cyberdeckzero-console.service` | The text console helper (installed in `/usr/share/APPLaunch/bin`: `unbind`, `bind`, `status`, `restore-desktop UNIT`) and the appliance boards' boot-time unit that frees the panel from the console ([Text console](#text-console)). |
@@ -1047,7 +1140,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `launcher-ntp-default.service` | Network Time is on at every boot (a manually set time lasts for the session). |
 | `ctl/` | `cyberdeckzero-ctl`, the `launcher.sock` command-line client (`docs/APP-CONTRACT.md` section 14), built by `build.sh`. |
 | `vfb/` | Framebuffer shim (`libapplaunch_vfb.so`) and a test app (`fbtest.c`). |
-| `tests/` | `test-install-board.sh`: board and desktop detection, profile, desktop unit and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board, desktop markers added by the test), `cyberdeckzero-console` against a fake `/sys/class/vtconsole` and a fake `systemctl` (the shutdown guard), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). `test-update-helper.sh`: Settings > Updates' root helper `cyberdeckzero-update` and what `install.sh` gives it (`/etc/applaunch/install.conf`, `--plan`) in a fake root (`UPDATE_ROOT`, stand-ins for `systemctl`, `runuser`, `systemd-inhibit`, ...): options replayed or inferred, backup, plan refusals, health check, rollback, the desktop unit's restart, resume after an interruption, uninstall. **Neither is part of `tools/dev/check-all.sh`.** Run them as a normal user with `sh projects/APPLaunch/pizero2w/tests/test-install-board.sh` and `sh projects/APPLaunch/pizero2w/tests/test-update-helper.sh`, from an LF copy of the **whole repository** (the fixtures' line ends: a Windows checkout with `core.autocrlf=true` has CRLF fixtures, so use WSL on a copy with the CRs stripped; `test-update-helper.sh` also reads `projects/APPLaunch/tests/fixtures/apt/deck-p4`, which a copy of this folder alone does not have). A run on 2026-11-12 (main at v0.10.1, WSL, CRs stripped) passed 501 of 502 checks of `test-install-board.sh` (the failing one: "amd64 config: the device config without the NEON lines") and 159 of 159 of `test-update-helper.sh`; see [`tools/dev/README.md`](../../../tools/dev/README.md) for what `check-all.sh` runs. |
+| `tests/` | `test-install-board.sh`: board and desktop detection, profile, desktop unit and uninstall-plan tests on the PC against `fixtures/` (fake `/proc` and `/sys` trees of each board, desktop markers added by the test), `cyberdeckzero-console` against a fake `/sys/class/vtconsole` and a fake `systemctl` (the shutdown guard), and the default app source (`default-sources.sh` with a temp state folder and a fake Store backend). `test-update-helper.sh`: Settings > Updates' root helper `cyberdeckzero-update` and what `install.sh` gives it (`/etc/applaunch/install.conf`, `--plan`) in a fake root (`UPDATE_ROOT`, stand-ins for `systemctl`, `runuser`, `systemd-inhibit`, ...): options replayed or inferred, backup, plan refusals, health check, rollback, the desktop unit's restart, resume after an interruption, uninstall. `test-share-helper.sh`: the network share helper in a fake root (`CDZ_SHARE_SYSROOT`, stand-ins for `mount`, `umount`, `mountpoint`, `systemctl`, `systemd-escape`, `id`): every verb, every allow-list rejection, the calling-user and credentials-file checks, every error word, remove, foreign units, and that stdin is never read and no password leaks. **None of them is part of `tools/dev/check-all.sh`.** Run them as a normal user with `sh projects/APPLaunch/pizero2w/tests/test-install-board.sh` `sh projects/APPLaunch/pizero2w/tests/test-update-helper.sh` and `sh projects/APPLaunch/pizero2w/tests/test-share-helper.sh`, from an LF copy of the **whole repository** (the fixtures' line ends: a Windows checkout with `core.autocrlf=true` has CRLF fixtures, so use WSL on a copy with the CRs stripped; `test-update-helper.sh` also reads `projects/APPLaunch/tests/fixtures/apt/deck-p4`, which a copy of this folder alone does not have). A run on 2026-11-12 (main at v0.10.1, WSL, CRs stripped) passed 501 of 502 checks of `test-install-board.sh` (the failing one: "amd64 config: the device config without the NEON lines") and 159 of 159 of `test-update-helper.sh`; see [`tools/dev/README.md`](../../../tools/dev/README.md) for what `check-all.sh` runs. |
 
 ## Sound, battery and brightness per board
 

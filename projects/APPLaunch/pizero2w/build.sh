@@ -161,6 +161,9 @@ chmod +x "$OUT/payload/bin/cyberdeckzero-console"
 # Settings > Updates' root helper (report 047 P2; install.sh puts it in /usr/share/APPLaunch/bin)
 cp "$HERE/cyberdeckzero-update" "$OUT/payload/bin/"
 chmod +x "$OUT/payload/bin/cyberdeckzero-update"
+# the network share helper (install.sh puts it in /usr/libexec/cyberdeckzero)
+cp "$HERE/cyberdeckzero-share" "$OUT/payload/bin/"
+chmod +x "$OUT/payload/bin/cyberdeckzero-share"
 # the command-line client of the launcher's request socket (install.sh links it into /usr/local/bin)
 cp "$HERE/ctl/cyberdeckzero-ctl" "$OUT/payload/bin/"
 ( cd "$OUT/payload/share" && find . -type f | sed 's|^\./||' | LC_ALL=C sort ) > "$OUT/payload/share.manifest"   # for uninstall.sh

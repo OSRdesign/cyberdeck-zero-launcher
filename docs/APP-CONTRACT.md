@@ -690,6 +690,26 @@ The client (`cp0_app_client.h`) returns `-1` for every "no service" case within 
 
 An app may run `udisksctl mount -b <dev>` as the launcher's user, and unmount what it mounted (`udisksctl unmount -b <dev>`), without a password: the installer writes the PolicyKit rule `53-cyberdeckzero-udisks.rules` for the install user from the next release (0.10.3) on. It covers removable media only (not fixed disks, encryption or formatting); an older install needs `install.sh` run again, and `udisks2` must be installed. An app unmounts only the drives it mounted itself.
 
+### Network shares (SMB)
+
+An app that lets the user add a network share (Vinyl does) calls the launcher's root helper `/usr/libexec/cyberdeckzero/cyberdeckzero-share` (installed by the launcher's `install.sh` together with `cifs-utils`; **a launcher older than the release that ships it has no such file: check for it and say "needs a newer launcher"**). The launcher grants **no passwordless sudo** for it: the app runs it through the toolkit's shared sudo password prompt, so the user types the password at every Add and Remove. The prompt is the toolkit's (`cp0_sudo_run_argv_async_ex`, which runs `sudo -k`, then `sudo -S -- <argv>`); an app that has not switched the toolkit's sudo service on (`CONFIG_CP0_LVGL_INIT_SUDO=y` in its `cp0_config.mk`) has no prompt. The helper never reads stdin: stdin may hold the sudo password.
+
+| Action | Command line (argv, never through a shell) |
+| --- | --- |
+| Is the helper there? | `access("/usr/libexec/cyberdeckzero/cyberdeckzero-share", X_OK)`; `cyberdeckzero-share version` answers `ok 1` |
+| List the shares | `/usr/libexec/cyberdeckzero/cyberdeckzero-share list` (**no sudo, no password**: run it as the user) |
+| Add, guest | `sudo -k`, then `sudo /usr/libexec/cyberdeckzero/cyberdeckzero-share add --name N --host H --share S [--subfolder P]` |
+| Add, with a user | the same with `--user U --credfile /run/user/<uid>/cyberdeckzero-share/<random>.cred` |
+| Remove | `sudo -k`, then `sudo /usr/libexec/cyberdeckzero/cyberdeckzero-share remove --name N` |
+
+Values: `N` 1-32 of `A-Za-z0-9_-` (not a leading `-`), `H` an IPv4 address or host name, `S` 1-80 of `A-Za-z0-9_.$-` (no spaces; a subfolder is a separate `--subfolder`), `U` 1-64 of `A-Za-z0-9_.@-`; the helper checks them all again and answers `err usage` for anything else. The share is mounted read-only at `/mnt/cyberdeck/N` (a systemd mount and automount, mounted on first use and again after a reboot; the files belong to the user who ran `sudo`), where an app that lists the mounts under `/mnt/` sees it.
+
+**The password** never goes on the command line or stdin. The app writes `$XDG_RUNTIME_DIR/cyberdeckzero-share/<random>.cred` itself (folder 0700, **file 0600, owned by the user, a regular file**, on tmpfs under `/run/user/<uid>`; `<random>` 8-64 characters of `A-Za-z0-9_-`) with the lines `username=<U>`, `password=<P>` and optionally `domain=<D>` (only these keys, at most 1024 bytes, the password 1-256 bytes, no control characters) and passes that exact path as `--credfile`. The helper copies it into a root-only file and **deletes it**; the app deletes it as well on a Cancel, a time-out or any other end. Any other path is refused.
+
+**The reply** is on stdout; sudo's own lines may come first, so **take the last non-empty line**: `ok path=/mnt/cyberdeck/N` (add), `ok` (remove; also when the share was not there), `ok 1` (version), for `list` the lines `<name> <host> <share> [<subfolder>] <state>` (state `mounted`, `idle`, `failed`, `inactive`) and then a line that is exactly `ok`, or `err <word> [reason]`. Exit status 0 only for `ok`, 2 for `err usage`, 1 for the other errors. The words: `usage`, `exists`, `nomodule` (no cifs kernel module), `nohelper` (no `mount.cifs`), `unreachable` (host name, route or connection), `notfound` (share or subfolder), `denied` (user, password or guest refused), `timeout` (10 s), `other` (the reason is the first line of the message, printable ASCII, redacted of credentials). The reason is for a log, not for the screen. A wrong sudo password, a Cancel or a time-out is the toolkit's result, not the helper's. A share the helper did not make is never touched: `remove` of it answers `err other`.
+
+Details, the files the helper writes and how to undo by hand: `projects/APPLaunch/pizero2w/README.md`, "Network shares helper".
+
 ### The command line: `cyberdeckzero-ctl`
 
 `cyberdeckzero-ctl` (installed in `/usr/share/APPLaunch/bin`, linked in `/usr/local/bin`) is the same client for terminal apps, scripts and the board test protocols: `cyberdeckzero-ctl hello`, `beep done`, `toast "2 new messages"`, `volume set 30`, `brightness get`, `dim allow`, `board` (prints `board.state`). It prints the reply; exit status 0 ok, 1 refused (`err ...`), 2 usage, 3 no launcher service.

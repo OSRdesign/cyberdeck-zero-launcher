@@ -1,0 +1,378 @@
+#!/bin/sh
+# cyberdeckzero-share: add or remove a network share (SMB) as a systemd .mount + .automount pair for
+# /mnt/cyberdeck/<name>. A root helper of the launcher (installed by install.sh as
+# /usr/libexec/cyberdeckzero/cyberdeckzero-share, root:root 0755), run by an app through the shared sudo password
+# prompt:   sudo -k, then   sudo /usr/libexec/cyberdeckzero/cyberdeckzero-share <verb> ...
+# There is NO sudoers rule for it: the password is asked at every add and remove. Study: vinyl-share-study.md.
+#
+#   cyberdeckzero-share version
+#   cyberdeckzero-share list
+#   cyberdeckzero-share add --name N --host H --share S [--subfolder P] [--user U --credfile PATH]
+#   cyberdeckzero-share remove --name N
+#
+# Reply on stdout (stderr is silent): "ok", "ok 1", "ok path=/mnt/cyberdeck/<name>", the share lines of list and then a
+# last line "ok", or "err <word> [reason]". Exit status 0 only on ok; 2 for err usage; 1 for every other err.
+# Words: usage exists nomodule nohelper unreachable notfound denied timeout other.
+#
+# Rules: stdin is never read (sudo's password may arrive there: the first line closes it); no password is ever an
+# argument, echoed or logged; every argument is checked by an allow-list before anything else; no caller text reaches
+# the mount options; the calling user comes from SUDO_UID/SUDO_USER (add needs it; never root); an optional credentials
+# file is read only from /run/user/<SUDO_UID>/cyberdeckzero-share/<random>.cred, after checks, copied into
+# /etc/cyberdeckzero/shares/<name>.cred (0600 root) and deleted. Only units carrying the marker line below are ever
+# touched. Test hook: CDZ_SHARE_SYSROOT (honoured only when NOT root) puts every path under it; CDZ_SHARE_PATH then
+# comes first on PATH (stand-ins for mount, systemctl, ...); CDZ_SHARE_MOUNT_TIMEOUT sets the test mount's timeout.
+exec < /dev/null
+umask 077
+LC_ALL=C
+export LC_ALL
+IFS=$(printf ' 	
+_')
+IFS=${IFS%_}
+unset ENV BASH_ENV CDPATH
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+set -u
+
+R=""
+FAKE=0
+if [ -n "${CDZ_SHARE_SYSROOT:-}" ] && [ "$(id -u)" -ne 0 ]; then
+    FAKE=1
+    R=$CDZ_SHARE_SYSROOT
+    PATH="${CDZ_SHARE_PATH:-/nonexistent}:/usr/bin:/bin"
+fi
+PROTOCOL=1
+MARKER='# cyberdeckzero-share v1: made by the launcher helper, remove with: cyberdeckzero-share remove --name'
+SYSD="$R/etc/systemd/system"
+CONF_REAL=/etc/cyberdeckzero/shares
+CONF="$R$CONF_REAL"
+MNT_REAL=/mnt/cyberdeck
+RUN="$R/run/cyberdeckzero-share"
+MOUNT_TIMEOUT=10
+if [ "$FAKE" = 1 ] && [ -n "${CDZ_SHARE_MOUNT_TIMEOUT:-}" ]; then MOUNT_TIMEOUT=$CDZ_SHARE_MOUNT_TIMEOUT; fi
+
+PW=""            # the password, only to redact it from error text
+T=""             # per-run work dir under $RUN
+CRED_FS=""       # the caller's credentials file, deleted at exit once it passed the owner checks
+CRED_OK=0
+MADE_UNITS=0
+MADE_CRED=0
+MADE_MP=0
+MP_FS=""
+MOUNT_UNIT=""
+AUTO_UNIT=""
+NAME=""
+
+# ---- replies ----------------------------------------------------------------------------------------------
+redact() { # stdin -> stdout: the password and key=value credential text removed
+    CDZ_PW=$PW awk 'BEGIN { p = ENVIRON["CDZ_PW"] }
+        { s = $0; o = ""
+          if (p != "") { while ((i = index(s, p)) > 0) { o = o substr(s, 1, i - 1) "***"; s = substr(s, i + length(p)) } }
+          print o s }' | sed -E 's/(pass(word)?|pwd|cred(entials)?|user(name)?|domain)=[^, ]*/\1=***/Ig'
+}
+clean() { # one line: redacted, printable ASCII only, at most 160 characters
+    printf '%s\n' "$*" | head -n 1 | redact | tr -c ' -~
+' ' ' | sed -e 's/^ *//' -e 's/ *$//' | cut -c1-160
+}
+fail() { # word [reason...]
+    _w=$1
+    shift
+    _r=$(clean "$*")
+    printf 'err %s%s\n' "$_w" "${_r:+ $_r}"
+    if [ "$_w" = usage ]; then exit 2; fi
+    exit 1
+}
+
+cleanup() {
+    if [ -n "$T" ] && [ -d "$T" ]; then
+        if mountpoint -q "$T/mnt" 2>/dev/null; then umount "$T/mnt" 2>/dev/null || umount -l "$T/mnt" 2>/dev/null; fi
+        case $T in "$RUN"/add.*) rm -rf "$T" ;; esac
+    fi
+    if [ "$CRED_OK" = 1 ] && [ -n "$CRED_FS" ]; then rm -f -- "$CRED_FS"; fi
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
+# ---- allow-lists ---------------------------------------------------------------------------------------------
+printable() { case $1 in *[![:print:]]*) return 1 ;; esac; return 0; }  # no control chars, no byte above 0x7e (C locale)
+rx() { printf '%s\n' "$1" | grep -Eq "$2"; }                             # only after printable(): one line
+valid_name() { printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 32 ] && rx "$1" '^[A-Za-z0-9_][A-Za-z0-9_-]*$'; }
+is_ipv4() { rx "$1" '^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$'; }
+valid_host() {
+    printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 253 ] || return 1
+    if rx "$1" '^[0-9.]+$'; then is_ipv4 "$1"; return; fi
+    rx "$1" '^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$'
+}
+valid_share() {
+    printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 80 ] || return 1
+    case $1 in .|*..*) return 1 ;; esac
+    rx "$1" '^[A-Za-z0-9_.$-]+$'
+}
+valid_subfolder() { # relative, segments of [A-Za-z0-9_.$@+=-], no empty segment, no ".." anywhere
+    printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 200 ] || return 1
+    case $1 in *..*|/*|*/|*//*|.|./*|*/.|*/./*) return 1 ;; esac
+    rx "$1" '^[A-Za-z0-9_.$@+=-]+(/[A-Za-z0-9_.$@+=-]+)*$'
+}
+valid_user() { printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 64 ] && rx "$1" '^[A-Za-z0-9_.@][A-Za-z0-9_.@-]*$'; }
+
+# ---- arguments (checked first) ---------------------------------------------------------------------------------
+VERB=${1:-}
+if [ $# -ge 1 ]; then shift; fi
+HOST=""; SHARE=""; SUBF=""; CUSER=""; CREDFILE=""
+case $VERB in
+    version|list)
+        [ $# -eq 0 ] || fail usage "$VERB takes no argument" ;;
+    add|remove)
+        while [ $# -gt 0 ]; do
+            flag=$1
+            case $flag in
+                --name|--host|--share|--subfolder|--user|--credfile) ;;
+                *) fail usage "unknown option" ;;
+            esac
+            [ $# -ge 2 ] || fail usage "missing value for $flag"
+            val=$2
+            shift 2
+            case $flag in
+                --name)      [ -z "$NAME" ] || fail usage "--name twice"; NAME=$val; [ -n "$val" ] || fail usage "empty --name" ;;
+                --host)      [ -z "$HOST" ] || fail usage "--host twice"; HOST=$val; [ -n "$val" ] || fail usage "empty --host" ;;
+                --share)     [ -z "$SHARE" ] || fail usage "--share twice"; SHARE=$val; [ -n "$val" ] || fail usage "empty --share" ;;
+                --subfolder) [ -z "$SUBF" ] || fail usage "--subfolder twice"; SUBF=$val; [ -n "$val" ] || fail usage "empty --subfolder" ;;
+                --user)      [ -z "$CUSER" ] || fail usage "--user twice"; CUSER=$val; [ -n "$val" ] || fail usage "empty --user" ;;
+                --credfile)  [ -z "$CREDFILE" ] || fail usage "--credfile twice"; CREDFILE=$val; [ -n "$val" ] || fail usage "empty --credfile" ;;
+            esac
+        done
+        [ -n "$NAME" ] || fail usage "--name is required"
+        valid_name "$NAME" || fail usage "bad --name"
+        if [ "$VERB" = remove ]; then
+            [ -z "$HOST$SHARE$SUBF$CUSER$CREDFILE" ] || fail usage "remove takes only --name"
+        else
+            [ -n "$HOST" ] && [ -n "$SHARE" ] || fail usage "--host and --share are required"
+            valid_host "$HOST" || fail usage "bad --host"
+            valid_share "$SHARE" || fail usage "bad --share"
+            if [ -n "$SUBF" ]; then valid_subfolder "$SUBF" || fail usage "bad --subfolder"; fi
+            if [ -n "$CUSER" ]; then valid_user "$CUSER" || fail usage "bad --user"; fi
+            if [ -n "$CUSER" ] && [ -z "$CREDFILE" ]; then fail usage "--user needs --credfile"; fi
+            if [ -z "$CUSER" ] && [ -n "$CREDFILE" ]; then fail usage "--credfile needs --user"; fi
+            if [ -n "$CREDFILE" ]; then
+                printable "$CREDFILE" && [ ${#CREDFILE} -le 200 ] || fail usage "bad --credfile"
+            fi
+        fi ;;
+    "") fail usage "no verb" ;;
+    *) fail usage "unknown verb" ;;
+esac
+
+# ---- common helpers ----------------------------------------------------------------------------------------
+is_ours() { # a unit file made by this helper: no symlink, first line is the marker
+    [ -f "$1" ] && [ ! -L "$1" ] && [ "$(head -n 1 "$1" | cut -c1-${#MARKER})" = "$MARKER" ]
+}
+setup_names() { # NAME -> MP_REAL, MP_FS, MOUNT_UNIT, AUTO_UNIT
+    MP_REAL="$MNT_REAL/$NAME"
+    MP_FS="$R$MP_REAL"
+    base=$(systemd-escape --path "$MP_REAL" 2>/dev/null) || fail other "systemd-escape failed"
+    rx "$base" '^mnt-cyberdeck-[A-Za-z0-9_.:\\-]{1,200}$' || fail other "unexpected unit name"
+    MOUNT_UNIT="$base.mount"
+    AUTO_UNIT="$base.automount"
+}
+need_root() {
+    [ "$FAKE" = 1 ] || [ "$(id -u)" -eq 0 ] || fail other "must run as root (through sudo)"
+}
+sysctl_() { systemctl "$@" > /dev/null 2>&1; }
+
+# ---- version / list ----------------------------------------------------------------------------------------
+meta_get() { printf '%s\n' "$1" | sed -n "s/.* $2=\([^ ]*\).*/\1/p"; }
+cmd_list() {
+    for f in "$SYSD"/mnt-cyberdeck-*.mount; do
+        is_ours "$f" || continue
+        unit=${f##*/}
+        meta=$(sed -n '2p' "$f")
+        printable "$meta" || continue
+        n=$(meta_get "$meta" name); h=$(meta_get "$meta" host); s=$(meta_get "$meta" share); p=$(meta_get "$meta" sub)
+        valid_name "$n" && valid_host "$h" && valid_share "$s" || continue
+        if [ -n "$p" ]; then valid_subfolder "$p" || continue; fi
+        if systemctl is-active --quiet "$unit" 2>/dev/null; then st=mounted
+        elif systemctl is-failed --quiet "$unit" 2>/dev/null; then st=failed
+        elif systemctl is-active --quiet "${unit%.mount}.automount" 2>/dev/null; then st=idle
+        else st=inactive; fi
+        printf '%s %s %s %s%s\n' "$n" "$h" "$s" "${p:+$p }" "$st" | sed 's/  */ /g'
+    done
+    echo ok
+    exit 0
+}
+if [ "$VERB" = version ]; then echo "ok $PROTOCOL"; exit 0; fi
+if [ "$VERB" = list ]; then cmd_list; fi
+
+need_root
+setup_names
+
+# one add or remove at a time
+if command -v flock > /dev/null 2>&1; then
+    mkdir -p "$RUN" || fail other "cannot create the work folder"
+    chmod 700 "$RUN"
+    exec 9> "$RUN/lock"
+    flock -w 30 9 || fail other "another add or remove is running"
+fi
+
+# ---- remove ------------------------------------------------------------------------------------------------
+cmd_remove() {
+    mu="$SYSD/$MOUNT_UNIT"; au="$SYSD/$AUTO_UNIT"
+    for u in "$mu" "$au"; do
+        if { [ -e "$u" ] || [ -L "$u" ]; } && ! is_ours "$u"; then fail other "that unit was not made by the share helper"; fi
+    done
+    sysctl_ disable --now "$AUTO_UNIT"
+    sysctl_ stop "$MOUNT_UNIT"
+    if mountpoint -q "$MP_FS" 2>/dev/null; then umount "$MP_FS" > /dev/null 2>&1 || umount -l "$MP_FS" > /dev/null 2>&1; fi
+    rm -f -- "$mu" "$au" "$CONF/$NAME.cred"
+    sysctl_ daemon-reload
+    sysctl_ reset-failed "$MOUNT_UNIT" "$AUTO_UNIT"
+    # the empty mountpoint, only under /mnt/cyberdeck and never through a symlink
+    if [ -d "$MP_FS" ] && [ ! -L "$MP_FS" ]; then rmdir "$MP_FS" 2> /dev/null; fi
+    echo ok
+    exit 0
+}
+if [ "$VERB" = remove ]; then cmd_remove; fi
+
+# ---- add ---------------------------------------------------------------------------------------------------
+# the calling user: sudo sets these; never root, never absent
+case ${SUDO_UID:-} in
+    ""|*[!0-9]*) fail usage "SUDO_UID is missing: run through sudo" ;;
+esac
+[ "$SUDO_UID" -ne 0 ] 2> /dev/null && [ ${#SUDO_UID} -le 10 ] || fail usage "refusing to act for root"
+case ${SUDO_GID:-} in
+    ""|*[!0-9]*) fail usage "SUDO_GID is missing: run through sudo" ;;
+esac
+[ ${#SUDO_GID} -le 10 ] || fail usage "bad SUDO_GID"
+[ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && printable "$SUDO_USER" || fail usage "SUDO_USER is missing: run through sudo"
+rx "$SUDO_USER" '^[A-Za-z0-9_.][A-Za-z0-9_.-]*$' || fail usage "bad SUDO_USER"
+[ "$(id -u "$SUDO_USER" 2> /dev/null)" = "$SUDO_UID" ] || fail usage "SUDO_USER and SUDO_UID do not agree"
+
+command -v mount.cifs > /dev/null 2>&1 || fail nohelper "mount.cifs is not installed (package cifs-utils)"
+
+for u in "$SYSD/$MOUNT_UNIT" "$SYSD/$AUTO_UNIT"; do
+    if [ -e "$u" ] || [ -L "$u" ]; then
+        if is_ours "$u"; then fail exists "a share with that name is there already"; fi
+        fail exists "that name belongs to a unit not made by the share helper"
+    fi
+done
+if [ -e "$MP_FS" ] || [ -L "$MP_FS" ]; then fail exists "the mount point exists and was not made by the share helper"; fi
+if [ -e "$CONF/$NAME.cred" ] || [ -L "$CONF/$NAME.cred" ]; then fail exists "a credentials file of that name is there"; fi
+
+mkdir -p "$RUN" || fail other "cannot create the work folder"
+chmod 700 "$RUN"
+T=$(mktemp -d "$RUN/add.XXXXXX") || fail other "cannot create a work folder"
+mkdir "$T/mnt"
+
+# the credentials file of the caller (optional)
+read_credfile() {
+    pre="/run/user/$SUDO_UID/cyberdeckzero-share/"
+    case $CREDFILE in "$pre"*) ;; *) fail usage "credfile outside $pre" ;; esac
+    rest=${CREDFILE#"$pre"}
+    rx "$rest" '^[A-Za-z0-9_-]{8,64}\.cred$' || fail usage "bad credfile name"
+    f="$R$CREDFILE"
+    if [ -L "$f" ]; then fail usage "credfile is a symlink"; fi
+    [ -e "$f" ] || fail usage "credfile not found"
+    [ -r "$f" ] || fail usage "credfile cannot be read"
+    command exec 3< "$f" || fail usage "credfile cannot be read"
+    # what was opened (not the path again): a regular file, ours, 0600, small
+    info=$(stat -L -c '%u %a %s %F' /proc/$$/fd/3 2> /dev/null) || fail usage "credfile cannot be checked"
+    set -- $info
+    [ "$1" = "$SUDO_UID" ] || fail usage "credfile is not owned by the caller"
+    [ "$2" = 600 ] || fail usage "credfile mode must be 0600"
+    [ "$4" = regular ] || fail usage "credfile is not a regular file"
+    CRED_FS=$f
+    CRED_OK=1
+    [ "$3" -le 1024 ] || fail usage "credfile is too big"
+    head -c 1025 <&3 > "$T/cred.raw"
+    exec 3<&-
+    [ "$(wc -c < "$T/cred.raw")" -le 1024 ] || fail usage "credfile is too big"
+    [ "$(tr -d '\n -~\200-\377' < "$T/cred.raw" | wc -c)" -eq 0 ] || fail usage "credfile has control characters"
+    awk -v want="$CUSER" '
+        { i = index($0, "="); if (i < 2) { bad = 1; next }
+          k = substr($0, 1, i - 1); v = substr($0, i + 1)
+          if (k == "username") { if (hu++) bad = 1; if (v != want) bad = 1 }
+          else if (k == "password") { if (hp++) bad = 1; if (length(v) < 1 || length(v) > 256) bad = 1; p = v }
+          else if (k == "domain") { if (hd++) bad = 1; if (v !~ /^[A-Za-z0-9_.-]+$/ || length(v) > 64) bad = 1; d = v }
+          else bad = 1 }
+        END { if (bad || !hp) exit 3; print "username=" want; print "password=" p; if (hd) print "domain=" d }' \
+        "$T/cred.raw" > "$T/cred" || fail usage "credfile must hold only username=, password= and domain= lines"
+    rm -f "$T/cred.raw"
+    PW=$(sed -n 's/^password=//p' "$T/cred")
+}
+OPTS_BASE="ro,nosuid,nodev,noexec,uid=$SUDO_UID,gid=$SUDO_GID,forceuid,forcegid,file_mode=0444,dir_mode=0555,soft,echo_interval=10"
+if [ -n "$CUSER" ]; then
+    read_credfile
+    AUTH=user
+    TEST_OPTS="$OPTS_BASE,credentials=$T/cred"
+    UNIT_OPTS="$OPTS_BASE,credentials=$CONF_REAL/$NAME.cred"
+else
+    AUTH=guest
+    TEST_OPTS="$OPTS_BASE,guest"
+    UNIT_OPTS="$OPTS_BASE,guest"
+fi
+WHAT="//$HOST/$SHARE${SUBF:+/$SUBF}"
+
+# the test mount: fails cleanly, leaves nothing behind (cleanup removes $T)
+timeout -k 2 "$MOUNT_TIMEOUT" mount -t cifs "$WHAT" "$T/mnt" -o "$TEST_OPTS" > "$T/out" 2>&1
+rc=$?
+if [ "$rc" -ne 0 ]; then
+    reason=$(grep -v '^[[:space:]]*$' "$T/out" | head -n 1)
+    low=$(cat "$T/out" | tr 'A-Z' 'a-z')
+    has() { printf '%s\n' "$low" | grep -Fq "$1"; }
+    if [ "$rc" -eq 124 ] || [ "$rc" -eq 137 ]; then word=timeout; [ -n "$reason" ] || reason="the server did not answer in $MOUNT_TIMEOUT s"
+    elif has "filesystem not supported" || has "error(19)"; then word=nomodule
+    elif has "could not resolve address" || has "unable to find suitable address" || has "name or service not known" \
+        || has "could not connect" || has "error(113)" || has "error(112)" || has "error(111)" || has "error(101)" \
+        || has "no route to host" || has "host is down" || has "connection refused" || has "network is unreachable"; then word=unreachable
+    elif has "error(110)" || has "connection timed out"; then word=timeout
+    elif has "nt_status_logon_failure" || has "nt_status_access_denied" || has "error(13)" || has "permission denied" \
+        || has "nt_status_account"; then word=denied
+    elif has "nt_status_bad_network_name" || has "nt_status_object_name_not_found" || has "nt_status_object_path_not_found" \
+        || has "error(2)" || has "error(6)" || has "no such file or directory" || has "no such device or address"; then word=notfound
+    else word=other; [ -n "$reason" ] || reason="mount failed (status $rc)"; fi
+    fail "$word" "$reason"
+fi
+umount "$T/mnt" > /dev/null 2>&1 || umount -l "$T/mnt" > /dev/null 2>&1
+
+# rollback of a partial add
+undo() {
+    sysctl_ disable --now "$AUTO_UNIT"
+    if [ "$MADE_UNITS" = 1 ]; then rm -f -- "$SYSD/$MOUNT_UNIT" "$SYSD/$AUTO_UNIT"; fi
+    if [ "$MADE_CRED" = 1 ]; then rm -f -- "$CONF/$NAME.cred"; fi
+    if [ "$MADE_MP" = 1 ]; then rmdir "$MP_FS" 2> /dev/null; fi
+    sysctl_ daemon-reload
+}
+
+# the folders: /mnt/cyberdeck 0755 root (never a symlink), the credentials folder 0700 root, lazily
+if [ -L "$R$MNT_REAL" ]; then fail other "/mnt/cyberdeck is a symlink"; fi
+mkdir -p "$R$MNT_REAL" || fail other "cannot create /mnt/cyberdeck"
+chmod 755 "$R$MNT_REAL"
+if [ "$AUTH" = user ]; then
+    if [ -L "$CONF" ] || [ -L "$R/etc/cyberdeckzero" ]; then fail other "/etc/cyberdeckzero is a symlink"; fi
+    mkdir -p "$R/etc/cyberdeckzero" "$CONF" || fail other "cannot create $CONF_REAL"
+    chmod 755 "$R/etc/cyberdeckzero"
+    chmod 700 "$CONF"
+    cp "$T/cred" "$CONF/$NAME.cred.tmp" && chmod 600 "$CONF/$NAME.cred.tmp" && mv "$CONF/$NAME.cred.tmp" "$CONF/$NAME.cred" \
+        || { rm -f "$CONF/$NAME.cred.tmp"; fail other "cannot write the credentials file"; }
+    MADE_CRED=1
+fi
+mkdir "$MP_FS" || { undo; fail other "cannot create the mount point"; }
+chmod 755 "$MP_FS"
+MADE_MP=1
+
+meta="# share: name=$NAME host=$HOST share=$SHARE${SUBF:+ sub=$SUBF} auth=$AUTH"
+{
+    printf '%s %s\n' "$MARKER" "$NAME"
+    printf '%s\n' "$meta"
+    printf '[Unit]\nDescription=Network share %s (%s)\nDocumentation=man:systemd.mount(5)\n\n' "$NAME" "$WHAT"
+    printf '[Mount]\nWhat=%s\nWhere=%s\nType=cifs\nOptions=%s\nTimeoutSec=10\n' "$WHAT" "$MP_REAL" "$UNIT_OPTS"
+} > "$SYSD/$MOUNT_UNIT.tmp" && chmod 644 "$SYSD/$MOUNT_UNIT.tmp" || { rm -f "$SYSD/$MOUNT_UNIT.tmp"; undo; fail other "cannot write the mount unit"; }
+{
+    printf '%s %s\n' "$MARKER" "$NAME"
+    printf '%s\n' "$meta"
+    printf '[Unit]\nDescription=Automount of network share %s\n\n' "$NAME"
+    printf '[Automount]\nWhere=%s\nTimeoutIdleSec=60\n\n[Install]\nWantedBy=remote-fs.target\n' "$MP_REAL"
+} > "$SYSD/$AUTO_UNIT.tmp" && chmod 644 "$SYSD/$AUTO_UNIT.tmp" || { rm -f "$SYSD/$MOUNT_UNIT.tmp" "$SYSD/$AUTO_UNIT.tmp"; undo; fail other "cannot write the automount unit"; }
+mv "$SYSD/$MOUNT_UNIT.tmp" "$SYSD/$MOUNT_UNIT" && mv "$SYSD/$AUTO_UNIT.tmp" "$SYSD/$AUTO_UNIT" \
+    || { rm -f "$SYSD/$MOUNT_UNIT.tmp" "$SYSD/$AUTO_UNIT.tmp"; MADE_UNITS=1; undo; fail other "cannot install the units"; }
+MADE_UNITS=1
+sysctl_ daemon-reload || { undo; fail other "systemctl daemon-reload failed"; }
+sysctl_ enable --now "$AUTO_UNIT" || { undo; fail other "systemctl could not start the automount"; }
+echo "ok path=$MP_REAL"
+exit 0
