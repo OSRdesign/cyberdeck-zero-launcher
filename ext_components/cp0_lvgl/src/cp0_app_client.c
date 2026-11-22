@@ -163,5 +163,7 @@ int cp0_app_toast(const char *text)
 
 int cp0_app_backlight(int on)
 {
-    return cp0_app_client_call(on ? "screen on" : "screen off", NULL, 0, 0);
+    /* its own, longer wait: the launcher answers on its UI loop, which a slow board or a frame being drawn can keep busy for
+     * more than the 200 ms default; a "no answer" there would make the app think a request failed that is about to be done */
+    return cp0_app_client_call(on ? "screen on" : "screen off", NULL, 0, CP0_APP_BACKLIGHT_TIMEOUT_MS);
 }

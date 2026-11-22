@@ -35,6 +35,7 @@ extern "C" {
 #define CP0_APP_CLIENT_SOCKET_FILE "launcher.sock"
 #define CP0_APP_CLIENT_ENV_SOCKET "APPLAUNCH_SOCKET"
 #define CP0_APP_CLIENT_TIMEOUT_MS 200
+#define CP0_APP_BACKLIGHT_TIMEOUT_MS 1500 /* cp0_app_backlight's own wait (the launcher answers on its UI loop) */
 #define CP0_APP_CLIENT_LINE_MAX 256 /* request and reply, with the newline */
 #define CP0_APP_CLIENT_PROTOCOL 1
 
@@ -56,7 +57,11 @@ int cp0_app_toast(const char *text);
  * launcher: `err unknown` also counts as 1). The launcher gives the light back by itself when this process sends
  * `screen on`, exits or dies (looked at about once a second), is hidden or replaced in front, or the launcher stops:
  * keep running while the screen is off and call this with 1 to wake it. Each call is one connection, so the
- * launcher follows the process, not the socket. Touch and keys are not filtered: the app ignores them while off. */
+ * launcher follows the process, not the socket. Touch and keys are not filtered: the app ignores them while off.
+ * Unlike beep and toast it waits up to CP0_APP_BACKLIGHT_TIMEOUT_MS (1500 ms, not the 200 ms default): the launcher
+ * handles `screen` on its UI loop, which a slow board (Pi Zero 2 W) or a frame being drawn can keep busy for longer.
+ * So it may block that long: do not call it from the UI thread's hot path (a worker thread, or accept the short wait).
+ * A nonzero return means refused (1) or no answer (-1); the request may still be carried out after a -1. */
 int cp0_app_backlight(int on);
 
 #ifdef __cplusplus
