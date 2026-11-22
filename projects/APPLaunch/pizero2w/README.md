@@ -4,7 +4,8 @@ CyberdeckZero Launcher on Raspberry Pi boards with a touch panel and a keyboard.
 (the **Pi Zero 2 W deck** with the Waveshare 2.8" DPI touch LCD, 480x640 portrait used as 640x480 landscape, and a
 Bluetooth keyboard; the **Pi 3A+** with a 3.5" SPI or a 4.3" DSI panel; the **Pi 4 B** with a 5" DSI panel; the **Pi 5**
 with the HyperPixel 4" or the 7" DSI panel; the **HackBerry CM5** (720x720); a **Pi Zero 2 W** with the Waveshare 3.5"
-SPI panel) and PCs. Since phase x-b of the x86 port (report 028)
+SPI panel; any Raspberry Pi with the Luckfox or Waveshare 3.5" SPI panel, set up by `--spi-panel luckfox35`; an
+**Orange Pi Zero 2W** with Armbian and the Waveshare 3.5" (F), set up by `--spi-panel waveshare35f`) and PCs. Since phase x-b of the x86 port (report 028)
 the same launcher also installs on **PCs** (x86_64, the amd64 bundle; the Panasonic FZ-M1 tablet first): see
 [Install on a PC](#install-on-a-pc-amd64). The port is selected at run time with
 `APPLAUNCH_DISPLAY=dpi-scaled` and at build time with `APPLAUNCH_HW=pizero2w` (every bundle sets both); without them
@@ -35,18 +36,18 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 | Area | What it does |
 | --- | --- |
 | Display | Two LVGL displays share `/dev/fb0`: a **native 640x480** one (home grid, terminal, Calculator) and the legacy **320x170** one drawn 2x into a window at the top (`cp0_lvgl_dpi_scaled.c`, `cp0_display.h`). |
-| Home | Touch-friendly app grid with clock, Wi-Fi bars and Bluetooth state (`native_ui.cpp`). A tile's name is one line (v0.9.3): a long name gets a smaller font, down to 80 % of the normal size, then ends in dots; it never runs over the icon. |
-| Terminal | CLI, Python and SSH use a full-screen terminal with touch scrolling (`ui_app_st*.cpp`). |
+| Home | Touch-friendly app grid with clock, Wi-Fi bars and Bluetooth state (`native_ui.cpp`). A tile's name is one line (v0.9.3): a long name gets a smaller font, down to 80 % of the normal size, then ends in dots; it never runs over the icon. **Move mode** (v0.8.12): hold a tile 3 s (a bar shows the hold) or press Ctrl+O on the selected tile, then the arrows move it, a tap on another place puts it there, Enter drops it and Esc cancels; the order is saved (`home_order` in `config.json`) and **Settings > Launcher > Reset app order** puts the default back. |
+| Terminal | CLI, Python and SSH use a full-screen terminal with touch scrolling (`ui_app_st*.cpp`). The grid fills the screen (v0.10.6: columns = width / text cell, rows = height / text cell, 20 x 8 to 255 x 255; covered by unit tests and renders, not yet tried on a board); F6 switches to an 80 x 24 view. The text size is **Settings > Screen > Terminal text size** (v0.10.5): Auto (`APPLAUNCH_TERM_FONT` of `board.conf`, else 20 px, 14 px on a portrait screen under 480 px wide), 14, 17, 20 or 24 px, each with its grid as a grey note; it applies the next time the terminal opens. |
 | Calculator | Native touch + keyboard calculator (the only one: the external 320x170 calculator program of the inherited code is gone). |
 | Legacy apps | Fullscreen 320x170 framebuffer apps (the older apps, installed from a source in Settings > Apps) run unmodified, scaled 2x: an `LD_PRELOAD` shim (`vfb/`) gives them a virtual 320x170 framebuffer and a virtual keyboard (`native_vkbd.cpp`, uinput) that carries both the physical keys and the on-screen toolbar. |
 | Touch | Toolbar (Esc, arrows, Enter) under the scaled window; Settings (native, full screen) takes taps and drags directly, and games are driven by swipe/tap gestures; **Settings > Touch** chooses the behaviour per app. |
-| Screensaver | After the DarkTime timeout the backlight dims to 10 % and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
-| SSH indicator | While someone is connected to the board over SSH (an incoming connection to its sshd; `ssh localhost` counts), the status strip shows a terminal glyph (`>_`) in its leftmost place: blue, alternating blue and white once a second while data flows (typing, output, a copy). Nothing without a session; the place stays reserved, so the page headers do not move when one starts. On a board with a battery its percentage hides while the glyph shows. **Settings > System > SSH indicator** Off stops it (On by default); the clock screensaver covers it. Apps show it once rebuilt with a toolkit of this release (`status.state` `ssh=`, `docs/APP-CONTRACT.md` section 5b). The launcher reads `/proc/net/tcp*` and `/etc/ssh/sshd_config` (ports; `APPLAUNCH_SSH_PORTS=22,2222` in `board.conf` overrides them) as the launcher user: no root, no new permission (`cp0_ssh_watch.h`). |
-| Settings | **Speaker, Battery and Screen > Brightness are detected at run time** each time Settings opens (`cp0_capabilities`, report 030): a row shows only when the board has that hardware, see [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board). The hardware profile (`settings_hw_profile.hpp`) still hides Ethernet and the upstream bq27220 battery pages and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). **Battery** (after Bluetooth) shows only on a board with a Linux `power_supply` battery (a PC's ACPI `BAT0`/`BAT1`, a gauge driver's; read when Settings opens): charge, status, time left or to full, power, voltage, health, device, refreshed every 2 s; the status strip then shows the battery's level and percentage left of the Bluetooth icon (green while charging). The Pi boards have none: no row, nothing in the strip. |
+| Screensaver | After the DarkTime timeout the backlight dims to the idle dim level (**Settings > Screen > Idle dim level**, v0.10.5: Default, the board profile's `APPLAUNCH_DIM_PERCENT`, else 10 %; or 5, 10, 20, 30, 50 %; an on/off backlight stays on and has no such row) and a big HH:MM clock with the date is shown; any touch or key wakes it (`native_screensaver.cpp`). |
+| SSH indicator | While someone is connected to the board over SSH (an incoming connection to its sshd; `ssh localhost` counts), the status strip shows a terminal glyph (`>_`) in its leftmost place: blue, alternating blue and white once a second while data flows (typing, output, a copy). Nothing without a session; the place stays reserved, so the page headers do not move when one starts. On a board with a battery its percentage hides while the glyph shows. **Settings > System > SSH indicator** Off stops it (On by default); the clock screensaver covers it. Apps show it once rebuilt with a toolkit of v0.8.12 or later (`status.state` `ssh=`, `docs/APP-CONTRACT.md` section 5b). The launcher reads `/proc/net/tcp*` and `/etc/ssh/sshd_config` (ports; `APPLAUNCH_SSH_PORTS=22,2222` in `board.conf` overrides them) as the launcher user: no root, no new permission (`cp0_ssh_watch.h`). |
+| Settings | **Speaker, Battery and Screen > Brightness are detected at run time** each time Settings opens (`cp0_capabilities`, report 030): a row shows only when the board has that hardware, see [Sound, battery and brightness per board](#sound-battery-and-brightness-per-board). The hardware profile (`settings_hw_profile.hpp`) still hides Ethernet and the upstream bq27220 battery pages and adds Shutdown (the upstream device's ExtPort, ADB and software-update pages were removed, report 029); Wi-Fi, Bluetooth, Date & Time work without sudo prompts. **Date & Time > Time zone** picks the zone (region, then city; independent of Network Time) through timedated: the clock follows at once, no restart (when PolicyKit refuses, the sudo password prompt asks first). **Battery** (after Bluetooth) shows only on a board with a Linux `power_supply` battery (a PC's ACPI `BAT0`/`BAT1`, a gauge driver's; read when Settings opens): charge, status, time left or to full, power, voltage, health, device, refreshed every 2 s; the status strip then shows the battery's level and percentage left of the Bluetooth icon (green while charging). The Pi boards have none: no row, nothing in the strip. **Settings > Screen** also has **PDA mode** (v0.8.9, where portrait fits; `docs/PDA-PROFILE.md`), **Idle dim level** (v0.10.5, where the backlight has levels; see Screensaver), **Terminal text size** (v0.10.5; see Terminal) and **Screen size** (v0.10.5, on a board with a profile; [Screen size](#screen-size)). **Settings > Updates** updates the launcher and the apt packages ([Settings > Updates](#settings--updates)). |
 | Responsive shell | One code base for several screens: `cp0_ui_metrics` computes the layout (screen class, density, tokens) from the logical size and the panel size in mm (`APPLAUNCH_PANEL_MM=WxH`, written by `install.sh` for known panels); the home grid, status bar, toolbar and the native Settings (the default on the Pi boards since task 014 P3e; no switch) use it. A fallback on-screen keyboard (`APPLAUNCH_OSK=force|auto|off`) shows only when no physical keyboard is present (a keyboard listed in `APPLAUNCH_KBD_IGNORE` does not count); in a terminal it has an **Alt** key next to Ctrl (one-shot, double tap locks: Alt then Tab is Alt+Tab). Developer notes: `docs/dev/tasks/014-responsive-shell.md`. |
-| Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: Mesh Hop, Net Toolbox, viz1090, Home Assistant, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. Available lists only the apps whose registry `min_size` fits the screen (v0.9.2; a portrait screen is judged turned, installed apps always stay listed), and an app's page shows Screen and Minimum size. See `docs/HOSTING-APPS.md`. |
+| Apps | **Settings > Apps** installs/removes apps from GitHub sources (`settings_native_apps_page.cpp`). `install.sh` adds the project's apps repo (`OSRdesign/cyberdeck-zero-apps`: Mesh Hop, Net Toolbox, viz1090, Home Assistant, ...) once for a user who has no source yet, so **Settings > Apps > Available** lists its apps out of the box; add your own under Sources. Available lists only the apps whose registry `min_size` fits the screen (v0.9.2; a portrait screen is judged turned, installed apps always stay listed), and an app's page shows Screen and Minimum size. Opening the page checks the sources for app updates in the background (v0.10.0; **Auto-check updates** at the end of Sources, On by default). Libraries an app needs that are missing are installed without apt's recommended packages (v0.10.2, the bundled Store fork's one change). See `docs/HOSTING-APPS.md`. |
 | App contract | Every app the launcher starts learns its mode (`compat` / `fullscreen`), window, canvas and scale, the panel's size, rotation, density, framebuffer and touch device, the design tokens and the on-screen keyboard rule (environment, `$XDG_RUNTIME_DIR/applaunch/screen.state` and `input.state`); `X-MinSize=WxH` in a `.desktop` hides an app on a smaller screen. See `docs/APP-CONTRACT.md`; test app `tools/dev/app-contract-probe`. |
-| Launcher | **Settings > Launcher** shows or hides the built-in tiles. The Store has no tile any more (its program still ships, as the back end of Settings > Apps). |
+| Launcher | **Settings > Launcher** shows or hides the built-in tiles, and **Reset app order** (v0.8.12) puts back the default order of the home grid after tiles were moved. The Store has no tile any more (its program still ships, as the back end of Settings > Apps). |
 | Keyboard | A standard keyboard is supported (`APPLAUNCH_STD_KEYBOARD=1` disables the inherited matrix keymap); the Bluetooth keyboard re-attaches after sleep. Volume, mute and brightness keys work from any device that has them, a keyboard or not (a tablet's buttons, the ACPI video bus, a headset's buttons: media-key devices, `docs/APP-CONTRACT.md` section 14), on the launcher's pages and inside apps; such a device never counts as a keyboard. Pointer navigation (Settings > System, off by default) turns a mouse or trackpoint into arrows, Enter and the options key; on the HackBerry a quick tap on the pad does not select, press the pad's button (`APPLAUNCH_POINTER_MIN_CLICK_MS`, see `docs/APP-CONTRACT.md` section 10b). |
 | Multitasking | Since v0.8.0: up to 4 apps stay open; three fingers held 1 s, a 0.5 s long-press on the status strip, Alt+Tab, Super tapped twice (within 0.45 s) or held 0.6 s open "Open apps", Super tapped once goes home; apps opt in with `X-Background=run\|freeze` (`docs/APP-CONTRACT.md` section 13). On by default on canvases whose short side is 480 or more; see [Multitasking](#multitasking). Code: `main/ui/multitask/`. |
 
@@ -66,7 +67,8 @@ binary name as a symlink. `uninstall.sh` knows both the old and the new names. R
 and PolicyKit rules, the user service (with lingering, so it starts at boot), the boot-time Network Time
 service, masks the text console on tty1, frees the panel from the kernel text console once the boot is done
 (`cyberdeckzero-console.service`, see [Text console](#text-console)) and adds the PWM backlight overlay (original files are
-kept as `*.bak-applaunch`). On a board that boots to a desktop it installs the desktop variant instead (see
+kept as `*.bak-applaunch`). It also installs the anchor package `cyberdeckzero-runtime` ([Settings > Updates](#settings--updates)) and the
+network share helper with `cifs-utils` ([Network shares helper](#network-shares-helper)). On a board that boots to a desktop it installs the desktop variant instead (see
 [Desktop boards](#desktop-boards)). The end of the install names the session and why (`session: appliance (...)` or
 `session: desktop (...)`). **If you install or remove a desktop later, run `install.sh` again**: it switches between
 the two variants ([Switching between appliance and desktop](#switching-between-appliance-and-desktop)). To take it all
@@ -270,9 +272,9 @@ The apt commands run the same way, in a transient unit of their own: `systemd-ru
 Exit status: 0 done (or nothing to resume), 1 rolled back or failed, 2 refused or cancelled (nothing changed) or a usage error.
 
 - **Options.** Every `install.sh` run (not `--dry-run` or `--board-only`) records its options in
-  `/etc/applaunch/install.conf`: `keyboard_name`, `board` (empty when the board was detected), `boot_config`,
-  `pwm_backlight`, `default_source`, `user`. The helper replays them as `--keyboard-name`, `--board`,
-  `--no-boot-config`, `--pwm-backlight`, `--no-default-source`. Without the file (an install before 0.8.13) it infers
+  `/etc/applaunch/install.conf`: `keyboard_name`, `board` (empty when the board was detected), `screen_size`,
+  `panel_mm` (v0.10.4), `boot_config`, `pwm_backlight`, `default_source`, `user`. The helper replays them as
+  `--keyboard-name`, `--board`, `--screen-size`, `--panel-mm`, `--no-boot-config`, `--pwm-backlight`, `--no-default-source`. Without the file (an install before 0.8.13) it infers
   them from the keyboard udev rule, `board.conf`, `cmdline.txt`, `config.txt` and the default-source marker.
 - **The plan.** `install.sh --plan` is the dry run as `key=value` lines (`plan`, `board`, `session`,
   `desktop_refused`, `switch`, `migration`, `profile_action`, ...). The helper refuses, and asks for `install.sh` by
@@ -454,7 +456,7 @@ sudo ./install.sh --panel-mm 108x65          # or the visible area in mm, exactl
   replaces it, the old one stays as `board.conf.bak`): edit `APPLAUNCH_PANEL_MM` by hand there. `--dry-run` shows the size
   in use (`screen: panel size ... mm`); `--plan` prints `screen_size=`, `panel_mm=` and `panel_in_use=`.
 - **The deck** (`zero2w`) has no profile, its 2.8" panel size is built in: the options are refused there.
-- **In Settings** (since v0.10.5, draft): Settings > Screen > Screen size picks the diagonal from a list (2.8, 3.5, 4.3, 5,
+- **In Settings** (since v0.10.5): Settings > Screen > Screen size picks the diagonal from a list (2.8, 3.5, 4.3, 5,
   5.5, 7, 8, 10.1 inches; "Auto (board profile)" clears the choice) on any board that has a profile, with the same formula
   and the same exceptions as above, and applies it at the next launcher start (the grey hint says so and shows the size in
   use and its source: installer, setting, board profile). It is stored in the launcher's user settings
@@ -550,7 +552,8 @@ framebuffer). Refused, with nothing changed, on `luckfox35` (a Raspberry Pi's na
 `config.txt`, [below](#raspberry-pi-the-35-spi-panel)), on another SoC, without `/boot/armbianEnv.txt`, or with a kernel release that is not `<version>-<flavour>`. Undo by hand:
 take `spi35-st7796s` out of `user_overlays=` (or put the `.bak-<date>` file back), `sudo dkms remove
 drm-mipi-dbi-chunk/1.0 --all` (and `pwm-gpio/1.0`), remove the two files in `/etc/modules-load.d`, reboot;
-`uninstall.sh` does not touch them.
+on a board installed before v0.10.9 (no record in `install.conf`) `uninstall.sh` does not touch them; from v0.10.9 on it
+undoes what the record names (below).
 
 **Undo.** `./uninstall.sh` removes only what `install.conf` records as made by `install.sh --spi-panel waveshare35f`
 (`spi_armbian_files=`, `spi_armbian_dkms=`, `spi_armbian_env=`; each name is checked against a fixed list): `"spi35-st7796s"` taken off the
@@ -566,7 +569,7 @@ A file that was there before `install.sh`, a panel set up by hand (no `install.c
 The same panel family as the Orange Pi's section above, on a **Raspberry Pi**: the Luckfox 3.5" RPi LCD (CTP) and the
 Waveshare 3.5" RPi LCD (F) (ST7796S 320x480 on SPI0 CE0, Goodix GT911 touch on I2C 0x5d; DC GPIO22, reset GPIO27,
 backlight GPIO18, touch interrupt GPIO4, touch reset GPIO17). Tested by hand on a **Pi 5** (Raspberry Pi OS trixie,
-kernel 6.18, labwc + lightdm desktop): screen, touch, launcher and 15-step brightness. Since this release the set-up is
+kernel 6.18, labwc + lightdm desktop): screen, touch, launcher and 15-step brightness. Since v0.10.7 the set-up is
 `install.sh --spi-panel luckfox35` (`waveshare35f` is accepted as a name too: the same panel family):
 
 ```
@@ -1111,6 +1114,10 @@ lines `dtoverlay=waveshare-pwm-backlight` and `dtoverlay=pwm,pin=18,func=2` in `
 The block that `install.sh --spi-panel luckfox35` added to `config.txt` on a Raspberry Pi (between the `# >>> cyberdeckzero spi
 panel` and `# <<< cyberdeckzero spi panel` lines) is removed, and so is `/lib/firmware/st7796s.bin` when `install.sh` put it there
 and it is unchanged; a panel set up by hand is never touched ([Raspberry Pi: the 3.5" SPI panel](#raspberry-pi-the-35-spi-panel)).
+On Armbian it undoes what `install.sh --spi-panel waveshare35f` recorded in `install.conf` (v0.10.9; [Orange Pi Zero 2W: the 3.5" SPI panel](#orange-pi-zero-2w-the-35-spi-panel), "Undo").
+It also removes the network share helper (the shares stay unless `--remove-shares`, [Network shares helper](#network-shares-helper)),
+the FZ-M1's power-key drop-in when `install.sh` wrote it and it is unedited ([Install on a PC](#install-on-a-pc-amd64)),
+and purges the anchor package `cyberdeckzero-runtime` (it installs no file; the packages it names stay).
 
 It keeps by default: `~/.config/cardputerzero`, the Settings > Apps sources and install records
 (`~/.local/share/cardputerzero-appstore`, with the default source and its marker), the download cache, every installed
@@ -1124,7 +1131,7 @@ and the backup files. After `--purge-config` a new install offers the default ap
 | `--purge-config` | Also delete `~/.config/cardputerzero`, `~/.local/share/cardputerzero-appstore` and `~/.cache/cardputerzero-appstore`, and Settings > Updates' `~/.local/state/cyberdeckzero` and `~/.cache/cyberdeckzero`. |
 | `--remove-apps` | Also `apt-get remove` the app packages installed from Settings > Apps / the Store, taken from the launcher's `installed.json` and listed first. No record: skipped. With `--purge-config` the packages are purged. |
 | `--restore-config` | Restore `config.txt` from `config.txt.bak-before-pwm` instead of removing the two lines (loses any other later edit; the current file is backed up first). This works only where that file exists (the deck's own backup, made by hand before `install.sh` existed). `install.sh` itself writes `config.txt.bak-applaunch`, which this option does not use; without the file the option stops with an error. |
-| `--no-boot-config` | Leave `config.txt` (also the 3.5" SPI panel's block), `cmdline.txt`, the overlay and the panel's init file alone. |
+| `--no-boot-config` | Leave `config.txt` (also the 3.5" SPI panel's block), `cmdline.txt`, the overlay and the panel's init file alone; on Armbian also the `--spi-panel waveshare35f` set-up (the overlay name in `armbianEnv.txt`, the files, the DKMS modules). |
 | `--disable-linger` | Also run `loginctl disable-linger` (`install.sh` enabled it; it may have been on before). |
 | `--remove-shares` | Also remove the network shares made with the share helper (unmount, units, credentials files). Without it they stay and keep working; the way to remove them by hand is printed ([Network shares helper](#network-shares-helper)). |
 | `--user NAME`, `--payload DIR` | The user that ran `install.sh`; where the bundle's `payload/` is, if it is not next to the script. |
@@ -1189,11 +1196,13 @@ What each board gets (from the boards' measured facts, the fake trees of `projec
 `cyberdeckzero.service` environment: `APPLAUNCH_DISPLAY=dpi-scaled`, `APPLAUNCH_ROTATE=0`,
 `LV_LINUX_KEYBOARD_DEVICE=/dev/input/bt-keyboard`, `APPLAUNCH_TOUCH_SWAP_XY/INVERT_X/INVERT_Y` (touch panel
 orientation measured on this deck), `APPLAUNCH_STD_KEYBOARD=1`, optional `APPLAUNCH_FN_KEY=<evdev code>`,
-optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20; Settings > Screen > Terminal text size, when not Auto, wins over it), optional `APPLAUNCH_MULTITASK=0|1`
+optional `APPLAUNCH_TERM_FONT=<px>` (terminal font, default 20, 14 on a portrait screen under 480 px wide; Settings > Screen > Terminal text size, when not Auto, wins over it), optional `APPLAUNCH_MULTITASK=0|1`
 ([Multitasking](#multitasking); not set = on from 640x480).
 
 User settings live in `~/.config/cardputerzero/config.json` (DarkTime screensaver timeout, brightness, volume,
-per-app touch choice `touch_<app>`, app switches such as `app_Python`: 0 hides the Python tile).
+per-app touch choice `touch_<app>`, app switches such as `app_Python`: 0 hides the Python tile; the home grid's
+`app_order` and, after a move, `home_order`; `pda_mode`, `ssh_indicator`, `apps_auto_check`, `idle_dim_percent`,
+`terminal_font_px`, `screen_diag` and `screen_mm`).
 
 Test hooks of the detection (the render harness and the unit tests use them; leave them unset on a board):
 `APPLAUNCH_BACKLIGHT_ROOT` (default `/sys/class/backlight`), `APPLAUNCH_ASOUND_ROOT` (default `/proc/asound`),
