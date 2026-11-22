@@ -37,6 +37,7 @@ cat > "$BIN/mount" <<'EOF'
 #!/bin/sh
 # stand-in mount: args -t cifs WHAT PATH -o OPTS. FAKE_MOUNT=ok|err|hang. Records its own stdin (must be empty).
 echo "mount $*" >> "$FAKE_LOG"
+echo "mount-argc $#" >> "$FAKE_LOG"
 cat > "$FAKE_STATE/mount.stdin"
 # the credentials file must be readable while the test mount runs (only its existence is logged, never a value)
 case "$6" in *credentials=*) f=${6#*credentials=}; f=${f%%,*}; if grep -q '^password=' "$f" 2>/dev/null; then echo "credfile-readable" >> "$FAKE_LOG"; fi ;; esac
@@ -201,28 +202,28 @@ rej() { # LABEL args...
     check "rejected: $lab" '[ $RC = 2 ] && has "err usage" && no_mount_call && nothing_left'
 }
 GOOD="--host 192.168.1.5 --share music"
-for v in 'a,b' 'a b' '-x' '../x' 'a/b' 'a.b' 'x$(id)' 'a`b' "a${NL}b" 'a;b' 'né' 'a%b' "a$(printf '\t')b" "a$(printf '\r')" 'a=b' 'a*' '.' '..' 'a:b'; do
+for v in 'a,b' 'a b' ' a' '-x' '../x' 'a/b' 'a.b' 'x$(id)' 'a`b' "a${NL}b" 'a;b' 'né' 'a%b' "a$(printf '\t')b" "a$(printf '\r')" 'a=b' 'a*' '.' '..' 'a:b'; do
     rej "name [$v]" add --name "$v" $GOOD
 done
 rej "name empty" add --name "" $GOOD
 rej "name of 33 characters" add --name abcdefghijklmnopqrstuvwxyz0123456 $GOOD
-for v in 'a b' '-h' '1.2.3.999' '1.2.3' '010.1.1.1' '1.2.3.4.5' 'h,ost' 'h/ost' 'host..x' '.local' 'host-' '-host' 'a_b.local' '::1' 'fe80::1' 'h;x' "h${NL}x" 'h$x' 'hé.lan' 'a..b' '1.2.3.4/24' 'user@host' '[::1]' 'h:445' 'host.'; do
+for v in 'a b' ' h' 'h ' '-h' '1.2.3.999' '1.2.3' '010.1.1.1' '1.2.3.4.5' 'h,ost' 'h/ost' 'host..x' '.local' 'host-' '-host' 'a_b.local' '::1' 'fe80::1' 'h;x' "h${NL}x" 'h$x' 'hé.lan' 'a..b' '1.2.3.4/24' 'user@host' '[::1]' 'h:445' 'host.'; do
     rej "host [$v]" add --name nas --host "$v" --share music
 done
 rej "host of 254 characters" add --name nas --host "$(printf 'a%.0s' $(seq 1 63)).$(printf 'a%.0s' $(seq 1 63)).$(printf 'a%.0s' $(seq 1 63)).$(printf 'a%.0s' $(seq 1 62))x" --share music
-for v in 'a b' 'a/b' 'a\b' 'a,b' '..' '.' 'a..b' '' 'é' 'a%b' 'a(b)' 'a;b' "a${NL}b" "a$(printf '\001')b" 'a"b' "a'b" 'a=b'; do
+for v in ' a' 'a ' ' ' 'a  b' "a$(printf '\t')b" 'my share ' 'a b..c' 'a b/c' 'a/b' 'a\b' 'a,b' '..' '.' 'a..b' '' 'é' 'a%b' 'a(b)' 'a;b' "a${NL}b" "a$(printf '\001')b" 'a"b' "a'b" 'a=b'; do
     rej "share [$v]" add --name nas --host 192.168.1.5 --share "$v"
 done
 rej "share of 81 characters" add --name nas --host 192.168.1.5 --share "$(printf 'a%.0s' $(seq 1 81))"
-for v in '../x' '/abs' 'a/../b' 'a,b' 'a//b' 'a/' './a' 'a/.' 'a b' 'a\b' '..' '.' "a${NL}b" 'a;b' 'é' '' 'a%b'; do
+for v in '../x' '/abs' 'a/../b' 'a,b' 'a//b' 'a/' './a' 'a/.' ' a' 'a ' 'a  b' 'a/ b' 'a /b' 'a/b ' "a b/c$(printf '\t')d" 'My Folder/../x' 'My .. Folder' 'a\b' '..' '.' "a${NL}b" 'a;b' 'é' '' 'a%b'; do
     rej "subfolder [$v]" add --name nas $GOOD --subfolder "$v"
 done
-for v in 'a,b' 'a b' '-u' 'u=x' 'u/x' "u${NL}x" 'é' 'u;x' ''; do
+for v in 'a,b' 'a b' ' u' '-u' 'u=x' 'u/x' "u${NL}x" 'é' 'u;x' ''; do
     rej "user [$v]" add --name nas $GOOD --user "$v" --credfile /run/user/$UIDN/cyberdeckzero-share/abcdef12.cred
 done
 rej "option -o" add --name nas $GOOD -o rw,suid
 rej "option --options" add --name nas $GOOD --options rw
-rej "option -o as a value of --share" add --name nas --host 192.168.1.5 --share "x -o suid"
+rej "option -o as a value of --share, double space" add --name nas --host 192.168.1.5 --share "x  -o suid"
 rej "option injection through the host (comma)" add --name nas --host "1.2.3.4,uid=0" --share music
 rej "option injection through the user (comma)" add --name nas $GOOD --user "bob,sec=none" --credfile /run/user/$UIDN/cyberdeckzero-share/abcdef12.cred
 rej "a password flag" add --name nas $GOOD --password hunter2
@@ -240,6 +241,33 @@ rej "remove with a bad name" remove --name "../etc"
 rej "remove with a name starting with a dash" remove --name -rf
 # the value of a flag that looks like another flag
 rej "--name followed by a flag" add --name --host 1.2.3.4 --share music
+
+# spaces: a single inner space is fine in a share and in a subfolder segment, as ONE argument to the test mount
+reset
+run add --name nas --host 192.168.1.5 --share "My Share"
+check "space: share [My Share] accepted, the test mount got WHAT as one word (6 arguments)" '[ $RC = 0 ] && [ "$OUT" = "ok path=/mnt/cyberdeck/nas" ] && grep -q "^mount-argc 6$" "$LOG" && grep -q "^mount -t cifs //192.168.1.5/My Share .*/mnt -o " "$LOG"'
+check "space: the unit has the real UNC (plain space) in What=, Description=, and the meta line has \040" 'grep -qx "What=//192.168.1.5/My Share" "$SYSD/$MU" && grep -qx "Description=Network share nas (//192.168.1.5/My Share)" "$SYSD/$MU" && sed -n 2p "$SYSD/$MU" | grep -qxF "# share: name=nas host=192.168.1.5 share=My\040Share auth=guest" && sed -n 2p "$SYSD/$AU" | grep -qxF "# share: name=nas host=192.168.1.5 share=My\040Share auth=guest"'
+run list
+check "space: list shows \040 and exactly 4 tokens" '[ "$OUT" = "$(printf "%s\nok" "nas 192.168.1.5 My\040Share inactive")" ] && [ "$(printf "%s\n" "$OUT" | head -n 1 | wc -w)" = 4 ]'
+run remove --name nas
+check "space: remove works, nothing left" '[ $RC = 0 ] && nothing_left'
+reset
+run add --name nas --host 192.168.1.5 --share "My Share" --subfolder "My Folder/sub/a b"
+check "space: share and subfolder with spaces accepted, one-word WHAT" '[ $RC = 0 ] && grep -q "^mount-argc 6$" "$LOG" && grep -qx "What=//192.168.1.5/My Share/My Folder/sub/a b" "$SYSD/$MU" && sed -n 2p "$SYSD/$MU" | grep -qxF "# share: name=nas host=192.168.1.5 share=My\040Share sub=My\040Folder/sub/a\040b auth=guest"'
+run list
+check "space: list with a subfolder shows \040 and exactly 5 tokens" '[ "$OUT" = "$(printf "%s\nok" "nas 192.168.1.5 My\040Share My\040Folder/sub/a\040b inactive")" ] && [ "$(printf "%s\n" "$OUT" | head -n 1 | wc -w)" = 5 ]'
+# an old meta line (no \040) still lists; a meta line with a bad decoded value is skipped
+printf '%s old\n# share: name=old host=1.2.3.4 share=music sub=a/b auth=guest\n' "# cyberdeckzero-share v1: made by the launcher helper, remove with: cyberdeckzero-share remove --name" > "$SYSD/mnt-cyberdeck-old.mount"
+printf '%s bad\n# share: name=bad host=1.2.3.4 share=a\\040\\040b auth=guest\n' "# cyberdeckzero-share v1: made by the launcher helper, remove with: cyberdeckzero-share remove --name" > "$SYSD/mnt-cyberdeck-bad.mount"
+run list
+check "space: an old meta line still lists, a decoded double space is skipped" 'has "old 1.2.3.4 music a/b inactive" && ! has "bad" && [ "$(printf "%s\n" "$OUT" | wc -l)" = 3 ]'
+reset
+run add --name nas --host 192.168.1.5 --share "x -o suid"
+check "space: a value like [x -o suid] stays one mount word and out of the options" '[ $RC = 0 ] && grep -q "^mount-argc 6$" "$LOG" && grep -qx "What=//192.168.1.5/x -o suid" "$SYSD/$MU" && grep -qx "Options=ro,nosuid,nodev,noexec,uid=$UIDN,gid=$GIDN,forceuid,forcegid,file_mode=0444,dir_mode=0555,soft,echo_interval=10,guest" "$SYSD/$MU"'
+reset
+FAKE_MOUNT=err; FAKE_MOUNT_ERR="$TMP/err.txt"; printf 'mount error(2): No such file or directory\n' > "$FAKE_MOUNT_ERR"; export FAKE_MOUNT FAKE_MOUNT_ERR
+run add --name nas --host 192.168.1.5 --share "My Share"
+check "space: a wrong share with a space answers denied (mount error(2) rule), nothing left" '[ $RC = 1 ] && has "err denied wrong share name, or it needs a login" && nothing_left'
 
 # ---------------------------------------------------------------------------------------------------------------
 # the calling user

@@ -10,6 +10,7 @@
 #   cyberdeckzero-share add --name N --host H --share S [--subfolder P] [--user U --credfile PATH]
 #   cyberdeckzero-share remove --name N
 #
+# A share or subfolder may hold single inner spaces; list writes each as \040 (one token per field).
 # Reply on stdout (stderr is silent): "ok", "ok 1", "ok path=/mnt/cyberdeck/<name>", the share lines of list and then a
 # last line "ok", or "err <word> [reason]". Exit status 0 only on ok; 2 for err usage; 1 for every other err.
 # Words: usage exists nomodule nohelper unreachable notfound denied timeout other.
@@ -108,12 +109,12 @@ valid_host() {
 valid_share() {
     printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 80 ] || return 1
     case $1 in .|*..*) return 1 ;; esac
-    rx "$1" '^[A-Za-z0-9_.$-]+$'
+    rx "$1" '^[A-Za-z0-9_.$-]+( [A-Za-z0-9_.$-]+)*$'   # single inner spaces (0x20) only
 }
-valid_subfolder() { # relative, segments of [A-Za-z0-9_.$@+=-], no empty segment, no ".." anywhere
+valid_subfolder() { # relative, segments of [A-Za-z0-9_.$@+=-] with single inner spaces, no empty segment, no ".." anywhere
     printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 200 ] || return 1
     case $1 in *..*|/*|*/|*//*|.|./*|*/.|*/./*) return 1 ;; esac
-    rx "$1" '^[A-Za-z0-9_.$@+=-]+(/[A-Za-z0-9_.$@+=-]+)*$'
+    rx "$1" '^[A-Za-z0-9_.$@+=-]+( [A-Za-z0-9_.$@+=-]+)*(/[A-Za-z0-9_.$@+=-]+( [A-Za-z0-9_.$@+=-]+)*)*$'
 }
 valid_user() { printable "$1" && [ ${#1} -ge 1 ] && [ ${#1} -le 64 ] && rx "$1" '^[A-Za-z0-9_.@][A-Za-z0-9_.@-]*$'; }
 
@@ -182,6 +183,10 @@ sysctl_() { systemctl "$@" > /dev/null 2>&1; }
 
 # ---- version / list ----------------------------------------------------------------------------------------
 meta_get() { printf '%s\n' "$1" | sed -n "s/.* $2=\([^ ]*\).*/\1/p"; }
+# a space inside a share or subfolder is written \040 in the meta line and in the list reply (one token per field);
+# a valid share never holds a backslash, so the decoding is unambiguous
+enc_sp() { printf '%s\n' "$1" | sed 's/ /\\040/g'; }
+dec_sp() { printf '%s\n' "$1" | sed 's/\\040/ /g'; }
 cmd_list() {
     for f in "$SYSD"/mnt-cyberdeck-*.mount; do
         is_ours "$f" || continue
@@ -189,8 +194,8 @@ cmd_list() {
         meta=$(sed -n '2p' "$f")
         printable "$meta" || continue
         n=$(meta_get "$meta" name); h=$(meta_get "$meta" host); s=$(meta_get "$meta" share); p=$(meta_get "$meta" sub)
-        valid_name "$n" && valid_host "$h" && valid_share "$s" || continue
-        if [ -n "$p" ]; then valid_subfolder "$p" || continue; fi
+        valid_name "$n" && valid_host "$h" && valid_share "$(dec_sp "$s")" || continue
+        if [ -n "$p" ]; then valid_subfolder "$(dec_sp "$p")" || continue; fi
         if systemctl is-active --quiet "$unit" 2>/dev/null; then st=mounted
         elif systemctl is-failed --quiet "$unit" 2>/dev/null; then st=failed
         elif systemctl is-active --quiet "${unit%.mount}.automount" 2>/dev/null; then st=idle
@@ -310,6 +315,8 @@ else
     TEST_OPTS="$OPTS_BASE,guest"
     UNIT_OPTS="$OPTS_BASE,guest"
 fi
+# a space in share or subfolder stays a plain space in What= (the rest of the line, as systemd-fstab-generator writes it) and
+# WHAT is always ONE quoted word; the meta line and the list reply write it \040 so every field is one token
 WHAT="//$HOST/$SHARE${SUBF:+/$SUBF}"
 
 # the test mount: fails cleanly, leaves nothing behind (cleanup removes $T)
@@ -366,7 +373,7 @@ mkdir "$MP_FS" || { undo; fail other "cannot create the mount point"; }
 chmod 755 "$MP_FS"
 MADE_MP=1
 
-meta="# share: name=$NAME host=$HOST share=$SHARE${SUBF:+ sub=$SUBF} auth=$AUTH"
+meta="# share: name=$NAME host=$HOST share=$(enc_sp "$SHARE")${SUBF:+ sub=$(enc_sp "$SUBF")} auth=$AUTH"
 {
     printf '%s %s\n' "$MARKER" "$NAME"
     printf '%s\n' "$meta"
