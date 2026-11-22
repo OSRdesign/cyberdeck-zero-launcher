@@ -24,6 +24,9 @@
 #   --no-boot-config   do not touch config.txt, cmdline.txt and the overlay (counterpart of install.sh); the 3.5" SPI panel's
 #                      block and init file (install.sh --spi-panel luckfox35 on a Raspberry Pi) stay as well
 #   --disable-linger   also run "loginctl disable-linger" (install.sh enabled it; it may have been on before)
+#   --remove-shares    also remove the network shares made with the share helper (cyberdeckzero-share): unmount, units and
+#                      credentials files. Without it the user's shares are left alone (they keep working: they need only
+#                      cifs-utils) and the way to remove them by hand is printed
 #   --user NAME        user that ran install.sh (default: the current user, or the one who ran sudo)
 #   --payload DIR      bundle payload directory, to know which files install.sh copied into /usr/share/APPLaunch
 #                      (default: payload/ next to this script)
@@ -37,6 +40,7 @@ REMOVE_APPS=0
 RESTORE_CONFIG=0
 BOOT_CONFIG=1
 DISABLE_LINGER=0
+REMOVE_SHARES=0
 TARGET_USER=""
 PAYLOAD_ARG=""
 while [ $# -gt 0 ]; do
@@ -48,9 +52,10 @@ while [ $# -gt 0 ]; do
         --restore-config) RESTORE_CONFIG=1; shift ;;
         --no-boot-config) BOOT_CONFIG=0; shift ;;
         --disable-linger) DISABLE_LINGER=1; shift ;;
+        --remove-shares) REMOVE_SHARES=1; shift ;;
         --user) [ $# -ge 2 ] || { echo "--user needs a name" >&2; exit 2; }; TARGET_USER="$2"; shift 2 ;;
         --payload) [ $# -ge 2 ] || { echo "--payload needs a directory" >&2; exit 2; }; PAYLOAD_ARG="$2"; shift 2 ;;
-        -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+        -h|--help) sed -n '2,33p' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
@@ -86,6 +91,11 @@ CONSOLE_UNIT=cyberdeckzero-console.service
 DESKTOP_UNIT=cyberdeckzero-desktop.service
 DESKTOP_RULES=52-cyberdeckzero-desktop.rules
 UDISKS_RULES=53-cyberdeckzero-udisks.rules
+# the network share helper (install.sh: SHARE_HELPER) and the marker its units carry (cyberdeckzero-share, MARKER)
+SHARE_HELPER=cyberdeckzero-share
+SHARE_LIBEXEC_DIR="$ROOT/usr/libexec/cyberdeckzero"
+SHARE_CONF_DIR="$ROOT/etc/cyberdeckzero/shares"
+SHARE_MARKER='# cyberdeckzero-share v1: made by the launcher helper'
 POWERKEY_DROPIN=50-cyberdeckzero-powerkey.conf
 LOGIND_DIR="$ROOT/etc/systemd/logind.conf.d"
 DESKTOP_ENTRY_NAME=cyberdeckzero.desktop
@@ -339,8 +349,7 @@ if [ "$BOOT_CONFIG" = 1 ] && [ -f "$INSTALL_CONF" ] && [ "$(sed -n 's/^spi_fw_ad
         if [ "$RESTORE_OK" = 1 ]; then spi_left=$(cat "$CONFIG.bak-before-pwm")
         elif [ -f "$CONFIG" ]; then spi_left=$(spi_block_strip "$CONFIG")
         else spi_left=""; fi
-        if printf '%s
-' "$spi_left" | grep -q '^dtoverlay=mipi-dbi-spi\(,\|$\)'; then
+        if printf '%s\n' "$spi_left" | grep -q '^dtoverlay=mipi-dbi-spi\(,\|$\)'; then
             SPI_NOTE="${SPI_NOTE:+$SPI_NOTE; }$SPI_FW kept: config.txt still has a dtoverlay=mipi-dbi-spi line (not install.sh's)"
         else
             SPI_FW_REMOVE=1
@@ -364,6 +373,18 @@ if grep -q -e "$USER_UNIT" -e "$DESKTOP_UNIT" -e "$OLD_USER_UNIT" -e "$OLD_DESKT
     exit 1
 fi
 
+# the share units made by the helper: "<name> <mount unit file>" per line (only files with the helper's marker, no link)
+share_units() {
+    for f in "$SYSTEMD_DIR"/mnt-cyberdeck-*.mount; do
+        [ -f "$f" ] && [ ! -L "$f" ] || continue
+        [ "$(head -n 1 "$f" | cut -c1-${#SHARE_MARKER})" = "$SHARE_MARKER" ] || continue
+        n=$(sed -n '2s/.* name=\([^ ]*\).*/\1/p' "$f")
+        case $n in ""|-*|*[!A-Za-z0-9_-]*) continue ;; esac
+        [ ${#n} -le 32 ] || continue
+        echo "$n $f"
+    done
+}
+
 say "Uninstall plan (user: $TARGET_USER, home: $TARGET_HOME)"
 [ "$DRY" = 1 ] && echo "DRY RUN: nothing will be changed."
 echo "Will remove (the names of this release, then those of v0.6.0 and before, whichever are there):"
@@ -376,6 +397,18 @@ echo "  - system service launcher-ntp-default.service"
 if exists "$WP_DROPIN"; then echo "  - $WP_DROPIN (desktop boards: WirePlumber Bluetooth audio drop-in)"; fi
 echo "  - $APP_ROOT/bin/$LAUNCHER_BIN, $OLD_LAUNCHER_BIN, M5CardputerZero-AppStore, $CONSOLE_HELPER, $OLD_CONSOLE_HELPER,"
 echo "    $CTL_BIN (and its link $ROOT/usr/local/bin/$CTL_BIN), $UPDATE_HELPER, lib/libapplaunch_vfb.so"
+SHARE_UNITS=$(share_units)
+if [ -n "$SHARE_UNITS" ]; then
+    SHARE_COUNT=$(printf '%s\n' "$SHARE_UNITS" | grep -c .)
+    if [ "$REMOVE_SHARES" = 1 ]; then
+        echo "  - $SHARE_COUNT network share(s) made with the share helper (--remove-shares): unmounted, their units and credentials files removed: $(printf '%s\n' "$SHARE_UNITS" | cut -d' ' -f1 | tr '\n' ' ')"
+    else
+        echo "  - NOT removed: $SHARE_COUNT network share(s) made with the share helper ($(printf '%s\n' "$SHARE_UNITS" | cut -d' ' -f1 | tr '\n' ' ')): they keep working;"
+        echo "    --remove-shares removes them, or by hand: sudo systemctl disable --now mnt-cyberdeck-<name>.automount; sudo rm /etc/systemd/system/mnt-cyberdeck-<name>.*"
+        echo "    /etc/cyberdeckzero/shares/<name>.cred; sudo systemctl daemon-reload; sudo umount /mnt/cyberdeck/<name>; sudo rmdir /mnt/cyberdeck/<name>"
+    fi
+fi
+echo "  - the network share helper $SHARE_LIBEXEC_DIR/$SHARE_HELPER"
 echo "  - Settings > Updates' helper files: $UPDATE_STATE_DIR (its status and last backup), $UPDATE_WORK_DIR,"
 echo "    $UPDATE_RUN_DIR, $UPDATE_LOG_DIR/update-*.log, apt-refresh.log and apt-upgrade-*.log"
 if [ -n "$ANCHOR_STATE" ] && [ "$ANCHOR_STATE" != "un " ]; then
@@ -572,11 +605,36 @@ else
     note "$ANCHOR_PKG is not installed"
 fi
 
+say "Network shares made with the share helper"
+if [ -z "$SHARE_UNITS" ]; then
+    note "none"
+elif [ "$REMOVE_SHARES" = 1 ]; then
+    if [ ! -x "$SHARE_LIBEXEC_DIR/$SHARE_HELPER" ]; then
+        note "$SHARE_LIBEXEC_DIR/$SHARE_HELPER is not there: the shares stay (remove them by hand, see above)"
+    else
+        printf '%s\n' "$SHARE_UNITS" | while IFS=' ' read -r n _; do
+            if [ -n "$ROOT" ]; then   # test hook: the helper works inside the fake root
+                act_try $SUDO env CDZ_SHARE_SYSROOT="$ROOT" CDZ_SHARE_PATH="${CDZ_SHARE_PATH:-}" "$SHARE_LIBEXEC_DIR/$SHARE_HELPER" remove --name "$n"
+            else
+                act_try $SUDO "$SHARE_LIBEXEC_DIR/$SHARE_HELPER" remove --name "$n"
+            fi
+        done
+        CHANGED_SYS=1
+    fi
+else
+    note "left alone (they keep working; --remove-shares removes them)"
+fi
+
 say "Removing the launcher files in $APP_ROOT"
 for f in "bin/$LAUNCHER_BIN" "bin/$OLD_LAUNCHER_BIN" bin/M5CardputerZero-AppStore "bin/$CONSOLE_HELPER" \
          "bin/$OLD_CONSOLE_HELPER" "bin/$CTL_BIN" "bin/$UPDATE_HELPER" lib/libapplaunch_vfb.so; do
     rm_sys "$APP_ROOT/$f"
 done
+# the share helper (after the shares: --remove-shares needs it); its folders only when empty
+rm_sys "$SHARE_LIBEXEC_DIR/$SHARE_HELPER"
+if [ -d "$SHARE_LIBEXEC_DIR" ] && [ -z "$(ls -A "$SHARE_LIBEXEC_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$SHARE_LIBEXEC_DIR"; fi
+if [ -d "$SHARE_CONF_DIR" ] && [ -z "$(ls -A "$SHARE_CONF_DIR" 2>/dev/null)" ]; then act $SUDO rmdir "$SHARE_CONF_DIR"; fi
+if [ -d "$ROOT/etc/cyberdeckzero" ] && [ -z "$(ls -A "$ROOT/etc/cyberdeckzero" 2>/dev/null)" ]; then act $SUDO rmdir "$ROOT/etc/cyberdeckzero"; fi
 # the link of the request socket's client: only when it still points at ours
 if [ -L "$ROOT/usr/local/bin/$CTL_BIN" ] && [ "$(readlink "$ROOT/usr/local/bin/$CTL_BIN")" = "/usr/share/APPLaunch/bin/$CTL_BIN" ]; then
     rm_sys "$ROOT/usr/local/bin/$CTL_BIN"
@@ -726,7 +784,10 @@ if [ -d "$APP_ROOT" ]; then
 fi
 for b in "$CONFIG.bak-applaunch" "$CMDLINE.bak-applaunch" "$CONFIG.bak-before-pwm" "$CONFIG.bak-applaunch-spipanel" "$PROFILE.bak"; do [ -f "$b" ] && echo "  backup kept: $b"; done
 for b in "$BOOT"/config.txt.bak-uninstall-* "$BOOT"/cmdline.txt.bak-uninstall-*; do [ -f "$b" ] && echo "  backup made now: $b"; done
-echo "  apt packages added by install.sh, and the groups input/video/netdev (audio, i2c) of $TARGET_USER (not recorded by install.sh)"
+if [ -n "$(share_units)" ]; then
+    echo "  network shares (left alone; they keep working): $(share_units | cut -d' ' -f1 | tr '\n' ' ')- to remove: ./uninstall.sh --remove-shares, or by hand as printed above the plan"
+fi
+echo "  apt packages added by install.sh (cifs-utils among them), and the groups input/video/netdev (audio, i2c) of $TARGET_USER (not recorded by install.sh)"
 if [ "$DISABLE_LINGER" = 0 ]; then echo "  lingering stays on for $TARGET_USER (loginctl disable-linger $TARGET_USER to undo)"; fi
 echo "Follow-ups:"
 if [ "$NEED_REBOOT" = 1 ]; then

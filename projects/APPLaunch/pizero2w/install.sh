@@ -185,6 +185,9 @@ CONSOLE_UNIT=cyberdeckzero-console.service       # appliance boards: frees the p
 DESKTOP_UNIT=cyberdeckzero-desktop.service       # desktop boards: started from the menu entry
 DESKTOP_RULES=52-cyberdeckzero-desktop.rules     # desktop boards: the user may start and stop DESKTOP_UNIT
 UDISKS_RULES=53-cyberdeckzero-udisks.rules       # every variant: the user may mount removable drives (udisksctl)
+SHARE_HELPER=cyberdeckzero-share                 # /usr/libexec/cyberdeckzero/cyberdeckzero-share: network shares (docs: README "Network shares helper")
+SHARE_LIBEXEC=/usr/libexec/cyberdeckzero         # root:root 0755; no sudoers rule: an app runs it through the sudo password prompt
+OPT_PKGS="cifs-utils"                            # the helper's mount.cifs: installed on every board; a failure only warns
 POWERKEY_DROPIN=50-cyberdeckzero-powerkey.conf   # Panasonic FZ-M1 only: logind drop-in, power key = standby (see pk_state)
 DESKTOP_ENTRY_NAME=cyberdeckzero.desktop         # desktop boards: "CyberdeckZero Launcher" in the menu
 DOC_NAME=cyberdeckzero-launcher                  # /usr/share/doc/cyberdeckzero-launcher: licences and notices
@@ -2046,6 +2049,8 @@ if [ "$PLAN" = 1 ]; then
     echo "profile_state=$(profile_state)"
     echo "user=$TARGET_USER"
     echo "udisks_rule=$UDISKS_RULES"
+    echo "share_helper=$SHARE_LIBEXEC/$SHARE_HELPER"
+    echo "optional_packages=$OPT_PKGS"
     exit 0
 fi
 if [ "$DRY" = 1 ]; then
@@ -2130,6 +2135,9 @@ if [ "$DRY" = 1 ]; then
         echo "removable drives: /etc/polkit-1/rules.d/$UDISKS_RULES: $TARGET_USER (only) may mount removable drives through udisks"
         echo "  (udisksctl mount -b, org.freedesktop.udisks2.filesystem-mount and -mount-other-seat) without a password, also from"
         echo "  the launcher's background session; fixed disks, encryption and everything else stay as they are"
+        echo "network shares: $SHARE_LIBEXEC/$SHARE_HELPER (root:root 0755) adds and removes an SMB share as systemd mount units for"
+        echo "  /mnt/cyberdeck/<name>; an app runs it through the sudo password prompt (no sudoers rule, no passwordless sudo);"
+        echo "  package $OPT_PKGS (apt, no recommends, when missing; if it cannot be installed the install only warns)"
         if [ "$IS_PC" = 1 ] && pc_is_fzm1; then
             case "$(pk_state)" in
                 absent) echo "power key (Panasonic FZ-M1): /etc/systemd/logind.conf.d/$POWERKEY_DROPIN will be written: a short press suspends"
@@ -2375,7 +2383,7 @@ anchor_paths() {
 # the Depends of the anchor: sorted, unique, installed now ("ii"), joined with ", "
 anchor_depends() {
     {
-        for p in $PKGS ca-certificates; do echo "$p"; done
+        for p in $PKGS $OPT_PKGS ca-certificates; do echo "$p"; done
         for b in "$APP_ROOT/bin/$LAUNCHER_BIN" "$APP_ROOT/bin/M5CardputerZero-AppStore" "$APP_ROOT/bin/$CTL_BIN" \
                  "$APP_ROOT/lib/libapplaunch_vfb.so"; do
             [ -f "$b" ] || continue
@@ -2511,8 +2519,24 @@ if [ -n "$MISSING" ]; then
     apt-get update
     # shellcheck disable=SC2086
     apt-get install -y --no-install-recommends $MISSING
+    APT_UPDATED=1
 else
     echo "all packages already present"
+    APT_UPDATED=0
+fi
+# the packages the launcher can do without (cifs-utils: mount.cifs of the network share helper): a failure here is a
+# warning, not the end of the install (no network, a mirror without the package); the anchor package names it once it is installed
+OPT_MISSING=""
+for pkg in $OPT_PKGS; do
+    dpkg -s "$pkg" >/dev/null 2>&1 || OPT_MISSING="$OPT_MISSING $pkg"
+done
+if [ -n "$OPT_MISSING" ]; then
+    # shellcheck disable=SC2086
+    if { [ "$APT_UPDATED" = 1 ] || apt-get update; } && apt-get install -y --no-install-recommends $OPT_MISSING; then
+        echo "optional packages installed:$OPT_MISSING"
+    else
+        echo "WARNING: could not install$OPT_MISSING: network shares added from an app will not mount until it is installed (sudo apt-get install$OPT_MISSING); the launcher itself is not affected" >&2
+    fi
 fi
 if [ "$IS_PC" = 1 ]; then
     # BlueZ's daemon for Settings > Bluetooth (its package enables it on most distributions; an Armbian image may not)
@@ -2552,6 +2576,15 @@ install -m 755 "$PAYLOAD/bin/$CONSOLE_HELPER" "$APP_ROOT/bin/$CONSOLE_HELPER"
 # systemd-run; a bundle without it installs without (Settings > Updates then offers no install)
 if [ -f "$PAYLOAD/bin/$UPDATE_HELPER" ]; then
     install -m 755 "$PAYLOAD/bin/$UPDATE_HELPER" "$APP_ROOT/bin/$UPDATE_HELPER"
+fi
+# the network share helper (docs: README "Network shares helper"): a root helper an app runs through the sudo password
+# prompt, so it is plain root-owned 0755 in /usr/libexec/cyberdeckzero and there is NO sudoers rule for it; a bundle
+# without it installs without
+if [ -f "$PAYLOAD/bin/$SHARE_HELPER" ]; then
+    mkdir -p "$SYSROOT$SHARE_LIBEXEC"
+    chmod 755 "$SYSROOT$SHARE_LIBEXEC"
+    install -m 755 "$PAYLOAD/bin/$SHARE_HELPER" "$SYSROOT$SHARE_LIBEXEC/$SHARE_HELPER"
+    echo "$SHARE_HELPER installed ($SHARE_LIBEXEC/$SHARE_HELPER; no sudoers rule: the password is asked at every add and remove)"
 fi
 # the command-line client of launcher.sock (report 035), on the PATH of every user; a bundle without it installs without
 if [ -f "$PAYLOAD/bin/$CTL_BIN" ]; then

@@ -38,7 +38,9 @@ check "zero2w dry-run: no gpio backlight rule" '! has "92-applaunch-backlight-gp
 check "zero2w dry-run: PWM boot config as today" 'has "boot config: PWM backlight overlay"'
 check "zero2w dry-run: nothing written" '[ ! -e "$R/etc" ]'
 check "zero2w dry-run: the udisks polkit rule for removable drives is listed" 'has "removable drives: /etc/polkit-1/rules.d/53-cyberdeckzero-udisks.rules:" && has "filesystem-mount and -mount-other-seat"'
+check "zero2w dry-run: the network share helper and cifs-utils are listed, no sudoers rule" 'has "network shares: /usr/libexec/cyberdeckzero/cyberdeckzero-share (root:root 0755)" && has "package cifs-utils (apt, no recommends" && has "no sudoers rule" && ! has "NOPASSWD"'
 run --plan
+check "zero2w --plan: the share helper and the optional package keys" 'has "share_helper=/usr/libexec/cyberdeckzero/cyberdeckzero-share" && has "optional_packages=cifs-utils"'
 check "zero2w --plan: key=value lines only, with the udisks rule key" '[ $RC = 0 ] && has "udisks_rule=53-cyberdeckzero-udisks.rules" && ! printf "%s
 " "$OUT" | grep -v -E "^[a-z_0-9]+=" | grep -q .'
 run --board-only
@@ -1093,8 +1095,8 @@ rm -rf "$BUN"; mkdir -p "$BUN/payload/bin" "$BUN/payload/lib" "$BUN/payload/etc"
     "$BUN/payload/share/share/font" "$BUN/payload/doc/LICENSES" "$BUN/payload/doc/fonts"
 cp "$D/install.sh" "$D/uninstall.sh" "$D/default-sources.sh" "$BUN/"
 printf '#!/bin/sh\necho launcher\n' > "$BUN/payload/bin/cyberdeckzero"
-cp "$D/cyberdeckzero-console" "$BUN/payload/bin/"
-chmod 755 "$BUN/payload/bin/cyberdeckzero" "$BUN/payload/bin/cyberdeckzero-console"
+cp "$D/cyberdeckzero-console" "$D/cyberdeckzero-share" "$BUN/payload/bin/"
+chmod 755 "$BUN/payload/bin/cyberdeckzero" "$BUN/payload/bin/cyberdeckzero-console" "$BUN/payload/bin/cyberdeckzero-share"
 : > "$BUN/payload/lib/libapplaunch_vfb.so"
 for f in cyberdeckzero.service launcher-ntp-default.service waveshare-pwm-backlight.dts hyperpixel4-pwm-backlight.dts 90-backlight-unblank.rules \
          91-applaunch-vkbd.rules 93-applaunch-rfkill.rules 50-networkmanager-netdev.rules 51-launcher-time-power.rules \
@@ -1253,18 +1255,40 @@ echo "tampered" > "$UR"
 full "$R"
 check "fake install, second run: the udisks rule is written again, the same bytes" '[ $RC = 0 ] && [ "$(cksum < "$UR")" = "$URSUM" ]'
 
+# the network share helper (docs: README "Network shares helper"): installed root-only into /usr/libexec/cyberdeckzero, no
+# sudoers rule, cifs-utils among the packages (every board), a failure to install it only warns
+SH="$R/usr/libexec/cyberdeckzero/cyberdeckzero-share"
+check "share helper: installed 0755 into /usr/libexec/cyberdeckzero (0755), the same bytes as the bundle's, said" '[ -x "$SH" ] && [ "$(stat -c %a "$SH")" = 755 ] && [ "$(stat -c %a "$R/usr/libexec/cyberdeckzero")" = 755 ] && cmp -s "$SH" "$BUN/payload/bin/cyberdeckzero-share" && has "cyberdeckzero-share installed (/usr/libexec/cyberdeckzero/cyberdeckzero-share; no sudoers rule"'
+check "share helper: no sudoers file, no visudo, nothing mentioning NOPASSWD written" '[ ! -e "$R/etc/sudoers.d" ] && ! called "visudo" && ! grep -rq "NOPASSWD" "$R/etc" 2>/dev/null'
+check "share helper: cifs-utils checked with dpkg, there already: no apt" 'called "dpkg -s cifs-utils" && ! called "apt-get"'
+rm -f "$SH"; printf 'tampered\n' > "$R/usr/libexec/cyberdeckzero/other"
+full "$R"
+check "share helper: a second run puts it back; another file in the folder is left" '[ $RC = 0 ] && cmp -s "$SH" "$BUN/payload/bin/cyberdeckzero-share" && [ -f "$R/usr/libexec/cyberdeckzero/other" ]'
+rm -f "$R/usr/libexec/cyberdeckzero/other"
+FAKE_DPKG_MISSING=cifs-utils FAKE_APT_RC=0; export FAKE_DPKG_MISSING FAKE_APT_RC
+full "$R"
+unset FAKE_DPKG_MISSING FAKE_APT_RC
+check "cifs-utils missing: apt-get update, then install --no-install-recommends, said; exit 0" '[ $RC = 0 ] && called "apt-get update" && called "apt-get install -y --no-install-recommends cifs-utils" && has "optional packages installed: cifs-utils" && ! has "WARNING: could not install"'
+FAKE_DPKG_MISSING=cifs-utils; export FAKE_DPKG_MISSING
+full "$R"
+unset FAKE_DPKG_MISSING
+check "cifs-utils missing and apt fails (no network): a clear warning, the install goes on (exit 0), helper installed" '[ $RC = 0 ] && has "WARNING: could not install cifs-utils: network shares added from an app will not mount until it is installed (sudo apt-get install cifs-utils)" && has "== Done" && [ -x "$SH" ]'
+check "cifs-utils not installed: not in the anchor's Depends" '! cut -d"|" -f3 "$FAKE_ANCHOR" | grep -q cifs-utils'
+full "$R"
+check "cifs-utils there again: in the anchor's Depends, sorted" 'cut -d"|" -f3 "$FAKE_ANCHOR" | grep -q "ca-certificates, cifs-utils, curl"'
+
 # the anchor package (report 047 P4, D13): cyberdeckzero-runtime built with dpkg-deb and installed with dpkg; its Depends
 # from this board (install.sh's packages, ca-certificates, the owners of the libraries ldd names and of the programs the
 # launcher runs), sorted, installed ones only, never a version; a second run changes nothing; uninstall.sh purges it
 rm -f "$FAKE_ANCHOR"
 R=$(root pi3a-luckfox35)
 full "$R"
-ANCHOR_DEPS="alsa-utils, ca-certificates, curl, device-tree-compiler, libc6, libfreetype6, libinput10, libstdc++6, libxkbcommon0"
-check "anchor: built with dpkg-deb (root-owned), installed with dpkg, no apt" '[ $RC = 0 ] && called "dpkg-deb --root-owner-group --build" && called "dpkg -i " && ! called "apt-get" && has "== Runtime anchor package" && has "cyberdeckzero-runtime 0 installed: 9 packages kept for the launcher"'
+ANCHOR_DEPS="alsa-utils, ca-certificates, cifs-utils, curl, device-tree-compiler, libc6, libfreetype6, libinput10, libstdc++6, libxkbcommon0"
+check "anchor: built with dpkg-deb (root-owned), installed with dpkg, no apt" '[ $RC = 0 ] && called "dpkg-deb --root-owner-group --build" && called "dpkg -i " && ! called "apt-get" && has "== Runtime anchor package" && has "cyberdeckzero-runtime 0 installed: 10 packages kept for the launcher"'
 check "anchor: Depends = the packages, ca-certificates, the libraries' owners (/lib -> /usr/lib) and a program's owner, sorted, no version" '[ "$(cut -d"|" -f3 "$FAKE_ANCHOR")" = "$ANCHOR_DEPS" ] && [ "$(cut -d"|" -f1 "$FAKE_ANCHOR")" = "ii " ]'
 check "anchor: nothing of it in the fake root (built in a temp folder, removed)" '[ -z "$(find "$R" -name "cyberdeckzero-runtime*")" ]'
 full "$R"
-check "anchor, second run: already up to date, not built or installed again" '[ $RC = 0 ] && has "cyberdeckzero-runtime 0 already up to date (9 packages kept for the launcher)" && ! called "dpkg-deb" && ! called "dpkg -i "'
+check "anchor, second run: already up to date, not built or installed again" '[ $RC = 0 ] && has "cyberdeckzero-runtime 0 already up to date (10 packages kept for the launcher)" && ! called "dpkg-deb" && ! called "dpkg -i "'
 echo "0.9.2-p4" > "$BUN/VERSION"
 full "$R"
 check "anchor: the bundle's VERSION is its version (a new bundle: rebuilt)" '[ $RC = 0 ] && called "dpkg -i " && [ "$(cut -d"|" -f2 "$FAKE_ANCHOR")" = "0.9.2-p4" ]'
@@ -1275,7 +1299,7 @@ rm -f "$BUN/VERSION"
 FAKE_DPKG_MISSING=libstdc++6; export FAKE_DPKG_MISSING
 full "$R"
 unset FAKE_DPKG_MISSING
-check "anchor: a library whose package is not installed is left out of Depends (dpkg would refuse the anchor)" '[ $RC = 0 ] && [ "$(cut -d"|" -f3 "$FAKE_ANCHOR")" = "alsa-utils, ca-certificates, curl, device-tree-compiler, libc6, libfreetype6, libinput10, libxkbcommon0" ]'
+check "anchor: a library whose package is not installed is left out of Depends (dpkg would refuse the anchor)" '[ $RC = 0 ] && [ "$(cut -d"|" -f3 "$FAKE_ANCHOR")" = "alsa-utils, ca-certificates, cifs-utils, curl, device-tree-compiler, libc6, libfreetype6, libinput10, libxkbcommon0" ]'
 FAKE_DPKG_I_RC=1; export FAKE_DPKG_I_RC
 full "$R"
 unset FAKE_DPKG_I_RC
@@ -1294,6 +1318,43 @@ check "anchor: uninstall purges it (the packages it named are not touched)" '[ $
 OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
       sh "$BUN/uninstall.sh" --yes --no-boot-config 2>&1); RC=$?
 check "anchor: uninstall again: not installed, nothing to do" '[ $RC = 0 ] && has "cyberdeckzero-runtime is not installed"'
+
+# the share helper and the user's shares at uninstall: the helper goes, the shares stay (said, with the way to remove them
+# by hand) unless --remove-shares, which removes only units carrying the helper's marker, through the helper
+SHBIN="$TMP/shbin"; mkdir -p "$SHBIN"
+printf '#!/bin/sh\np=${2#/}\nprintf "%%s\\n" "$p" | sed "s/-/\\\\\\\\x2d/g; s|/|-|g"\n' > "$SHBIN/systemd-escape"; chmod 755 "$SHBIN/systemd-escape"
+MARK="# cyberdeckzero-share v1: made by the launcher helper, remove with: cyberdeckzero-share remove --name"
+mkshare() { # ROOT NAME
+    printf '%s %s\n# share: name=%s host=1.2.3.4 share=s auth=user\n[Mount]\nWhere=/mnt/cyberdeck/%s\n' "$MARK" "$2" "$2" "$2" > "$1/etc/systemd/system/mnt-cyberdeck-$2.mount"
+    printf '%s %s\n# share: name=%s host=1.2.3.4 share=s auth=user\n[Automount]\nWhere=/mnt/cyberdeck/%s\n' "$MARK" "$2" "$2" "$2" > "$1/etc/systemd/system/mnt-cyberdeck-$2.automount"
+    mkdir -p "$1/mnt/cyberdeck/$2" "$1/etc/cyberdeckzero/shares"; chmod 700 "$1/etc/cyberdeckzero/shares"
+    printf 'username=u\npassword=p\n' > "$1/etc/cyberdeckzero/shares/$2.cred"
+}
+unshare() { : > "$CALLS"; OUT=$(PATH="$FAKEBIN:$PATH" FAKE_CALLS="$CALLS" HOME="$R$UHOME" UNINSTALL_ROOT="$R" APPLAUNCH_SYSFS="$TMP/no-sys" \
+      CDZ_SHARE_PATH="$SHBIN:$FAKEBIN" sh "$BUN/uninstall.sh" --no-boot-config "$@" 2>&1); RC=$?; }
+R=$(root pi3a-luckfox35)
+full "$R"
+mkshare "$R" nas; mkshare "$R" music
+printf '[Mount]\nWhere=/mnt/cyberdeck/foreign\n' > "$R/etc/systemd/system/mnt-cyberdeck-foreign.mount"
+SH="$R/usr/libexec/cyberdeckzero/cyberdeckzero-share"
+unshare --dry-run
+check "uninstall dry-run: the helper is listed, the shares are named as NOT removed, with the way to remove them by hand" '[ $RC = 0 ] && has "the network share helper $R/usr/libexec/cyberdeckzero/cyberdeckzero-share" && has "NOT removed: 2 network share(s) made with the share helper (music nas )" && has "--remove-shares removes them, or by hand: sudo systemctl disable --now mnt-cyberdeck-<name>.automount" && [ -f "$SH" ] && [ -f "$R/etc/systemd/system/mnt-cyberdeck-nas.mount" ]'
+unshare --dry-run --remove-shares
+check "uninstall dry-run --remove-shares: the plan says they will be removed, nothing changed" '[ $RC = 0 ] && has "2 network share(s) made with the share helper (--remove-shares): unmounted" && [ -f "$SH" ] && [ -f "$R/etc/systemd/system/mnt-cyberdeck-nas.mount" ] && [ -f "$R/etc/cyberdeckzero/shares/nas.cred" ]'
+unshare --yes
+check "uninstall: the helper and its folder removed, the shares and their credentials left alone and said" '[ $RC = 0 ] && [ ! -e "$SH" ] && [ ! -e "$R/usr/libexec/cyberdeckzero" ] && [ -f "$R/etc/systemd/system/mnt-cyberdeck-nas.mount" ] && [ -f "$R/etc/systemd/system/mnt-cyberdeck-music.automount" ] && [ -f "$R/etc/cyberdeckzero/shares/nas.cred" ] && has "network shares (left alone; they keep working): music nas" && has "./uninstall.sh --remove-shares" && has "cifs-utils among them"'
+R=$(root pi3a-luckfox35)
+full "$R"
+mkshare "$R" nas; mkshare "$R" music
+printf '[Mount]\nWhere=/mnt/cyberdeck/foreign\n' > "$R/etc/systemd/system/mnt-cyberdeck-foreign.mount"
+printf '[Mount]\nWhere=/mnt/cyberdeck/fake\n' > "$R/etc/systemd/system/mnt-cyberdeck-fake.mount"
+SH="$R/usr/libexec/cyberdeckzero/cyberdeckzero-share"
+unshare --yes --remove-shares
+check "uninstall --remove-shares: each helper unit pair, credentials file and mount point removed through the helper" '[ $RC = 0 ] && [ ! -e "$R/etc/systemd/system/mnt-cyberdeck-nas.mount" ] && [ ! -e "$R/etc/systemd/system/mnt-cyberdeck-nas.automount" ] && [ ! -e "$R/etc/systemd/system/mnt-cyberdeck-music.mount" ] && [ ! -e "$R/etc/cyberdeckzero/shares/nas.cred" ] && [ ! -d "$R/mnt/cyberdeck/nas" ] && [ ! -d "$R/mnt/cyberdeck/music" ]'
+check "uninstall --remove-shares: systemd told (disable --now of the automount, daemon-reload), the helper ran as root through sudo" 'called "systemctl disable --now mnt-cyberdeck-nas.automount" && called "systemctl daemon-reload" && called "sudo env CDZ_SHARE_SYSROOT=$R"'
+check "uninstall --remove-shares: a unit without the helper's marker is never touched; the helper and its folders gone" '[ -f "$R/etc/systemd/system/mnt-cyberdeck-foreign.mount" ] && [ -f "$R/etc/systemd/system/mnt-cyberdeck-fake.mount" ] && [ ! -e "$SH" ] && [ ! -e "$R/usr/libexec/cyberdeckzero" ] && [ ! -e "$R/etc/cyberdeckzero" ]'
+unshare --yes --remove-shares
+check "uninstall --remove-shares again: nothing to remove, exit 0" '[ $RC = 0 ] && has "Network shares made with the share helper" && has "  none"'
 # HDMI only (the Pi 5, the HackBerry: vc4-hdmi): no sound card of the board's own, no audio group (report 030)
 R=$(root pi5-hyperpixel4)
 mkdir -p "$R/proc/asound"
