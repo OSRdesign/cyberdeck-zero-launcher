@@ -92,8 +92,7 @@ app shows the standard keyboard, as before.
 
 Serial Console was the first app to have it (version 0.6.0). Since then RSS Reader (0.2.0), Markdown Notes (0.2.0),
 Net Toolbox (0.5.0), Klondike Solitaire (0.1.0) and viz1090 (0.3.0) have it in their portrait layouts, wherever a text
-field asks for input (the apps' own READMEs describe it). Apps with no text field, such as the viewers and games
-without a name or address to type, never show it. Apps built with an older toolkit keep the on-screen
+field asks for input (the apps' own READMEs describe it). Apps built with an older toolkit keep the on-screen
 keyboard, and so do landscape apps run turned. Nothing is set in the app's `.desktop` file: the launcher tells the app
 it runs upright, and the app reads your trained glyphs when it starts.
 
