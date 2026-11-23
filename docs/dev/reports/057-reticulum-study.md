@@ -125,6 +125,9 @@ project whose code is written with AI assistance (9).
 
 **Owner decisions, 2026-11-07.** The owner accepted all recommendations D1-D19 of this report, "as we revised the plans". For each row below the recommendation column is therefore the decision (text kept as written; the Status column marks it Accepted). Next step: probe P0 (section 8). P0 is first dry-run on the PC (no board, loopback only, to validate the commands and versions); then it runs on the Pi 4B and on the deck with the owner present, with the owner's Heltec V4 (RNode firmware) as the radio. The budget in D2 and the "if P0 confirms" conditions in D13 and D15 still apply: P0's numbers decide whether the build starts.
 
+**Added 2026-11-23.** D20 (scope of the first user-facing pages, 5.4, and the microReticulum look, 3.1.1) is proposed,
+not yet accepted; D1-D19 are unchanged.
+
 | # | Decision | Options | Recommendation (not a rule) | Status |
 |---|---|---|---|---|
 | D1 | Start at all | run probe P0 now; park the topic | run P0 (one evening: about 1-1.5 h of the owner's time, section 8) before any build | Accepted (2026-11-07) |
@@ -146,6 +149,7 @@ project whose code is written with AI assistance (9).
 | D17 | AI account data use | check; ignore | check that the sessions used for this work are not used for model training (6.2: the licence's AI-training condition) | Accepted (2026-11-07) |
 | D18 | Mesh Hop guard | none; skip ports held by any other process | a small Mesh Hop task: treat a port held by any other process as busy (`/proc` check), and name an RNode as "used by Reticulum" (4.4) | Accepted (2026-11-07) |
 | D19 | Transport model | LoRa-first apps around an RNode; transport-agnostic apps over any Reticulum interface | transport-agnostic (owner's statement, 2026-11-07): an interface manager in the bridge and the status app lists, adds, edits, enables and disables interfaces of every documented type (4.1), each with only its own options and per-interface status (online, rx/tx bytes, bitrate, errors); D8 applies per interface; hardware-neutral wording ("interface", not "radio"); the other apps never ask which medium is in use | Accepted (2026-11-07) |
+| D20 | Scope for P1b-P2; microReticulum | the four pages of 5.4 (Connections, Contacts, Messages, Status, in that build order); a wider first scope; microReticulum as a base (3.1.1) | the four pages of 5.4, no Reticulum vocabulary in the UI, NomadNet-style browser later (P3); microReticulum evaluated (3.1.1) and not adopted, D3 stays A | Proposed (owner go given 2026-11-23 for writing it up; go/no-go on the scope still open) |
 
 ## 2. Reticulum and its parts (question 1)
 
@@ -207,12 +211,38 @@ instance without transport and an LXMF client (I); a Pi 4B at home could be all 
 | `rnspure` | the same code, no declared dependencies | contents "completely identical" to `rns` (manual) | same | only where `cryptography` cannot be installed: not our case |
 | Reticulum-Go (Quad4 Software) | Go, Reticulum License (earlier MIT, 0BSD, Apache-2.0) | v1.4.2, 2026-11-01; "still considered experimental, may not always be up to date with the Python reference, and not ready to be reliably used" | claims wire compatibility; the manual lists Ren Browser, built on it | a later look if Python fails P0 |
 | Reticulum-rs (Beechat) | Rust, MIT | last push 2026-08-22; TCP, serial, Kaonic transports; tests against Python RNS | partial (no LXMF mentioned) | no |
-| microReticulum | C++, Apache-2.0 | 0.5.0, 2026-06-27; "Port of Reticulum Network Stack to C++", aimed at microcontrollers | U | firmware, not apps |
+| microReticulum | C++, Apache-2.0 | 0.5.0, 2026-06-27; "Port of Reticulum Network Stack to C++", aimed at microcontrollers; a library, no messaging layer stated (3.1.1) | an interop test harness against Python exists (3.1.1); not tested by us, U | firmware or a standalone relay node, not our apps' base (3.1.1) |
 | reticulum-kt | Kotlin, MPL-2.0 | "almost completely AI generated. You probably shouldn't use this" (its README) | own conformance suite | no |
 | Prns | Rust, claims Apache-2.0 / MIT | the manual's Brandolini's Reference examines it as a machine-generated derivative of RNS and concludes: "Treat the Prns project as hostile" | n/a | never |
 
 The manual's guide to evaluating implementations welcomes honest, human-made implementations and names "roughly a
 dozen machine-generated 'Reticulum implementations'" (V). This weighs on D3 and D16.
+
+#### 3.1.1 microReticulum, second look (2026-11-23)
+
+What was read (V): the GitHub README, the release notes of 0.2.5 to 0.5.0, the examples folder and the docs. No code was
+read and nothing was built, so nothing below is tested by us.
+
+| Item | Fact (V unless marked) |
+|---|---|
+| What it is | a C++ port of the Reticulum stack, Apache-2.0, maintainer `attermann`; 439 stars, 248 commits; latest release 0.5.0 (27 Jun 2026) |
+| In its own words | "this is a library implementing the Reticulum Network Stack and not a useful application on its own" |
+| Targets | 32-bit microcontrollers (ESP32, nRF52), plus native Linux, macOS and Raspberry Pi builds through CMake |
+| Implemented, per the release notes | links (Python-compatible fixes in 0.2.7), resources (0.4.0), announces with replay rejection, transport and path requests, remote management (read-only first, provisioning and reboot in 0.5.0), an interop test harness against the Python stack |
+| On the roadmap | channels and buffers; ratchets (partly: 0.4.1 added ratchet-aware announce validation); IFAC listed, its status not visible |
+| LXMF (messaging) | not stated; `lxmf.delivery` appears only as an example announce filter |
+| Stamps | not stated |
+| Interfaces documented | UDP and LoRa (RadioLib) examples; TCP, serial, BLE, Wi-Fi, Ethernet and an auto-interface are not stated as library interfaces |
+| Memory and flash footprint | not stated (U) |
+| Known Issues section | empty |
+| AI-assisted code | not stated either way (U) |
+| Related projects | `microReticulum_Firmware` (an RNode-firmware variant that acts as a Reticulum transport node); `examples/nomadnet` |
+
+**Verdict (I).** microReticulum does not replace the Python stack for our goals: it has no messaging layer on which to
+build contacts and messages, and it documents fewer transports than the transport-agnostic scope (D19) needs. D3 stays
+option A. microReticulum could later fit on the radio-board side, as a standalone relay node (through
+`microReticulum_Firmware`), not as the base of our apps. Option D in D3 stays "only if a later look finds a mature one",
+with this look recorded (D20).
 
 ### 3.2 Getting it onto a board
 
@@ -528,6 +558,23 @@ message bodies, keys or passphrases; `rnpath -B` blackholes a spamming identity 
 
 **Launcher.** No change needed (I). Everything lives in the apps repository.
 
+### 5.4 What the user sees (scope for P1b-P2, draft for the owner)
+
+A draft of the user-facing scope (I, proposal; D20). Four pages, designed for small screens first (640x480, then the
+smaller sizes). The UI uses no Reticulum vocabulary (no "destination", "announce", "LXMF", "interface"); the words below
+are working names, and the wording and layout stay the controller's and the owner's decisions.
+
+| # | Page | What the user does there | Built on |
+|---|---|---|---|
+| 1 | **Connections** | one switch per transport: Wi-Fi/LAN, Internet (TCP), LoRa radio through an RNode. The LoRa entry has the user's own frequency, bandwidth, spreading factor, coding rate and power fields (empty until filled, D10). Nothing transmits until a connection is switched on (D8) | the bridge's interface manager (5.3, D19) |
+| 2 | **Contacts** | a name plus an address, added by paste or by QR code; a "show my address" button | the bridge; QR as in g1 of 5.1 |
+| 3 | **Messages** | send and receive text, with a delivered or pending state per message | Python LXMF in the bridge, under our own native list-and-chat screen (a of 5.1) |
+| 4 | **Status** | which connections are up, who was heard recently | per-interface status and heard announces (c of 5.1) |
+
+The order 1-4 is the build order. A NomadNet-style page browser and everything else come later (P3 and on). The Python
+bridge hides all the complexity; architecture A is unchanged (5.2). **Main risk:** the Zero 2 W (415 MB) numbers are
+still unmeasured (8, 10).
+
 ## 6. Licensing (question 5)
 
 This section is a reading of the licence texts for the owner's decision, not legal advice.
@@ -630,8 +677,10 @@ except the optional wrapper **13.75-19.5 ws (5.5-7.8 M tokens)**. Upstream follo
 
 ### 7.3 Open unknowns
 
-Collected in section 10. The ones that decide the plan: Python memory and start time on the deck, stamp time and its
-effect on power, NomadNet in the terminal page, and the Heltec V4's host link (USB device name, BLE pairing).
+Collected in section 10. The ones that decide the plan: Python memory and start time on the deck (Zero 2 W numbers
+still unmeasured), stamp time and its effect on power, and the Heltec V4's BLE pairing. Settled on 2026-11-23: NomadNet
+in the terminal page is not usable (8.4); the Heltec V4 enumerates over USB as `/dev/ttyACM0` and runs RNode firmware
+1.86 (8.3).
 
 ### 7.4 Recommendation, with reasons
 
@@ -646,7 +695,11 @@ effect on power, NomadNet in the terminal page, and the Heltec V4's host link (U
 5. **Treat propagated messages on the Zero 2 W as open.** If P0 confirms minutes per stamp, the deck sends direct and
    opportunistic messages only, and propagation sync runs on the Pi 4B, Pi 5 or tablet.
 
-## 8. Probes (dry-run on the PC 2026-11-07; Pi 4B run 2026-11-07, 8.2; deck run not yet done)
+## 8. Probes (dry-run on the PC 2026-11-07; Pi 4B run 2026-11-07, 8.2; P0-e and P0-f on seveninch 2026-11-23, 8.3 and 8.4; deck run of P0-a..d still pending)
+
+**State on 2026-11-23.** Deck (Pi Zero 2 W) run of P0-a to P0-d: still pending. P0-e (RNode listen-only): done on
+seveninch (8.3). P0-f (NomadNet in the terminal page): done, verdict "not an option" (8.4); no deck run of P0-f needed.
+P0-g (cleanup): pending.
 
 The Pi 4B first (faster), then the deck (zero7), with the owner present for the deck runs. Every run
 has a timeout; nothing touches `~/.reticulum` (a separate configuration folder and `instance_name = probe`); no launcher
@@ -908,7 +961,64 @@ and a few seconds cold, `rnsd` start about 1.5 s, cost 8 about 10 s, cost 12 abo
 minutes at 2 cores, with a heat problem as well. **So a cost-16 stamp is not a task for the deck: only the Pi 4B (or the
 PC) should generate propagation stamps, or the deck should not send through propagation nodes (I).** Plain messages
 (opportunistic, direct) cost milliseconds of CPU on the Pi 4B, so they should be cheap on the deck too. `outgoing = False`
-on a radio (P0-e) and NomadNet's page (P0-f) were not run, as agreed.
+on a radio (P0-e) and NomadNet's page (P0-f) were not run, as agreed (both were run later on seveninch: 8.3, 8.4).
+
+### 8.3 Measured on seveninch (Pi 4B, 905 MB) with the owner's RNode, 2026-11-23
+
+Pi 4B numbers, not Zero 2 W numbers. Radio: the owner's Heltec LoRa32 V4 with RNode firmware 1.86 on `/dev/ttyACM0`
+(USB serial id `usb-Espressif_USB_JTAG...`; that suggests the ESP32-S3's native USB, not a USB-UART chip, I). A separate venv `~/rns-probe` with
+`rns` 1.6.0, `lxmf` 1.3.0 and `pyserial`. The `RNodeInterface` section used `frequency = 869525000`,
+`bandwidth = 250000`, `spreadingfactor = 11`, `codingrate = 5`, `txpower = 27` and **`outgoing = False`: listen only,
+nothing was transmitted.** The radio values are the owner's; this report makes no statement about them.
+
+| Measure | Result (V, measured) |
+|---|---|
+| Install (`rns`, `lxmf`, `pyserial`) | 4.8 s |
+| Disk: venv | 21 MB |
+| `import RNS, LXMF` | 0.5 s |
+| Shared-instance socket up | within 5 s |
+
+**30-minute listen, six samples 5 minutes apart.**
+
+| Measure | Result (V, measured) |
+|---|---|
+| `rnsd` VmRSS | 38.5 MB at the start, 39.2 MB at the end |
+| `rnsd` CPU | 2.1 % at the start, then 0.2-0.3 % |
+| Board temperature | 38-40 C |
+| `vcgencmd get_throttled` | 0x0 throughout |
+| Reticulum traffic on the RNode interface | 0 bytes in, 0 bytes out |
+| Announces heard | none |
+| RSSI, SNR | none reported (nothing was decoded) |
+| Noise floor | -88 to -104 dBm |
+| Channel load, short window | 0 to 7.04 % |
+| Channel load, long window | 0.13 % rising to 0.71 % |
+| Interference | one reading of -56 dBm |
+| Airtime reported by the Heltec (1 h) | 0.08 % from the first sample, constant; cause unknown (U): RNS's own tx byte count stayed 0 |
+| Heltec device | CPU 63 C, battery 67 % and charging |
+
+**Reading (I, hedged).** As far as the author recalls, these settings look like Meshtastic's EU868 "LongFast" channel;
+that is **not verified**. If it is right, the channel load may be traffic that Reticulum cannot decode (2.1: an RNode
+cannot talk to Meshtastic nodes). What the run does show: no Reticulum network was heard in range on those settings
+during 30 minutes, and listening costs the Pi 4B almost nothing. `outgoing = False` on an `RNodeInterface` kept RNS's tx
+count at 0 for a run with no app sending; the send-through case of 8.1 was not tried on the radio.
+
+### 8.4 NomadNet in the launcher terminal page (P0-f), 2026-11-23
+
+| Item | Result |
+|---|---|
+| Terminal page grid on seveninch | 10 rows x 66 columns (V, the owner's `stty size` in the launcher terminal page) |
+| NomadNet 1.5.1 install | 10 s; +15 MB in the venv; its folder 37 MB (V) |
+| How it was run | in a simulated terminal (a pty plus `pyte`) at the page's size, **not** in the launcher terminal page itself, so keys and Nerd Font rendering there are unchecked (U) |
+| At 10 x 66 | the menu bar is clipped after "Log" (Interfaces, Config, Guide and Quit not visible); about 5-6 content rows; the right-hand pane is 12 columns wide and wraps every word; the footer hint takes 2 rows; the bar starts with a Nerd Font glyph (V, simulated) |
+| NomadNet's own advice | its first-run text recommends at least 135 x 32 (V) |
+| At 100 x 30 | drew correctly (V, simulated) |
+| Memory | NomadNet VmRSS about 54 MB plus `rnsd` about 39 MB: about 94 MB together (V) |
+| CPU | a start-up burst: about 97 % on four threads for about 12 s in the 100 x 30 run, about 8 % in the first sample of the 10 x 66 run; idle about 1.4 % (V) |
+| Keys | Ctrl+U and Ctrl+N shortcuts work; Tab and the arrow keys did nothing while a dialog was open, so the Network (announce) page was never reached (V, simulated) |
+
+**Verdict (owner, 2026-11-23).** NomadNet fails at 10 x 66, so it would be worse on zero8 (480x320) and in PDA mode.
+Terminal NomadNet is not an option (D15: the stopgap is not built); a native browser (P3) is the route. No deck run of
+P0-f is needed.
 
 ## 9. Risks, ranked
 
@@ -932,23 +1042,29 @@ following the rules where they transmit (4.2).
 ## 10. Not verified
 
 - Memory, CPU and start time of RNS (and of the bridge) on the Zero 2 W; the 1.6.0 memory claims on our boards. (PC numbers
-  exist, 8.1, and Pi 4B numbers, 8.2: about 38-40 MB idle, 0.15 s and 0.45 s start; they say nothing certain about the Zero 2 W.)
+  exist, 8.1, and Pi 4B numbers, 8.2 and 8.3: about 38-40 MB idle, 0.15 s and 0.45 s start; they say nothing certain about the Zero 2 W.)
 - Stamp time on the Zero 2 W (my 2-5 minutes for cost 16 is an estimate that the Pi 4B run, 8.2, contradicts: no completion in 8.5 minutes; the completion time of a cost-16 stamp is still unmeasured on every board, and so are costs 10 and 14); SHA-256 throughput per core; whether the
   BCM2710A1 lacks the ARMv8 crypto extensions (widely reported, not checked).
 - The default destination-stamp cost from RNS 1.6.1 and its one-time CPU.
 - How often LXMF users (Sideband, MeshChatX, Columba) set an inbound stamp cost, which makes direct messages cost CPU
   too.
-- NomadNet's usability in the launcher's terminal page; the page's real column count at 640x480 and 480x320.
+- NomadNet in the launcher's terminal page: keys and Nerd Font rendering inside the page itself (8.4 used a simulated
+  terminal); the page's grid on zero8 (480x320). No longer needed for a decision: the owner ruled terminal NomadNet out
+  on 2026-11-23 (8.4; seveninch's page is 10 x 66, V).
+- Wi-Fi LXMF between two boards (P0-c was run Pi 4B to PC over TCP, 8.2, not board to board over AutoInterface).
+- Whether Meshtastic traffic explains the channel load seen in 8.3 (the settings looking like Meshtastic EU868
+  LongFast is the author's recollection, not checked), and why the Heltec reported 0.08 % airtime while RNS sent 0 bytes.
 - RNode over BLE on our boards: pairing without a display on the owner's RNode, `bleak` 0.22.3 with RNS 1.6.0.
 - RNS's retry behaviour when an RNode port is busy; whether RNode firmware sends anything before it is configured.
-- Heltec LoRa32 V4: the RNode firmware version on the owner's board; whether it enumerates as native USB CDC or
-  through a USB-UART chip (and so its `/dev/serial/by-id` name); BLE pairing with BlueZ on our boards; whether its TCP
+- Heltec LoRa32 V4 (firmware 1.86 and `/dev/ttyACM0` with id `usb-Espressif_USB_JTAG...` verified on seveninch, 8.3):
+  BLE pairing with BlueZ on our boards; whether its TCP
   host link over Wi-Fi works; how the firmware maps a requested `txpower` through the PA (28 dBm maximum) and whether
   the read-back value matches what RNS sent.
 - Which other boards of the owner's can run RNode (community forks not checked); the Wio-SX1262 antenna connector.
 - What the undocumented `WeaveInterface` is. (Verified on the PC, 8.1, and on the Pi 4B for attach, detach and reload, 8.2: run-time attach, detach and reload of interfaces; the
-  shared-instance sockets and attach rules; stamp costs 8, 12, 16 on the PC. Still open: the same on the Zero 2 W, and
-  `outgoing = False` on an `RNodeInterface`.)
+  shared-instance sockets and attach rules; stamp costs 8, 12, 16 on the PC. Still open: the same on the Zero 2 W.
+  `outgoing = False` on an `RNodeInterface` was run on seveninch, 8.3: RNS sent 0 bytes in 30 minutes with no app
+  sending; an app-requested send over the radio was not tried.)
 - Whether the RNode firmware clamps a `txpower` above the radio's maximum (RNS would then see a mismatch and take the
   interface offline, V `validateRadioState`), and whether it accepts spreading factors 5 and 6, which RNS 1.6.0 allows
   but the manual does not list.
@@ -956,7 +1072,8 @@ following the rules where they transmit (4.2).
 - `i2pd` resource use on a Zero 2 W.
 - Python version, `venv` behaviour and journald persistence on our board images (Debian 13 suggests Python 3.13).
 - Whether Settings > Apps handles a package without a home tile.
-- Interoperability claims of Reticulum-Go, Reticulum-rs and microReticulum (not tested); LXST's licence text.
+- Interoperability claims of Reticulum-Go, Reticulum-rs and microReticulum (not tested; microReticulum's README and
+  release notes were read on 2026-11-23, 3.1.1, its code was not); microReticulum's footprint; LXST's licence text.
 - Licences of `cryptography`, `pyserial` and `bleak` (not read; Debian dependencies, not bundled).
 - MeshChat and MeshChatX resource use.
 
@@ -976,6 +1093,8 @@ D1-D19 are accepted (section 1). The questions below are the details the owner s
 7. **Internet:** never, or only entrypoints you pick (D9)?
 8. **P0:** may it run on the Pi 4B and the deck, with you present for the deck, using the commands of section 8?
 9. **AI data use (D17):** can you confirm the account's setting for model training?
+10. **Scope (D20, proposed 2026-11-23):** go or no-go on the four pages of 5.4 (Connections, Contacts, Messages,
+    Status, built in that order), with microReticulum not adopted (3.1.1)?
 
 ## Sources
 
@@ -1008,7 +1127,8 @@ All read on 2026-11-07 unless noted.
 - Reticulum-Go v1.4.2 (2026-11-01): https://github.com/Quad4-Software/Reticulum-Go ; Ren Browser:
   https://github.com/Quad4-Software/Ren-Browser
 - Reticulum-rs (MIT): https://github.com/BeechatNetworkSystemsLtd/Reticulum-rs
-- microReticulum 0.5.0 (Apache-2.0): https://github.com/attermann/microReticulum
+- microReticulum 0.5.0 (Apache-2.0): https://github.com/attermann/microReticulum ; README, release notes 0.2.5-0.5.0,
+  examples and docs read again on 2026-11-23 (3.1.1)
 - reticulum-kt (MPL-2.0): https://github.com/torlando-tech/reticulum-kt ; Columba v2.2.6 (MPL-2.0):
   https://github.com/torlando-tech/columba
 - Prns (named in the manual's Brandolini's Reference): https://github.com/KenAKAFrosty/Prns
