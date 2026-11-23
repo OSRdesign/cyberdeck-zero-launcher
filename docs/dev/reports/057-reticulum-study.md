@@ -125,8 +125,8 @@ project whose code is written with AI assistance (9).
 
 **Owner decisions, 2026-11-07.** The owner accepted all recommendations D1-D19 of this report, "as we revised the plans". For each row below the recommendation column is therefore the decision (text kept as written; the Status column marks it Accepted). Next step: probe P0 (section 8). P0 is first dry-run on the PC (no board, loopback only, to validate the commands and versions); then it runs on the Pi 4B and on the deck with the owner present, with the owner's Heltec V4 (RNode firmware) as the radio. The budget in D2 and the "if P0 confirms" conditions in D13 and D15 still apply: P0's numbers decide whether the build starts.
 
-**Added 2026-11-23.** D20 (scope of the first user-facing pages, 5.4, and the microReticulum look, 3.1.1) is proposed,
-not yet accepted; D1-D19 are unchanged.
+**Added 2026-11-23.** D20 (scope of the first user-facing pages, 5.4, and the microReticulum look, 3.1.1) is accepted as written by the owner on
+2026-11-23; D1-D19 are unchanged.
 
 | # | Decision | Options | Recommendation (not a rule) | Status |
 |---|---|---|---|---|
@@ -149,7 +149,7 @@ not yet accepted; D1-D19 are unchanged.
 | D17 | AI account data use | check; ignore | check that the sessions used for this work are not used for model training (6.2: the licence's AI-training condition) | Accepted (2026-11-07) |
 | D18 | Mesh Hop guard | none; skip ports held by any other process | a small Mesh Hop task: treat a port held by any other process as busy (`/proc` check), and name an RNode as "used by Reticulum" (4.4) | Accepted (2026-11-07) |
 | D19 | Transport model | LoRa-first apps around an RNode; transport-agnostic apps over any Reticulum interface | transport-agnostic (owner's statement, 2026-11-07): an interface manager in the bridge and the status app lists, adds, edits, enables and disables interfaces of every documented type (4.1), each with only its own options and per-interface status (online, rx/tx bytes, bitrate, errors); D8 applies per interface; hardware-neutral wording ("interface", not "radio"); the other apps never ask which medium is in use | Accepted (2026-11-07) |
-| D20 | Scope for P1b-P2; microReticulum | the four pages of 5.4 (Connections, Contacts, Messages, Status, in that build order); a wider first scope; microReticulum as a base (3.1.1) | the four pages of 5.4, no Reticulum vocabulary in the UI, NomadNet-style browser later (P3); microReticulum evaluated (3.1.1) and not adopted, D3 stays A | Proposed (owner go given 2026-11-23 for writing it up; go/no-go on the scope still open) |
+| D20 | Scope for P1b-P2; microReticulum | the four pages of 5.4 (Connections, Contacts, Messages, Status, in that build order); a wider first scope; microReticulum as a base (3.1.1) | the four pages of 5.4, no Reticulum vocabulary in the UI, NomadNet-style browser later (P3); microReticulum evaluated (3.1.1) and not adopted, D3 stays A | Accepted as written (2026-11-23) |
 
 ## 2. Reticulum and its parts (question 1)
 
@@ -560,7 +560,7 @@ message bodies, keys or passphrases; `rnpath -B` blackholes a spamming identity 
 
 ### 5.4 What the user sees (scope for P1b-P2, draft for the owner)
 
-A draft of the user-facing scope (I, proposal; D20). Four pages, designed for small screens first (640x480, then the
+The user-facing scope (D20, accepted 2026-11-23). Four pages, designed for small screens first (640x480, then the
 smaller sizes). The UI uses no Reticulum vocabulary (no "destination", "announce", "LXMF", "interface"); the words below
 are working names, and the wording and layout stay the controller's and the owner's decisions.
 
@@ -1093,8 +1093,8 @@ D1-D19 are accepted (section 1). The questions below are the details the owner s
 7. **Internet:** never, or only entrypoints you pick (D9)?
 8. **P0:** may it run on the Pi 4B and the deck, with you present for the deck, using the commands of section 8?
 9. **AI data use (D17):** can you confirm the account's setting for model training?
-10. **Scope (D20, proposed 2026-11-23):** go or no-go on the four pages of 5.4 (Connections, Contacts, Messages,
-    Status, built in that order), with microReticulum not adopted (3.1.1)?
+10. **Scope (D20, accepted 2026-11-23):** the four pages of 5.4 (Connections, Contacts, Messages, Status, built in
+    that order), with microReticulum not adopted (3.1.1). Answered: accepted as written.
 
 ## Sources
 
