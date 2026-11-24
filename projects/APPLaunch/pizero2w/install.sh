@@ -1411,7 +1411,7 @@ profile_diag() {
         pi3a-luckfox35) echo 3.5 ;;
     esac
 }
-SIZE_KEY=0; SIZE_REC=""; MM_REC=""
+SIZE_KEY=0; SIZE_REC=""; MM_REC=""; MM_KEPT=0
 if [ -f "$INSTALL_CONF" ]; then
     if grep -q '^screen_size=' "$INSTALL_CONF"; then SIZE_KEY=1; SIZE_REC=$(sed -n 's/^screen_size=//p' "$INSTALL_CONF" | tail -n 1); fi
     MM_REC=$(sed -n 's/^panel_mm=//p' "$INSTALL_CONF" | tail -n 1)
@@ -1435,6 +1435,13 @@ case "$BOARD" in
         base=$(profile_body_base)
         SCREEN_OWN_MM=$(printf '%s\n' "$base" | sed -n 's/^APPLAUNCH_PANEL_MM=//p' | head -n 1)
         SCREEN_LOGICAL=$(printf '%s\n' "$base" | sed -n 's/^APPLAUNCH_LOGICAL=//p' | head -n 1)
+        # No size given and none recorded (an install.conf rewritten by an older install.sh, deleted or restored from a backup
+        # without it): the size in a generated profile of this board is the owner's choice, not the profile default, so it stays.
+        # Not on a PC (its size comes from the EDID of the screen in use). A hand-edited profile is kept whole anyway.
+        if [ -z "$SIZE_ARG$MM_ARG" ] && [ "$IS_PC" = 0 ] && [ -n "$SCREEN_OWN_MM" ] && [ "$(profile_state)" = ours ]; then
+            kept_mm=$(sed -n 's/^APPLAUNCH_PANEL_MM=//p' "$PROFILE" | head -n 1)
+            if valid_mm "$kept_mm" && [ "$kept_mm" != "$SCREEN_OWN_MM" ]; then MM_ARG=$kept_mm; MM_KEPT=1; fi
+        fi
         if [ -z "$SIZE_ARG$MM_ARG" ] && [ "$SIZE_KEY" = 0 ] && [ "$IS_PC" = 0 ] && [ "$DRY" = 0 ] && [ "$BOARD_ONLY" = 0 ] \
                 && { { [ "${APPLAUNCH_INSTALL_ASSUME_TTY:-0}" = 1 ] && [ -n "$SYSROOT" ]; } || { [ -t 0 ] && [ -t 1 ]; }; }; then
             own_diag=$(profile_diag)
@@ -1453,6 +1460,11 @@ case "$BOARD" in
         fi
         if [ -n "$MM_ARG" ]; then
             SCREEN_MM=$MM_ARG; SCREEN_NOTE="--panel-mm $MM_ARG"
+            # a size kept from the profile in place: its own comment wording, so that the profile is "up to date" and not rewritten
+            if [ "$MM_KEPT" = 1 ]; then
+                SCREEN_NOTE=$(sed -n "s/^# panel visible area in mm (\\(.*\\)): the layout's density\$/\\1/p" "$PROFILE" | head -n 1)
+                [ -n "$SCREEN_NOTE" ] || SCREEN_NOTE="--panel-mm $MM_ARG"
+            fi
         elif [ -n "$SIZE_ARG" ]; then
             case "$SCREEN_LOGICAL" in
                 [0-9]*x[0-9]*) SCREEN_MM=$(screen_mm "$SIZE_ARG" "${SCREEN_LOGICAL%x*}" "${SCREEN_LOGICAL#*x}"); SCREEN_NOTE="--screen-size $SIZE_ARG" ;;

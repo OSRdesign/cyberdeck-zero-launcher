@@ -441,6 +441,13 @@ sudo ./install.sh --panel-mm 108x65          # or the visible area in mm, exactl
   (`APPLAUNCH_PANEL_MM`; a profile that has none, such as the HyperPixel's, gets one) and, for 5 on the DSI regulator's
   backlight, `APPLAUNCH_DIM_PERCENT=20` (10 % is black on the 5" panel). The board name, framebuffer, rotation, touch and
   the rest stay the profile's.
+- **A re-install or update keeps your size.** A size given before (`screen_size=` / `panel_mm=` in `install.conf`) is
+  applied again by a run without options. When `install.conf` has neither (it was deleted, restored without them, or
+  rewritten by an older `install.sh`) and `board.conf` is the generated, unedited profile with a size other than the
+  board's default, that `APPLAUNCH_PANEL_MM` is kept and recorded as `panel_mm=`. A hand-edited `board.conf` is always
+  kept whole. A PC takes its size from the screen's EDID on every run. The profile still gets new lines of a
+  later release; the previous file is kept as `board.conf.bak` when it is rewritten. Run the installer of the release you
+  are updating to: a branch built before `--screen-size` existed rewrites `install.conf` without the size.
 - **The formula**: width = diagonal x 25.4 x w / sqrt(w^2 + h^2) and height likewise, w and h the profile's landscape
   canvas, each rounded to the nearest mm (4 inch at 640x480: 81x61; 2.8 inch at 640x480: 57x43). The sizes the profiles
   already know keep their values, which differ from the formula by a millimetre or two: 4.3, 5 and 7 inch at 800x480
