@@ -1,0 +1,23 @@
+# Quick controls at 320x480 (profile p320, the narrow portrait panel): the page header holds the Esc and the strip only
+# (no title); the buttons are 2 x 2 or one column of four, whichever the room allows. Review only: no golden.
+title p320 quick controls
+review
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_QUICKCTL_ADAPTERS all
+keyboards 0
+apps Settings CLI "Quick controls" SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch "Quick controls"
+wait 600
+shot p320_qc_open
+expect_text Shutdown
+key ENTER
+wait 400
+shot p320_qc_wifi_off
+expect_radio wifi off
+expect_power none

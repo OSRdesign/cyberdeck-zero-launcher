@@ -12,8 +12,8 @@
 
 int main()
 {
-    constexpr std::array<std::string_view, 20> expected = {
-        "Settings", "CLI", "Python", "ZClaw", "SSH", "Files",
+    constexpr std::array<std::string_view, 21> expected = {
+        "Settings", "CLI", "Quick controls", "Python", "ZClaw", "SSH", "Files",
         "Camera", "Rec", "Music", "Piano", "Compass", "IR Remote", "IR Chat",
         "Calculator", "Keyboard Guide", "FactoryTest", "GPS", "LoRa",
         "NFC", "SubG Chat",
@@ -23,7 +23,7 @@ int main()
         assert(launcher_builtin_app_display_order(expected[index]) == static_cast<int>(index));
 
     // Existing images may use the hardware-prefixed SubG desktop name.
-    assert(launcher_builtin_app_display_order("Cap-CC1101-SubG-Chat") == 19);
+    assert(launcher_builtin_app_display_order("Cap-CC1101-SubG-Chat") == 20);
     assert(launcher_builtin_app_display_order("Vim") == -1);
 
     assert(!launcher_builtin_desktop_app_is_managed("Settings"));

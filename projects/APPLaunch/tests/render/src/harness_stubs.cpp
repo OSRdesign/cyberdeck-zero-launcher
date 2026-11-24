@@ -219,6 +219,7 @@ const AppDescriptor *launcher_app_registry_entries(std::size_t *count)
     static const AppDescriptor entries[] = {
         {"Settings", "setting_100.png", "app_Setting", false, true},
         {"CLI", "cli_100.png", "app_CLI", false, true},
+        {"Quick controls", "quickctl_100.png", "app_QuickControls", true, false},
         {"Python", "python_100.png", "app_Python", true, false},
         {"SSH", "ssh_100.png", "app_SSH", true, false},
         {"Calculator", "math_100.png", "app_Math", true, false},

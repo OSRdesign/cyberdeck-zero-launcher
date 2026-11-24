@@ -1,0 +1,22 @@
+# Quick controls, Shutdown by touch (a tap acts at once, no dialog) and its failure path: the service refuses (the fake
+# service answers -1), the page says "Shutdown failed" in red and the buttons come back; a second tap then runs it.
+# Review only: no golden.
+title quick controls shutdown
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_QUICKCTL_ADAPTERS all
+apps Settings CLI "Quick controls" SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch "Quick controls"
+wait 600
+expect_power none
+quickctl fail power
+tapbutton Shutdown
+wait 600
+shot qc_shutdown_failed
+expect_text "Shutdown failed"
+expect_power Shutdown
+quickctl fail none

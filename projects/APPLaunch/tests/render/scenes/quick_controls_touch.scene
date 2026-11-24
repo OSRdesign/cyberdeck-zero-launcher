@@ -1,0 +1,32 @@
+# Quick controls by touch: a tap on Bluetooth switches it on, a tap on Wi-Fi off and on, and a refused switch (the fake
+# service answers -1) leaves the real state with "Wi-Fi did not switch" in red. No power button is touched here.
+# Review only: no golden.
+title quick controls touch
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_QUICKCTL_ADAPTERS all
+apps Settings CLI "Quick controls" SSH Calculator
+clock 20:30
+wifi 70
+bt off
+home
+launch "Quick controls"
+wait 600
+tapbutton Bluetooth
+wait 500
+shot qc_touch_bt_on
+expect_radio bt on
+tapbutton Wi-Fi
+wait 500
+shot qc_touch_wifi_off
+expect_radio wifi off
+tapbutton Wi-Fi
+wait 500
+expect_radio wifi on
+quickctl fail wifi
+tapbutton Wi-Fi
+wait 500
+shot qc_touch_wifi_refused
+expect_text "Wi-Fi did not switch"
+expect_radio wifi on
+expect_power none
