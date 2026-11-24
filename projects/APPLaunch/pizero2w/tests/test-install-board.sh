@@ -444,6 +444,58 @@ run --board-only
 check "pi4b-dsi real run with a hand-edited board.conf: the same note, the file untouched" 'has "its APPLAUNCH_PANEL_MM decides the screen size" && [ "$(cksum < "$P")" = "$HAND" ]'
 run --board-only --force
 check "pi4b-dsi real run with --force over a hand-edited board.conf: the profile replaced, the plain note again" 'has "assuming 5\" (108x65 mm); for another size run again with --screen-size INCHES" && ! has "was edited by hand and is kept" && [ -f "$P.bak" ]'
+# --- an install over an existing board.conf keeps the owner's size (a re-install, an update; a fresh install gets the profile's)
+KP_FIX=pi4b-dsi
+R=$(root $KP_FIX); P="$R/etc/applaunch/board.conf"; C="$R/etc/applaunch/install.conf"
+run --board-only
+check "keep size, fresh install: the profile's own size (108x65), no .bak" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 108x65 ] && [ ! -e "$P.bak" ]'
+KP_SUM=$(cksum < "$P")
+run --board-only
+check "keep size, re-install over an unchanged config: up to date, byte for byte, no .bak" 'has "already up to date" && [ "$(cksum < "$P")" = "$KP_SUM" ] && [ ! -e "$P.bak" ]'
+R=$(root $KP_FIX); P="$R/etc/applaunch/board.conf"; C="$R/etc/applaunch/install.conf"
+run --board-only --screen-size 7
+KP7=$(cksum < "$P")
+check "keep size: --screen-size 7 gives 154x86" '[ "$(mm_in "$P")" = 154x86 ]'
+# recorded size (install.conf screen_size=7): a re-run without options keeps it
+printf 'keyboard_name=K
+board=
+screen_size=7
+panel_mm=
+boot_config=1
+' > "$C"
+run --board-only
+check "keep size, re-install with screen_size=7 recorded: 154x86, file unchanged, no .bak" '[ "$(mm_in "$P")" = 154x86 ] && [ "$(cksum < "$P")" = "$KP7" ] && [ ! -e "$P.bak" ]'
+# the incident: install.conf rewritten by an installer that has no --screen-size (the keys gone), the profile still the generated 7 inch one
+printf 'keyboard_name=K
+board=
+boot_config=1
+' > "$C"
+run --board-only
+check "keep size, install.conf without the size keys, generated 7 inch profile: PANEL_MM 154x86 kept, file unchanged, no .bak, no *.quickctl" '[ $RC = 0 ] && [ "$(mm_in "$P")" = 154x86 ] && [ "$(cksum < "$P")" = "$KP7" ] && [ ! -e "$P.bak" ] && ! ls "$R/etc/applaunch/" | grep -q quickctl && has "already up to date"'
+rm -f "$C"
+run --board-only
+check "keep size, no install.conf at all: PANEL_MM 154x86 kept" '[ "$(mm_in "$P")" = 154x86 ] && [ "$(cksum < "$P")" = "$KP7" ]'
+run --plan
+check "keep size: --plan reports panel_mm=154x86, panel_in_use=154x86 and profile_action=keep" 'has "panel_mm=154x86" && has "panel_in_use=154x86" && has "profile_action=keep"'
+# a hand-edited PANEL_MM and a screen_size not on the list: kept
+R=$(root $KP_FIX); P="$R/etc/applaunch/board.conf"; C="$R/etc/applaunch/install.conf"
+run --board-only
+sed -i 's/^APPLAUNCH_PANEL_MM=.*/APPLAUNCH_PANEL_MM=150x90/' "$P"; printf 'screen_size=6.5
+' > "$C"; KPH=$(cksum < "$P")
+run --board-only
+check "keep size, hand-edited PANEL_MM=150x90 (and screen_size=6.5 recorded): the file untouched, no .bak" '[ "$(mm_in "$P")" = 150x90 ] && [ "$(cksum < "$P")" = "$KPH" ] && [ ! -e "$P.bak" ]'
+# an older generated profile (a line the current profile has is missing, its checksum right) with the owner's size and no recorded
+# size: the profile is brought up to date (the new line is added, the old one kept as board.conf.bak) and the size stays
+R=$(root $KP_FIX); P="$R/etc/applaunch/board.conf"; C="$R/etc/applaunch/install.conf"
+run --board-only --screen-size 7
+KP_BODY=$(sed '1,3d' "$P" | grep -v '^APPLAUNCH_TOUCH_SWAP_XY=')
+{ sed -n '1,2p' "$P"; printf '# applaunch-profile-sum: %s
+' "$(printf '%s
+' "$KP_BODY" | cksum | cut -d' ' -f1-2)"; printf '%s
+' "$KP_BODY"; } > "$P.new"; mv "$P.new" "$P"
+rm -f "$C"
+run --board-only
+check "keep size, older generated profile: updated with the profile's new line, PANEL_MM 154x86 kept, the old one in board.conf.bak" '[ $RC = 0 ] && grep -qx "APPLAUNCH_TOUCH_SWAP_XY=0" "$P" && [ "$(mm_in "$P")" = 154x86 ] && [ -f "$P.bak" ] && ! grep -q "SWAP_XY" "$P.bak" && [ "$(grep -c "^APPLAUNCH_PANEL_MM=" "$P")" = 1 ]'
 R=$(root pi3a-luckfox35); run --dry-run
 check "luckfox35 dry-run: no screen size note" '! has "cannot be detected"'
 # without a backlight device there is no dim line to set

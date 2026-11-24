@@ -427,6 +427,21 @@ check "an install.conf without screen_size and panel_mm: the options replay none
 download "$NEWTGZ"
 apply "$NEWTGZ" 0.8.13
 check "update of an earlier install.conf: done, no question asked, board.conf unchanged, the keys written (empty)" '[ $RC = 0 ] && [ "$(st state)" = done ] && ! grep -q "diagonal" "$R/var/log/cyberdeckzero/"update-*.log && [ "$(cksum < "$R/etc/applaunch/board.conf")" = "$CONF_SUM" ] && grep -qx "screen_size=" "$C" && grep -qx "panel_mm=" "$C"'
+# the owner's size after an install.conf that lost its size keys (written by an install.sh without --screen-size): the
+# update keeps the generated 7 inch profile's size, records it, leaves no .bak
+R=$(root pi3a-wsdsi43)
+mkdir -p "$R/boot/firmware"
+printf 'dtoverlay=vc4-kms-v3d
+' > "$R/boot/firmware/config.txt"
+echo 'console=tty1 root=PARTUUID=1-02 rootwait' > "$R/boot/firmware/cmdline.txt"
+first_install --keyboard-name "Lost Keys" --screen-size 7 --no-boot-config --no-default-source
+C="$R/etc/applaunch/install.conf"
+sed -i '/^screen_size=/d;/^panel_mm=/d' "$C"
+CONF_SUM=$(cksum < "$R/etc/applaunch/board.conf")
+check "lost size keys: (setup) the profile has the 7 inch size" 'grep -qx "APPLAUNCH_PANEL_MM=154x86" "$R/etc/applaunch/board.conf"'
+download "$NEWTGZ"
+apply "$NEWTGZ" 0.8.13
+check "lost size keys, update: done, board.conf byte for byte (154x86), no .bak, panel_mm=154x86 recorded" '[ $RC = 0 ] && [ "$(st state)" = done ] && [ "$(cksum < "$R/etc/applaunch/board.conf")" = "$CONF_SUM" ] && grep -qx "APPLAUNCH_PANEL_MM=154x86" "$R/etc/applaunch/board.conf" && [ ! -e "$R/etc/applaunch/board.conf.bak" ] && grep -qx "panel_mm=154x86" "$C"'
 # the helper never lets install.sh read a terminal: an unused terminal hook is not passed on, stdin is /dev/null
 check "the helper runs install.sh with stdin from /dev/null (the first-install question is never asked)" 'grep -q "< /dev/null" "$D/cyberdeckzero-update" && grep -q -- "-u APPLAUNCH_INSTALL_ASSUME_TTY" "$D/cyberdeckzero-update"'
 
