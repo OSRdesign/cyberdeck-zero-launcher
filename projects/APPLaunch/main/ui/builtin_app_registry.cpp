@@ -75,6 +75,8 @@ constexpr BuiltinAppRegistration BUILTIN_APPS[] = {
      nullptr, false, true, false, append_page_app<UISettingTreePage>},
     {{"CLI", "cli_100.png", "app_CLI", false, true},
      nullptr, false, true, false, append_cli_app},
+    {{"Quick controls", "quickctl_100.png", "app_QuickControls", true, false},
+     nullptr, false, true, false, append_page_app<UIQuickControlsPage>},
     {{"Python", "python_100.png", "app_Python", true, false},
      "python3", true, false, false, nullptr, create_python_help},
 #if defined(__linux__) && !defined(HAL_PLATFORM_SDL)

@@ -1,0 +1,39 @@
+# Quick controls, the guard: nothing runs on open, on a stray key release, on focus, or on a second tap; only a press and
+# release on a button does, and a power button acts at once (no dialog, owner decision 2026-11-23).
+# The page opens with the focus on Wi-Fi; a bare Enter RELEASE (the key that opened the tile on the home grid) must do
+# nothing. Reboot is started once (the fake service records "Reboot"; the real one runs systemctl reboot -i), the page says
+# "Restarting...", every button is dimmed, and more Enter presses start nothing.
+# Review only: no golden.
+title quick controls power
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_QUICKCTL_ADAPTERS all
+apps Settings CLI "Quick controls" SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+launch "Quick controls"
+wait 600
+expect_power none
+key ENTER release
+expect_power none
+expect_radio wifi on
+expect_radio bt on
+key UP
+shot qc_focus_on_shutdown
+expect_power none
+key RIGHT
+shot qc_focus_on_reboot
+expect_power none
+key ENTER
+wait 400
+shot qc_rebooting
+expect_power Reboot
+expect_text Restarting...
+key LEFT
+key ENTER
+key ENTER
+expect_power Reboot
+expect_radio wifi on
+expect_radio bt on

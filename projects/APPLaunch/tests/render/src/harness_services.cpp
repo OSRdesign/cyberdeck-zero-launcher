@@ -469,6 +469,10 @@ void install_services()
         } else if (command == "RadioEnabled") {
             if (reply) reply(f.wifi_radio ? 1 : 0, "");
         } else if (command == "RadioSetEnabled") { /* "on" / "off" */
+            if (f.qc_wifi_set_fails) {
+                if (reply) reply(-1, "refused");
+                return;
+            }
             f.wifi_radio = arg(args, 1) == "on" || arg(args, 1) == "1" || arg(args, 1) == "true";
             if (reply) reply(0, "");
         } else if (command == "Scan") { /* the fixture networks, in their order (the page sorts them) */
@@ -570,6 +574,10 @@ void install_services()
             f.bt_alias = arg(args, 1);
             if (reply) reply(0, "ok");
         } else if (command == "BtPower") {
+            if (f.qc_bt_set_fails) {
+                if (reply) reply(-1, "refused");
+                return;
+            }
             f.bt_powered = arg(args, 1) == "1";
             if (reply) reply(0, "");
         } else if (command == "BtConnect" || command == "BtDisconnect" || command == "BtRemove" ||
@@ -651,7 +659,20 @@ void install_services()
         if (command == "VolumeWrite") f.volume = std::max(0, std::min(100, std::atoi(arg(args, 1).c_str())));
         if (reply) reply(0, command == "VolumeRead" || command == "VolumeWrite" ? std::to_string(f.volume) : "");
     });
-    cp0_signal_process_api.append([](Args args, Reply reply) { unknown("process", args, reply); });
+    /* Quick controls: Shutdown / Reboot are only recorded (the real ones run systemctl poweroff / reboot) */
+    cp0_signal_process_api.append([](Args args, Reply reply) {
+        Fixtures &f = fixtures();
+        const std::string command = arg(args, 0);
+        if (command == "Shutdown" || command == "Reboot") {
+            {
+                std::lock_guard<std::mutex> lock(f.power_mutex);
+                f.power_calls.push_back(command);
+            }
+            if (reply) reply(f.qc_power_fails ? -1 : 0, "");
+            return;
+        }
+        unknown("process", args, reply);
+    });
 }
 
 } // namespace harness

@@ -80,6 +80,13 @@ struct Fixtures {
     std::string wifi_ssid = "deck-lab";
     std::string wifi_ip = "192.168.1.42";
     bool wifi_radio = true;
+    /* Quick controls: the power requests the fake process service received ("Shutdown" / "Reboot", never run; scene
+     * command expect_power), and which requests it refuses (scene command quickctl fail wifi|bt|power|none) */
+    std::mutex power_mutex;
+    std::vector<std::string> power_calls;
+    bool qc_wifi_set_fails = false;
+    bool qc_bt_set_fails = false;
+    bool qc_power_fails = false;
     /* the scan: the connected network (deck-lab, saved), a saved one, open ones, a new secured one, a weak one */
     std::vector<FixtureNetwork> wifi_networks = {
         {"deck-lab", 70, "WPA2", true},     {"Workshop", 84, "WPA2", true}, {"Cafe Libre", 62, "", false},

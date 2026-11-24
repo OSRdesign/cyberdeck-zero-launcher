@@ -1,0 +1,67 @@
+# Quick controls (built-in tile and page): the home grid with its tile, the page opened from the tile, then the keys.
+# Shutdown, Reboot, Wi-Fi, Bluetooth in a 2 x 2 grid; the first focus is Wi-Fi (never a power button). The fake services
+# (src/harness_services.cpp): Wi-Fi radio on, Bluetooth powered on, both adapters present (APPLAUNCH_QUICKCTL_ADAPTERS);
+# Shutdown / Reboot are only recorded (expect_power), never run.
+# Shots: the tile on the home grid, the page as opened, the focus on every button (arrows, no wrap), Wi-Fi switched off
+# and on again, Bluetooth switched off and on. A state is always a dot AND a word: filled dot "On", ring "Off".
+# Review only: no golden; the header is checked against the home grid's (run.sh header).
+title quick controls
+review
+env APPLAUNCH_DEV 0
+env APPLAUNCH_QUICKCTL_ADAPTERS all
+apps Settings CLI "Quick controls" SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+header home
+shot qc_home
+launch "Quick controls"
+wait 600
+shot qc_open
+header qc_open "Controls"
+expect_text Shutdown
+expect_text Reboot
+expect_text Wi-Fi
+expect_text Bluetooth
+expect_text On
+# opening reads only: nothing was switched or started
+expect_power none
+expect_radio wifi on
+expect_radio bt on
+# the arrows move on the grid, never wrap, never act
+key UP
+shot qc_focus_shutdown
+key LEFT
+key RIGHT
+shot qc_focus_reboot
+key DOWN
+shot qc_focus_bluetooth
+key RIGHT
+key DOWN
+key LEFT
+shot qc_focus_wifi
+expect_power none
+expect_radio wifi on
+expect_radio bt on
+# Enter on Wi-Fi switches it off, the button says Off with a ring
+key ENTER
+wait 400
+shot qc_wifi_off
+expect_radio wifi off
+expect_power none
+key ENTER
+wait 400
+shot qc_wifi_on
+expect_radio wifi on
+# Bluetooth off, then on again (the strip's Bluetooth icon follows)
+key RIGHT
+key ENTER
+wait 400
+shot qc_bt_off
+expect_radio bt off
+key ENTER
+wait 400
+shot qc_bt_on
+expect_radio bt on
+expect_power none

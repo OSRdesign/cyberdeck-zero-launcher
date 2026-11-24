@@ -13,9 +13,10 @@
 
 namespace {
 
-constexpr std::array<std::string_view, 20> kBuiltInAppOrder = {
+constexpr std::array<std::string_view, 21> kBuiltInAppOrder = {
     "settings",
     "cli",
+    "quickcontrols",
     "python",
     "zclaw",
     "ssh",
@@ -76,7 +77,7 @@ int launcher_builtin_app_display_order(std::string_view label) noexcept
         for (std::size_t index = 0; index < kBuiltInAppOrder.size(); ++index)
             if (normalized == kBuiltInAppOrder[index]) return static_cast<int>(index);
         // Releases have used both the short and hardware-prefixed SubG name.
-        if (normalized == "subgchat") return 19;
+        if (normalized == "subgchat") return 20;
     } catch (...) {
         // An allocation failure must not prevent the launcher from showing apps.
     }

@@ -1172,6 +1172,7 @@ std::string icon_for(const std::string &name)
     static const std::map<std::string, std::string> icons = {
         {"Settings", "setting_100.png"}, {"CLI", "cli_100.png"},
         {"Python", "python_100.png"},    {"SSH", "ssh_100.png"},       {"Calculator", "math_100.png"},
+        {"Quick controls", "quickctl_100.png"},
     };
     const auto found = icons.find(name);
     return found == icons.end() ? std::string() : found->second;
@@ -2198,6 +2199,51 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("%s %s ok\n", cmd.c_str(), what.c_str());
         return true;
     }
+    if (cmd == "quickctl") {
+        /* quickctl fail wifi|bt|power|none: that fake service refuses the next requests (Quick controls' failure path);
+         * quickctl wifi_radio on|off: the Wi-Fi radio's state (the `bt` command sets Bluetooth's) */
+        if (w.size() == 3 && w[1] == "fail") {
+            fx.qc_wifi_set_fails = w[2] == "wifi";
+            fx.qc_bt_set_fails = w[2] == "bt";
+            fx.qc_power_fails = w[2] == "power";
+            if (!fx.qc_wifi_set_fails && !fx.qc_bt_set_fails && !fx.qc_power_fails && w[2] != "none")
+                return fail(scene, line, "usage: quickctl fail wifi|bt|power|none");
+            return true;
+        }
+        if (w.size() == 3 && w[1] == "wifi_radio") {
+            fx.wifi_radio = w[2] != "off";
+            return true;
+        }
+        return fail(scene, line, "usage: quickctl fail wifi|bt|power|none, quickctl wifi_radio on|off");
+    }
+    if (cmd == "expect_power") {
+        /* expect_power none|Shutdown|Reboot: the fake process service received no power request, or exactly that one */
+        if (w.size() != 2) return fail(scene, line, "usage: expect_power none|Shutdown|Reboot");
+        settle(300);
+        std::vector<std::string> calls;
+        {
+            std::lock_guard<std::mutex> lock(fx.power_mutex);
+            calls = fx.power_calls;
+        }
+        const bool ok = w[1] == "none" ? calls.empty() : calls.size() == 1 && calls[0] == w[1];
+        if (!ok) {
+            std::string got;
+            for (const std::string &call : calls) got += (got.empty() ? "" : ",") + call;
+            return fail(scene, line, "expect_power " + w[1] + ": the service received [" + got + "]");
+        }
+        std::printf("expect_power ok: %s\n", w[1].c_str());
+        return true;
+    }
+    if (cmd == "expect_radio") {
+        /* expect_radio wifi|bt on|off: the fake radio's state (what the page switched) */
+        if (w.size() != 3 || (w[1] != "wifi" && w[1] != "bt") || (w[2] != "on" && w[2] != "off"))
+            return fail(scene, line, "usage: expect_radio wifi|bt on|off");
+        settle(300);
+        const bool now = w[1] == "wifi" ? fx.wifi_radio : fx.bt_powered;
+        if (now != (w[2] == "on")) return fail(scene, line, "expect_radio " + w[1] + " " + w[2] + ": it is " + (now ? "on" : "off"));
+        std::printf("expect_radio ok: %s %s\n", w[1].c_str(), w[2].c_str());
+        return true;
+    }
     if (cmd == "bt") {
         if (w.size() != 2) return fail(scene, line, "usage: bt off|on|connected");
         fx.bt_powered = w[1] != "off";
@@ -2407,6 +2453,7 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             spec.kind = spec.name == "Settings"     ? "settings"
                         : spec.name == "Calculator" ? "calculator"
                         : spec.name == "SSH"        ? "ssh"
+                        : spec.name == "Quick controls" ? "quickctl"
                         : spec.name == "CLI"        ? "cli"
                                                     : "tile";
             apps.push_back(spec);

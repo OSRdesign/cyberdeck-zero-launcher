@@ -231,7 +231,7 @@ plus the arrows, Enter, Esc and Del. The details are in [`docs/HOSTING-APPS.md`]
 - **`main`** has no global minimum screen size (decision of 2026-11-12): the smallest screen an app needs is a
   requirement of that app (`min_size` in the registry, `X-MinSize` in its `.desktop` file), and Settings > Apps >
   Available lists only the apps that fit the screen. Since v0.9.4 main also runs 480x320 panels upright in PDA mode.
-  Its apps are the built-in Settings, CLI, Python, SSH and Calculator, and from the apps repository Cassette, Deck
+  Its apps are the built-in Settings, CLI, Quick controls, Python, SSH and Calculator, and from the apps repository Cassette, Deck
   Atlas, Home Assistant, Klondike Solitaire, Markdown Notes, Mesh Hop, Mine Field, mmWave Radar, Net Toolbox, Net
   Walk, RSS Reader, Serial Console, System Monitor, VHS, Vinyl and viz1090.
 - **`small-screen`** (created at v0.8.13, commit 5ddd2e9f) is the long-lived fork for 480x320-only screens. It keeps

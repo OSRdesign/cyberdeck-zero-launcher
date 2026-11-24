@@ -10,6 +10,7 @@
  */
 #define APP_PAGE_IMPLEMENTATION_UNIT /* as in the page sources: ui.h must not pull launch.h first */
 #include "page_app/ui_app_calculator.hpp"
+#include "page_app/ui_app_quickctl.hpp"
 #include "page_app/ui_app_ssh.hpp"
 #include "page_app/ui_app_st.hpp"
 #include "settings/settings_page.hpp"
@@ -120,6 +121,8 @@ Launch::Launch()
             app_list.emplace_back(spec.name, spec.icon, page_v<UISettingTreePage>);
         else if (spec.kind == "calculator")
             app_list.emplace_back(spec.name, spec.icon, page_v<UICalculatorPage>);
+        else if (spec.kind == "quickctl") // the built-in Quick controls page
+            app_list.emplace_back(spec.name, spec.icon, page_v<UIQuickControlsPage>);
         else if (spec.kind == "ssh") // the SSH form (the native form on the native display) and its terminal
             app_list.emplace_back(spec.name, spec.icon, page_v<UISSHPage>);
         else if (spec.kind == "cli") // the terminal page as the CLI tile opens it, on the fake PTY (task 014 P4b)

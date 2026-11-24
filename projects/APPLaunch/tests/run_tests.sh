@@ -408,6 +408,24 @@ ${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
     "$build_dir/calculator_layout_metrics.o" \
     -o "$build_dir/test_calculator_layout"
 "$build_dir/test_calculator_layout"
+# Quick controls: the model (state replies, texts, decisions, adapters, focus, the Controller acting only on
+# activate()) and the layout (from the real layout service, at the scene sizes)
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror -pthread \
+    "$test_root/test_quick_controls_model.cpp" \
+    "$test_root/../main/ui/model/quick_controls_model.cpp" \
+    -o "$build_dir/test_quick_controls_model"
+"$build_dir/test_quick_controls_model"
+${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    -c "$test_root/../../../ext_components/cp0_lvgl/src/cp0_ui_roller.c" \
+    -o "$build_dir/quick_controls_layout_roller.o"
+${CXX:-g++} -std=c++17 -Wall -Wextra -Werror \
+    -I"$test_root/../../../ext_components/cp0_lvgl/include" \
+    "$test_root/test_quick_controls_layout.cpp" \
+    "$build_dir/calculator_layout_metrics.o" \
+    "$build_dir/quick_controls_layout_roller.o" -lm \
+    -o "$build_dir/test_quick_controls_layout"
+"$build_dir/test_quick_controls_layout"
 # P5: the app contract's per-launch environment (the real layout service and the contract's reader)
 ${CC:-gcc} -std=c11 -Wall -Wextra -Werror \
     -I"$test_root/../../../ext_components/cp0_lvgl/include" \

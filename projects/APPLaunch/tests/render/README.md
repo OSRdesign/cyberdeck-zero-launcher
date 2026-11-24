@@ -303,3 +303,5 @@ device screenshots, mostly in scaled FreeType text. `deck.py shot` stays the dev
   proves layout, not behaviour on the board.
 - Changes to `builtin_app_registry.cpp`'s table must be copied to `src/harness_stubs.cpp`; changes to the
   device LVGL config to `config/lvgl_config.h`.
+
+Quick controls scenes (review only): `quick_controls` (the tile, the page, the arrows, Wi-Fi and Bluetooth switched), `quick_controls_power` (the guard: a bare Enter release and focus moves start nothing; Reboot once, then every button dimmed), `quick_controls_shutdown` (a tap on Shutdown, the service refuses: "Shutdown failed"), `quick_controls_touch`, `quick_controls_unavailable` / `quick_controls_none` (adapters missing: "Not available", dimmed, no action), `pda_quick_controls` (480x640, 480x800), `p320_quick_controls` (320x480). Scene commands: `quickctl fail wifi|bt|power|none`, `quickctl wifi_radio on|off`, `expect_power none|Shutdown|Reboot` (the fake process service only records the request), `expect_radio wifi|bt on|off`; `env APPLAUNCH_QUICKCTL_ADAPTERS all|wifi|bt|none` is the page's test hook. A tile name with a space is quoted: `apps "Quick controls"`.
