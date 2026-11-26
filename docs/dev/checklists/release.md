@@ -89,8 +89,10 @@ the part above the marker, converted to plain text (`notes_blocks()` in `project
 
 - The first line is `**New since vA.B.C** (pull requests #n and #m: <headline>)`: the converted text must start with
   "New since v".
-- Then at least two bullets, **plain bullets only: no nested bullets.** The test counts the nested bullets of all the
-  notes and expects 6, the ones in the 0.8.0 notes.
+- Then at least two bullets, **plain bullets, no nested bullets in new notes.** The viewer does render a nested bullet
+  (indented, wrapped under its text), and the notes of 0.8.0 (6) and 0.10.6 to 0.10.10 (28) have them. The test counts
+  the nested bullets of all the notes and expects 34, so a new nested bullet fails it: write flat bullets, or raise the
+  count in the test on purpose.
 - **No picture** above the marker (an image alone, or a table of images, becomes the line "(pictures in the online
   notes)"; only the 0.8.8 and 0.8.9 notes may have it). A table becomes "(a table in the online notes)", HTML
   comments are dropped, and bold, code and link markup is removed (the link's text stays): keep the user-facing part

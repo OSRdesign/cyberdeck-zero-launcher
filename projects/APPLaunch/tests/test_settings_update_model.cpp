@@ -269,7 +269,7 @@ void test_notes_all_files()
                                              300);
         assert(!text.empty() && !contains(text, "\n\n\n"));
     }
-    assert(nested_total == 6); /* the 0.8.0 notes' nested bullets */
+    assert(nested_total == 34); /* nested bullets of all the notes: 6 in 0.8.0, 28 in 0.10.6 to 0.10.10 (9, 8, 7, 2, 2) */
 
     // one file in full detail: 0.8.12
     const std::vector<NoteBlock> b = notes_blocks(load(g_docs + "/release-notes-0.8.12.md"));
