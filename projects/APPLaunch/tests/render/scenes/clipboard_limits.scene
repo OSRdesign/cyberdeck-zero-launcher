@@ -1,0 +1,138 @@
+# The shared TextField's clipboard rules (docs/dev/clipboard.md): a long field that scrolls (Address: 79 characters), a
+# Number field that takes digits only, a Password field (paste yes, copy and cut no, the text never in the launcher's
+# log), a field of 8 bytes where a paste is cut at a character boundary, newlines stripped from a single-line field, and
+# the launcher side gone (no socket), old (`err unknown`) or slow (the 100 ms timeout gives up): the field is left as it
+# is, nothing is lost by a Cut. Review only.
+title text field: clipboard limits
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+fielddemo
+wait 300
+# Address: the whole long text selected, scrolled to its start, then the last five characters at its end
+key DOWN
+expect_caret Address 79
+key SHIFT+HOME
+expect_selection Address 0 79
+shot limits_long_selected
+key CTRL+C
+clipboard expect "https://example.test/a/very/long/path/that/does/not/fit/in/the/field/at/all?x=1"
+key END
+key SHIFT+LEFT
+key SHIFT+LEFT
+key SHIFT+LEFT
+key SHIFT+LEFT
+key SHIFT+LEFT
+expect_selection Address 74 79
+shot limits_long_tail
+# Port (Number, 5 digits): a paste keeps only the digits and is cut to the length
+key DOWN
+clipboard set "port 9090\n"
+key CTRL+A
+key CTRL+V
+expect_field Port "9090"
+clipboard set 123456789
+key CTRL+A
+key CTRL+V
+expect_field Port "12345"
+type ab
+expect_field Port "12345"
+shot limits_number
+# Secret (Password): paste works, copy and cut do not, and the log never has the text
+key DOWN
+clipboard set token-from-elsewhere
+key CTRL+A
+expect_selection Secret 0 7
+shot limits_password_selected
+key CTRL+C
+clipboard expect token-from-elsewhere
+key CTRL+INSERT
+key CTRL+X
+key SHIFT+DELETE
+clipboard expect token-from-elsewhere
+expect_field Secret "hunter2"
+key CTRL+V
+expect_field Secret "token-from-elsewhere"
+clipboard logged token-from-elsewhere
+clipboard logged hunter2
+# Short (8 bytes): the paste is cut at the limit, then at a character boundary
+key DOWN
+clipboard set 0123456789ABC
+key CTRL+V
+expect_field Short "abc01234"
+clipboard set "ééééé"
+key CTRL+A
+key CTRL+V
+expect_field Short "éééé"
+expect_caret Short 4
+type x
+expect_field Short "éééé"
+# Name: newlines are stripped, a tab becomes a space
+key UP
+key UP
+key UP
+key UP
+clipboard set "line one\nline two\n"
+key CTRL+A
+key CTRL+V
+expect_field Name "line oneline two"
+clipboard set "a\tb"
+key CTRL+A
+key CTRL+V
+expect_field Name "a b"
+shot limits_name
+# a field whose app keeps the Ctrl keys (clipboard_keys off, a terminal's line field): nothing happens, Shift+arrows select
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+key DOWN
+clipboard set kept
+key CTRL+A
+key CTRL+V
+key CTRL+C
+key CTRL+X
+expect_selection Raw none
+expect_field Raw "line"
+key SHIFT+LEFT
+expect_selection Raw 3 4
+clipboard expect kept
+key UP
+key UP
+key UP
+key UP
+key UP
+# no launcher at all: Copy, Cut and Paste do nothing, and Cut keeps the text
+key CTRL+A
+clipboard server off
+key CTRL+X
+key CTRL+C
+key CTRL+V
+expect_field Name "a b"
+expect_selection Name 0 3
+# an older launcher (no clipboard verb)
+clipboard server old
+wait 3200
+key CTRL+X
+key CTRL+V
+expect_field Name "a b"
+# a launcher too slow for the 100 ms the field waits
+clipboard server slow
+wait 3200
+key CTRL+X
+key CTRL+V
+expect_field Name "a b"
+# and a launcher with the clipboard again
+clipboard server on
+wait 3200
+clipboard set back
+key CTRL+V
+expect_field Name "back"

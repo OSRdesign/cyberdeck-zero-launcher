@@ -64,7 +64,7 @@ class LauncherBackend : public app_request::Backend {
 public:
     std::string verbs() const
     {
-        std::string v = "hello,caps,toast,beep";
+        std::string v = "hello,caps,toast,beep,clipboard";
         if (app_media::sound_present()) v += ",volume";
         if (app_media::backlight_present()) v += ",brightness";
         if (app_media::dim_eligible()) v += ",dim";
@@ -225,6 +225,11 @@ void start()
     config.handler = [](const std::string &line, const app_request::Peer &peer) {
         Service &sv = service();
         return app_request::handle_line(line, peer, sv.backend, sv.limiter, monotonic_ms(), log_line);
+    };
+    config.frame = [](const std::string &line, size_t &bytes) { return app_request::payload_length(line, bytes); };
+    config.payload_handler = [](const std::string &line, const std::string &payload, const app_request::Peer &peer) {
+        Service &sv = service();
+        return app_request::handle_payload(line, payload, peer, sv.backend, sv.limiter, monotonic_ms(), log_line);
     };
     (void)app_request::start_server(std::move(config));
 }

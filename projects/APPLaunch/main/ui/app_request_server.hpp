@@ -9,7 +9,10 @@
  *   - a stale socket of an earlier run is removed at start; a live one (another launcher) or a file that is not a
  *     socket is left alone and the server does not start;
  *   - at most kMaxClients connections (more get "err busy" and are closed), an idle one is closed after kIdleMs;
- *   - a request line longer than kLineMax bytes gets "err bad" and the connection is closed.
+ *   - a request line longer than kLineMax bytes gets "err bad" and the connection is closed;
+ *   - a request line that announces a payload (ServerConfig::frame, today `clipboard set-len <n>`) is followed by n
+ *     bytes and one newline; the server waits for them (the idle limit still applies), then calls payload_handler.
+ *     A bad or oversize announcement gets the handler's reply and the connection is closed.
  * Linux only; elsewhere start() returns false and stop() does nothing.
  */
 #pragma once
@@ -28,6 +31,11 @@ struct ServerConfig {
     std::string path;   /* the socket, e.g. $XDG_RUNTIME_DIR/applaunch/launcher.sock (no /tmp fallback) */
     /* One request line to its reply line, on the server thread. */
     std::function<std::string(const std::string &line, const Peer &peer)> handler;
+    /* Optional framing: how many payload bytes follow `line`. 0: none; 1: `bytes` follow, then a newline; < 0: bad
+     * announcement (answer through `handler`, close). Both frame and payload_handler must be set to use it. */
+    std::function<int(const std::string &line, size_t &bytes)> frame;
+    /* A request line and its payload (without the newline that ended it) to the reply. */
+    std::function<std::string(const std::string &line, const std::string &payload, const Peer &peer)> payload_handler;
     std::function<void(const std::string &)> log; /* start-up and error messages; may be empty */
     int idle_ms = kIdleMs;
 };

@@ -157,6 +157,181 @@ int main()
     CHECK(run(b, r, "beep warn", 900001) == "err limit" && g_log.size() == 1); // limited: not logged, not served
     CHECK(run(b, r, "frobnicate", 900002) == "err unknown" && g_log.size() == 1);
 
+    // ---- the clipboard: the one-line form
+    {
+        app_request::RateLimiter cr;
+        Fake cf;
+        long long ct = 1000000;
+        auto cgo = [&](const std::string &line) {
+            ct += 1000; // beyond the 50 ms class limit
+            return run(cf, cr, line, ct);
+        };
+        app_request::Clipboard &clip = cf.clipboard();
+        std::string got;
+        CHECK(cgo("clipboard get") == "err empty" && cgo("clipboard get-len") == "err empty");
+        CHECK(cgo("clipboard set hello world") == "ok 11");
+        CHECK(clip.get(got, ct) && got == "hello world");
+        CHECK(cgo("clipboard get") == "ok hello world");
+        CHECK(cgo("clipboard get-len") == "ok 11\nhello world");
+        CHECK(cgo("clipboard set  two  spaces ") == "ok 13"); // spaces after the first one are the text
+        CHECK(cgo("clipboard get") == "ok  two  spaces ");
+        CHECK(cgo("clipboard set \xc3\xa9\xe2\x82\xac\xf0\x9f\x98\x80") == "ok 9"); // 2 + 3 + 4 bytes
+        CHECK(cgo("clipboard get-len") == "ok 9\n\xc3\xa9\xe2\x82\xac\xf0\x9f\x98\x80");
+        CHECK(cgo("clipboard clear") == "ok" && cgo("clipboard get") == "err empty" && clip.size() == 0);
+        CHECK(cgo("clipboard clear") == "ok"); // twice is fine
+        // bad forms never store
+        CHECK(cgo("clipboard set") == "err bad" && cgo("clipboard set ") == "err bad" && cgo("clipboard") == "err bad");
+        CHECK(cgo("clipboard paste") == "err bad" && cgo("clipboard get now") == "err bad" && cgo("clipboard clear 1") == "err bad");
+        CHECK(cgo("clipboard set a\tb") == "err bad" && cgo("clipboard set a\xff") == "err bad"); // control, bad UTF-8
+        CHECK(clip.size() == 0);
+        // the longest one-line text: the line limit less "clipboard set "
+        const std::string longest(app_request::kLineMax - 14, 'x');
+        CHECK(cgo("clipboard set " + longest) == "ok " + std::to_string(longest.size()));
+        CHECK(cgo("clipboard get") == "ok " + longest);
+        CHECK(cgo("clipboard set " + longest + "x") == "err bad"); // over the line limit
+        CHECK(cgo("clipboard get") == "ok " + longest);            // a refused set leaves the old text
+        // a text that does not fit a reply line is read with get-len
+        CHECK(clip.set("line one\nline two", ct) && cgo("clipboard get") == "err size");
+        CHECK(cgo("clipboard get-len") == "ok 17\nline one\nline two");
+        CHECK(clip.set(std::string(300, 'y'), ct) && cgo("clipboard get") == "err size");
+        CHECK(cgo("clipboard get-len") == "ok 300\n" + std::string(300, 'y'));
+    }
+
+    // ---- the clipboard: expiry, 10 minutes after the last set; a read does not extend it; a set restarts it
+    {
+        app_request::Clipboard clip;
+        std::string got;
+        CHECK(clip.set("token", 1000));
+        CHECK(clip.get(got, 1000 + app_request::kClipboardExpiryMs - 1) && got == "token");
+        CHECK(clip.get(got, 1000 + app_request::kClipboardExpiryMs - 1) && got == "token"); // reading changes nothing
+        CHECK(!clip.get(got, 1000 + app_request::kClipboardExpiryMs) && clip.size() == 0);    // gone, and zeroed
+        CHECK(clip.set("a", 5000) && clip.set("b", 5000 + app_request::kClipboardExpiryMs - 10)); // a set restarts it
+        CHECK(clip.get(got, 5000 + app_request::kClipboardExpiryMs + 100) && got == "b");
+        CHECK(!clip.get(got, 5000 + 2 * app_request::kClipboardExpiryMs));
+        CHECK(!clip.set("", 0) && !clip.set(std::string(app_request::kClipboardMax + 1, 'z'), 0));
+        CHECK(clip.set(std::string(app_request::kClipboardMax, 'z'), 0)); // 4096 is the largest
+        clip.clear();
+        CHECK(!clip.get(got, 0));
+        // through the verbs: an expired text answers "err empty"
+        app_request::RateLimiter cr;
+        Fake cf;
+        CHECK(run(cf, cr, "clipboard set secret", 0) == "ok 6");
+        CHECK(run(cf, cr, "clipboard get", app_request::kClipboardExpiryMs - 1) == "ok secret");
+        CHECK(run(cf, cr, "clipboard get", app_request::kClipboardExpiryMs, 8) == "err empty"); // another client: no 50 ms limit
+    }
+
+    // ---- the clipboard: the length-prefixed form
+    {
+        size_t n = 0;
+        CHECK(app_request::payload_length("clipboard set-len 5", n) == 1 && n == 5);
+        CHECK(app_request::payload_length("clipboard set-len 4096", n) == 1 && n == 4096);
+        CHECK(app_request::payload_length("clipboard set-len 4097", n) == -2);
+        CHECK(app_request::payload_length("clipboard set-len 99999", n) == -2);
+        CHECK(app_request::payload_length("clipboard set-len 0", n) == -1 && app_request::payload_length("clipboard set-len", n) == -1);
+        CHECK(app_request::payload_length("clipboard set-len x", n) == -1 && app_request::payload_length("clipboard set-len -3", n) == -1);
+        CHECK(app_request::payload_length("clipboard set-len 5 6", n) == -1 && app_request::payload_length("clipboard set-len 1e3", n) == -1);
+        CHECK(app_request::payload_length("clipboard set-len 100000", n) == -1); // not a number of up to 5 digits
+        CHECK(app_request::payload_length("clipboard get", n) == 0 && app_request::payload_length("toast set-len 4", n) == 0);
+        CHECK(app_request::payload_length("clipboard set set-len", n) == 0 && app_request::payload_length("", n) == 0);
+
+        app_request::RateLimiter cr;
+        Fake cf;
+        long long ct = 2000000;
+        auto pgo = [&](const std::string &line, const std::string &payload) {
+            ct += 3000; // the direct run() calls below sit at ct + 1000 ... ct + 4000
+            app_request::Peer peer;
+            peer.pid = 7;
+            peer.name = "myapp";
+            return app_request::handle_payload(line, payload, peer, cf, cr, ct, log_it);
+        };
+        const std::string multi = "first line\n\tindented \xc3\xa9\nlast";
+        CHECK(pgo("clipboard set-len " + std::to_string(multi.size()), multi) == "ok " + std::to_string(multi.size()));
+        std::string got;
+        CHECK(cf.clipboard().get(got, ct) && got == multi);
+        CHECK(run(cf, cr, "clipboard get-len", ct + 1000) == "ok " + std::to_string(multi.size()) + "\n" + multi);
+        const std::string big(app_request::kClipboardMax, 'b');
+        CHECK(pgo("clipboard set-len 4096", big) == "ok 4096");
+        CHECK(cf.clipboard().size() == 4096);
+        // refused payloads leave the text as it was
+        CHECK(pgo("clipboard set-len 3", "a\rb") == "err bad");                      // CR is not allowed
+        CHECK(pgo("clipboard set-len 3", std::string("a\0b", 3)) == "err bad");      // NUL
+        CHECK(pgo("clipboard set-len 2", "\xc3\x28") == "err bad");                  // bad UTF-8
+        CHECK(pgo("clipboard set-len 3", "\xc2\x85z") == "err bad");                 // a C1 control
+        CHECK(pgo("clipboard set-len 4", "abc") == "err bad");                       // not the announced length
+        CHECK(pgo("clipboard set-len 4097", std::string(4097, 'q')) == "err bad");
+        CHECK(pgo("clipboard set-len x", "abc") == "err bad" && pgo("clipboard get", "") == "err bad");
+        CHECK(cf.clipboard().get(got, ct) && got == big);
+        // without framing (the line alone, as a transport without payloads would hand it over)
+        CHECK(run(cf, cr, "clipboard set-len 5", ct + 1000) == "err bad");
+        CHECK(run(cf, cr, "clipboard set-len 4097", ct + 2000) == "err size");
+        CHECK(run(cf, cr, "clipboard set-len 0", ct + 3000) == "err bad" && run(cf, cr, "clipboard set-len z", ct + 4000) == "err bad");
+        CHECK(cf.clipboard().get(got, ct) && got == big);
+    }
+
+    // ---- the clipboard: flood control (the class limit is 50 ms per client)
+    {
+        app_request::RateLimiter cr;
+        Fake cf;
+        CHECK(app_request::min_interval_ms("clipboard") == 50);
+        CHECK(run(cf, cr, "clipboard set a", 100000, 1) == "ok 1");
+        CHECK(run(cf, cr, "clipboard set b", 100049, 1) == "err limit");
+        CHECK(run(cf, cr, "clipboard get", 100049, 1) == "err limit"); // reads share the class
+        CHECK(run(cf, cr, "clipboard get", 100050, 1) == "ok a");      // the refused set changed nothing
+        CHECK(run(cf, cr, "clipboard get", 100049, 2) == "ok a");      // another client is its own
+        app_request::Peer peer;
+        peer.pid = 1;
+        CHECK(app_request::handle_payload("clipboard set-len 1", "z", peer, cf, cr, 100060, log_it) == "err limit");
+        std::string got;
+        CHECK(cf.clipboard().get(got, 100060) && got == "a");
+    }
+
+    // ---- the clipboard is never logged: not the text, not in an error, not in the summary
+    {
+        const std::string secret = "hunter2-SECRET-token";
+        g_log.clear();
+        app_request::RateLimiter cr;
+        Fake cf;
+        long long ct = 3000000;
+        auto cgo = [&](const std::string &line) {
+            ct += 1000;
+            return run(cf, cr, line, ct);
+        };
+        auto pgo = [&](const std::string &line, const std::string &payload) {
+            ct += 1000;
+            app_request::Peer peer;
+            peer.name = "myapp";
+            return app_request::handle_payload(line, payload, peer, cf, cr, ct, log_it);
+        };
+        CHECK(cgo("clipboard set " + secret) == "ok " + std::to_string(secret.size()));
+        CHECK(cgo("clipboard get") == "ok " + secret);
+        CHECK(cgo("clipboard get-len") == "ok 20\n" + secret);
+        CHECK(pgo("clipboard set-len 20", secret) == "ok 20");
+        CHECK(pgo("clipboard set-len 21", secret + "\r") == "err bad");        // refused payload
+        CHECK(pgo("clipboard set-len 22", secret + "\xff\xfe") == "err bad");
+        CHECK(cgo("clipboard set " + secret + "\x01") == "err bad");           // refused line (control)
+        CHECK(cgo("clipboard set " + secret + std::string(300, 'x')) == "err bad"); // over the line limit
+        CHECK(cgo("clipboard sett " + secret) == "err bad");                   // a typo of the sub-verb
+        CHECK(cgo("clipboard set-len " + secret) == "err bad");                // bad announcement
+        CHECK(cgo("clipboard get") == "ok " + secret);
+        CHECK(run(cf, cr, "clipboard set " + secret, ct) == "err limit");      // limited: the same instant
+        CHECK(cgo("clipboard clear") == "ok");
+        CHECK(!g_log.empty()); // the requests are logged, as summaries
+        for (const std::string &l : g_log) {
+            CHECK(l.find("hunter2") == std::string::npos && l.find("SECRET") == std::string::npos);
+            CHECK(l.find("token") == std::string::npos);
+        }
+        bool saw_set = false, saw_len = false, saw_get = false, saw_clear = false;
+        for (const std::string &l : g_log) {
+            saw_set = saw_set || l == "[req] myapp: clipboard set 20 bytes";
+            saw_len = saw_len || l == "[req] myapp: clipboard set-len 20 bytes";
+            saw_get = saw_get || l == "[req] myapp: clipboard get";
+            saw_clear = saw_clear || l == "[req] myapp: clipboard clear";
+        }
+        CHECK(saw_set && saw_len && saw_get && saw_clear);
+        g_log.clear();
+    }
+
+
     // rate limits: per client and per class
     app_request::RateLimiter rl;
     Fake f;

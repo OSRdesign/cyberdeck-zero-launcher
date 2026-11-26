@@ -1,0 +1,48 @@
+# The shared TextField with touch (docs/dev/clipboard.md, P1): a tap puts the caret at the tapped character (tapchar:
+# just inside the left edge of that character), in a short field, after multibyte characters, in a long field scrolled to
+# its end and in a password field, and a tap ends a selection. No touch bubble or handles yet. Review only.
+title text field: tap places the caret
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+fielddemo
+wait 300
+tapchar Name 4
+expect_caret Name 4
+tapchar Name 0
+expect_caret Name 0
+tapchar Name 16
+expect_caret Name 16
+# after the accent and the euro sign: the caret is a character index, the edit a byte offset
+tapchar Name 10
+expect_caret Name 10
+type X
+expect_field Name "café €5 anXd more"
+shot touch_caret_typed
+# a tap ends a selection
+key CTRL+A
+expect_selection Name 0 17
+tapchar Name 3
+expect_selection Name none
+expect_caret Name 3
+# a long field scrolled to its end
+tapfield Address
+key END
+tapchar Address 70
+expect_caret Address 70
+tapchar Address 66
+expect_caret Address 66
+shot touch_caret_long
+# a password field
+tapfield Secret
+tapchar Secret 2
+expect_caret Secret 2
+shot touch_caret_password

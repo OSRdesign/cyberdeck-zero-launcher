@@ -8,6 +8,12 @@
  * the cursor, password bullets) and, for a Password, the show / hide toggle at the right inside the box (a field
  * control, not a keyboard key: it never summons or hides the keyboard).
  *
+ * The text, the caret and the selection are a text_edit::Buffer (cp0_ui_text_edit.hpp: byte offsets on character
+ * boundaries, unit tested). Shift+arrows, Home and End extend the selection, Ctrl+A selects all, typing and Backspace
+ * replace or delete it; the highlight is the label's own text selection (LV_LABEL_TEXT_SELECTION). Ctrl+C / X / V (and
+ * Ctrl+Insert, Shift+Delete, Shift+Insert) use the launcher's clipboard (launcher.sock, cp0_app_client.h). A tap puts
+ * the caret at the tapped character.
+ *
  * Editing reads LV_EVENT_KEYBOARD on the field's screen with the LVGL keypad intercepted (AGENTS.md "Dual delivery and
  * interception"), so a physical keyboard and the on-screen keyboard type the same way; the previous input context,
  * intercept and text hint are saved when editing starts and restored on every way out (Esc, Enter, focus leaving,
@@ -16,6 +22,7 @@
 
 #include "cp0_ui_widgets.hpp"
 
+#include "cp0_app_client.h"
 #include "cp0_font_service.hpp"
 #include "cp0_ui_metrics_lvgl.h"
 #include "input_keys.h"
@@ -35,6 +42,10 @@ constexpr uint32_t kFieldBorder = 0x3A3A3A;
 constexpr uint32_t kEditing = 0x2D9CDB;     /* the home grid's selection blue: field being edited, cursor */
 constexpr uint32_t kText = 0xEEEEEE;
 constexpr uint32_t kPlaceholder = 0x666666;
+constexpr uint32_t kSelectionBg = 0x2D9CDB;    /* the selected text: the accent blue behind dark text (readable on the field) */
+constexpr uint32_t kSelectionText = 0x101010;
+constexpr int kClipboardTimeoutMs = 100;       /* a paste or copy waits for the launcher this long at most */
+constexpr uint32_t kClipboardBackoffMs = 3000; /* after "no service" the next try waits this long (a stalled launcher) */
 
 const lv_font_t *user_font(int px)
 {
@@ -58,35 +69,31 @@ void secure_zero(std::string &text)
     text.clear();
 }
 
-bool continuation(char c)
+/* the clipboard service: one failed attempt (no socket, an older launcher, a launcher too busy to answer in time) makes the
+ * next ones wait, so a key held down never stalls the UI thread more than once in a while */
+bool g_clipboard_backoff = false;
+uint32_t g_clipboard_failed_at = 0;
+
+bool clipboard_ready()
 {
-    return (static_cast<unsigned char>(c) & 0xC0) == 0x80;
+    if (!g_clipboard_backoff) return true;
+    if (lv_tick_elaps(g_clipboard_failed_at) < kClipboardBackoffMs) return false;
+    g_clipboard_backoff = false;
+    return true;
 }
 
-/* the longest UTF-8 prefix of text that fits max bytes */
-std::string clip(const std::string &text, std::size_t max)
+void clipboard_note(int result)
 {
-    if (text.size() <= max) return text;
-    std::size_t end = max;
-    while (end > 0 && continuation(text[end])) --end;
-    return text.substr(0, end);
-}
-
-std::uint32_t chars_before(const std::string &text, std::size_t bytes)
-{
-    std::uint32_t n = 0;
-    for (std::size_t i = 0; i < bytes && i < text.size(); ++i)
-        if (!continuation(text[i])) ++n;
-    return n;
+    g_clipboard_backoff = result == CP0_APP_CLIPBOARD_NOSERVICE || result == CP0_APP_CLIPBOARD_UNSUPPORTED;
+    if (g_clipboard_backoff) g_clipboard_failed_at = lv_tick_get();
 }
 
 } // namespace
 
 TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextFieldSpec spec, TextFieldEvents events)
-    : layout_(layout), spec_(std::move(spec)), events_(std::move(events))
+    : layout_(layout), spec_(std::move(spec)), events_(std::move(events)), buf_(spec_.max_bytes)
 {
-    text_ = clip(spec_.text, spec_.max_bytes);
-    cursor_ = text_.size();
+    buf_.set_text(spec_.text);
     const int field_h = layout_.row_h;
     const int inset = std::max(layout_.gap, field_h / 5);
     // label beside the field (spec_.label_w > 0): one row of the row token's height, the field after the label column
@@ -153,6 +160,11 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
     lv_obj_set_style_border_color(area_, lv_color_hex(kEditing), LV_PART_CURSOR);
     lv_obj_set_style_border_opa(area_, LV_OPA_COVER, LV_PART_CURSOR);
     lv_obj_set_style_anim_duration(area_, 0, LV_PART_CURSOR); /* a steady cursor, no blink timer */
+#if LV_LABEL_TEXT_SELECTION
+    lv_obj_t *text_label = lv_textarea_get_label(area_); /* the selection highlight is drawn by this label */
+    lv_obj_set_style_bg_color(text_label, lv_color_hex(kSelectionBg), LV_PART_SELECTED);
+    lv_obj_set_style_text_color(text_label, lv_color_hex(kSelectionText), LV_PART_SELECTED);
+#endif
     if (!spec_.placeholder.empty()) lv_textarea_set_placeholder_text(area_, spec_.placeholder.c_str());
     if (password) {
         lv_textarea_set_password_show_time(area_, 0); /* masked at once */
@@ -181,7 +193,7 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
 
 TextField::~TextField()
 {
-    if (spec_.type == TextType::Password) secure_zero(text_); /* the display copy goes with the row */
+    if (spec_.type == TextType::Password) buf_.wipe(); /* the display copy goes with the row */
     if (!row_) return;
     lv_obj_remove_event_cb_with_user_data(row_, row_delete_cb, this);
     stop(true);
@@ -198,15 +210,13 @@ void TextField::row_delete_cb(lv_event_t *event)
 
 void TextField::set_text(const std::string &text)
 {
-    text_ = clip(text, spec_.max_bytes);
-    cursor_ = text_.size();
+    buf_.set_text(text);
     refresh();
 }
 
 void TextField::wipe()
 {
-    secure_zero(text_);
-    cursor_ = 0;
+    buf_.wipe();
     refresh();
 }
 
@@ -221,8 +231,18 @@ void TextField::set_revealed(bool revealed)
 void TextField::refresh()
 {
     if (!area_) return;
-    lv_textarea_set_text(area_, text_.c_str());
-    lv_textarea_set_cursor_pos(area_, static_cast<int32_t>(chars_before(text_, cursor_)));
+    lv_textarea_set_text(area_, buf_.text().c_str());
+    lv_textarea_set_cursor_pos(area_, static_cast<int32_t>(text_edit::char_index(buf_.text(), buf_.caret())));
+#if LV_LABEL_TEXT_SELECTION
+    lv_obj_t *label = lv_textarea_get_label(area_);
+    if (buf_.selecting()) {
+        lv_label_set_text_selection_start(label, static_cast<uint32_t>(text_edit::char_index(buf_.text(), buf_.sel_lo())));
+        lv_label_set_text_selection_end(label, static_cast<uint32_t>(text_edit::char_index(buf_.text(), buf_.sel_hi())));
+    } else {
+        lv_label_set_text_selection_start(label, LV_LABEL_TEXT_SELECTION_OFF);
+        lv_label_set_text_selection_end(label, LV_LABEL_TEXT_SELECTION_OFF);
+    }
+#endif
     if (eye_label_) lv_label_set_text(eye_label_, revealed_ ? LV_SYMBOL_EYE_CLOSE : LV_SYMBOL_EYE_OPEN);
 }
 
@@ -267,6 +287,8 @@ void TextField::stop(bool silent)
 {
     if (!editing_) return;
     editing_ = false;
+    buf_.collapse(); /* a selection never outlives the editing */
+    if (!silent) refresh();
     if (key_screen_) {
         lv_obj_remove_event_cb_with_user_data(key_screen_, keyboard_event_cb, this);
         lv_obj_remove_event_cb_with_user_data(key_screen_, screen_delete_cb, this);
@@ -287,46 +309,111 @@ void TextField::focus_step(bool next)
     else lv_group_focus_prev(group);
 }
 
+void TextField::after_edit()
+{
+    refresh();
+    if (events_.changed) events_.changed(buf_.text());
+}
+
 void TextField::insert(const char *utf8)
 {
-    const std::size_t len = std::strlen(utf8);
-    if (len == 0 || text_.size() + len > spec_.max_bytes) return;
-    text_.insert(cursor_, utf8, len);
-    cursor_ += len;
-    refresh();
-    if (events_.changed) events_.changed(text_);
+    if (buf_.insert(utf8)) after_edit(); /* a typed character replaces the selection; refused when over the maximum */
 }
 
 void TextField::erase_before()
 {
-    if (cursor_ == 0) return;
-    std::size_t start = cursor_ - 1;
-    while (start > 0 && continuation(text_[start])) --start;
-    text_.erase(start, cursor_ - start);
-    cursor_ = start;
-    refresh();
-    if (events_.changed) events_.changed(text_);
+    if (buf_.erase_before()) after_edit();
 }
 
 void TextField::erase_after()
 {
-    if (cursor_ >= text_.size()) return;
-    std::size_t end = cursor_ + 1;
-    while (end < text_.size() && continuation(text_[end])) ++end;
-    text_.erase(cursor_, end - cursor_);
-    refresh();
-    if (events_.changed) events_.changed(text_);
+    if (buf_.erase_after()) after_edit();
 }
 
-void TextField::move_cursor(int delta)
+void TextField::move_cursor(int delta, bool extend)
 {
-    if (delta < 0 && cursor_ > 0) {
-        --cursor_;
-        while (cursor_ > 0 && continuation(text_[cursor_])) --cursor_;
-    } else if (delta > 0 && cursor_ < text_.size()) {
-        ++cursor_;
-        while (cursor_ < text_.size() && continuation(text_[cursor_])) ++cursor_;
+    buf_.move(delta, extend);
+    refresh();
+}
+
+void TextField::select_all()
+{
+    buf_.select_all();
+    refresh();
+}
+
+void TextField::copy_selection()
+{
+    if (spec_.type == TextType::Password) return; /* a password never leaves the field */
+    const std::string text = text_edit::clip_bytes(buf_.selecting() ? buf_.selection() : buf_.text(),
+                                                   CP0_APP_CLIPBOARD_MAX); /* nothing selected: the whole field */
+    if (text.empty() || !clipboard_ready()) return;
+    clipboard_note(cp0_app_clipboard_set(text.data(), text.size(), kClipboardTimeoutMs));
+}
+
+void TextField::cut_selection()
+{
+    if (spec_.type == TextType::Password || !buf_.selecting() || !clipboard_ready()) return;
+    const std::string text = buf_.selection();
+    if (text.size() > CP0_APP_CLIPBOARD_MAX) return; /* it would not fit whole: cutting must not lose text */
+    const int result = cp0_app_clipboard_set(text.data(), text.size(), kClipboardTimeoutMs);
+    clipboard_note(result);
+    if (result != CP0_APP_CLIPBOARD_OK) return; /* the text leaves the field only once the clipboard has it */
+    buf_.erase_selection();
+    after_edit();
+}
+
+void TextField::paste_clipboard()
+{
+    if (!clipboard_ready()) return;
+    std::string raw(CP0_APP_CLIPBOARD_MAX + 1, '\0');
+    std::size_t len = 0;
+    const int result = cp0_app_clipboard_get(&raw[0], raw.size(), &len, kClipboardTimeoutMs);
+    clipboard_note(result);
+    raw.resize(result == CP0_APP_CLIPBOARD_OK ? len : 0);
+    std::string clean = text_edit::sanitize_paste(raw, spec_.multiline, spec_.type == TextType::Number);
+    secure_zero(raw); /* the clipboard may hold a secret: no copy of it outlives this call but the field's */
+    if (!clean.empty() && buf_.paste(clean)) after_edit();
+    secure_zero(clean);
+}
+
+/* A tap on the field: the caret goes to the tapped character (the label's own coordinates include the field's
+ * horizontal scroll, as LVGL's textarea hit test does), and a selection ends. Touch and pointer only. */
+void TextField::place_caret_at_tap()
+{
+    lv_indev_t *indev = lv_indev_active();
+    if (!indev || lv_indev_get_type(indev) != LV_INDEV_TYPE_POINTER || !box_ || !area_) return;
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+    lv_area_t box;
+    lv_obj_get_coords(box_, &box);
+    if (point.x < box.x1 || point.x > box.x2 || point.y < box.y1 || point.y > box.y2)
+        return; /* the page moved under the finger (the keyboard came up) */
+    lv_obj_t *label = lv_textarea_get_label(area_);
+    lv_area_t coords;
+    lv_obj_get_coords(label, &coords);
+    const int32_t x = point.x - coords.x1; /* the label's coordinates already include the field's horizontal scroll */
+    /* The character boundary nearest to x, found with the same letter positions the caret is drawn with (a hit test of
+     * its own would disagree with them by a pixel or two further along a long text): the last boundary at or left of x,
+     * then the nearer of it and the next. */
+    const uint32_t count = static_cast<uint32_t>(text_edit::char_index(buf_.text(), buf_.text().size()));
+    auto left_of = [&](uint32_t index) {
+        lv_point_t pos;
+        lv_label_get_letter_pos(label, index, &pos);
+        return pos.x;
+    };
+    uint32_t lo = 0, hi = count;
+    while (lo < hi) {
+        const uint32_t mid = (lo + hi + 1) / 2;
+        if (left_of(mid) <= x) lo = mid;
+        else hi = mid - 1;
     }
+    uint32_t index = lo;
+    if (index < count) {
+        const int32_t from = left_of(index);
+        if (x - from > (left_of(index + 1) - from) / 2) ++index;
+    }
+    buf_.set_caret(text_edit::byte_offset(buf_.text(), index), false);
     refresh();
 }
 
@@ -335,6 +422,27 @@ void TextField::on_key(const struct key_item &item)
 {
     if (item.key_state == KBD_KEY_RELEASED) return;
     const bool press = item.key_state == KBD_KEY_PRESSED;
+    const bool ctrl = (item.mods & KBD_MOD_CTRL) != 0;
+    const bool shift = (item.mods & KBD_MOD_SHIFT) != 0;
+    if (spec_.clipboard_keys && !(item.mods & (KBD_MOD_ALT | KBD_MOD_LOGO))) {
+        /* select all, copy, cut and paste: by key code (the on-screen keyboard's Ctrl sends the same), a press only so
+         * a held key does not repeat them; the field takes them only while it is the one being edited */
+        if (ctrl) {
+            switch (item.key_code) {
+            case KEY_A: if (press) select_all(); return;
+            case KEY_C: case KEY_INSERT: if (press) copy_selection(); return;
+            case KEY_X: if (press) cut_selection(); return;
+            case KEY_V: if (press) paste_clipboard(); return;
+            default: break;
+            }
+        } else if (shift) {
+            switch (item.key_code) {
+            case KEY_INSERT: if (press) paste_clipboard(); return;
+            case KEY_DELETE: if (press) cut_selection(); return;
+            default: break;
+            }
+        }
+    }
     switch (item.key_code) {
     case KEY_ESC:
         if (!press) return;
@@ -345,7 +453,7 @@ void TextField::on_key(const struct key_item &item)
     case KEY_KPENTER:
         if (!press) return;
         if (spec_.multiline) insert("\n");
-        else if (events_.submit) events_.submit(text_);
+        else if (events_.submit) events_.submit(buf_.text());
         else end_edit();
         return;
     case KEY_BACKSPACE:
@@ -356,11 +464,12 @@ void TextField::on_key(const struct key_item &item)
         return;
     case KEY_LEFT:
     case KEY_RIGHT:
-        move_cursor(item.key_code == KEY_LEFT ? -1 : 1);
+        move_cursor(item.key_code == KEY_LEFT ? -1 : 1, shift);
         return;
     case KEY_HOME:
     case KEY_END:
-        cursor_ = item.key_code == KEY_HOME ? 0 : text_.size();
+        if (item.key_code == KEY_HOME) buf_.home(shift);
+        else buf_.end(shift);
         refresh();
         return;
     case KEY_UP:
@@ -414,6 +523,7 @@ void TextField::box_event_cb(lv_event_t *event)
         break;
     case LV_EVENT_CLICKED:
         self->begin_edit(); /* a tap on the field edits again after Esc: the keyboard comes back */
+        self->place_caret_at_tap(); /* ... and puts the caret at the tapped character */
         break;
     case LV_EVENT_KEY: {
         if (self->editing_) break;

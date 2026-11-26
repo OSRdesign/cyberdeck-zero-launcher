@@ -107,16 +107,16 @@ int main()
     std::strcpy(b.backlight, "levels");
     b.battery = 1;
     b.sound = 1;
-    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,volume,brightness,dim,screen");
+    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,clipboard,volume,brightness,dim,screen");
     b.battery = 0;
-    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,volume,brightness,screen"); // no dim without a battery
+    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,clipboard,volume,brightness,screen"); // no dim without a battery
     b.sound = 0;
     std::strcpy(b.backlight, "onoff");
     b.battery = 1;
-    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,brightness,screen"); // on/off has screen, not dim; beep answers "err nosound"
+    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,clipboard,brightness,screen"); // on/off has screen, not dim; beep answers "err nosound"
     std::strcpy(b.backlight, "none");
     b.sound = -1;
-    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep");
+    CHECK(board_facts::requests_for(b) == "hello,caps,toast,beep,clipboard");
 
     // collect() on fake trees
     char tmpl[] = "/tmp/applaunch-facts-XXXXXX";
@@ -165,7 +165,7 @@ int main()
     CHECK(f.battery == 1 && std::string(f.battery_source) == "power_supply:BAT0");
     CHECK(std::string(f.backlight) == "levels" && f.backlight_steps == 10);
     CHECK(f.sound == 1 && std::string(f.sound_kind) == "bluetooth" && f.sound_guess == 1);
-    CHECK(std::string(f.requests) == "hello,caps,toast,beep,volume,brightness,dim,screen");
+    CHECK(std::string(f.requests) == "hello,caps,toast,beep,clipboard,volume,brightness,dim,screen");
     char text[1536];
     CHECK(cp0_board_state_format(&f, text, sizeof(text)) > 0 && std::strstr(text, "sound_guess=1\n"));
     // the Bluetooth audio facts of the fake board (no pulse server text, a pipewire process, an adapter with 111f, no CIS)
@@ -191,7 +191,7 @@ int main()
     // the server not asked: the sound is unknown (absent), not "none"; the verbs leave volume out
     board_facts::collect(f, "0.8.6", false);
     CHECK(f.sound == -1 && f.sound_kind[0] == '\0' && f.sound_guess == -1);
-    CHECK(std::string(f.requests) == "hello,caps,toast,beep,brightness,dim,screen");
+    CHECK(std::string(f.requests) == "hello,caps,toast,beep,clipboard,brightness,dim,screen");
     CHECK(cp0_board_state_format(&f, text, sizeof(text)) > 0 && !std::strstr(text, "sound="));
     // the Bluetooth audio facts are probed with the sound server: not asked, absent keys (not 0)
     CHECK(f.bt_audio[0] == '\0' && f.bt_hfp == -1 && f.bt_le_audio == -1 && !std::strstr(text, "bt_"));
@@ -213,7 +213,7 @@ int main()
     board_facts::collect(f, "0.8.6", true);
     CHECK(f.board[0] == '\0' && f.battery == 0 && f.battery_source[0] == '\0');
     CHECK(f.sound == 0 && std::string(f.backlight) == "none" && f.backlight_steps == 0);
-    CHECK(std::string(f.requests) == "hello,caps,toast,beep");
+    CHECK(std::string(f.requests) == "hello,caps,toast,beep,clipboard");
     env("APPLAUNCH_HINT_BATTERY", "button cell");
     board_facts::collect(f, "0.8.6", true);
     CHECK(f.battery == 2 && std::string(f.battery_note) == "button cell");

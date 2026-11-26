@@ -38,7 +38,17 @@ struct Client {
     Peer peer;
     std::string in;
     long long last = 0;
+    size_t need = 0;         /* payload bytes (and a newline) the line in `pending` waits for; 0: none */
+    std::string pending;     /* the request line that announced the payload */
 };
+
+/* zero the bytes (the compiler may not drop the stores) and empty the string: a clipboard text passed through here */
+void wipe(std::string &text)
+{
+    volatile char *data = text.empty() ? nullptr : &text[0];
+    for (size_t i = 0; data && i < text.size(); ++i) data[i] = 0;
+    text.clear();
+}
 
 struct Server {
     ServerConfig config;
@@ -139,14 +149,61 @@ bool serve(Server &s, Client &c)
         } else {
             return false;
         }
-        if (c.in.size() > 4 * kLineMax) break;
+        if (c.in.size() > (c.need ? c.need + 1 : 0) + 4 * kLineMax) break;
     }
     for (;;) {
+        if (c.need) {
+            /* a payload: exactly `need` bytes and a newline, binary-safe (newlines inside are text, not requests) */
+            if (c.in.size() < c.need + 1) break;
+            std::string payload = c.in.substr(0, c.need);
+            const bool terminated = c.in[c.need] == '\n';
+            {
+                volatile char *raw = &c.in[0]; /* the receive buffer must not keep the text either */
+                for (size_t i = 0; i < c.need; ++i) raw[i] = 0;
+            }
+            c.in.erase(0, c.need + 1);
+            const std::string line = c.pending;
+            c.need = 0;
+            c.pending.clear();
+            if (!terminated) {
+                wipe(payload);
+                send_line(c.fd, "err bad");
+                return false; /* the framing is lost: close */
+            }
+            std::string reply;
+            try {
+                reply = s.config.payload_handler(line, payload, c.peer);
+            } catch (...) {
+                reply = "err busy";
+            }
+            wipe(payload);
+            send_line(c.fd, reply);
+            continue;
+        }
         const size_t nl = c.in.find('\n');
         if (nl == std::string::npos) break;
         std::string line = c.in.substr(0, nl);
         c.in.erase(0, nl + 1);
         if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (s.config.frame && s.config.payload_handler) {
+            size_t bytes = 0;
+            const int framed = s.config.frame(line, bytes);
+            if (framed == 1) {
+                c.need = bytes;
+                c.pending = line;
+                continue;
+            }
+            if (framed < 0) { /* the announcement is bad: nothing says where the request ends */
+                std::string answer;
+                try {
+                    answer = s.config.handler(line, c.peer);
+                } catch (...) {
+                    answer = "err busy";
+                }
+                send_line(c.fd, answer);
+                return false;
+            }
+        }
         std::string reply;
         try {
             reply = s.config.handler(line, c.peer);
@@ -155,7 +212,7 @@ bool serve(Server &s, Client &c)
         }
         send_line(c.fd, reply);
     }
-    if (c.in.size() > kLineMax) {
+    if (!c.need && c.in.size() > kLineMax) {
         send_line(c.fd, "err bad");
         return false;
     }

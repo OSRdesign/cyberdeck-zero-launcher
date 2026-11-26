@@ -31,7 +31,12 @@
  *                      Tab from the next field) starts editing: it sets KBD_INPUT_CONTEXT_TEXT, the LVGL keypad
  *                      intercept and the text hint, reads LV_EVENT_KEYBOARD on its screen and asks for the on-screen
  *                      keyboard; Esc, Enter (default), focus leaving or the field's deletion stop editing and restore all
- *                      three. Esc then Esc again goes back; a tap or Enter on the field edits again.
+ *                      three. Esc then Esc again goes back; a tap or Enter on the field edits again. A tap puts the
+ *                      caret at the tapped character. Selection and clipboard (docs/dev/clipboard.md): Shift+Left / Right /
+ *                      Home / End extend a selection, Ctrl+A selects all, Ctrl+C / X / V (also Ctrl+Insert, Shift+Delete,
+ *                      Shift+Insert, and the on-screen keyboard's Ctrl then a letter) copy, cut and paste on the
+ *                      launcher's clipboard; typing, Backspace and Delete replace or delete the selection; a Password
+ *                      field pastes but never copies or cuts.
  *   OnScreenKeyboard   (task 014 P2b) the fallback keyboard (cp0_ui_osk.h: layout, pages, modifiers, key events) drawn
  *                      at the bottom of the display on its top layer. Keys are injected as press + release key_items
  *                      with text (cp0_keyboard_inject_key), so fields, the sudo prompt and old pages read them as a
@@ -79,6 +84,7 @@
 #include "cp0_ui_list.h"
 #include "cp0_ui_osk.h"
 #include "cp0_ui_roller.h"
+#include "cp0_ui_text_edit.hpp"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 
@@ -529,6 +535,9 @@ struct TextFieldSpec {
     std::string placeholder;
     std::size_t max_bytes = 128; /* UTF-8 bytes */
     bool multiline = false;      /* Tab types a tab character; Enter a new line (no submit) */
+    bool clipboard_keys = true;  /* false: Ctrl+A / C / X / V, Ctrl+Insert, Shift+Insert and Shift+Delete are left to the app
+                                    (a terminal's line field that sends Ctrl keys to a port: Serial Console); Shift+arrows
+                                    still select, and nothing else changes */
     int label_w = 0; /* > 0 (task 014 P4, the SSH form): the label BESIDE the field on one row, in a column this wide, at
                         the BODY text size, the field taking the rest of the row; 0: the label above the field */
 };
@@ -548,7 +557,7 @@ public:
     TextField(const TextField &) = delete;
     TextField &operator=(const TextField &) = delete;
 
-    const std::string &text() const { return text_; }
+    const std::string &text() const { return buf_.text(); }
     void set_text(const std::string &text);
     bool editing() const { return editing_; }
     void begin_edit();
@@ -563,6 +572,20 @@ public:
     /* The field: add it to the page's input group (focus starts editing). */
     lv_obj_t *focus_object() const { return box_; }
 
+    /* The selection (docs/dev/clipboard.md), byte offsets on character boundaries; anchor == caret: nothing selected. */
+    bool has_selection() const { return buf_.selecting(); }
+    std::string selected_text() const { return buf_.selection(); }
+    std::size_t caret_byte() const { return buf_.caret(); }
+    std::size_t anchor_byte() const { return buf_.anchor(); }
+    void select_all(); /* Ctrl+A */
+    /* Copy / Cut / Paste on the launcher's clipboard (launcher.sock `clipboard`, about 100 ms at most; an older launcher
+     * or no socket: nothing happens, nothing is shown). Copy takes the selection, or the whole field when nothing is
+     * selected; Cut only the selection, and removes it only once the clipboard took it. A Password field neither copies
+     * nor cuts; paste_clipboard() is allowed there. */
+    void copy_selection();
+    void cut_selection();
+    void paste_clipboard();
+
 private:
     static void box_event_cb(lv_event_t *event);
     static void eye_event_cb(lv_event_t *event);
@@ -574,7 +597,9 @@ private:
     void insert(const char *utf8);
     void erase_before();
     void erase_after();
-    void move_cursor(int delta);
+    void move_cursor(int delta, bool extend);
+    void after_edit(); /* the text changed: show it and tell the page */
+    void place_caret_at_tap();
     void refresh();
     void style_editing();
     void focus_step(bool next);
@@ -589,8 +614,7 @@ private:
     lv_obj_t *area_ = nullptr; /* lv_textarea, display only (not clickable, not in a group) */
     lv_obj_t *eye_ = nullptr;
     lv_obj_t *eye_label_ = nullptr;
-    std::string text_;
-    std::size_t cursor_ = 0; /* byte offset in text_ */
+    text_edit::Buffer buf_; /* the text, the caret and the selection anchor (byte offsets) */
     bool editing_ = false;
     bool revealed_ = false;
     /* what editing replaced, restored when it stops */

@@ -13,6 +13,9 @@
  *   cyberdeckzero-ctl dim allow | deny
  *   cyberdeckzero-ctl screen off | on  (off lasts only while this process runs: the launcher restores the light once
  *                                       it is gone, so from a shell it is back about a second later)
+ *   cyberdeckzero-ctl clipboard set TEXT... | set - | get | clear
+ *                                      (set - reads the text from stdin, up to 4096 bytes, newlines kept; get prints the
+ *                                       text as it is, no newline added, exit 1 when empty)
  *   cyberdeckzero-ctl board            (prints board.state)
  *
  * Prints the launcher's reply. Exit status: 0 ok, 1 refused (the reply starts with err), 2 usage, 3 no launcher service
@@ -37,6 +40,7 @@ static int usage(FILE *to)
           "       cyberdeckzero-ctl brightness get | set N\n"
           "       cyberdeckzero-ctl dim allow | deny\n"
           "       cyberdeckzero-ctl screen off | on\n"
+          "       cyberdeckzero-ctl clipboard set TEXT... | set - | get | clear\n"
           "       cyberdeckzero-ctl board\n"
           "exit status: 0 ok, 1 refused (err ...), 2 usage, 3 no launcher service\n",
           to);
@@ -59,11 +63,74 @@ static int show_board(void)
     return 0;
 }
 
+/* clipboard set TEXT... | set - | get | clear: the text can be longer than a request line and hold newlines, so it goes
+ * through the client's clipboard calls (one-line or length-prefixed form as it fits) */
+static int clipboard(int argc, char **argv)
+{
+    static char text[CP0_APP_CLIPBOARD_MAX + 1];
+    int r;
+    if (argc == 3 && !strcmp(argv[2], "clear")) {
+        r = cp0_app_clipboard_clear(CTL_TIMEOUT_MS);
+    } else if (argc == 3 && !strcmp(argv[2], "get")) {
+        size_t len = 0;
+        r = cp0_app_clipboard_get(text, sizeof(text), &len, CTL_TIMEOUT_MS);
+        if (r == CP0_APP_CLIPBOARD_OK && len == 0) {
+            fputs("err empty\n", stderr);
+            return 1;
+        }
+        if (r == CP0_APP_CLIPBOARD_OK) {
+            fwrite(text, 1, len, stdout);
+            memset(text, 0, sizeof(text));
+            return 0;
+        }
+    } else if (argc >= 4 && !strcmp(argv[2], "set")) {
+        size_t len = 0;
+        if (argc == 4 && !strcmp(argv[3], "-")) {
+            len = fread(text, 1, sizeof(text), stdin);
+            if (len > CP0_APP_CLIPBOARD_MAX) {
+                fprintf(stderr, "cyberdeckzero-ctl: the clipboard holds %d bytes at most\n", CP0_APP_CLIPBOARD_MAX);
+                return 2;
+            }
+            if (len > 0 && text[len - 1] == '\n' && memchr(text, '\n', len - 1) == NULL) len--; /* echo's newline */
+        } else {
+            for (int i = 3; i < argc; i++) {
+                const size_t n = strlen(argv[i]);
+                if (len + n + 1 > CP0_APP_CLIPBOARD_MAX) {
+                    fprintf(stderr, "cyberdeckzero-ctl: the clipboard holds %d bytes at most\n", CP0_APP_CLIPBOARD_MAX);
+                    return 2;
+                }
+                if (i > 3) text[len++] = ' ';
+                memcpy(text + len, argv[i], n);
+                len += n;
+            }
+        }
+        r = cp0_app_clipboard_set(text, len, CTL_TIMEOUT_MS);
+        memset(text, 0, sizeof(text));
+        if (r == CP0_APP_CLIPBOARD_OK) {
+            puts("ok");
+            return 0;
+        }
+    } else {
+        return usage(stderr);
+    }
+    if (r == CP0_APP_CLIPBOARD_OK) {
+        puts("ok");
+        return 0;
+    }
+    if (r == CP0_APP_CLIPBOARD_REFUSED) {
+        fputs("err refused\n", stderr);
+        return 1;
+    }
+    fprintf(stderr, "cyberdeckzero-ctl: the launcher does not answer (not running, or older than the clipboard verb)\n");
+    return 3;
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) return usage(stderr);
     if (!strcmp(argv[1], "-h") || !strcmp(argv[1], "--help") || !strcmp(argv[1], "help")) return usage(stdout);
     if (!strcmp(argv[1], "board")) return argc == 2 ? show_board() : usage(stderr);
+    if (!strcmp(argv[1], "clipboard")) return clipboard(argc, argv);
 
     char line[CP0_APP_CLIENT_LINE_MAX];
     size_t at = 0;

@@ -69,6 +69,14 @@ lv_obj_t *add_title(lv_obj_t *parent, const char *text);
 - Fonts: `share/font/Montserrat-Medium.ttf` and `FontAwesome5-Solid+Brands+Regular.woff` through `cp0_file_path_c`, else `/usr/share/APPLaunch/share/font`. Apps do not bundle them.
 - `status_strip_left()` is the `strip_left` argument of `cp0_ui_roller_page()`: a header keeps its own controls left of it. `add_title()` is the label `Page`'s `TitleFactory` makes (shell `title_x`, `title_y`, `title_px`, gold `#F0B400`). On a narrow header (`cp0_ui_narrow_header()`: the portrait 480x640 / 480x800) `title_px` is 18 and `Page::set_title()` shows only the last part of a breadcrumb, a path or one string with `" > "` (`title_last_only`).
 
+### Text fields: selection, clipboard and the touch caret (`include/cp0_ui_widgets.hpp`, `include/cp0_ui_text_edit.hpp`)
+- `TextField` keeps its text, caret and selection anchor in a `text_edit::Buffer` (byte offsets on UTF-8 character boundaries; header only, unit tested). `has_selection()`, `selected_text()`, `caret_byte()`, `anchor_byte()`, `select_all()`, `copy_selection()`, `cut_selection()`, `paste_clipboard()`.
+- Keys while editing: Shift+Left / Right / Home / End extend a selection; plain Left / Right collapse it to the near end; Ctrl+A selects all; **Ctrl+C / Ctrl+Insert copy, Ctrl+X / Shift+Delete cut, Ctrl+V / Shift+Insert paste** (by key code, on a press only; Alt or Logo with them: nothing). Typing, Backspace, Delete and Enter in a multi-line field replace or delete the selection. Esc and leaving the field end it. The on-screen keyboard's one-shot Ctrl then a letter sends the same key, so it works there too; its arrow keys carry no Shift, so Ctrl then A is its way to select.
+- `TextFieldSpec::clipboard_keys = false` leaves Ctrl+A / C / X / V, Ctrl+Insert, Shift+Insert and Shift+Delete to the app (a terminal line field that sends Ctrl keys to a port); the other selection keys stay.
+- Copy takes the selection, or the whole field when nothing is selected; Cut only the selection (and removes it only once the clipboard has taken it); a **Password field neither copies nor cuts** (Paste works). Paste replaces the selection, drops what the field cannot hold (a single-line field loses CR and LF and turns a tab into a space; a Number field keeps the digits) and **cuts the text at a character boundary to the field's maximum length** instead of refusing it.
+- The clipboard is the launcher's (above): about 100 ms at most per call; an older launcher, no socket or a slow one: nothing happens and nothing is shown (a failed call makes the next ones wait 3 s). The highlight is the label's own text selection (`LV_LABEL_TEXT_SELECTION`, on in the launcher's and the apps' LVGL configuration), accent blue behind dark text.
+- A tap (touch or pointer) in the field puts the caret at the tapped character, in a field scrolled sideways too, and ends a selection. No touch bubble or handles yet.
+
 ### Lists: Roller or CompactList (`include/cp0_ui_widgets.hpp`, `include/cp0_ui_list.h`)
 
 Two list widgets share the page scaffold, the keys (Up / Down, Enter and Right activate, Esc and Left go back, through
@@ -285,6 +293,11 @@ int cp0_app_client_call(const char *line, char *reply, size_t size, int timeout_
 int cp0_app_beep(const char *name);     /* NULL = "notify"; 1 = "err nosound" (board.state sound=0) */
 int cp0_app_toast(const char *text);    /* shown on the launcher's toast when the launcher is in front */
 int cp0_app_backlight(int on);             /* 0 = backlight fully off, nonzero = back; not saved; 1 = err busy / absent (board.state requests= has no "screen"); the launcher restores it by itself when the app hides, exits or dies; waits up to CP0_APP_BACKLIGHT_TIMEOUT_MS = 1500 ms (beep and toast: 200 ms) */
+/* The launcher's clipboard (launcher.sock `clipboard`, APP-CONTRACT section 14): one UTF-8 text, 1 to CP0_APP_CLIPBOARD_MAX = 4096 bytes, memory only, forgotten 10 minutes after the last set.
+ * 0 CP0_APP_CLIPBOARD_OK, 1 REFUSED (err bad / size / limit), 2 UNSUPPORTED (err unknown: a launcher without the verb), -1 NOSERVICE (no socket, timeout). A UI thread passes about 100 ms. */
+int cp0_app_clipboard_set(const char *text, size_t len, int timeout_ms);
+int cp0_app_clipboard_get(char *buf, size_t size, size_t *len, int timeout_ms); /* OK with *len == 0: empty or expired */
+int cp0_app_clipboard_clear(int timeout_ms);
 ```
 
 Unset fields of `cp0_app_board_t` are `-1` / `""`; a missing, stale or older-launcher file makes the reader return `-1`, and the app hides what depends on it. The client never blocks longer than its timeout and prints nothing; call it from a worker thread, not the LVGL thread. `cp0_app_backlight` is the one call with a longer wait (1500 ms): the launcher answers `screen` on its UI loop, which a slow board (Pi Zero 2 W) or a frame being drawn can keep busy for more than 200 ms, so it may block that long and must not be called from the UI thread's hot path (use a worker, or accept the short wait); a nonzero return means refused (`1`) or no answer (`-1`, the request may still be carried out). Command line: `cyberdeckzero-ctl` (`projects/APPLaunch/pizero2w/ctl`) is the same client as a command. The launcher's side is `cp0_board_state.{h,c}` (writer of the file, launcher only) and `projects/APPLaunch/main/ui/app_request*.{hpp,cpp}` (server, protocol, limits).
