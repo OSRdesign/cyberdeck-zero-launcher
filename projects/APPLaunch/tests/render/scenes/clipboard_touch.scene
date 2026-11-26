@@ -41,8 +41,9 @@ expect_caret Address 70
 tapchar Address 66
 expect_caret Address 66
 shot touch_caret_long
-# a password field
-tapfield Secret
+# a password field (two fields down: the strip of the one above pushes it off the screen for a tap)
+key DOWN
+key DOWN
 tapchar Secret 2
 expect_caret Secret 2
 shot touch_caret_password

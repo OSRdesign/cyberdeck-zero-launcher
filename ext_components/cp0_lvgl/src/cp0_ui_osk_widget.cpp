@@ -531,6 +531,15 @@ bool multiline()
     return s.owner && s.multiline;
 }
 
+void content_changed()
+{
+    Service &s = service();
+    const int inset = s.inset;
+    const std::vector<Listener> listeners = s.listeners; /* a listener may remove itself */
+    for (const Listener &l : listeners)
+        if (l.fn) l.fn(inset);
+}
+
 void set_reserved_inset(int px)
 {
     Service &s = service();

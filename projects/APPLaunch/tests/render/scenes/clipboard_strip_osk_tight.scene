@@ -1,0 +1,39 @@
+# The clipboard strip where the on-screen keyboard leaves too little room for the field and a 7 mm strip (640x480: about 120 px
+# above the keyboard, 480x320: about 80): the pills shrink to what is left (never under 32 px, text scaled with them), the label
+# above the field goes while they do, and the strip is fully visible above the keyboard (expect_strip checks it). The buttons work
+# and the keyboard stays. When the keyboard goes the strip is 7 mm again. Review only.
+title clipboard strip with the keyboard, shrunk pills
+review
+sizes 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+clipboard set "from elsewhere"
+fielddemo
+wait 800
+expect_osk shown
+expect_strip Name paste=on copy=on clear=on editing=yes size=tight
+shot osk_strip_tight
+tapclip Name Copy
+expect_strip Name copy_text=Copied editing=yes size=tight
+expect_osk shown
+shot osk_strip_tight_copied
+tapclip Name Clear
+expect_strip Name copy=off clear=hide editing=yes size=tight
+tapclip Name Paste
+expect_field Name "café €5 and more"
+expect_osk shown
+# the password field: Paste and Clear
+key DOWN
+key DOWN
+key DOWN
+expect_strip Secret paste=on copy=hide clear=on editing=yes size=tight
+shot osk_strip_tight_password
+# the keyboard goes (Esc ends the editing): the label and the 7 mm come back for the next field
+key ESC
+expect_osk hidden

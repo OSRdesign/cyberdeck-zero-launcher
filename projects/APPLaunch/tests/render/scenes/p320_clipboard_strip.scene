@@ -1,0 +1,41 @@
+# The clipboard strip at 320x480 (profile p320, the narrow portrait; PDA writing band off, the on-screen keyboard forced): three
+# pills across 320 px with the keyboard under them, the password field without Copy, the Esc two steps. Review only.
+title p320 clipboard strip
+review
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_PDA 0
+env APPLAUNCH_OSK force
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+clipboard set "from elsewhere"
+fielddemo
+wait 600
+expect_osk shown
+expect_strip Name paste=on copy=on clear=on editing=yes
+shot p320_strip
+tapclip Name Copy
+expect_strip Name copy_text=Copied editing=yes
+expect_osk shown
+shot p320_strip_copied
+tapclip Name Clear
+expect_strip Name copy=off clear=hide
+shot p320_strip_empty
+tapclip Name Paste
+expect_field Name "café €5 and more"
+expect_osk shown
+key SHIFT+LEFT
+key SHIFT+LEFT
+key ESC
+expect_selection Name none
+expect_strip Name editing=yes
+key DOWN
+key DOWN
+key DOWN
+expect_strip Secret paste=on copy=hide clear=on
+shot p320_strip_password

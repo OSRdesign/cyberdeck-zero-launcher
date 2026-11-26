@@ -1,0 +1,76 @@
+# The clipboard strip of the shared TextField (docs/dev/clipboard.md, step 2): Paste / Copy / Clear under the field while it is
+# edited, taps through the touch path. States: field with text and an empty clipboard (Paste greyed), Copy ("Copied" in green for
+# 2 s, then "Copy" again; the clipboard holds the text), Copy of a selection, Paste, Clear (then Clear is gone and Copy greyed),
+# a greyed button does nothing. Every shown button is one ROW token (7 mm) high and the strip lies under the field inside the
+# screen. A physical keyboard is present, so no on-screen keyboard. Review only.
+title clipboard strip: Paste, Copy, Clear
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+clipboard clear
+fielddemo
+wait 300
+# editing from the start: the strip is there; the clipboard is empty, so Paste is greyed
+expect_strip Name paste=off copy=on clear=on copy_text=Copy editing=yes size=row
+shot strip_text_clipboard_empty
+# Copy takes the whole field and says Copied
+tapclip Name Copy
+clipboard expect "café €5 and more"
+expect_strip Name paste=on copy=on clear=on copy_text=Copied editing=yes
+shot strip_copied
+wait 2200
+expect_strip Name paste=on copy=on clear=on copy_text=Copy
+shot strip_after_copied
+# a selection: Copy takes just that, and the selection stays
+key SHIFT+LEFT
+key SHIFT+LEFT
+key SHIFT+LEFT
+expect_selection Name 13 16
+shot strip_selection
+tapclip Name Copy
+clipboard expect "ore"
+expect_selection Name 13 16
+expect_strip Name copy_text=Copied
+# Paste replaces the selection
+tapclip Name Paste
+expect_field Name "café €5 and more"
+expect_selection Name none
+# Clear empties the field: no Clear, Copy greyed, Paste still on
+tapclip Name Clear
+expect_field Name ""
+expect_strip Name paste=on copy=off clear=hide editing=yes
+shot strip_field_empty
+# a greyed Copy does nothing (the clipboard keeps "ore"); Paste works in the empty field
+tapclip Name Copy
+clipboard expect "ore"
+expect_strip Name copy_text=Copy
+tapclip Name Paste
+expect_field Name "ore"
+expect_strip Name paste=on copy=on clear=on
+# the strip follows typing: type into an empty field
+tapclip Name Clear
+type hi
+expect_strip Name copy=on clear=on
+expect_field Name "hi"
+# a number field keeps its digits on Paste
+clipboard set "a1b2"
+key DOWN
+key DOWN
+expect_strip Port paste=on copy=on clear=on editing=yes
+expect_strip Name none
+tapclip Port Clear
+tapclip Port Paste
+expect_field Port "12"
+shot strip_number
+# the strip of a field goes with its editing: Esc ends it
+key ESC
+expect_strip Port none editing=no
+shot strip_gone

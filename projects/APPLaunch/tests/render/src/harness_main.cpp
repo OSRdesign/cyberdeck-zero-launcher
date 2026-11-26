@@ -2001,6 +2001,81 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_selection ok: %s %d %d (%d of %d px)\n", w[1].c_str(), lo, hi, hits, total);
         return true;
     }
+    if (cmd == "expect_strip") {
+        /* expect_strip LABEL none: the field shows no strip. expect_strip LABEL KEY=VALUE ...: the clipboard strip under the
+         * field LABEL: paste= copy= clear= on|off|hide (enabled, greyed, not shown); copy_text= the Copy pill's text; editing=
+         * yes|no; and always for a shown strip: every button as high as the page's ROW token (7 mm) or, where the on-screen
+         * keyboard leaves no room, smaller but at least 32 px (size=row | tight demands one of them), the strip under the
+         * field's box, inside the screen and above the keyboard. expect_strip @N copied=yes|no enabled=yes|no: a copydemo Copy button. */
+        if (w.size() < 3) return fail(scene, line, "usage: expect_strip LABEL none | KEY=VALUE ... | @N copied=yes|no enabled=yes|no");
+        settle(500);
+        lv_refr_now(nullptr);
+        auto kv = [&](size_t i, std::string *key, std::string *value) {
+            const size_t eq = w[i].find('=');
+            if (eq == std::string::npos) return false;
+            *key = w[i].substr(0, eq);
+            *value = w[i].substr(eq + 1);
+            return true;
+        };
+        std::string key, value, why;
+        if (w[1][0] == '@') {
+            harness::CopyState cs;
+            if (!harness::copy_state(to_int(w[1].substr(1)), &cs, &why)) return fail(scene, line, why);
+            for (size_t i = 2; i < w.size(); ++i) {
+                if (!kv(i, &key, &value)) return fail(scene, line, "expect_strip: " + w[i] + " is not KEY=VALUE");
+                if (key == "copied" ? cs.copied != (value == "yes") : key == "enabled" ? cs.enabled != (value == "yes") : false)
+                    return fail(scene, line, "expect_strip: " + w[1] + " " + key + " is " + (key == "copied" ? (cs.copied ? "yes" : "no") : (cs.enabled ? "yes" : "no")));
+                if (key == "text" && cs.text != value) return fail(scene, line, "expect_strip: " + w[1] + " says \"" + cs.text + "\"");
+            }
+            if (cs.x1 < 0 || cs.x2 >= run.size.w || cs.y1 < 0 || cs.y2 >= run.size.h || cs.y2 - cs.y1 + 1 < 1)
+                return fail(scene, line, "expect_strip: " + w[1] + " is not inside the screen");
+            std::printf("expect_strip ok: %s copied=%d enabled=%d (%dx%d)\n", w[1].c_str(), cs.copied, cs.enabled, cs.x2 - cs.x1 + 1, cs.y2 - cs.y1 + 1);
+            return true;
+        }
+        harness::StripState st;
+        if (!harness::strip_state(w[1], &st, &why)) return fail(scene, line, why);
+        if (w[2] == "none") {
+            if (st.shown) return fail(scene, line, "expect_strip: " + w[1] + " shows a strip");
+            std::printf("expect_strip ok: %s none\n", w[1].c_str());
+            return true;
+        }
+        auto state_name = [](int v) { return v == 2 ? "on" : v == 1 ? "off" : "hide"; };
+        std::string summary, size;
+        for (size_t i = 2; i < w.size(); ++i) {
+            if (!kv(i, &key, &value)) return fail(scene, line, "expect_strip: " + w[i] + " is not KEY=VALUE");
+            const int want = value == "on" ? 2 : value == "off" ? 1 : 0;
+            if (key == "paste" || key == "copy" || key == "clear") {
+                const int have = key == "paste" ? st.paste : key == "copy" ? st.copy : st.clear;
+                if (!st.shown || have != want)
+                    return fail(scene, line, "expect_strip: " + w[1] + " " + key + " is " + (st.shown ? state_name(have) : "not shown (no strip)") + ", not " + value);
+            } else if (key == "copy_text") {
+                if (st.copy_text != value) return fail(scene, line, "expect_strip: the Copy pill says \"" + st.copy_text + "\", not \"" + value + "\"");
+            } else if (key == "size") {
+                size = value; /* row: the ROW token (7 mm); tight: smaller, not under 32 px; default either */
+            } else if (key == "editing") {
+                if (st.editing != (value == "yes")) return fail(scene, line, std::string("expect_strip: ") + w[1] + (st.editing ? " is" : " is not") + " being edited");
+            } else {
+                return fail(scene, line, "expect_strip: unknown key " + key);
+            }
+            summary += " " + w[i];
+        }
+        if (st.shown) {
+            /* 7 mm (the ROW token) where it fits; under the on-screen keyboard where there is no room, no less than 32 px */
+            const bool row_size = st.btn_h == st.row_h, tight_size = st.btn_h >= 32 && st.btn_h < st.row_h;
+            if (!row_size && !tight_size)
+                return fail(scene, line, "expect_strip: the buttons are " + std::to_string(st.btn_h) + " px high: neither the ROW token (" +
+                                             std::to_string(st.row_h) + ") nor 32 px or more under it");
+            if (size == "row" && !row_size) return fail(scene, line, "expect_strip: the buttons are " + std::to_string(st.btn_h) + " px, not the ROW token " + std::to_string(st.row_h));
+            if (size == "tight" && !tight_size) return fail(scene, line, "expect_strip: the buttons are " + std::to_string(st.btn_h) + " px: not the shrunk size (32 px up to under the ROW token " + std::to_string(st.row_h) + ")");
+            if (st.y2 >= st.visible_bottom)
+                return fail(scene, line, "expect_strip: the strip ends at y " + std::to_string(st.y2) + ", under the keyboard (the room ends at " + std::to_string(st.visible_bottom) + ")");
+            if (st.y1 <= st.box_y2) return fail(scene, line, "expect_strip: the strip is not under the field");
+            if (st.x1 < 0 || st.x2 >= run.size.w || st.y2 >= run.size.h)
+                return fail(scene, line, "expect_strip: the strip leaves the screen (" + std::to_string(st.x1) + ".." + std::to_string(st.x2) + ", bottom " + std::to_string(st.y2) + ")");
+        }
+        std::printf("expect_strip ok: %s%s (buttons %d px, strip %d..%d x %d..%d)\n", w[1].c_str(), summary.c_str(), st.btn_h, st.x1, st.x2, st.y1, st.y2);
+        return true;
+    }
     if (cmd == "expect_chevron") {
         /* expect_chevron LABEL yes|no: the list row of the visible label LABEL shows a row-affordance chevron (yes) or
          * none (no). yes: the chevron label is visible and grey (CP0_UI_LIST_CHEVRON_RGB) with pixels of that colour
@@ -2754,6 +2829,23 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
     } else if (cmd == "fielddemo") {
         harness::field_demo_open();
         settle(400);
+    } else if (cmd == "copydemo") {
+        /* copydemo: a page with read-only values and their Copy buttons (CopyButton): "@0" the round one at the end of a
+         * row, "@1" the pill, "@2" the one with nothing to copy (greyed) */
+        harness::copy_demo_open();
+        settle(400);
+    } else if (cmd == "tapclip") {
+        /* tapclip LABEL Paste|Copy|Clear: a tap through the touch path on a button of the clipboard strip under the field
+         * LABEL; tapclip @N: the Nth Copy button of copydemo. No key, no focus: the finger goes down and up on the button. */
+        if (w.size() < 2 || w.size() > 3) return fail(scene, line, "usage: tapclip LABEL Paste|Copy|Clear | tapclip @N");
+        settle(300);
+        int x = 0, y = 0;
+        std::string why;
+        if (!harness::strip_point(w[1], w.size() == 3 ? w[2] : "Value", &x, &y, &why)) return fail(scene, line, why);
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(300);
     } else if (cmd == "clipboard") {
         std::string why;
         if (!harness::clipboard_command(w, &why)) return fail(scene, line, why);

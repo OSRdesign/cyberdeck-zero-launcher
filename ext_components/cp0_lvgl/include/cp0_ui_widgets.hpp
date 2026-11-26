@@ -538,6 +538,8 @@ struct TextFieldSpec {
     bool clipboard_keys = true;  /* false: Ctrl+A / C / X / V, Ctrl+Insert, Shift+Insert and Shift+Delete are left to the app
                                     (a terminal's line field that sends Ctrl keys to a port: Serial Console); Shift+arrows
                                     still select, and nothing else changes */
+    bool clipboard_strip = true; /* false: no Paste / Copy / Clear strip under the field while it is edited (an app that keeps the
+                                    whole row for itself); the keys are unaffected (clipboard_keys) */
     int label_w = 0; /* > 0 (task 014 P4, the SSH form): the label BESIDE the field on one row, in a column this wide, at
                         the BODY text size, the field taking the rest of the row; 0: the label above the field */
 };
@@ -582,13 +584,27 @@ public:
      * or no socket: nothing happens, nothing is shown). Copy takes the selection, or the whole field when nothing is
      * selected; Cut only the selection, and removes it only once the clipboard took it. A Password field neither copies
      * nor cuts; paste_clipboard() is allowed there. */
-    void copy_selection();
+    bool copy_selection(); /* true: the clipboard took the text (the strip's Copy then shows "Copied") */
     void cut_selection();
     void paste_clipboard();
+    /* Clear: empty the field (a Password's text is zeroed). The strip's button; editing goes on. */
+    void clear_text();
+
+    /* The clipboard strip (docs/dev/clipboard.md, step 2): while the field is being edited, Paste / Copy / Clear buttons
+     * (one ROW token high = 7 mm) under it, in the row. They take no keyboard focus and never open or close the on-screen
+     * keyboard; none is a long press. Paste is greyed when the clipboard is empty or the launcher has none; Copy takes the
+     * selection or the whole field, is greyed when the field is empty (and absent on a Password), and reads "Copied" in
+     * green for about 2 s; Clear shows only when the field has text. TextFieldSpec::clipboard_strip = false: no strip. */
+    enum class Clip { Paste, Copy, Clear };
+    lv_obj_t *clip_strip() const { return strip_; }              /* NULL when the field has none; hidden unless editing */
+    lv_obj_t *clip_button(Clip which) const;                      /* the button, NULL when the field has no strip */
 
 private:
     static void box_event_cb(lv_event_t *event);
     static void eye_event_cb(lv_event_t *event);
+    static void clip_event_cb(lv_event_t *event);
+    static void copied_timer_cb(lv_timer_t *timer);
+    static void hide_timer_cb(lv_timer_t *timer);
     static void keyboard_event_cb(lv_event_t *event);
     static void row_delete_cb(lv_event_t *event);
     static void screen_delete_cb(lv_event_t *event);
@@ -604,6 +620,13 @@ private:
     void style_editing();
     void focus_step(bool next);
     void stop(bool silent);
+    void build_strip();
+    void size_strip(int pill_h, bool tight);
+    void fit_strip();
+    void show_strip(bool shown);
+    void update_strip();
+    void show_copied(bool copied);
+    void on_clip(Clip which);
 
     cp0_ui_roller_page_t layout_;
     TextFieldSpec spec_;
@@ -614,6 +637,17 @@ private:
     lv_obj_t *area_ = nullptr; /* lv_textarea, display only (not clickable, not in a group) */
     lv_obj_t *eye_ = nullptr;
     lv_obj_t *eye_label_ = nullptr;
+    lv_obj_t *strip_ = nullptr;       /* Paste / Copy / Clear, the row's last child; hidden while not editing */
+    lv_obj_t *paste_ = nullptr;
+    lv_obj_t *copy_ = nullptr;
+    lv_obj_t *copy_label_ = nullptr;
+    lv_obj_t *clear_ = nullptr;
+    lv_timer_t *copied_timer_ = nullptr; /* the "Copied" feedback ends */
+    lv_timer_t *hide_timer_ = nullptr;   /* the strip goes once the finger that left the field is up */
+    int strip_h_ = 0;                    /* the pills' height now: the ROW token, or less where there is no room */
+    int fit_listener_ = 0;               /* osk inset listener while editing: the strip fits the room above the keyboard */
+    bool fitting_ = false;
+    bool beside_ = false;                /* the label is beside the field (no label line to give up) */
     text_edit::Buffer buf_; /* the text, the caret and the selection anchor (byte offsets) */
     bool editing_ = false;
     bool revealed_ = false;
@@ -622,6 +656,41 @@ private:
     int saved_intercept_ = 0;
     cp0_keyboard_text_hint_t saved_hint_ = KBD_TEXT_HINT_TEXT;
     lv_obj_t *key_screen_ = nullptr; /* the screen LV_EVENT_KEYBOARD is read on while editing */
+};
+
+/* ------------------------------------------------------------------ Copy button for a read-only value */
+
+/* A Copy button for a value that is shown but not edited (an address, a public IP, a coordinate; docs/dev/clipboard.md,
+ * step 2): ROW token high (7 mm), round with the copy glyph or, with_label, a pill "Copy". A tap copies value() to the
+ * launcher's clipboard (the whole text, up to CP0_APP_CLIPBOARD_MAX bytes); it then shows a green check (pill: "Copied")
+ * for about 2 s. Greyed when value() is empty or the launcher has no clipboard. It takes no keyboard focus and is no
+ * long press. The page places it (obj()): at the end of the value's row, beside it or under it. */
+class CopyButton {
+public:
+    CopyButton(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, std::function<std::string()> value,
+               bool with_label = false);
+    ~CopyButton();
+    CopyButton(const CopyButton &) = delete;
+    CopyButton &operator=(const CopyButton &) = delete;
+
+    lv_obj_t *obj() const { return button_; }
+    bool copy();           /* what a tap does: true when the clipboard took the text */
+    bool copied() const { return copied_; }
+    void update();         /* the value or the launcher changed: grey or enable (call after the value changes) */
+
+private:
+    static void click_cb(lv_event_t *event);
+    static void delete_cb(lv_event_t *event);
+    static void timer_cb(lv_timer_t *timer);
+    void show_copied(bool copied);
+
+    cp0_ui_roller_page_t layout_;
+    std::function<std::string()> value_;
+    bool with_label_ = false;
+    bool copied_ = false;
+    lv_obj_t *button_ = nullptr;
+    lv_obj_t *label_ = nullptr;
+    lv_timer_t *timer_ = nullptr;
 };
 
 /* ------------------------------------------------------------------ dialog (task 014 P3b) */
@@ -779,6 +848,10 @@ void set_close(std::function<void()> on_close);
 /* Called with the new inset whenever it changes. Returns an id for remove_inset_listener(). */
 int add_inset_listener(std::function<void(int inset)> listener);
 void remove_inset_listener(int id);
+
+/* The content of a page or dialog around the field that asked changed height (the clipboard strip came or went): the
+ * inset listeners run again with the current inset, so the page keeps the field in view and a dialog lays itself out. */
+void content_changed();
 
 /* Dialog primitive: keep obj centred vertically in the room between `top` and the keyboard (whole room when it is
  * hidden; top-aligned when it does not fit), following the keyboard until obj is deleted. */
