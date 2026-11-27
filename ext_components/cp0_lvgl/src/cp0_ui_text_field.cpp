@@ -773,10 +773,15 @@ void TextField::touch_build_bubble()
     if (lv_obj_get_group(bubble_)) lv_group_remove_obj(bubble_);
     lv_obj_set_size(bubble_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
     lv_obj_set_flex_flow(bubble_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_style_pad_all(bubble_, 1, 0);
-    lv_obj_set_style_pad_column(bubble_, 1, 0); /* the 1 px between the buttons shows the edge colour: the dividers */
-    lv_obj_set_style_bg_color(bubble_, lv_color_hex(kBubbleEdge), 0);
+    /* one rounded shape carries fill, outline and clip: the 1 px border follows the radius, the buttons inside are
+     * transparent squares clipped to it (clip_corner), the dividers are the left border of every button but the first */
+    lv_obj_set_style_pad_all(bubble_, 0, 0);
+    lv_obj_set_style_pad_column(bubble_, 0, 0);
+    lv_obj_set_style_bg_color(bubble_, lv_color_hex(kBubbleBg), 0);
     lv_obj_set_style_bg_opa(bubble_, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(bubble_, lv_color_hex(kBubbleEdge), 0);
+    lv_obj_set_style_border_width(bubble_, 1, 0);
+    lv_obj_set_style_border_opa(bubble_, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(bubble_, cp0_ui_tok(CP0_TOK_RADIUS_M), 0);
     lv_obj_set_style_clip_corner(bubble_, true, 0);
     lv_obj_remove_flag(bubble_, LV_OBJ_FLAG_SCROLLABLE);
@@ -795,10 +800,15 @@ void TextField::touch_build_bubble()
         lv_obj_t *button = lv_obj_create(bubble_);
         lv_obj_remove_style_all(button);
         if (lv_obj_get_group(button)) lv_group_remove_obj(button);
-        lv_obj_set_size(button, std::max(target, size.x + 2 * pad), target);
-        lv_obj_set_style_bg_color(button, lv_color_hex(kBubbleBg), 0);
-        lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
+        const int divider = lv_obj_get_child_count(bubble_) > 1 ? 1 : 0; /* the 1 px divider is part of the button */
+        lv_obj_set_size(button, std::max(target, size.x + 2 * pad) + divider, target);
         lv_obj_set_style_bg_color(button, lv_color_hex(kBubbleBgPressed), LV_STATE_PRESSED);
+        lv_obj_set_style_bg_opa(button, LV_OPA_COVER, LV_STATE_PRESSED); /* transparent at rest: the bubble's fill shows */
+        if (divider) { /* the divider: drawn over the pressed fill */
+            lv_obj_set_style_border_color(button, lv_color_hex(kBubbleEdge), 0);
+            lv_obj_set_style_border_width(button, 1, 0);
+            lv_obj_set_style_border_side(button, LV_BORDER_SIDE_LEFT, 0);
+        }
         lv_obj_remove_flag(button, LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_remove_flag(button, LV_OBJ_FLAG_SCROLL_CHAIN);
         lv_obj_remove_flag(button, LV_OBJ_FLAG_CLICK_FOCUSABLE); /* a tap keeps the field as it is */
