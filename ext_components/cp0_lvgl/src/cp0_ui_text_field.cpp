@@ -18,9 +18,6 @@
  * interception"), so a physical keyboard and the on-screen keyboard type the same way; the previous input context,
  * intercept and text hint are saved when editing starts and restored on every way out (Esc, Enter, focus leaving,
  * deletion).
- *
- * The clipboard strip (step 2): while the field is edited, Paste / Copy / Clear under it, in the row (ROW token high, no
- * keyboard focus, never a long press); CopyButton, at the end of this file, is the same Copy for a read-only value.
  */
 
 #include "cp0_ui_widgets.hpp"
@@ -47,14 +44,6 @@ constexpr uint32_t kText = 0xEEEEEE;
 constexpr uint32_t kPlaceholder = 0x666666;
 constexpr uint32_t kSelectionBg = 0x2D9CDB;    /* the selected text: the accent blue behind dark text (readable on the field) */
 constexpr uint32_t kSelectionText = 0x101010;
-constexpr uint32_t kStripBg = 0x262626;        /* the strip's pills (the status strip's grey) */
-constexpr uint32_t kStripBgHot = 0x4A4A4A;
-constexpr uint32_t kStripBgOff = 0x161616;
-constexpr uint32_t kStripText = 0xFFFFFF;
-constexpr uint32_t kStripTextOff = 0x5F5F5F;
-constexpr uint32_t kCopiedText = 0x2ECC71;     /* "Copied" */
-constexpr uint32_t kCopiedMs = 2000;
-constexpr int kStripFloorPx = 32;              /* the smallest pill, where the keyboard leaves no room for 7 mm */
 constexpr int kClipboardTimeoutMs = 100;       /* a paste or copy waits for the launcher this long at most */
 constexpr uint32_t kClipboardBackoffMs = 3000; /* after "no service" the next try waits this long (a stalled launcher) */
 
@@ -99,79 +88,6 @@ void clipboard_note(int result)
     if (g_clipboard_backoff) g_clipboard_failed_at = lv_tick_get();
 }
 
-/* What the strip knows of the clipboard: set by every call that asks it (a probe when a field starts editing, a copy, a
- * paste), so the buttons are drawn without a round trip of their own */
-enum class ClipAvail { Unknown, Empty, Full, Absent };
-ClipAvail g_clip = ClipAvail::Unknown;
-
-bool clip_gone(int result)
-{
-    return result == CP0_APP_CLIPBOARD_NOSERVICE || result == CP0_APP_CLIPBOARD_UNSUPPORTED;
-}
-
-/* is there a text, or is there no clipboard at all (an older launcher, no socket, a stalled one)? Reads at most 8 bytes of
- * it (zeroed again) */
-void clipboard_probe()
-{
-    if (!clipboard_ready()) {
-        g_clip = ClipAvail::Absent;
-        return;
-    }
-    char peek[8];
-    size_t len = 0;
-    const int result = cp0_app_clipboard_get(peek, sizeof(peek), &len, kClipboardTimeoutMs);
-    clipboard_note(result);
-    volatile char *bytes = peek;
-    for (size_t i = 0; i < sizeof(peek); ++i) bytes[i] = 0;
-    g_clip = clip_gone(result) ? ClipAvail::Absent : (result == CP0_APP_CLIPBOARD_OK && len > 0 ? ClipAvail::Full : ClipAvail::Empty);
-}
-
-void set_enabled(lv_obj_t *obj, bool enabled)
-{
-    if (!obj) return;
-    if (enabled) lv_obj_remove_state(obj, LV_STATE_DISABLED);
-    else lv_obj_add_state(obj, LV_STATE_DISABLED);
-}
-
-void set_shown(lv_obj_t *obj, bool shown)
-{
-    if (!obj) return;
-    if (shown) lv_obj_remove_flag(obj, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
-}
-
-/* a pill of the strip: the look of the status strip's buttons (dark grey, white text), a lighter grey while pressed, a
- * darker one with grey text when disabled; one ROW token high; no keyboard focus */
-lv_obj_t *make_pill(lv_obj_t *parent, int height, int pad_hor, int text_px)
-{
-    lv_obj_t *button = lv_obj_create(parent);
-    lv_obj_remove_style_all(button);
-    if (lv_obj_get_group(button)) lv_group_remove_obj(button);
-    lv_obj_set_size(button, LV_SIZE_CONTENT, height);
-    lv_obj_set_style_radius(button, height / 2, 0);
-    lv_obj_set_style_bg_color(button, lv_color_hex(kStripBg), 0);
-    lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-    lv_obj_set_style_bg_color(button, lv_color_hex(kStripBgHot), LV_STATE_PRESSED);
-    lv_obj_set_style_bg_color(button, lv_color_hex(kStripBgOff), LV_STATE_DISABLED);
-    lv_obj_set_style_text_color(button, lv_color_hex(kStripText), 0);
-    lv_obj_set_style_text_color(button, lv_color_hex(kStripTextOff), LV_STATE_DISABLED);
-    lv_obj_set_style_text_font(button, cp0_ui_font_px(text_px), 0);
-    lv_obj_set_style_pad_hor(button, pad_hor, 0);
-    lv_obj_set_flex_flow(button, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(button, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_remove_flag(button, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(button, LV_OBJ_FLAG_CLICK_FOCUSABLE); /* a tap leaves the field being edited, and the keyboard, as they are */
-    lv_obj_add_flag(button, LV_OBJ_FLAG_CLICKABLE);
-    return button;
-}
-
-int text_width(const char *text, int px)
-{
-    lv_point_t size;
-    lv_text_get_size(&size, text, cp0_ui_font_px(px), 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    return size.x;
-}
-
 } // namespace
 
 TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextFieldSpec spec, TextFieldEvents events)
@@ -182,17 +98,15 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
     const int inset = std::max(layout_.gap, field_h / 5);
     // label beside the field (spec_.label_w > 0): one row of the row token's height, the field after the label column
     const bool beside = spec_.label_w > 0 && spec_.label_w + layout_.gap < layout_.roller_w;
-    beside_ = beside;
     const int field_w = beside ? layout_.roller_w - spec_.label_w - layout_.gap : layout_.roller_w;
 
     row_ = lv_obj_create(parent);
     lv_obj_remove_style_all(row_);
     lv_obj_set_size(row_, layout_.roller_w, LV_SIZE_CONTENT);
     if (beside) {
-        lv_obj_set_flex_flow(row_, spec_.clipboard_strip ? LV_FLEX_FLOW_ROW_WRAP : LV_FLEX_FLOW_ROW); /* the strip wraps under */
+        lv_obj_set_flex_flow(row_, LV_FLEX_FLOW_ROW);
         lv_obj_set_flex_align(row_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
         lv_obj_set_style_pad_column(row_, layout_.gap, 0);
-        lv_obj_set_style_pad_row(row_, std::max(2, layout_.gap / 3), 0);
     } else {
         lv_obj_set_flex_flow(row_, LV_FLEX_FLOW_COLUMN);
         lv_obj_set_style_pad_row(row_, std::max(2, layout_.gap / 3), 0);
@@ -273,7 +187,6 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
         lv_obj_set_style_text_color(eye_label_, lv_color_hex(kLabel), 0);
         lv_obj_center(eye_label_);
     }
-    build_strip();
     refresh();
     style_editing();
 }
@@ -281,9 +194,6 @@ TextField::TextField(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, TextF
 TextField::~TextField()
 {
     if (spec_.type == TextType::Password) buf_.wipe(); /* the display copy goes with the row */
-    if (copied_timer_) lv_timer_delete(copied_timer_);
-    if (hide_timer_) lv_timer_delete(hide_timer_);
-    copied_timer_ = hide_timer_ = nullptr;
     if (!row_) return;
     lv_obj_remove_event_cb_with_user_data(row_, row_delete_cb, this);
     stop(true);
@@ -295,206 +205,7 @@ void TextField::row_delete_cb(lv_event_t *event)
     auto *self = static_cast<TextField *>(lv_event_get_user_data(event));
     if (!self) return;
     self->stop(true);
-    if (self->copied_timer_) lv_timer_delete(self->copied_timer_);
-    if (self->hide_timer_) lv_timer_delete(self->hide_timer_);
-    self->copied_timer_ = self->hide_timer_ = nullptr;
     self->row_ = self->label_ = self->box_ = self->area_ = self->eye_ = self->eye_label_ = nullptr;
-    self->strip_ = self->paste_ = self->copy_ = self->copy_label_ = self->clear_ = nullptr;
-}
-
-/* ---- the clipboard strip */
-
-lv_obj_t *TextField::clip_button(Clip which) const
-{
-    switch (which) {
-    case Clip::Paste: return paste_;
-    case Clip::Copy: return copy_;
-    default: return clear_;
-    }
-}
-
-void TextField::build_strip()
-{
-    if (!spec_.clipboard_strip || !row_) return;
-    strip_ = lv_obj_create(row_);
-    lv_obj_remove_style_all(strip_);
-    if (lv_obj_get_group(strip_)) lv_group_remove_obj(strip_);
-    lv_obj_set_size(strip_, layout_.roller_w, LV_SIZE_CONTENT);
-    lv_obj_set_flex_flow(strip_, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(strip_, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    lv_obj_remove_flag(strip_, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_remove_flag(strip_, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_remove_flag(strip_, LV_OBJ_FLAG_CLICK_FOCUSABLE);
-    lv_obj_add_flag(strip_, LV_OBJ_FLAG_HIDDEN); /* only while the field is edited */
-
-    const int px = layout_.text_px > 0 ? layout_.text_px : layout_.value_px;
-    auto add = [&](const char *text, lv_obj_t **label_out) {
-        lv_obj_t *button = make_pill(strip_, layout_.row_h, 0, px);
-        lv_obj_t *label = lv_label_create(button);
-        lv_label_set_text(label, text);
-        lv_obj_add_event_cb(button, clip_event_cb, LV_EVENT_CLICKED, this);
-        if (label_out) *label_out = label;
-        return button;
-    };
-    paste_ = add("Paste", nullptr);
-    copy_ = add("Copy", &copy_label_);
-    clear_ = add("Clear", nullptr);
-    size_strip(layout_.row_h, false);
-}
-
-/* The pills' size: one ROW token (7 mm) high where there is room; `tight` (the room above the on-screen keyboard cannot hold
- * the field and a strip: 640x480, 480x320) a smaller pill, text scaled with it, the label above the field gone and the gaps at
- * their minimum. The three pills (Copy as wide as Copied) always fit the row: on a narrow screen their padding gives. */
-void TextField::size_strip(int pill_h, bool tight)
-{
-    if (!strip_) return;
-    const int row_h = std::max(1, layout_.row_h);
-    const int base_px = layout_.text_px > 0 ? layout_.text_px : layout_.value_px;
-    const int px = tight ? std::max(12, base_px * pill_h / row_h) : base_px;
-    const int columns = tight ? 4 : std::max(4, layout_.gap);
-    const int texts = text_width("Paste", px) + text_width("Copied", px) + text_width("Clear", px);
-    const int pad_hor = std::max(2, std::min(std::max(layout_.gap, pill_h * 2 / 5), (layout_.roller_w - 2 * columns - texts) / 6));
-    lv_obj_set_style_pad_column(strip_, columns, 0);
-    lv_obj_set_style_pad_top(strip_, tight ? 2 : std::max(2, layout_.gap / 2), 0);
-    lv_obj_set_style_pad_row(row_, tight ? 2 : std::max(2, layout_.gap / 3), 0);
-    for (lv_obj_t *button : {paste_, copy_, clear_}) {
-        lv_obj_set_height(button, pill_h);
-        lv_obj_set_style_radius(button, pill_h / 2, 0);
-        lv_obj_set_style_text_font(button, cp0_ui_font_px(px), 0);
-        lv_obj_set_style_pad_hor(button, pad_hor, 0);
-    }
-    lv_obj_set_style_min_width(copy_, text_width("Copied", px) + 2 * pad_hor, 0); /* the pill keeps its width when it says Copied */
-    if (label_ && !beside_) set_shown(label_, !tight);
-    strip_h_ = pill_h;
-}
-
-/* The strip must be fully visible above the on-screen keyboard: where the viewport (the page's body, a dialog's body) is too
- * short for the field's row with a 7 mm strip, the pills shrink to what is left, but not under kStripFloorPx; the field's own
- * label goes while they do. A page's body only (a dialog sizes itself to its content). Runs when the keyboard comes, goes or
- * changes the room. */
-void TextField::fit_strip()
-{
-    if (!strip_ || !editing_ || fitting_ || !row_) return;
-    /* the page's body is the row's own parent and scrolls; a dialog's content does not (its viewport lays itself out, with
-     * its message, in Dialog::relayout): no shrinking there */
-    lv_obj_t *view = lv_obj_get_parent(row_);
-    if (!view || !lv_obj_has_flag(view, LV_OBJ_FLAG_SCROLLABLE)) return;
-    lv_obj_update_layout(view);
-    const int room = lv_obj_get_height(view);
-    const lv_font_t *label_font = lv_obj_get_style_text_font(label_, LV_PART_MAIN);
-    const int label_line = beside_ || !label_font ? 0 : lv_font_get_line_height(label_font) + std::max(2, layout_.gap / 3);
-    const int pad = std::max(2, layout_.gap / 3);
-    const int need = label_line + layout_.row_h + pad + std::max(2, layout_.gap / 2) + layout_.row_h;
-    const int before = strip_h_;
-    const bool tight = need > room;
-    if (!tight) {
-        size_strip(layout_.row_h, false);
-    } else {
-        const int left = room - layout_.row_h - 4;
-        size_strip(std::max(kStripFloorPx, std::min(layout_.row_h, left)), true);
-    }
-    if (strip_h_ == before && !tight && !lv_obj_has_flag(strip_, LV_OBJ_FLAG_HIDDEN)) return;
-    lv_obj_update_layout(row_);
-    fitting_ = true;
-    osk::content_changed(); /* a dialog lays itself out for the new height */
-    fitting_ = false;
-    lv_obj_update_layout(view);
-    lv_area_t row_area, view_area;
-    lv_obj_get_coords(row_, &row_area);
-    lv_obj_get_coords(view, &view_area);
-    /* a page or dialog scrolled to keep the field in view in content_changed(); only a shrunk strip that still sticks out of the
-     * viewport (it has no room to spare) puts the row's top at the viewport's */
-    if (tight && (row_area.y2 > view_area.y2 || row_area.y1 < view_area.y1))
-        lv_obj_scroll_by(view, 0, view_area.y1 - row_area.y1, LV_ANIM_OFF);
-}
-
-/* which buttons show and which are greyed: from the text, the type and what the clipboard is known to hold */
-void TextField::update_strip()
-{
-    if (!strip_) return;
-    const bool has_text = !buf_.text().empty();
-    set_shown(paste_, true);
-    set_enabled(paste_, g_clip == ClipAvail::Full);
-    set_shown(copy_, spec_.type != TextType::Password); /* a password never leaves the field */
-    set_enabled(copy_, has_text && g_clip != ClipAvail::Absent);
-    set_shown(clear_, has_text);
-}
-
-void TextField::show_strip(bool shown)
-{
-    if (!strip_) return;
-    if (shown) {
-        update_strip();
-    } else {
-        show_copied(false);
-        size_strip(layout_.row_h, false); /* the label above the field is back for the next time */
-    }
-    set_shown(strip_, shown);
-    lv_obj_update_layout(row_);
-}
-
-void TextField::show_copied(bool copied)
-{
-    if (copied_timer_) {
-        lv_timer_delete(copied_timer_);
-        copied_timer_ = nullptr;
-    }
-    if (!copy_label_) return;
-    lv_label_set_text(copy_label_, copied ? "Copied" : "Copy");
-    if (copied) {
-        lv_obj_set_style_text_color(copy_label_, lv_color_hex(kCopiedText), 0);
-        copied_timer_ = lv_timer_create(copied_timer_cb, kCopiedMs, this);
-        lv_timer_set_repeat_count(copied_timer_, 1);
-        lv_timer_set_auto_delete(copied_timer_, false); /* deleted here, so that a stale pointer is never kept */
-    } else {
-        lv_obj_remove_local_style_prop(copy_label_, LV_STYLE_TEXT_COLOR, 0);
-    }
-}
-
-void TextField::copied_timer_cb(lv_timer_t *timer)
-{
-    auto *self = static_cast<TextField *>(lv_timer_get_user_data(timer));
-    if (self) self->show_copied(false);
-}
-
-/* The field stopped being edited by a press elsewhere (a button or a row below it): the strip stays until the finger is
- * up, so that nothing moves under the finger between the press and the release (a moved button would lose its tap). */
-void TextField::hide_timer_cb(lv_timer_t *timer)
-{
-    auto *self = static_cast<TextField *>(lv_timer_get_user_data(timer));
-    if (!self) return;
-    for (lv_indev_t *indev = lv_indev_get_next(nullptr); indev; indev = lv_indev_get_next(indev))
-        if (lv_indev_get_type(indev) == LV_INDEV_TYPE_POINTER && lv_indev_get_state(indev) == LV_INDEV_STATE_PRESSED) return;
-    lv_timer_t *self_timer = self->hide_timer_;
-    self->hide_timer_ = nullptr;
-    if (self_timer) lv_timer_delete(self_timer);
-    if (self->editing_ || !self->row_) return;
-    self->show_strip(false);
-    osk::content_changed();
-}
-
-void TextField::clip_event_cb(lv_event_t *event)
-{
-    auto *self = static_cast<TextField *>(lv_event_get_user_data(event));
-    lv_obj_t *target = static_cast<lv_obj_t *>(lv_event_get_current_target(event));
-    if (!self || !target) return;
-    if (target == self->paste_) self->on_clip(Clip::Paste);
-    else if (target == self->copy_) self->on_clip(Clip::Copy);
-    else if (target == self->clear_) self->on_clip(Clip::Clear);
-}
-
-/* A tap on a strip button (a pointer tap; the field stays being edited). A greyed button does nothing. */
-void TextField::on_clip(Clip which)
-{
-    lv_obj_t *button = clip_button(which);
-    if (!editing_ || !button || lv_obj_has_state(button, LV_STATE_DISABLED)) return;
-    switch (which) {
-    case Clip::Paste: paste_clipboard(); break;
-    case Clip::Copy: copy_selection(); break;
-    case Clip::Clear: clear_text(); break;
-    }
-    update_strip();
-    lv_obj_update_layout(row_);
 }
 
 void TextField::set_text(const std::string &text)
@@ -533,7 +244,6 @@ void TextField::refresh()
     }
 #endif
     if (eye_label_) lv_label_set_text(eye_label_, revealed_ ? LV_SYMBOL_EYE_CLOSE : LV_SYMBOL_EYE_OPEN);
-    if (editing_) update_strip();
 }
 
 void TextField::style_editing()
@@ -547,10 +257,6 @@ void TextField::begin_edit()
 {
     if (editing_ || !box_) return;
     editing_ = true;
-    if (hide_timer_) { /* the strip of the press that left this field a moment ago: this field takes it over */
-        lv_timer_delete(hide_timer_);
-        hide_timer_ = nullptr;
-    }
     saved_context_ = cp0_keyboard_get_input_context();
     saved_intercept_ = cp0_keyboard_get_lvgl_keypad_intercept();
     saved_hint_ = cp0_keyboard_get_text_hint();
@@ -568,14 +274,7 @@ void TextField::begin_edit()
     if (lv_group_t *group = lv_obj_get_group(box_))
         if (lv_group_get_focused(group) != box_) lv_group_focus_obj(box_);
     style_editing();
-    if (strip_) {
-        clipboard_probe(); /* Paste is greyed when the clipboard is empty or the launcher has none */
-        show_strip(true);
-        fit_strip();
-        if (!fit_listener_) fit_listener_ = osk::add_inset_listener([this](int) { fit_strip(); });
-    }
     osk::request(box_, spec_.type, spec_.multiline);
-    if (strip_) osk::content_changed(); /* a page keeps the field in view, a dialog lays itself out for the taller row */
     lv_obj_scroll_to_view_recursive(row_, LV_ANIM_OFF);
 }
 
@@ -588,8 +287,6 @@ void TextField::stop(bool silent)
 {
     if (!editing_) return;
     editing_ = false;
-    if (fit_listener_) osk::remove_inset_listener(fit_listener_);
-    fit_listener_ = 0;
     buf_.collapse(); /* a selection never outlives the editing */
     if (!silent) refresh();
     if (key_screen_) {
@@ -602,17 +299,6 @@ void TextField::stop(bool silent)
     cp0_keyboard_set_text_hint(saved_hint_);
     osk::release(box_);
     if (!silent) style_editing();
-    if (!silent && strip_ && !lv_obj_has_flag(strip_, LV_OBJ_FLAG_HIDDEN)) {
-        lv_indev_t *indev = lv_indev_active();
-        const bool touching = indev && lv_indev_get_type(indev) == LV_INDEV_TYPE_POINTER &&
-                              lv_indev_get_state(indev) == LV_INDEV_STATE_PRESSED;
-        if (touching) {
-            if (!hide_timer_) hide_timer_ = lv_timer_create(hide_timer_cb, 30, this);
-        } else {
-            show_strip(false);
-            osk::content_changed();
-        }
-    }
 }
 
 void TextField::focus_step(bool next)
@@ -656,19 +342,13 @@ void TextField::select_all()
     refresh();
 }
 
-bool TextField::copy_selection()
+void TextField::copy_selection()
 {
-    if (spec_.type == TextType::Password) return false; /* a password never leaves the field */
+    if (spec_.type == TextType::Password) return; /* a password never leaves the field */
     const std::string text = text_edit::clip_bytes(buf_.selecting() ? buf_.selection() : buf_.text(),
                                                    CP0_APP_CLIPBOARD_MAX); /* nothing selected: the whole field */
-    if (text.empty() || !clipboard_ready()) return false;
-    const int result = cp0_app_clipboard_set(text.data(), text.size(), kClipboardTimeoutMs);
-    clipboard_note(result);
-    g_clip = clip_gone(result) ? ClipAvail::Absent : result == CP0_APP_CLIPBOARD_OK ? ClipAvail::Full : g_clip;
-    if (editing_ && strip_) update_strip();
-    if (result != CP0_APP_CLIPBOARD_OK) return false;
-    if (editing_ && strip_) show_copied(true);
-    return true;
+    if (text.empty() || !clipboard_ready()) return;
+    clipboard_note(cp0_app_clipboard_set(text.data(), text.size(), kClipboardTimeoutMs));
 }
 
 void TextField::cut_selection()
@@ -678,7 +358,6 @@ void TextField::cut_selection()
     if (text.size() > CP0_APP_CLIPBOARD_MAX) return; /* it would not fit whole: cutting must not lose text */
     const int result = cp0_app_clipboard_set(text.data(), text.size(), kClipboardTimeoutMs);
     clipboard_note(result);
-    g_clip = clip_gone(result) ? ClipAvail::Absent : result == CP0_APP_CLIPBOARD_OK ? ClipAvail::Full : g_clip;
     if (result != CP0_APP_CLIPBOARD_OK) return; /* the text leaves the field only once the clipboard has it */
     buf_.erase_selection();
     after_edit();
@@ -691,20 +370,11 @@ void TextField::paste_clipboard()
     std::size_t len = 0;
     const int result = cp0_app_clipboard_get(&raw[0], raw.size(), &len, kClipboardTimeoutMs);
     clipboard_note(result);
-    g_clip = clip_gone(result) ? ClipAvail::Absent : (result == CP0_APP_CLIPBOARD_OK && len > 0 ? ClipAvail::Full : ClipAvail::Empty);
     raw.resize(result == CP0_APP_CLIPBOARD_OK ? len : 0);
     std::string clean = text_edit::sanitize_paste(raw, spec_.multiline, spec_.type == TextType::Number);
     secure_zero(raw); /* the clipboard may hold a secret: no copy of it outlives this call but the field's */
     if (!clean.empty() && buf_.paste(clean)) after_edit();
     secure_zero(clean);
-    if (editing_) update_strip();
-}
-
-void TextField::clear_text()
-{
-    if (buf_.text().empty()) return;
-    buf_.wipe(); /* zeroed in memory, a Password's or not */
-    after_edit();
 }
 
 /* A tap on the field: the caret goes to the tapped character (the label's own coordinates include the field's
@@ -776,11 +446,6 @@ void TextField::on_key(const struct key_item &item)
     switch (item.key_code) {
     case KEY_ESC:
         if (!press) return;
-        if (buf_.selecting()) { /* with a selection Esc takes two steps: this one clears it, the next one ends the editing */
-            buf_.collapse();
-            refresh();
-            return;
-        }
         if (events_.escape) events_.escape(); /* a dialog's Cancel */
         else end_edit();                      /* the keyboard goes; Esc again goes back */
         return;
@@ -877,94 +542,6 @@ void TextField::eye_event_cb(lv_event_t *event)
 {
     auto *self = static_cast<TextField *>(lv_event_get_user_data(event));
     if (self) self->set_revealed(!self->revealed_);
-}
-
-/* ---- CopyButton: Copy for a value that is shown, not edited */
-
-CopyButton::CopyButton(lv_obj_t *parent, const cp0_ui_roller_page_t &layout, std::function<std::string()> value, bool with_label)
-    : layout_(layout), value_(std::move(value)), with_label_(with_label)
-{
-    const int height = layout_.row_h; /* 7 mm */
-    const int px = layout_.text_px > 0 ? layout_.text_px : layout_.value_px;
-    button_ = make_pill(parent, height, with_label_ ? std::max(layout_.gap, height * 2 / 5) : 0, px);
-    if (!with_label_) lv_obj_set_width(button_, height); /* round */
-    label_ = lv_label_create(button_);
-    lv_obj_add_event_cb(button_, click_cb, LV_EVENT_CLICKED, this);
-    lv_obj_add_event_cb(button_, delete_cb, LV_EVENT_DELETE, this);
-    clipboard_probe(); /* greyed when the launcher has no clipboard */
-    show_copied(false);
-    update();
-}
-
-CopyButton::~CopyButton()
-{
-    if (timer_) lv_timer_delete(timer_);
-    timer_ = nullptr;
-    if (!button_) return;
-    lv_obj_remove_event_cb_with_user_data(button_, delete_cb, this);
-    lv_obj_delete(button_);
-}
-
-void CopyButton::delete_cb(lv_event_t *event)
-{
-    auto *self = static_cast<CopyButton *>(lv_event_get_user_data(event));
-    if (!self) return;
-    if (self->timer_) lv_timer_delete(self->timer_);
-    self->timer_ = nullptr;
-    self->button_ = self->label_ = nullptr;
-}
-
-void CopyButton::update()
-{
-    if (!button_) return;
-    set_enabled(button_, g_clip != ClipAvail::Absent && value_ && !value_().empty());
-}
-
-void CopyButton::show_copied(bool copied)
-{
-    copied_ = copied;
-    if (timer_) {
-        lv_timer_delete(timer_);
-        timer_ = nullptr;
-    }
-    if (!label_) return;
-    if (copied) {
-        lv_label_set_text(label_, with_label_ ? LV_SYMBOL_OK " Copied" : LV_SYMBOL_OK);
-        lv_obj_set_style_text_color(label_, lv_color_hex(kCopiedText), 0);
-        timer_ = lv_timer_create(timer_cb, kCopiedMs, this);
-        lv_timer_set_repeat_count(timer_, 1);
-        lv_timer_set_auto_delete(timer_, false);
-    } else {
-        lv_label_set_text(label_, with_label_ ? LV_SYMBOL_COPY " Copy" : LV_SYMBOL_COPY);
-        lv_obj_remove_local_style_prop(label_, LV_STYLE_TEXT_COLOR, 0);
-    }
-}
-
-void CopyButton::timer_cb(lv_timer_t *timer)
-{
-    auto *self = static_cast<CopyButton *>(lv_timer_get_user_data(timer));
-    if (self) self->show_copied(false);
-}
-
-bool CopyButton::copy()
-{
-    if (!button_ || !value_ || !clipboard_ready()) return false;
-    std::string text = text_edit::clip_bytes(value_(), CP0_APP_CLIPBOARD_MAX);
-    if (text.empty()) return false;
-    const int result = cp0_app_clipboard_set(text.data(), text.size(), kClipboardTimeoutMs);
-    secure_zero(text);
-    clipboard_note(result);
-    g_clip = clip_gone(result) ? ClipAvail::Absent : result == CP0_APP_CLIPBOARD_OK ? ClipAvail::Full : g_clip;
-    update();
-    if (result != CP0_APP_CLIPBOARD_OK) return false;
-    show_copied(true);
-    return true;
-}
-
-void CopyButton::click_cb(lv_event_t *event)
-{
-    auto *self = static_cast<CopyButton *>(lv_event_get_user_data(event));
-    if (self && self->button_ && !lv_obj_has_state(self->button_, LV_STATE_DISABLED)) self->copy();
 }
 
 } // namespace ui

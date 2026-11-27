@@ -260,30 +260,6 @@ struct FieldState {
 bool field_state(const std::string &label, FieldState *out, std::string *err);
 /* a point just inside the left edge of character `index` of the field's text, on its line (screen coordinates) */
 bool field_char_point(const std::string &label, int index, int *x, int *y, std::string *err);
-/* The clipboard strip under the field being edited (docs/dev/clipboard.md, step 2) and the Copy buttons of "copydemo". A
- * button's state: 0 not shown, 1 greyed, 2 enabled. `name` is a field label, or "@N" for the Nth Copy button of copydemo. */
-struct StripState {
-    bool present = false;       /* the field has a strip at all */
-    bool shown = false;         /* ... and it is showing */
-    bool editing = false;
-    int paste = 0, copy = 0, clear = 0;
-    std::string copy_text;      /* what the Copy pill says ("Copy", "Copied") */
-    int btn_h = 0, row_h = 0;   /* the shown buttons' height (all the same), the page's ROW token */
-    int x1 = 0, y1 = 0, x2 = 0, y2 = 0; /* the shown buttons together, screen coordinates */
-    int box_y2 = 0;             /* the bottom of the field's box: the strip lies under it */
-    int visible_bottom = 0;     /* the display's height less the on-screen keyboard's inset: the strip must end above it */
-};
-bool strip_state(const std::string &label, StripState *out, std::string *err);
-/* the centre of a button: which = Paste | Copy | Clear (a field's strip) or "Value" ("@N") */
-bool strip_point(const std::string &name, const std::string &which, int *x, int *y, std::string *err);
-/* "@N": the copydemo button's state: copied now, greyed, its box */
-struct CopyState {
-    bool copied = false, enabled = false;
-    int x1 = 0, y1 = 0, x2 = 0, y2 = 0;
-    std::string text;
-};
-bool copy_state(int index, CopyState *out, std::string *err);
-void copy_demo_open();
 bool clipboard_command(const std::vector<std::string> &words, std::string *err);
 void clipboard_reset(); /* stops the fake launcher side and removes its socket */
 

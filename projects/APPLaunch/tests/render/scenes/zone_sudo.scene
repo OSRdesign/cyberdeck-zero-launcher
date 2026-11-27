@@ -50,8 +50,8 @@ shot zone_sudo_band
 # l and i written in the letters box (masked), then shown with the field's eye
 stroke letters 60,30 60,130 121,130
 stroke letters 60,30 60,130
-@480x800 tap 417 187
-@800x1280 tap 633 347
+@480x800 tap 417 224
+@800x1280 tap 633 384
 expect_text li
 shot zone_sudo_written
 zonekey Keyb

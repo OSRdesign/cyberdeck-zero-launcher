@@ -45,8 +45,8 @@ sanitiser), `src/cp0_ui_text_field.cpp` (keys, highlight, clipboard calls, tap),
 - **Keys.** Shift+Left/Right/Home/End extend; plain Left/Right collapse a selection to its near end; Ctrl+A all;
   Ctrl+C or Ctrl+Insert copy; Ctrl+X or Shift+Delete cut; Ctrl+V or Shift+Insert paste. By key code, on a press only
   (a held key does not repeat them), with Alt or Logo they do nothing. Typing, Backspace, Delete replace or delete the
-  selection. With a selection Esc takes two steps (step 2): the first clears it, the second ends the editing; without a
-  selection one Esc ends the editing, as before. Up, Down, Tab and a tap elsewhere end it too.
+  selection. Esc ends the editing and the selection with it (it does not stop at "just clear the selection": Esc keeps its
+  meaning everywhere); Up, Down, Tab and a tap elsewhere end it too.
 - **Copy with nothing selected: the whole field.** The owner's suggestion, kept: it makes "copy this address" one key and
   one tap on the OSK's Ctrl. Not risky for passwords because a Password field never copies at all; for a Text field the
   user chose to press Ctrl+C. **Cut with nothing selected does nothing** (a cut that empties a field by accident is worse
@@ -62,7 +62,7 @@ sanitiser), `src/cp0_ui_text_field.cpp` (keys, highlight, clipboard calls, tap),
 - **Touch.** A tap (the box's `CLICKED`, pointer indev only) puts the caret at the tapped character with
   `lv_label_get_letter_on` on the textarea's label (its coordinates include the horizontal scroll, as LVGL's own textarea
   hit test does) and ends a selection; a tap whose point is no longer in the field (the page moved when the keyboard came
-  up) is ignored. No bubble and no handles (later); the Paste / Copy / Clear strip is step 2, below.
+  up) is ignored. No bubble, no handles, no Copy / Paste buttons.
 - **OSK.** No change. Ctrl (one-shot) then a letter sends the key with `KBD_MOD_CTRL`, which the field reads. The OSK's
   arrow keys carry no Shift (a one-shot Shift is for the next character key only), so on the OSK alone the way to select is
   Ctrl then A.
@@ -92,43 +92,11 @@ viz1090, the template. Home Assistant (URL and token), RSS Reader's feed URL (it
 and Net Toolbox (host) are where paste matters first. Reticulum's `copy_address` / `paste_address` shell out to
 `wl-copy` / `wl-paste` today and can move to `cp0_app_clipboard_*`.
 
-## Step 2: the clipboard strip and the Copy button
+## Where Copy and Paste buttons would be wanted (not built)
 
-Owner-approved design of 2026-11-26 (canvas boards 38 to 47). Code: `cp0_ui_text_field.cpp` (`TextField::build_strip`,
-`update_strip`, `show_copied`, `CopyButton`), `cp0_ui_widgets.hpp`, `osk::content_changed()` in `cp0_ui_osk_widget.cpp`.
-
-- **The strip.** While a field is edited, a row of three pills under it, inside the field's row: Paste, Copy, Clear. Each is one
-  ROW token high (7 mm), the status strip's look (grey `#262626`, white text; lighter while pressed; darker with grey text when
-  greyed). They take no keyboard focus (no `CLICK_FOCUSABLE`, in no group), so a tap leaves the field and the on-screen keyboard as
-  they are; none is a long press. It shows from the moment the field starts editing to the moment it stops. `TextFieldSpec::
-  clipboard_strip = false` leaves it out (Serial Console's line field will want it, with `clipboard_keys = false`).
-- **States.** Paste: greyed unless the clipboard is known to hold text. Copy: the selection, or the whole field; greyed when the
-  field is empty or the launcher has no clipboard; absent on a Password; "Copied" in green for 2 s afterwards (the pill keeps its
-  width). Clear: only when the field has text; empties it (a Password's bytes are zeroed) and keeps the editing going.
-- **What the strip knows of the clipboard.** One 8-byte `get` when a field starts editing, and what every copy, cut and paste
-  learns (`ClipAvail`). No timer: another app cannot change the clipboard while this one is in front. An old launcher, no socket and a
-  stalled launcher read as "absent" (Paste and Copy greyed); the toolkit's 3 s backoff applies, and the next field to start editing asks again.
-- **Layout.** The strip is the row's last child (under a label-above or label-beside field alike: a beside row wraps). A page keeps
-  the field in view (`Page::on_inset`), a dialog lays itself out again (`Dialog::relayout`): `osk::content_changed()` runs the inset
-  listeners when the strip comes or goes. When a press elsewhere ends the editing (a button or a row below the field) the strip stays
-  until the finger is up, so nothing moves under it between press and release.
-- **Esc.** With a selection the first Esc clears it (the field is still edited, the strip stays); the second ends the editing.
-- **CopyButton.** For a value that is shown, not edited (an address, a public IP, a coordinate): `CopyButton(parent, layout, value_fn,
-  with_label)`, round with the copy glyph or a pill "Copy"; a tap copies `value_fn()`, shows a green check (pill: "Copied") for 2 s;
-  greyed when the value is empty or the launcher has no clipboard. The page places it (`obj()`).
-- **Where there is no room (owner decision 2026-11-26).** With the on-screen keyboard up, the room above it can be too short for the
-  field's row plus a 7 mm strip (640x480: about 120 px above the keyboard, 480x320: about 80). `TextField::fit_strip()` (an inset
-  listener while editing) then shrinks the pills to what is left, never under 32 px (`kStripFloorPx`), scales their text with them,
-  drops the label above the field and the gaps to a minimum, and puts the row at the top of the viewport, so the strip is fully
-  visible above the keyboard. Where it fits (800x480, 320x480, any size with a physical keyboard) the pills stay 7 mm. When the
-  keyboard goes, the next edit starts at 7 mm again. Not solved: a viewport under field + 32 px + gaps (nothing today).
-- **Tests.** Scenes `clipboard_strip`, `clipboard_strip_states`, `clipboard_esc`, `clipboard_strip_osk`, `clipboard_strip_osk_tight`,
-  `clipboard_copy_button`, `p320_clipboard_strip`; harness commands `tapclip`, `expect_strip`, `copydemo` (`harness_fields.cpp`).
-
-## Where Copy and Paste buttons are still wanted (not built)
-
-Touch-only decks have no Ctrl key unless the OSK is up, and the OSK is never summoned by hand (D-38). The strip (shared fields)
-and CopyButton (read-only values) now cover the fields and values of the shared toolkit; still open: the apps' own inputs (RSS
-feed URL), apps placing a CopyButton on their result rows and read-only values (Reticulum "My address", Net Toolbox public IP and
-results, Deck Atlas coordinates), and the Select all / Cut / Copy / Paste bubble (P2) in any editable field. The label of such a button must not
+Touch-only decks have no Ctrl key unless the OSK is up, and the OSK is never summoned by hand (D-38), so these places
+need a visible control later (decision for the owner, draft screens first): a Paste next to every address, URL and token
+field (Reticulum add contact, Home Assistant URL and token, Net Toolbox host, RSS feed URL), a Copy on result rows and
+read-only values (Reticulum "My address", Net Toolbox public IP and results, Deck Atlas coordinates), a Clear on the same
+fields, and the Select all / Cut / Copy / Paste bubble (P2) in any editable field. The label of such a button must not
 repeat a hold (D-35).
