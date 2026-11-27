@@ -822,6 +822,21 @@ void TextField::touch_build_bubble()
         lv_obj_center(label);
         if (item.action == kActCopy) copy_label_ = label;
     }
+    /* the outline again, on top of the buttons: a pressed end button's fill reaches the outer corner arc (clip_corner
+     * cuts at the outer radius), so a floating frame as large as the content draws the 1 px ring over it (an outline
+     * just outside the frame = the bubble's border pixels, radius one less inside). It is the last child. */
+    lv_obj_t *frame = lv_obj_create(bubble_);
+    lv_obj_remove_style_all(frame);
+    if (lv_obj_get_group(frame)) lv_group_remove_obj(frame);
+    lv_obj_add_flag(frame, LV_OBJ_FLAG_FLOATING);
+    lv_obj_remove_flag(frame, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(frame, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_size(frame, lv_pct(100), lv_pct(100));
+    lv_obj_set_style_radius(frame, std::max(0, cp0_ui_tok(CP0_TOK_RADIUS_M) - 1), 0);
+    lv_obj_set_style_outline_width(frame, 1, 0);
+    lv_obj_set_style_outline_pad(frame, 0, 0);
+    lv_obj_set_style_outline_color(frame, lv_color_hex(kBubbleEdge), 0);
+    lv_obj_set_style_outline_opa(frame, LV_OPA_COVER, 0);
     lv_obj_update_layout(bubble_);
 }
 
@@ -907,7 +922,7 @@ void TextField::touch_layout(bool force)
     touch_build_bubble();
     if (!bubble_) return;
     /* the buttons start at the TARGET token (7 mm, at least 44 px) each time: a compressed bubble may be laid out again */
-    for (uint32_t i = 0; i < lv_obj_get_child_count(bubble_); ++i) lv_obj_set_height(lv_obj_get_child(bubble_, i), target);
+    for (uint32_t i = 0; i + 1 < lv_obj_get_child_count(bubble_); ++i) lv_obj_set_height(lv_obj_get_child(bubble_, i), target);
     lv_obj_update_layout(bubble_);
     const int bw = lv_obj_get_width(bubble_);
     int bh = lv_obj_get_height(bubble_);
@@ -926,7 +941,7 @@ void TextField::touch_layout(bool force)
              * buttons give up height for it, never below 44 px (the TARGET token's floor). */
             const int text_top = static_cast<int>(lc.y1) + first.y;
             const int buttons = std::max(kMinTouchPx, std::min(target, text_top - gap - head - 2));
-            for (uint32_t i = 0; i < lv_obj_get_child_count(bubble_); ++i) lv_obj_set_height(lv_obj_get_child(bubble_, i), buttons);
+            for (uint32_t i = 0; i + 1 < lv_obj_get_child_count(bubble_); ++i) lv_obj_set_height(lv_obj_get_child(bubble_, i), buttons);
             lv_obj_update_layout(bubble_);
             bh = lv_obj_get_height(bubble_);
             by = std::max(head, text_top - gap - bh);

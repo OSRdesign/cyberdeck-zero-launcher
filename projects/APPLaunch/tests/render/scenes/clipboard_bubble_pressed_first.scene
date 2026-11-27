@@ -1,0 +1,43 @@
+# The pressed look of the touch clipboard bubble's first button: the pressed fill must stay inside the 1 px outline
+# at the rounded outer corners (holdbubble keeps the finger down for the shot; the release then acts as a tap). Review only.
+title text field: pressed bubble, first button
+review
+sizes 800x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+clipboard set "from elsewhere"
+fielddemo
+wait 300
+expect_osk shown
+expect_handles Name none
+expect_bubble Name none
+tapchar Name 4
+expect_caret Name 4
+expect_handles Name caret
+expect_bubble Name none
+expect_osk shown
+taphandle Name caret
+expect_bubble Name "Select all|Paste"
+expect_editing Name on
+expect_osk shown
+taphandle Name caret
+expect_bubble Name none
+expect_handles Name caret
+expect_editing Name on
+taphandle Name caret
+expect_bubble Name "Select all|Paste"
+tapbubble Name "Select all"
+expect_selection Name 0 16
+expect_handles Name range
+expect_bubble Name "Cut|Copy|Paste"
+expect_editing Name on
+expect_osk shown
+holdbubble Name Cut
+shot press_first
+release

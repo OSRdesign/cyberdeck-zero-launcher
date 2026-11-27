@@ -343,6 +343,7 @@ bool touch_point(const std::string &label, const std::string &what, int *x, int 
         lv_obj_update_layout(ui.bubble);
         for (uint32_t i = 0; i < lv_obj_get_child_count(ui.bubble); ++i) {
             lv_obj_t *button = lv_obj_get_child(ui.bubble, i);
+            if (lv_obj_has_flag(button, LV_OBJ_FLAG_FLOATING)) continue; /* the outline frame */
             if (label_text(button) != want) continue;
             lv_obj_get_coords(button, &a);
             *x = centre_of(a).x;
@@ -430,13 +431,14 @@ bool touch_expect(const std::string &label, const std::string &what, const std::
     bool squeezed = false;
     for (uint32_t i = 0; i < lv_obj_get_child_count(ui.bubble); ++i) {
         lv_obj_t *button = lv_obj_get_child(ui.bubble, i);
+        if (lv_obj_has_flag(button, LV_OBJ_FLAG_FLOATING)) continue; /* the outline frame */
         lv_area_t ba;
         lv_obj_get_coords(button, &ba);
         /* the TARGET token, or its floor of 44 px when the bubble is squeezed between the header and the text line */
         if (ba.x2 - ba.x1 + 1 < 44 || ba.y2 - ba.y1 + 1 < 44)
             return bad("expect_bubble: button " + label_text(button) + " is smaller than 44 px");
         if (ba.y2 - ba.y1 + 1 < target) squeezed = true;
-        items += (i ? "|" : "") + label_text(button);
+        items += (items.empty() ? "" : "|") + label_text(button);
     }
     if (items != arg) return bad("expect_bubble: " + label + " has [" + items + "], not [" + arg + "]");
     if (!inside_screen("the bubble", b, true)) return false;

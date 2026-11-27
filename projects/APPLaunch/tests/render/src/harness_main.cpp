@@ -2726,6 +2726,15 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
             touch_at(run, 0, x, y);
             settle(i == 0 ? 90 : 400);
         }
+    } else if (cmd == "holdbubble") {
+        /* holdbubble LABEL TEXT: the finger goes down on the middle of the bubble's button TEXT and stays (until release):
+         * the pressed look of the button, for a shot */
+        if (w.size() != 3) return fail(scene, line, "usage: holdbubble LABEL TEXT   (finger stays down until release)");
+        int x = 0, y = 0;
+        std::string why;
+        if (!harness::touch_point(w[1], "bubble:" + w[2], &x, &y, &why)) return fail(scene, line, why);
+        touch_at(run, 1, x, y);
+        settle(200);
     } else if (cmd == "taphandle" || cmd == "tapbubble") {
         /* taphandle LABEL caret|start|end: a tap through the touch path on the middle of that handle's dot.
          * tapbubble LABEL TEXT: a tap on the middle of the bubble's button TEXT. */
