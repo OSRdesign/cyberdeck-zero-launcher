@@ -1949,6 +1949,25 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_color ok: %s %s (%d px)\n", w[1].c_str(), w[2].c_str(), hits);
         return true;
     }
+    if (cmd == "expect_bubble" || cmd == "expect_handles" || cmd == "expect_editing") {
+        /* The touch bubble and handles of a `fielddemo` field (docs/dev/clipboard.md step 2). expect_bubble LABEL none |
+         * ITEM|ITEM... (its buttons left to right, e.g. "Select all|Paste"); expect_handles LABEL none|caret|range;
+         * expect_editing LABEL on|off. A shown bubble or handle must lie inside the screen, under the header, above the
+         * keyboard and (the bubble) off the field, with every touch area at least the TARGET token; the range handles apart. */
+        if (w.size() != 3) return fail(scene, line, "usage: expect_bubble LABEL none|ITEM|ITEM | expect_handles LABEL none|caret|range | expect_editing LABEL on|off");
+        settle(500);
+        lv_refr_now(nullptr);
+        std::string why;
+        if (cmd == "expect_editing") {
+            bool editing = false;
+            if (!harness::field_editing(w[1], &editing, &why)) return fail(scene, line, why);
+            if (editing != (w[2] == "on")) return fail(scene, line, std::string("expect_editing: ") + w[1] + (editing ? " is editing" : " is not editing"));
+            std::printf("expect_editing ok: %s %s\n", w[1].c_str(), w[2].c_str());
+            return true;
+        }
+        if (!harness::touch_expect(w[1], cmd == "expect_handles" ? "handles" : "bubble", w[2], &why)) return fail(scene, line, why);
+        return true;
+    }
     if (cmd == "expect_field" || cmd == "expect_caret" || cmd == "expect_selection") {
         /* The shared TextField of `fielddemo` (docs/dev/clipboard.md). expect_field LABEL TEXT: the field's text is TEXT
          * ("" for none). expect_caret LABEL N: the caret stands before character N. expect_selection LABEL none: nothing
@@ -2694,6 +2713,47 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         settle(80);
         touch_at(run, 0, x, y);
         settle(400);
+    } else if (cmd == "doubletapchar") {
+        /* doubletapchar LABEL INDEX: two taps about 200 ms apart on character INDEX (the word-selection gesture) */
+        if (w.size() != 3) return fail(scene, line, "usage: doubletapchar LABEL INDEX");
+        int x = 0, y = 0;
+        std::string why;
+        settle(800);
+        if (!harness::field_char_point(w[1], to_int(w[2]), &x, &y, &why)) return fail(scene, line, why);
+        for (int i = 0; i < 2; ++i) {
+            touch_at(run, 1, x, y);
+            settle(90);
+            touch_at(run, 0, x, y);
+            settle(i == 0 ? 90 : 400);
+        }
+    } else if (cmd == "taphandle" || cmd == "tapbubble") {
+        /* taphandle LABEL caret|start|end: a tap through the touch path on the middle of that handle's dot.
+         * tapbubble LABEL TEXT: a tap on the middle of the bubble's button TEXT. */
+        if (w.size() != 3) return fail(scene, line, "usage: taphandle LABEL caret|start|end | tapbubble LABEL TEXT");
+        int x = 0, y = 0;
+        std::string why;
+        if (!harness::touch_point(w[1], cmd == "tapbubble" ? "bubble:" + w[2] : w[2], &x, &y, &why)) return fail(scene, line, why);
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(400);
+    } else if (cmd == "draghandle") {
+        /* draghandle LABEL start|end|caret INDEX [STEPS]: press on the handle's dot and move the finger so that the edge
+         * it holds ends at character INDEX (the finger keeps its offset from the edge), then lift */
+        if (w.size() < 4) return fail(scene, line, "usage: draghandle LABEL start|end|caret INDEX [STEPS]");
+        int x = 0, y = 0, ex = 0, ey = 0, tx = 0, ty = 0;
+        std::string why;
+        if (!harness::touch_point(w[1], w[2], &x, &y, &why) || !harness::touch_point(w[1], "edge:" + w[2], &ex, &ey, &why) ||
+            !harness::field_char_point(w[1], to_int(w[3]), &tx, &ty, &why))
+            return fail(scene, line, why);
+        const int x2 = tx - 1 + (x - ex); /* the character's edge is one px left of the tap point */
+        const int steps = w.size() >= 5 ? std::max(1, to_int(w[4])) : 8;
+        for (int i = 0; i <= steps; ++i) {
+            touch_at(run, 1, x + (x2 - x) * i / steps, y);
+            settle(35);
+        }
+        touch_at(run, 0, x2, y);
+        settle(500);
     } else if (cmd == "drag") {
         if (w.size() < 5) return fail(scene, line, "usage: drag X1 Y1 X2 Y2 [STEPS]");
         const int x1 = to_int(w[1]), y1 = to_int(w[2]), x2 = to_int(w[3]), y2 = to_int(w[4]);

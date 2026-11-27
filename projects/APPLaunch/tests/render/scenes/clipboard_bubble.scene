@@ -1,0 +1,170 @@
+# The touch clipboard bubble and the selection handles of the shared TextField (docs/dev/clipboard.md, step 2), with the
+# on-screen keyboard up (APPLAUNCH_OSK=force stands for "no physical keyboard"). Nothing is shown until a finger taps
+# in the field: a tap puts the caret and a small handle under it; a tap on the handle opens [Select all] [Paste] (Paste
+# only when the clipboard holds text); Select all (or a double tap on a word) gives a range with two handles and
+# [Cut] [Copy] [Paste] [All]; a handle drags its end (the bubble steps aside while it is held); Copy says "Copied" in
+# its own button; a password field has Paste only; a press elsewhere, a typed key and Esc put it all away. Every
+# expect_bubble / expect_handles also checks the geometry: inside the screen, under the header, above the keyboard,
+# off the field, touch areas at least the TARGET token, the range handles apart. The keyboard is neither shown nor
+# hidden by any of it (expect_osk, expect_editing). Review only.
+title text field: touch clipboard bubble and handles
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+clipboard set "from elsewhere"
+fielddemo
+wait 300
+expect_osk shown
+# nothing selected, nothing shown
+expect_handles Name none
+expect_bubble Name none
+shot start
+# a tap places the caret; the caret handle appears under it, and nothing else
+tapchar Name 4
+expect_caret Name 4
+expect_handles Name caret
+expect_bubble Name none
+expect_osk shown
+shot caret_handle
+# the handle opens the bubble: Select all and Paste (the clipboard holds text)
+taphandle Name caret
+expect_bubble Name "Select all|Paste"
+expect_editing Name on
+expect_osk shown
+shot bubble_open
+# a tap on the handle again closes it
+taphandle Name caret
+expect_bubble Name none
+expect_handles Name caret
+expect_editing Name on
+taphandle Name caret
+expect_bubble Name "Select all|Paste"
+# Select all: two handles and the range bubble (everything is selected: no All)
+tapbubble Name "Select all"
+expect_selection Name 0 16
+expect_handles Name range
+expect_bubble Name "Cut|Copy|Paste"
+expect_editing Name on
+expect_osk shown
+shot range_all
+# dragging the end handle: the bubble steps aside, and comes back on release with All
+draghandle Name end 10
+expect_selection Name 0 10
+expect_handles Name range
+expect_bubble Name "Cut|Copy|Paste|All"
+shot end_dragged
+draghandle Name start 4
+expect_selection Name 4 10
+expect_bubble Name "Cut|Copy|Paste|All"
+shot start_dragged
+# the handles never cross
+draghandle Name end 2
+expect_selection Name 4 5
+expect_handles Name range
+draghandle Name end 10
+expect_selection Name 4 10
+# Copy says Copied inside the bubble (same size) and the bubble closes by itself, the range stays
+tapbubble Name "Copy"
+clipboard expect " €5 an"
+expect_bubble Name "Cut|Copied|Paste|All"
+shot copied
+wait 1700
+expect_bubble Name none
+expect_handles Name range
+expect_selection Name 4 10
+# a handle tap opens the bubble again; Paste replaces the range and leaves a caret handle
+clipboard set "from elsewhere"
+taphandle Name end
+expect_bubble Name "Cut|Copy|Paste|All"
+tapbubble Name "Paste"
+expect_field Name "caféfrom elsewhered more"
+expect_selection Name none
+expect_handles Name caret
+expect_bubble Name none
+expect_osk shown
+shot pasted
+# a double tap on a word selects it, with the range handles and bubble
+doubletapchar Name 9
+expect_selection Name 9 19
+expect_handles Name range
+expect_bubble Name "Cut|Copy|Paste|All"
+shot double_tap_word
+# Cut takes it to the clipboard
+tapbubble Name "Cut"
+clipboard expect "elsewhered"
+expect_handles Name caret
+expect_bubble Name none
+# a press elsewhere (the corner of the header) collapses the selection and puts the handles away
+key CTRL+A
+doubletapchar Name 0
+expect_handles Name range
+tap 4 4
+expect_selection Name none
+expect_handles Name none
+expect_bubble Name none
+expect_osk shown
+# typing over a selection: the keys replace it, the bubble is gone
+doubletapchar Name 0
+expect_handles Name range
+type Q
+expect_handles Name none
+expect_bubble Name none
+expect_selection Name none
+# a physical key puts the bubble away too, and Esc
+tapchar Name 1
+taphandle Name caret
+expect_bubble Name "Select all|Paste"
+key LEFT
+expect_handles Name none
+expect_bubble Name none
+tapchar Name 1
+expect_handles Name caret
+key ESC
+expect_handles Name none
+expect_bubble Name none
+expect_editing Name off
+# an empty clipboard: no Paste
+clipboard clear
+tapfield Name
+tapchar Name 2
+taphandle Name caret
+expect_bubble Name "Select all"
+shot no_paste
+tapbubble Name "Select all"
+expect_bubble Name "Cut|Copy"
+# a password field: no Copy or Cut, and with nothing to paste not even a bubble for a full selection
+key DOWN
+key DOWN
+key DOWN
+wait 600
+tapchar Secret 2
+expect_handles Secret caret
+taphandle Secret caret
+expect_bubble Secret "Select all"
+tapbubble Secret "Select all"
+expect_handles Secret range
+expect_bubble Secret none
+clipboard set "pw"
+taphandle Secret start
+expect_bubble Secret "Paste"
+shot password
+# the field that keeps its keys and its taps (a terminal's line field): a tap places the caret, nothing is shown
+key DOWN
+key DOWN
+wait 600
+tapchar Raw 2
+expect_caret Raw 2
+expect_handles Raw none
+doubletapchar Raw 1
+expect_selection Raw none
+expect_handles Raw none
+expect_bubble Raw none
+expect_osk shown
+shot raw_field

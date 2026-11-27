@@ -54,6 +54,7 @@ struct FieldDemo {
     std::vector<std::unique_ptr<cp0::ui::TextField>> fields;
     std::vector<std::string> labels;
     lv_group_t *group = nullptr;
+    cp0_ui_roller_page_t layout{};
 };
 
 FieldDemo g_demo;
@@ -189,7 +190,7 @@ void field_demo_open()
     lv_obj_remove_style_all(d.screen);
     lv_obj_set_style_bg_color(d.screen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(d.screen, LV_OPA_COVER, 0);
-    cp0_ui_roller_page_t layout{};
+    cp0_ui_roller_page_t &layout = d.layout;
     cp0_ui_roller_page(cp0_ui_metrics_get(), cp0::ui::status_strip_left(), &layout);
     d.page = std::make_unique<cp0::ui::Page>(
         d.screen, layout, [](lv_obj_t *header, const char *text) { return cp0::ui::add_title(header, text); }, [] {});
@@ -218,6 +219,7 @@ void field_demo_open()
         fs.text = spec.text;
         fs.max_bytes = spec.max;
         fs.clipboard_keys = std::string(spec.label) != "Raw";
+        fs.clipboard_touch = std::string(spec.label) != "Raw"; /* Serial Console's line field turns both off */
         d.labels.push_back(spec.label);
         d.fields.push_back(std::make_unique<cp0::ui::TextField>(body, layout, fs, cp0::ui::TextFieldEvents{}));
     }
@@ -288,6 +290,163 @@ bool field_char_point(const std::string &label, int index, int *x, int *y, std::
     lv_label_get_letter_pos(text_label, static_cast<uint32_t>(index), &pos);
     *x = coords.x1 + pos.x + 1; /* just right of the character's left edge: the caret goes before it */
     *y = (coords.y1 + coords.y2) / 2;
+    return true;
+}
+
+bool field_editing(const std::string &label, bool *editing, std::string *err)
+{
+    cp0::ui::TextField *field = find_field(label);
+    if (!field) {
+        if (err) *err = "no field " + label + " (fielddemo first)";
+        return false;
+    }
+    *editing = field->editing();
+    return true;
+}
+
+namespace {
+
+bool rect_of(lv_obj_t *obj, lv_area_t *area)
+{
+    if (!obj) return false;
+    lv_obj_update_layout(obj);
+    lv_obj_get_coords(obj, area);
+    return !lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+lv_point_t centre_of(const lv_area_t &a)
+{
+    return {(a.x1 + a.x2) / 2, (a.y1 + a.y2) / 2};
+}
+
+std::string label_text(lv_obj_t *button)
+{
+    lv_obj_t *label = lv_obj_get_child(button, 0);
+    return label ? lv_label_get_text(label) : "";
+}
+
+} // namespace
+
+bool touch_point(const std::string &label, const std::string &what, int *x, int *y, std::string *err)
+{
+    cp0::ui::TextField *field = find_field(label);
+    auto bad = [&](const std::string &why) {
+        if (err) *err = why;
+        return false;
+    };
+    if (!field) return bad("no field " + label + " (fielddemo first)");
+    const cp0::ui::TextField::TouchUi ui = field->touch_ui();
+    lv_area_t a;
+    if (what.rfind("bubble:", 0) == 0) {
+        if (!ui.bubble) return bad("touch: no bubble on " + label);
+        const std::string want = what.substr(7);
+        lv_obj_update_layout(ui.bubble);
+        for (uint32_t i = 0; i < lv_obj_get_child_count(ui.bubble); ++i) {
+            lv_obj_t *button = lv_obj_get_child(ui.bubble, i);
+            if (label_text(button) != want) continue;
+            lv_obj_get_coords(button, &a);
+            *x = centre_of(a).x;
+            *y = centre_of(a).y;
+            return true;
+        }
+        return bad("touch: the bubble has no button " + want);
+    }
+    std::string role = what;
+    const bool edge = what.rfind("edge:", 0) == 0;
+    if (edge) role = what.substr(5);
+    lv_obj_t *handle = role == "caret" ? ui.caret_handle : role == "start" ? ui.start_handle : role == "end" ? ui.end_handle : nullptr;
+    if (!handle) return bad("touch: no " + role + " handle on " + label);
+    lv_obj_update_layout(handle);
+    if (edge) { /* the stem's x: the character edge the handle holds */
+        lv_obj_get_coords(lv_obj_get_child(handle, 0), &a);
+        *x = a.x1 + 1;
+        *y = (a.y1 + a.y2) / 2;
+        return true;
+    }
+    lv_obj_get_coords(lv_obj_get_child(handle, 1), &a); /* the dot */
+    *x = centre_of(a).x;
+    *y = centre_of(a).y;
+    return true;
+}
+
+bool touch_expect(const std::string &label, const std::string &what, const std::string &arg, std::string *err)
+{
+    cp0::ui::TextField *field = find_field(label);
+    auto bad = [&](const std::string &why) {
+        if (err) *err = why;
+        return false;
+    };
+    if (!field) return bad("no field " + label + " (fielddemo first)");
+    lv_obj_update_layout(field->focus_object());
+    const cp0::ui::TextField::TouchUi ui = field->touch_ui();
+    const int sw = static_cast<int>(lv_display_get_horizontal_resolution(lv_obj_get_display(field->focus_object())));
+    const int sh = static_cast<int>(lv_display_get_vertical_resolution(lv_obj_get_display(field->focus_object())));
+    const int osk_top = sh - cp0::ui::osk::bottom_inset();
+    const int head = g_demo.layout.header_h;
+    const int target = cp0_ui_tok(CP0_TOK_TARGET);
+    lv_area_t box;
+    lv_obj_get_coords(field->focus_object(), &box);
+    auto overlaps = [](const lv_area_t &a, const lv_area_t &b) {
+        return a.x1 <= b.x2 && b.x1 <= a.x2 && a.y1 <= b.y2 && b.y1 <= a.y2;
+    };
+    auto inside_screen = [&](const std::string &name, const lv_area_t &a, bool keep_off_header) {
+        if (a.x1 < 0 || a.x2 >= sw || a.y1 < 0 || a.y2 >= sh)
+            return bad(name + " leaves the screen (" + std::to_string(a.x1) + "," + std::to_string(a.y1) + " " + std::to_string(a.x2) +
+                       "," + std::to_string(a.y2) + " on " + std::to_string(sw) + "x" + std::to_string(sh) + ")");
+        if (keep_off_header && a.y1 < head) return bad(name + " covers the header (top " + std::to_string(a.y1) + " < " + std::to_string(head) + ")");
+        if (a.y2 > osk_top) return bad(name + " reaches into the keyboard (bottom " + std::to_string(a.y2) + " > " + std::to_string(osk_top) + ")");
+        return true;
+    };
+    if (what == "handles") {
+        const int want = arg == "none" ? 0 : arg == "caret" ? 1 : arg == "range" ? 2 : -1;
+        if (want < 0) return bad("usage: expect_handles LABEL none|caret|range");
+        lv_area_t c, s, e;
+        bool short_area = false;
+        const bool hc = rect_of(ui.caret_handle, &c), hs = rect_of(ui.start_handle, &s), he = rect_of(ui.end_handle, &e);
+        const int have = hc ? 1 : (hs && he ? 2 : 0);
+        if ((hc ? 1 : 0) + (hs ? 1 : 0) + (he ? 1 : 0) != (want == 0 ? 0 : want == 1 ? 1 : 2) || have != want)
+            return bad("expect_handles: " + label + " shows caret=" + std::to_string(hc) + " start=" + std::to_string(hs) + " end=" +
+                       std::to_string(he) + ", wanted " + arg);
+        for (const lv_area_t *a : {hc ? &c : nullptr, hs ? &s : nullptr, he ? &e : nullptr}) {
+            if (!a) continue;
+            /* 7 mm wide always; as high when the keyboard leaves room, else only what it leaves under the text line */
+            if (a->x2 - a->x1 + 1 < target || a->y2 - a->y1 + 1 < 24)
+                return bad("expect_handles: a touch area is smaller than the TARGET token wide or 24 px high: " + std::to_string(a->x1) + "," + std::to_string(a->y1) + " " + std::to_string(a->x2) + "," + std::to_string(a->y2) + ", keyboard top " + std::to_string(osk_top) + ", field " + std::to_string(box.y1) + ".." + std::to_string(box.y2));
+            if (a->y2 - a->y1 + 1 < target) short_area = true;
+            if (!inside_screen("a handle", *a, false)) return false;
+        }
+        if (hs && he && overlaps(s, e)) return bad("expect_handles: the range handles overlap");
+        std::printf("expect_handles ok: %s %s%s\n", label.c_str(), arg.c_str(), short_area ? " (short touch area: the keyboard edge)" : "");
+        return true;
+    }
+    if (arg == "none") {
+        if (ui.bubble && !lv_obj_has_flag(ui.bubble, LV_OBJ_FLAG_HIDDEN)) return bad("expect_bubble: " + label + " shows a bubble");
+        std::printf("expect_bubble ok: %s none\n", label.c_str());
+        return true;
+    }
+    lv_area_t b;
+    if (!rect_of(ui.bubble, &b)) return bad("expect_bubble: " + label + " shows no bubble");
+    std::string items;
+    bool squeezed = false;
+    for (uint32_t i = 0; i < lv_obj_get_child_count(ui.bubble); ++i) {
+        lv_obj_t *button = lv_obj_get_child(ui.bubble, i);
+        lv_area_t ba;
+        lv_obj_get_coords(button, &ba);
+        /* the TARGET token, or its floor of 44 px when the bubble is squeezed between the header and the text line */
+        if (ba.x2 - ba.x1 + 1 < 44 || ba.y2 - ba.y1 + 1 < 44)
+            return bad("expect_bubble: button " + label_text(button) + " is smaller than 44 px");
+        if (ba.y2 - ba.y1 + 1 < target) squeezed = true;
+        items += (i ? "|" : "") + label_text(button);
+    }
+    if (items != arg) return bad("expect_bubble: " + label + " has [" + items + "], not [" + arg + "]");
+    if (!inside_screen("the bubble", b, true)) return false;
+    FieldState st;
+    if (!field_state(label, &st, err)) return false;
+    /* the glyphs: the line box without its top third (the ascent's empty top) down to the field's bottom edge */
+    lv_area_t text_line = {box.x1, st.label_y1 + (st.label_y2 - st.label_y1) / 3, box.x2, box.y2};
+    if (overlaps(b, text_line)) return bad("expect_bubble: the bubble covers the text line of the field");
+    std::printf("expect_bubble ok: %s [%s] at %d,%d %dx%d%s\n", label.c_str(), items.c_str(), b.x1, b.y1, b.x2 - b.x1 + 1,
+                b.y2 - b.y1 + 1, squeezed ? " (squeezed)" : "");
     return true;
 }
 

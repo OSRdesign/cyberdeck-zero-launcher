@@ -538,6 +538,8 @@ struct TextFieldSpec {
     bool clipboard_keys = true;  /* false: Ctrl+A / C / X / V, Ctrl+Insert, Shift+Insert and Shift+Delete are left to the app
                                     (a terminal's line field that sends Ctrl keys to a port: Serial Console); Shift+arrows
                                     still select, and nothing else changes */
+    bool clipboard_touch = true; /* false: no touch bubble, no selection handles and no double-tap word selection (docs/dev/clipboard.md
+                                    step 2); a tap still places the caret. Serial Console sets this and clipboard_keys to false */
     int label_w = 0; /* > 0 (task 014 P4, the SSH form): the label BESIDE the field on one row, in a column this wide, at
                         the BODY text size, the field taking the rest of the row; 0: the label above the field */
 };
@@ -582,11 +584,30 @@ public:
      * or no socket: nothing happens, nothing is shown). Copy takes the selection, or the whole field when nothing is
      * selected; Cut only the selection, and removes it only once the clipboard took it. A Password field neither copies
      * nor cuts; paste_clipboard() is allowed there. */
-    void copy_selection();
+    bool copy_selection(); /* true: the clipboard took the text */
     void cut_selection();
     void paste_clipboard();
 
+    /* The touch clipboard bubble and the selection handles (docs/dev/clipboard.md step 2): plain objects on the display's
+     * top layer, nullptr while not shown. For the render harness and for layout checks; nothing to call. */
+    struct TouchUi {
+        lv_obj_t *bubble = nullptr;
+        lv_obj_t *caret_handle = nullptr;
+        lv_obj_t *start_handle = nullptr;
+        lv_obj_t *end_handle = nullptr;
+    };
+    TouchUi touch_ui() const { return TouchUi{bubble_, h_caret_, h_start_, h_end_}; }
+
 private:
+    enum class Touch { Off, Caret, Range };
+    enum class Role { Caret, Start, End };
+
+    static void handle_event_cb(lv_event_t *event);
+    static void bubble_button_cb(lv_event_t *event);
+    static void indev_press_cb(lv_event_t *event);
+    static void touch_timer_cb(lv_timer_t *timer);
+    static void copied_timer_cb(lv_timer_t *timer);
+
     static void box_event_cb(lv_event_t *event);
     static void eye_event_cb(lv_event_t *event);
     static void keyboard_event_cb(lv_event_t *event);
@@ -599,7 +620,22 @@ private:
     void erase_after();
     void move_cursor(int delta, bool extend);
     void after_edit(); /* the text changed: show it and tell the page */
-    void place_caret_at_tap();
+    bool place_caret_at_tap(); /* false: the tap was not on the field */
+    std::size_t byte_at_x(int32_t x, bool nearest) const; /* the character boundary (nearest) or the character (floor) at screen x */
+    void select_word_at_tap();
+    /* the touch bubble and handles */
+    void touch_begin(Touch mode, bool bubble_open);
+    void touch_end(bool now); /* a key, Esc, the editing stopping: everything gone (now: deleted at once, else later) */
+    void touch_outside(); /* a press outside the field and the bubble: selection collapses, the touch UI goes */
+    void touch_sync();    /* the model changed (text, selection): handle kinds follow */
+    void touch_layout(bool force);
+    void touch_build_bubble();
+    void touch_drop_bubble();
+    void touch_make_handle(lv_obj_t *&handle, Role role);
+    void touch_action(int action);
+    void touch_handle_event(lv_event_t *event, Role role);
+    void touch_refresh_model(); /* cursor and highlight only (a handle drag) */
+    bool clipboard_has_text();
     void refresh();
     void style_editing();
     void focus_step(bool next);
@@ -622,6 +658,26 @@ private:
     int saved_intercept_ = 0;
     cp0_keyboard_text_hint_t saved_hint_ = KBD_TEXT_HINT_TEXT;
     lv_obj_t *key_screen_ = nullptr; /* the screen LV_EVENT_KEYBOARD is read on while editing */
+    /* touch bubble and handles */
+    Touch touch_ = Touch::Off;
+    bool bubble_open_ = false;
+    bool dragging_ = false;
+    bool drag_moved_ = false;
+    int drag_grab_dx_ = 0;
+    int drag_press_x_ = 0, drag_press_y_ = 0;
+    std::size_t drag_fixed_ = 0; /* a range handle: the other end, byte offset */
+    lv_obj_t *bubble_ = nullptr;
+    lv_obj_t *h_caret_ = nullptr;
+    lv_obj_t *h_start_ = nullptr;
+    lv_obj_t *h_end_ = nullptr;
+    lv_obj_t *copy_label_ = nullptr;
+    lv_timer_t *touch_timer_ = nullptr;
+    lv_timer_t *copied_timer_ = nullptr;
+    lv_indev_t *touch_indev_ = nullptr;
+    long long geom_key_[8] = {0, 0, 0, 0, 0, 0, 0, 0}; /* what the objects were last laid out for */
+    uint32_t last_tap_tick_ = 0;
+    int last_tap_x_ = 0;
+    bool have_tap_ = false;
 };
 
 /* ------------------------------------------------------------------ dialog (task 014 P3b) */

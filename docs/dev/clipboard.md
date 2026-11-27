@@ -1,7 +1,11 @@
-# Clipboard and text selection (step 1: P0 and P1)
+# Clipboard and text selection (step 1: P0 and P1; step 2: the touch bubble)
 
 Owner decisions of 2026-11-26: build the clipboard and the keyboard-side selection now, the touch bubble and handles
-later (they are reviewed as draft screens first); a 4 KB length-prefixed form besides the one-line verb. Research:
+later (they are reviewed as draft screens first); a 4 KB length-prefixed form besides the one-line verb. Step 2 (the touch
+bubble, below) was then built as an overlay that appears only after a finger selection: no always-visible strip, no extra
+row, no change to any screen where nothing is selected (an always-on Paste / Copy / Clear strip was built and reverted at
+the owner's request; branch `clipboard-strip-parked`, do not bring it back). Word selection is a **double tap**, never a
+long press (a long press is used for options in some apps). Research:
 the two reports of 2026-11-26 (`reticulum-work/open-topics-report.md` topic 1 and `text-selection-assessment.md`).
 
 ## P0: the clipboard (launcher side)
@@ -62,7 +66,7 @@ sanitiser), `src/cp0_ui_text_field.cpp` (keys, highlight, clipboard calls, tap),
 - **Touch.** A tap (the box's `CLICKED`, pointer indev only) puts the caret at the tapped character with
   `lv_label_get_letter_on` on the textarea's label (its coordinates include the horizontal scroll, as LVGL's own textarea
   hit test does) and ends a selection; a tap whose point is no longer in the field (the page moved when the keyboard came
-  up) is ignored. No bubble, no handles, no Copy / Paste buttons.
+  up) is ignored. The bubble and handles of step 2 hang on this tap.
 - **OSK.** No change. Ctrl (one-shot) then a letter sends the key with `KBD_MOD_CTRL`, which the field reads. The OSK's
   arrow keys carry no Shift (a one-shot Shift is for the next character key only), so on the OSK alone the way to select is
   Ctrl then A.
@@ -74,6 +78,75 @@ paste in the field. `TextFieldSpec::clipboard_keys = false` leaves Ctrl+A / C / 
 (Shift+arrows still select, nothing else changes); Serial Console must set it when it moves its pin (one line in its
 `TextFieldSpec`, not done here). The render harness has a field "Raw" for it.
 
+## Step 2: the touch bubble and the selection handles
+
+Code: `ext_components/cp0_lvgl/src/cp0_ui_text_field.cpp` (the `touch_*` functions at the end), `include/cp0_ui_widgets.hpp`
+(`TextFieldSpec::clipboard_touch`, `TextField::touch_ui()`), `include/cp0_ui_text_edit.hpp` (`word_range`,
+`Buffer::select_range`, unit tested). Spec: `reticulum-work/text-selection-assessment.md` section 3.
+
+**The flow** (nothing here is shown until a finger taps in the field):
+
+| Step | What shows |
+|---|---|
+| Tap in the field | the caret goes to the tap (step 1) and a small handle appears under it; no bubble |
+| Tap the caret handle | the bubble **[Select all] [Paste]** (Select all only when there is text, Paste only when the clipboard holds text; neither: no bubble). A second tap on the handle closes it |
+| Select all, or a **double tap** on a word | the range, a handle at each end, and **[Cut] [Copy] [Paste] [All]** (Paste only with text on the clipboard, All only when not everything is selected) |
+| Drag a handle | that end moves (the finger keeps its offset from the edge; a handle never crosses the other: at least one character stays selected); the bubble steps aside while the handle is held and comes back on release; the caret handle drags the caret the same way |
+| Copy | the button says "Copied" for 1.5 s (same button, same size: it was measured for the longer text), then the bubble closes; the selection and its handles stay, a tap on a handle opens the bubble again |
+| Cut, Paste | as the keys (step 1); the selection is gone, the caret handle is left under the new caret |
+| Password field | Paste (and Select all, All) only: no Cut, no Copy |
+| Any key (physical **or** on the keyboard), Esc, a press elsewhere on the screen (not on the field, the bubble, a handle or the keyboard), the editing stopping | everything is put away; a press elsewhere also drops the selection. Typing over a selection still replaces it (the keyboard's own presses are not "elsewhere") |
+
+**Double tap** (decision of 2026-11-27). The first tap places the caret at once, as before: **no delay for a single tap**.
+A second tap within **500 ms** and within half the TARGET token (3.5 mm) horizontally of the first selects the word under the
+finger (a run of letters, digits, `_` and non-ASCII characters; a run of spaces; or a run of other punctuation, so a URL
+selects piece by piece) and shows the range handles and the bubble. It is an accelerator: the route by the caret handle needs
+no double tap and no hold (D-35). **No long press is used by the bubble feature.** A double tap on a field whose app turned
+`clipboard_touch` off does nothing more than place the caret.
+
+**Placement.** Everything is a plain object on the display's top layer (as the keyboard is), `CLICKABLE`, not `CLICK_FOCUSABLE`,
+in no group (the password eye's rule), not scrollable and not a child of the page: the page's scroll cannot take a drag, a tap on
+them never changes the focus, never ends the editing and never shows or hides the keyboard (the scenes check `expect_osk`
+and `expect_editing` around every bubble tap). A 100 ms timer lays them out again only when something moved (the field, the
+selection edges, the keyboard), so they follow a page that scrolls and a field that scrolls sideways, and a slow SPI panel
+redraws little. A press anywhere is seen through an input-device event (`LV_EVENT_PRESSED` on the pointer indev), only while
+the touch UI is shown.
+
+- Handle: drawn as a 14 px dot on a 2 x 6 px stem at the character edge, in the editing blue; its **touch area is the TARGET
+  token wide and high** (7 mm, at least 44 px), under the text line. Range handles hang to the left of the start edge and
+  to the right of the end edge, so their areas never overlap (a one-character selection too).
+- Bubble: buttons of the TARGET token height (width: the text and 2 x SPACE_M, at least TARGET), 1 px dividers, dark
+  with a light edge; no shadow, no animation, no fade. Centred on the selection and clamped into the screen with a
+  SPACE_S margin.
+- Vertical: above the field if it fits under the header; else below the handles if the keyboard leaves room (800x480 with
+  the keyboard up and a field near the top, or no keyboard); else, **with the keyboard up and no room**, over the label row
+  and the field's top padding, above the text line, with the **buttons squeezed down to 44 px at least**
+  (`CP0_TOK_TARGET`'s floor): 640x480 (59 px bubble, target 79), 480x320 (46 px) and 320x480. The bubble never covers the
+  header (Esc, title, status strip) or the keyboard.
+- When the keyboard leaves less than 7 mm under the text line (480x320, 320x480 and 640x480 with it up) the handle's
+  touch area is cut at the keyboard's edge, and may rise no higher than the middle of the text line so that a tap on the
+  text still reaches the field: 28 to 47 px high instead of 7 mm there. This is the one place the 7 mm recommendation
+  (R-4) is not met; it needs the owner's finger on a board.
+- A handle whose edge has scrolled out of the field, or a field outside the screen's body, is hidden.
+
+**Opt-out.** `TextFieldSpec::clipboard_touch = false` (default `true`): no bubble, no handles, no double tap; a tap still
+places the caret. `clipboard_keys` is separate (the keys). **Serial Console's line field must set both to `false`** when
+it moves its toolkit pin (two lines in its `TextFieldSpec`, not done here): its on-screen Ctrl keys go to the port. The
+render harness's field "Raw" has both off.
+
+**Deviations and limits.** The handle drag has no edge auto-scroll of its own: the field's own scroll follows the caret,
+so a drag past the right edge moves a character per event. A press that finds nothing clickable under it (no object at
+all) is not seen by the input-device event, so the touch UI stays; every page has a clickable body or screen today.
+A short handle area on the tightest layouts, and the squeezed bubble, are above. Not verified on a board: the feel of
+the handles, whether a finger reaches the 28 px handle areas next to the keyboard, SPI redraw cost.
+
+Scenes (headless, with injected touch; the harness checks the geometry of every shown bubble and handle: inside the
+screen, under the header, above the keyboard, off the text line, touch areas, range handles apart): `clipboard_bubble`
+(800x480, 640x480, 480x320 with the keyboard up), `p320_clipboard_bubble` (320x480), `clipboard_bubble_nokbd` (a physical
+keyboard, no on-screen keyboard); commands `doubletapchar`, `taphandle`, `tapbubble`, `draghandle`, `expect_bubble`,
+`expect_handles`, `expect_editing` ([render README](../../projects/APPLaunch/tests/render/README.md)). No golden shot shows a
+bubble, so every existing golden is unchanged (`run.sh`: 315 identical).
+
 ## Tests
 
 | What | Where |
@@ -81,6 +154,7 @@ paste in the field. `TextFieldSpec::clipboard_keys = false` leaves Ctrl+A / C / 
 | Protocol, expiry, framing parse, rate limit, **log never has the text** | `projects/APPLaunch/tests/test_app_request.cpp` |
 | The real server and the real client: both forms, 4096 bytes, pieces, a payload that holds a request line, a bad terminator, an oversize announcement, a client that leaves mid-payload, old launcher, no launcher, slow launcher, **the log grep** | `projects/APPLaunch/tests/test_app_request_server.cpp` |
 | Selection and byte mapping: multibyte, emoji, maximum length, paste cleaning | `ext_components/cp0_lvgl/tests/test_ui_text_edit.cpp` |
+| Selection model: word range for a double tap, `select_range` | `ext_components/cp0_lvgl/tests/test_ui_text_edit.cpp` |
 | Headless scenes at 800x480, 640x480, 480x320 (and 320x480 in `p320_clipboard`): keys, limits, tap, OSK Ctrl. The harness runs the real server on a short socket (`clipboard server on|off|old|slow`) | `projects/APPLaunch/tests/render/scenes/clipboard_keys.scene`, `clipboard_limits.scene`, `clipboard_touch.scene`, `clipboard_osk.scene`, `p320_clipboard.scene`; harness `src/harness_fields.cpp` |
 
 ## Where the apps are affected
@@ -94,9 +168,7 @@ and Net Toolbox (host) are where paste matters first. Reticulum's `copy_address`
 
 ## Where Copy and Paste buttons would be wanted (not built)
 
-Touch-only decks have no Ctrl key unless the OSK is up, and the OSK is never summoned by hand (D-38), so these places
-need a visible control later (decision for the owner, draft screens first): a Paste next to every address, URL and token
-field (Reticulum add contact, Home Assistant URL and token, Net Toolbox host, RSS feed URL), a Copy on result rows and
-read-only values (Reticulum "My address", Net Toolbox public IP and results, Deck Atlas coordinates), a Clear on the same
-fields, and the Select all / Cut / Copy / Paste bubble (P2) in any editable field. The label of such a button must not
-repeat a hold (D-35).
+Step 2's bubble covers editable fields on touch. Still without a visible control, and not built: a Copy on read-only values
+(Reticulum "My address", Net Toolbox public IP and results, Deck Atlas coordinates), which are not text fields. A Paste
+next to an address, URL or token field and a Clear are not needed any more for a touch user: tap the field, tap the handle,
+Paste. The label of any such button must not repeat a hold (D-35).

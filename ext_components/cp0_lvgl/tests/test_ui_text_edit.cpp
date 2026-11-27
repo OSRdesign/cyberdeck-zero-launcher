@@ -205,6 +205,28 @@ int main()
     CHECK(sanitize_paste("1 234,5\xc3\xa9\n", false, true) == "12345");
     CHECK(sanitize_paste("\n\t -", true, true).empty() && sanitize_paste("", false, false).empty());
 
+    // ---- the word under a double tap
+    {
+        auto w = [](const std::string &t, std::size_t pos) { return word_range(t, pos); };
+        auto P = [](std::size_t a, std::size_t b) { return std::make_pair(a, b); };
+        CHECK(w("hello world", 0) == P(0, 5));
+        CHECK(w("hello world", 4) == P(0, 5));
+        CHECK(w("hello world", 5) == P(5, 6));    // the space
+        CHECK(w("hello world", 8) == P(6, 11));
+        CHECK(w("hello world", 11) == P(6, 11)); // at the end: the last word
+        CHECK(w("a://b", 1) == P(1, 4));         // punctuation run
+        CHECK(w("", 0) == P(0, 0));
+        const std::string text = "caf" + kE + " " + kEuro + "5";                         // non-ASCII counts as a letter
+        CHECK(text.substr(w(text, 3).first, w(text, 3).second - w(text, 3).first) == "caf" + kE);
+        CHECK(w(text, 4).first == 0 && w(text, 4).second == 5);                         // inside the accent: snapped back
+        Buffer b(32);
+        b.set_text("one two");
+        b.select_range(4, 7);
+        CHECK(b.selection() == "two" && b.caret() == 7 && b.anchor() == 4);
+        b.select_range(7, 4);
+        CHECK(b.selection() == "two");
+    }
+
     std::puts("test_ui_text_edit: PASS");
     return 0;
 }

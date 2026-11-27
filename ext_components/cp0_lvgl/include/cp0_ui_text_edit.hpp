@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <utility>
 
 namespace cp0 {
 namespace ui {
@@ -114,6 +115,32 @@ inline std::string sanitize_paste(const std::string &raw, bool multiline, bool d
     return out;
 }
 
+/* The word around byte offset `pos` (the character that starts there, or the last one when pos is at the end), as a
+ * byte range [first, second): the run of characters of the same kind, a kind being a space, a letter / digit / underscore
+ * / any non-ASCII character, or another punctuation mark. Empty text: [0, 0). Double-tap word selection. */
+inline int char_kind(const std::string &text, std::size_t pos)
+{
+    const unsigned char c = static_cast<unsigned char>(text[pos]);
+    if (c == ' ' || c == '\t' || c == '\n') return 0;
+    if (c >= 0x80 || c == '_' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) return 1;
+    return 2;
+}
+
+inline std::pair<std::size_t, std::size_t> word_range(const std::string &text, std::size_t pos)
+{
+    if (text.empty()) return {0, 0};
+    std::size_t at = pos >= text.size() ? prev_boundary(text, text.size()) : boundary_at_or_before(text, pos);
+    const int kind = char_kind(text, at);
+    std::size_t lo = at, hi = next_boundary(text, at);
+    while (lo > 0) {
+        const std::size_t p = prev_boundary(text, lo);
+        if (char_kind(text, p) != kind) break;
+        lo = p;
+    }
+    while (hi < text.size() && char_kind(text, hi) == kind) hi = next_boundary(text, hi);
+    return {lo, hi};
+}
+
 class Buffer {
 public:
     explicit Buffer(std::size_t max_bytes = 128) : max_(max_bytes) {}
@@ -168,6 +195,12 @@ public:
         caret_ = text_.size();
     }
     void collapse() { anchor_ = caret_; }
+    /* the range [lo, hi) selected, the caret at hi (both snapped to character boundaries, hi >= lo) */
+    void select_range(std::size_t lo, std::size_t hi)
+    {
+        anchor_ = boundary_at_or_before(text_, std::min(lo, hi));
+        caret_ = boundary_at_or_before(text_, std::max(lo, hi));
+    }
 
     /* typed text (one key's characters): replaces the selection; refused (false, nothing changes) when the result would
      * pass the maximum */

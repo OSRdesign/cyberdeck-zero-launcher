@@ -260,6 +260,15 @@ struct FieldState {
 bool field_state(const std::string &label, FieldState *out, std::string *err);
 /* a point just inside the left edge of character `index` of the field's text, on its line (screen coordinates) */
 bool field_char_point(const std::string &label, int index, int *x, int *y, std::string *err);
+/* the touch bubble and handles of a field (docs/dev/clipboard.md step 2). what: "bubble:TEXT" (the centre of that button),
+ * "caret" / "start" / "end" (the centre of that handle's drawn dot), "edge:caret|start|end" (the x of the caret or selection
+ * edge it holds). */
+bool touch_point(const std::string &label, const std::string &what, int *x, int *y, std::string *err);
+/* what: "none" (no bubble), "ITEM|ITEM" (the bubble's buttons, left to right, and its geometry), "handles none|caret|range"
+ * (which handles are shown, and their geometry). Geometry: inside the screen, under the header, above the keyboard, off the
+ * field, every touch area at least the TARGET token, the range handles apart. */
+bool touch_expect(const std::string &label, const std::string &what, const std::string &arg, std::string *err);
+bool field_editing(const std::string &label, bool *editing, std::string *err);
 bool clipboard_command(const std::vector<std::string> &words, std::string *err);
 void clipboard_reset(); /* stops the fake launcher side and removes its socket */
 
