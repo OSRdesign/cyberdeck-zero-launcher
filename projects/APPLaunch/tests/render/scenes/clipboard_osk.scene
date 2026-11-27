@@ -1,0 +1,43 @@
+# The on-screen keyboard's Ctrl (one-shot) then a letter reaches the field as Ctrl+A / C / X / V, with the launcher's
+# clipboard (docs/dev/clipboard.md): select all, copy, delete the selection with the keyboard's Backspace, paste, cut. The
+# keyboard itself is not changed and is neither summoned nor sent away by any of it (expect_osk). APPLAUNCH_OSK=force
+# stands for "no physical keyboard". Review only.
+title text field: on-screen keyboard Ctrl+A, C, X, V
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK force
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+fielddemo
+wait 300
+expect_osk shown
+shot osk_start
+tapkey Ctrl
+tapkey a
+expect_selection Name 0 16
+shot osk_select_all
+tapkey Ctrl
+tapkey c
+clipboard expect "café €5 and more"
+tapkey BACKSPACE
+expect_field Name ""
+tapkey Ctrl
+tapkey v
+expect_field Name "café €5 and more"
+expect_caret Name 16
+tapkey Ctrl
+tapkey a
+tapkey Ctrl
+tapkey x
+expect_field Name ""
+clipboard expect "café €5 and more"
+tapkey Ctrl
+tapkey v
+expect_field Name "café €5 and more"
+expect_osk shown
+shot osk_pasted

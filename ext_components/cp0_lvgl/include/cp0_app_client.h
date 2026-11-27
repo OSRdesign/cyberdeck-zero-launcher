@@ -23,6 +23,7 @@
  *   dim allow|deny            ok | err absent       (idle dimming while this app is in front; battery boards only)
  *   screen off|on             ok | err busy | err absent   (backlight fully off, not saved; the launcher restores it
  *                                                 by itself, see cp0_app_backlight)
+ *   clipboard set <text> | set-len <n> | get | get-len | clear    (see cp0_app_clipboard_*)
  */
 #pragma once
 
@@ -63,6 +64,28 @@ int cp0_app_toast(const char *text);
  * So it may block that long: do not call it from the UI thread's hot path (a worker thread, or accept the short wait).
  * A nonzero return means refused (1) or no answer (-1); the request may still be carried out after a -1. */
 int cp0_app_backlight(int on);
+
+/* ---- The clipboard (launcher releases after 0.10.11, docs/APP-CONTRACT.md section 14): one plain UTF-8 text in the
+ * launcher's memory, shared by every app of the user. Never written to a file, never logged, forgotten 10 minutes after
+ * the last set. The text is 1 to CP0_APP_CLIPBOARD_MAX bytes of valid UTF-8; newline and tab are the only control
+ * characters allowed. `set` uses the launcher's one-line form (`clipboard set <text>`) for a single printable line of up
+ * to 230 bytes and the length-prefixed form (`clipboard set-len <n>`, then n bytes and a newline) for the rest; `get`
+ * always asks `get-len`. timeout_ms <= 0: CP0_APP_CLIENT_TIMEOUT_MS (a UI thread passes about 100). Nothing is retried
+ * or printed. An older launcher answers `err unknown`: CP0_APP_CLIPBOARD_UNSUPPORTED (Copy and Paste do nothing, no
+ * error shown; board.state requests= and the hello verbs= list `clipboard` when it is there). */
+#define CP0_APP_CLIPBOARD_MAX 4096
+#define CP0_APP_CLIPBOARD_OK 0           /* done */
+#define CP0_APP_CLIPBOARD_REFUSED 1      /* err bad / size / limit, or arguments refused here (empty, too long) */
+#define CP0_APP_CLIPBOARD_UNSUPPORTED 2  /* err unknown: a launcher without the clipboard */
+#define CP0_APP_CLIPBOARD_NOSERVICE (-1) /* no socket, connection refused, timeout, malformed reply */
+
+/* Stores text[0..len). */
+int cp0_app_clipboard_set(const char *text, size_t len, int timeout_ms);
+/* Reads the text into buf (NUL-terminated, cut at a character boundary to `size`); *len gets its length. OK with
+ * *len == 0: the clipboard is empty or expired. Otherwise REFUSED, UNSUPPORTED or NOSERVICE (buf empty). */
+int cp0_app_clipboard_get(char *buf, size_t size, size_t *len, int timeout_ms);
+/* Empties it. */
+int cp0_app_clipboard_clear(int timeout_ms);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,45 @@
+# The shared TextField's selection, clipboard and tap-to-place-caret at 320x480 (profile p320, the narrow portrait; the
+# PDA writing band off: APPLAUNCH_PDA 0, the fallback on-screen keyboard forced for the Ctrl part). Keys (Shift+arrows,
+# Ctrl+A / C / V), a tap on a character, then the keyboard's own Ctrl then A / C / V. Review only.
+title p320 text field selection and clipboard
+review
+sizes 320x480
+profile p320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_PDA 0
+env APPLAUNCH_OSK force
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+fielddemo
+wait 300
+shot p320_clip_start
+key SHIFT+LEFT
+key SHIFT+LEFT
+key SHIFT+LEFT
+expect_selection Name 13 16
+shot p320_clip_shift_left
+key CTRL+C
+clipboard expect "ore"
+tapchar Name 5
+expect_caret Name 5
+expect_selection Name none
+key CTRL+V
+expect_field Name "café ore€5 and more"
+tapkey Ctrl
+tapkey a
+expect_selection Name 0 19
+shot p320_clip_osk_select_all
+tapkey Ctrl
+tapkey c
+clipboard expect "café ore€5 and more"
+tapkey BACKSPACE
+expect_field Name ""
+tapkey Ctrl
+tapkey v
+expect_field Name "café ore€5 and more"
+expect_osk shown
+shot p320_clip_osk_pasted

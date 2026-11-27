@@ -62,6 +62,7 @@ LVGL_PRIV := -I$(PROJECT)/main/lvgl -I$(LVGL)/src/libs/freetype
 CP0_SRCS := \
     $(CP0)/src/cp0/cp0_fb_output.c \
     $(CP0)/src/cp0_app_contract.c \
+    $(CP0)/src/cp0_app_client.c \
     $(CP0)/src/cp0_ui_metrics.c \
     $(CP0)/src/cp0_ui_metrics_lvgl.c \
     $(CP0)/src/cp0_ui_overlay.c \
@@ -133,6 +134,7 @@ APT_PLATFORM_SRC := $(UI)/settings/settings_apt_platform.cpp
 
 # Launcher sources (real code).
 APP_SRCS := $(addprefix $(UI)/,\
+    app_request.cpp app_request_server.cpp \
     native_ui.cpp desktop_entry.cpp launcher_update.cpp app_launch_env.cpp launcher_toast.cpp native_screensaver.cpp touch_settings.cpp launcher_app.cpp \
     ui_loading.cpp launcher_media_osd.cpp esc_ui_watchdog.cpp app_directory_watcher.cpp launcher_media_controls.cpp \
     native_vkbd.cpp keyboard_text_input.cpp app_registry.cpp launcher_osk.cpp launcher_pointer.cpp launcher_zone.cpp     pda_mode.cpp \

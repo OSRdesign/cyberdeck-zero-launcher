@@ -163,7 +163,7 @@ std::string server_sink_kind(const char *short_sinks, int &guess)
 
 std::string requests_for(const cp0_app_board_t &b)
 {
-    std::string verbs = "hello,caps,toast,beep";
+    std::string verbs = "hello,caps,toast,beep,clipboard";
     if (b.sound == 1) verbs += ",volume";
     if (std::strcmp(b.backlight, "none") != 0 && b.backlight[0]) verbs += ",brightness";
     if (b.battery == 1 && std::strcmp(b.backlight, "levels") == 0) verbs += ",dim";

@@ -1159,7 +1159,7 @@ uint32_t key_code(const std::string &name)
         {"BACKSPACE", KEY_BACKSPACE}, {"0", KEY_0}, {"1", KEY_1}, {"2", KEY_2},  {"3", KEY_3},
         {"4", KEY_4},         {"5", KEY_5},         {"6", KEY_6},                 {"7", KEY_7},
         {"8", KEY_8},         {"9", KEY_9},         {"MINUS", KEY_MINUS},         {"EQUAL", KEY_EQUAL},
-        {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH}, {"DELETE", KEY_DELETE},
+        {"DOT", KEY_DOT},     {"SLASH", KEY_SLASH}, {"DELETE", KEY_DELETE}, {"INSERT", KEY_INSERT},
         {"F1", KEY_F1},       {"HOME", KEY_HOME},   {"END", KEY_END},
         {"PAGEUP", KEY_PAGEUP}, {"PAGEDOWN", KEY_PAGEDOWN},
     };
@@ -1949,6 +1949,77 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::printf("expect_color ok: %s %s (%d px)\n", w[1].c_str(), w[2].c_str(), hits);
         return true;
     }
+    if (cmd == "expect_bubble" || cmd == "expect_handles" || cmd == "expect_editing") {
+        /* The touch bubble and handles of a `fielddemo` field (docs/dev/clipboard.md step 2). expect_bubble LABEL none |
+         * ITEM|ITEM... (its buttons left to right, e.g. "Select all|Paste"); expect_handles LABEL none|caret|range;
+         * expect_editing LABEL on|off. A shown bubble or handle must lie inside the screen, under the header, above the
+         * keyboard and (the bubble) off the field, with every touch area at least the TARGET token; the range handles apart. */
+        if (w.size() != 3) return fail(scene, line, "usage: expect_bubble LABEL none|ITEM|ITEM | expect_handles LABEL none|caret|range | expect_editing LABEL on|off");
+        settle(500);
+        lv_refr_now(nullptr);
+        std::string why;
+        if (cmd == "expect_editing") {
+            bool editing = false;
+            if (!harness::field_editing(w[1], &editing, &why)) return fail(scene, line, why);
+            if (editing != (w[2] == "on")) return fail(scene, line, std::string("expect_editing: ") + w[1] + (editing ? " is editing" : " is not editing"));
+            std::printf("expect_editing ok: %s %s\n", w[1].c_str(), w[2].c_str());
+            return true;
+        }
+        if (!harness::touch_expect(w[1], cmd == "expect_handles" ? "handles" : "bubble", w[2], &why)) return fail(scene, line, why);
+        return true;
+    }
+    if (cmd == "expect_field" || cmd == "expect_caret" || cmd == "expect_selection") {
+        /* The shared TextField of `fielddemo` (docs/dev/clipboard.md). expect_field LABEL TEXT: the field's text is TEXT
+         * ("" for none). expect_caret LABEL N: the caret stands before character N. expect_selection LABEL none: nothing
+         * is selected, in the model and in the label that draws it. expect_selection LABEL START END: characters START
+         * to END (either way round) are selected in the model and in the label, and the drawn field shows the selection
+         * colour behind them (the accent blue over at least a third of the span's box). */
+        if (cmd == "expect_selection" ? (w.size() != 3 && w.size() != 4) : w.size() != 3)
+            return fail(scene, line, "usage: expect_field LABEL TEXT | expect_caret LABEL N | expect_selection LABEL none|START END");
+        settle(500);
+        lv_refr_now(nullptr);
+        harness::FieldState st;
+        std::string why;
+        if (!harness::field_state(w[1], &st, &why)) return fail(scene, line, why);
+        if (cmd == "expect_field") {
+            if (st.text != w[2]) return fail(scene, line, "expect_field: " + w[1] + " holds \"" + st.text + "\", not \"" + w[2] + "\"");
+            std::printf("expect_field ok: %s \"%s\"\n", w[1].c_str(), st.text.c_str());
+            return true;
+        }
+        if (cmd == "expect_caret") {
+            if (st.caret != to_int(w[2], -1))
+                return fail(scene, line, "expect_caret: " + w[1] + " has the caret before character " + std::to_string(st.caret));
+            std::printf("expect_caret ok: %s %d\n", w[1].c_str(), st.caret);
+            return true;
+        }
+        if (w.size() == 3) {
+            if (w[2] != "none") return fail(scene, line, "usage: expect_selection LABEL none|START END");
+            if (st.selecting || st.sel_start != -1 || st.sel_end != -1)
+                return fail(scene, line, "expect_selection: " + w[1] + " has a selection (" + std::to_string(st.sel_start) + ", " +
+                                             std::to_string(st.sel_end) + ")");
+            std::printf("expect_selection ok: %s none\n", w[1].c_str());
+            return true;
+        }
+        const int lo = std::min(to_int(w[2], -2), to_int(w[3], -2)), hi = std::max(to_int(w[2], -2), to_int(w[3], -2));
+        if (!st.selecting || std::min(st.sel_start, st.sel_end) != lo || std::max(st.sel_start, st.sel_end) != hi)
+            return fail(scene, line, "expect_selection: " + w[1] + " has selection (" + std::to_string(st.sel_start) + ", " +
+                                         std::to_string(st.sel_end) + "), not (" + std::to_string(lo) + ", " + std::to_string(hi) + ")");
+        const Image image = grab(run);
+        const int x1 = std::max({st.span_x1, st.box_x1 + 3, 0}), x2 = std::min({st.span_x2, st.box_x2 - 3, run.size.w - 1});
+        const int y1 = std::max({st.label_y1, st.box_y1 + 3, 0}), y2 = std::min({st.label_y2, st.box_y2 - 3, run.size.h - 1});
+        int hits = 0, total = 0;
+        for (int y = y1; y <= y2; ++y)
+            for (int x = x1; x <= x2; ++x) {
+                const unsigned char *px = image.at(x, y);
+                ++total;
+                if (std::abs(px[0] - 0x2D) <= 8 && std::abs(px[1] - 0x9C) <= 4 && std::abs(px[2] - 0xDB) <= 8) ++hits;
+            }
+        if (total == 0 || hits * 3 < total)
+            return fail(scene, line, "expect_selection: the selection colour covers " + std::to_string(hits) + " of " +
+                                         std::to_string(total) + " px of the selected span of " + w[1]);
+        std::printf("expect_selection ok: %s %d %d (%d of %d px)\n", w[1].c_str(), lo, hi, hits, total);
+        return true;
+    }
     if (cmd == "expect_chevron") {
         /* expect_chevron LABEL yes|no: the list row of the visible label LABEL shows a row-affordance chevron (yes) or
          * none (no). yes: the chevron label is visible and grey (CP0_UI_LIST_CHEVRON_RGB) with pixels of that colour
@@ -2630,6 +2701,68 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         settle(80);
         touch_at(run, 0, x, y);
         settle(400);
+    } else if (cmd == "tapchar") {
+        /* tapchar LABEL INDEX: a tap through the touch path just right of the left edge of character INDEX of the text
+         * field under the label LABEL (INDEX = the text's length: the end), as the TextField's caret hit test sees it */
+        if (w.size() != 3) return fail(scene, line, "usage: tapchar LABEL INDEX");
+        int x = 0, y = 0;
+        std::string why;
+        settle(800); /* a field that scrolls to its caret animates: the finger lands where the text has come to rest */
+        if (!harness::field_char_point(w[1], to_int(w[2]), &x, &y, &why)) return fail(scene, line, why);
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(400);
+    } else if (cmd == "doubletapchar") {
+        /* doubletapchar LABEL INDEX: two taps about 200 ms apart on character INDEX (the word-selection gesture) */
+        if (w.size() != 3) return fail(scene, line, "usage: doubletapchar LABEL INDEX");
+        int x = 0, y = 0;
+        std::string why;
+        settle(800);
+        if (!harness::field_char_point(w[1], to_int(w[2]), &x, &y, &why)) return fail(scene, line, why);
+        for (int i = 0; i < 2; ++i) {
+            touch_at(run, 1, x, y);
+            settle(90);
+            touch_at(run, 0, x, y);
+            settle(i == 0 ? 90 : 400);
+        }
+    } else if (cmd == "holdbubble") {
+        /* holdbubble LABEL TEXT: the finger goes down on the middle of the bubble's button TEXT and stays (until release):
+         * the pressed look of the button, for a shot */
+        if (w.size() != 3) return fail(scene, line, "usage: holdbubble LABEL TEXT   (finger stays down until release)");
+        int x = 0, y = 0;
+        std::string why;
+        if (!harness::touch_point(w[1], "bubble:" + w[2], &x, &y, &why)) return fail(scene, line, why);
+        touch_at(run, 1, x, y);
+        settle(200);
+    } else if (cmd == "taphandle" || cmd == "tapbubble") {
+        /* taphandle LABEL caret|start|end: a tap through the touch path on the middle of that handle's dot.
+         * tapbubble LABEL TEXT: a tap on the middle of the bubble's button TEXT. */
+        if (w.size() != 3) return fail(scene, line, "usage: taphandle LABEL caret|start|end | tapbubble LABEL TEXT");
+        int x = 0, y = 0;
+        std::string why;
+        if (!harness::touch_point(w[1], cmd == "tapbubble" ? "bubble:" + w[2] : w[2], &x, &y, &why)) return fail(scene, line, why);
+        touch_at(run, 1, x, y);
+        settle(80);
+        touch_at(run, 0, x, y);
+        settle(400);
+    } else if (cmd == "draghandle") {
+        /* draghandle LABEL start|end|caret INDEX [STEPS]: press on the handle's dot and move the finger so that the edge
+         * it holds ends at character INDEX (the finger keeps its offset from the edge), then lift */
+        if (w.size() < 4) return fail(scene, line, "usage: draghandle LABEL start|end|caret INDEX [STEPS]");
+        int x = 0, y = 0, ex = 0, ey = 0, tx = 0, ty = 0;
+        std::string why;
+        if (!harness::touch_point(w[1], w[2], &x, &y, &why) || !harness::touch_point(w[1], "edge:" + w[2], &ex, &ey, &why) ||
+            !harness::field_char_point(w[1], to_int(w[3]), &tx, &ty, &why))
+            return fail(scene, line, why);
+        const int x2 = tx - 1 + (x - ex); /* the character's edge is one px left of the tap point */
+        const int steps = w.size() >= 5 ? std::max(1, to_int(w[4])) : 8;
+        for (int i = 0; i <= steps; ++i) {
+            touch_at(run, 1, x + (x2 - x) * i / steps, y);
+            settle(35);
+        }
+        touch_at(run, 0, x2, y);
+        settle(500);
     } else if (cmd == "drag") {
         if (w.size() < 5) return fail(scene, line, "usage: drag X1 Y1 X2 Y2 [STEPS]");
         const int x1 = to_int(w[1]), y1 = to_int(w[2]), x2 = to_int(w[3]), y2 = to_int(w[4]);
@@ -2687,6 +2820,13 @@ bool run_line(Run &run, const Scene &scene, const Line &line)
         std::string err;
         if (!harness::map_demo(w, runtime_path(run, "maps"), &err)) return fail(scene, line, err);
         settle(100);
+    } else if (cmd == "fielddemo") {
+        harness::field_demo_open();
+        settle(400);
+    } else if (cmd == "clipboard") {
+        std::string why;
+        if (!harness::clipboard_command(w, &why)) return fail(scene, line, why);
+        settle(w.size() >= 2 && w[1] == "server" ? 100 : 20);
     } else if (cmd == "listdemo") {
         /* listdemo compact|comfortable ROWS [readonly] [separators] [wrap] [empty TEXT...]: a CompactList page;
          * listdemo update: refresh the values in place (a live list's set_rows) */
@@ -3077,8 +3217,12 @@ int run_scene_at(const Scene &scene, const Size &size, const std::string &out_di
     set_sound(run, "off");
     for (const Line &line : scene.lines) {
         if (!line.only.empty() && std::find(line.only.begin(), line.only.end(), size) == line.only.end()) continue;
-        if (!run_line(run, scene, line)) return 1;
+        if (!run_line(run, scene, line)) {
+            harness::clipboard_reset();
+            return 1;
+        }
     }
+    harness::clipboard_reset(); /* the fake launcher side's socket is removed (the child ends without destructors) */
     return 0;
 }
 

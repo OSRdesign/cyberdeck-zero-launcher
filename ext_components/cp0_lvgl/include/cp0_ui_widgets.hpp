@@ -31,7 +31,12 @@
  *                      Tab from the next field) starts editing: it sets KBD_INPUT_CONTEXT_TEXT, the LVGL keypad
  *                      intercept and the text hint, reads LV_EVENT_KEYBOARD on its screen and asks for the on-screen
  *                      keyboard; Esc, Enter (default), focus leaving or the field's deletion stop editing and restore all
- *                      three. Esc then Esc again goes back; a tap or Enter on the field edits again.
+ *                      three. Esc then Esc again goes back; a tap or Enter on the field edits again. A tap puts the
+ *                      caret at the tapped character. Selection and clipboard (docs/dev/clipboard.md): Shift+Left / Right /
+ *                      Home / End extend a selection, Ctrl+A selects all, Ctrl+C / X / V (also Ctrl+Insert, Shift+Delete,
+ *                      Shift+Insert, and the on-screen keyboard's Ctrl then a letter) copy, cut and paste on the
+ *                      launcher's clipboard; typing, Backspace and Delete replace or delete the selection; a Password
+ *                      field pastes but never copies or cuts.
  *   OnScreenKeyboard   (task 014 P2b) the fallback keyboard (cp0_ui_osk.h: layout, pages, modifiers, key events) drawn
  *                      at the bottom of the display on its top layer. Keys are injected as press + release key_items
  *                      with text (cp0_keyboard_inject_key), so fields, the sudo prompt and old pages read them as a
@@ -79,6 +84,7 @@
 #include "cp0_ui_list.h"
 #include "cp0_ui_osk.h"
 #include "cp0_ui_roller.h"
+#include "cp0_ui_text_edit.hpp"
 #include "keyboard_input.h"
 #include "lvgl/lvgl.h"
 
@@ -529,6 +535,11 @@ struct TextFieldSpec {
     std::string placeholder;
     std::size_t max_bytes = 128; /* UTF-8 bytes */
     bool multiline = false;      /* Tab types a tab character; Enter a new line (no submit) */
+    bool clipboard_keys = true;  /* false: Ctrl+A / C / X / V, Ctrl+Insert, Shift+Insert and Shift+Delete are left to the app
+                                    (a terminal's line field that sends Ctrl keys to a port: Serial Console); Shift+arrows
+                                    still select, and nothing else changes */
+    bool clipboard_touch = true; /* false: no touch bubble, no selection handles and no double-tap word selection (docs/dev/clipboard.md
+                                    step 2); a tap still places the caret. Serial Console sets this and clipboard_keys to false */
     int label_w = 0; /* > 0 (task 014 P4, the SSH form): the label BESIDE the field on one row, in a column this wide, at
                         the BODY text size, the field taking the rest of the row; 0: the label above the field */
 };
@@ -548,7 +559,7 @@ public:
     TextField(const TextField &) = delete;
     TextField &operator=(const TextField &) = delete;
 
-    const std::string &text() const { return text_; }
+    const std::string &text() const { return buf_.text(); }
     void set_text(const std::string &text);
     bool editing() const { return editing_; }
     void begin_edit();
@@ -563,7 +574,40 @@ public:
     /* The field: add it to the page's input group (focus starts editing). */
     lv_obj_t *focus_object() const { return box_; }
 
+    /* The selection (docs/dev/clipboard.md), byte offsets on character boundaries; anchor == caret: nothing selected. */
+    bool has_selection() const { return buf_.selecting(); }
+    std::string selected_text() const { return buf_.selection(); }
+    std::size_t caret_byte() const { return buf_.caret(); }
+    std::size_t anchor_byte() const { return buf_.anchor(); }
+    void select_all(); /* Ctrl+A */
+    /* Copy / Cut / Paste on the launcher's clipboard (launcher.sock `clipboard`, about 100 ms at most; an older launcher
+     * or no socket: nothing happens, nothing is shown). Copy takes the selection, or the whole field when nothing is
+     * selected; Cut only the selection, and removes it only once the clipboard took it. A Password field neither copies
+     * nor cuts; paste_clipboard() is allowed there. */
+    bool copy_selection(); /* true: the clipboard took the text */
+    void cut_selection();
+    void paste_clipboard();
+
+    /* The touch clipboard bubble and the selection handles (docs/dev/clipboard.md step 2): plain objects on the display's
+     * top layer, nullptr while not shown. For the render harness and for layout checks; nothing to call. */
+    struct TouchUi {
+        lv_obj_t *bubble = nullptr;
+        lv_obj_t *caret_handle = nullptr;
+        lv_obj_t *start_handle = nullptr;
+        lv_obj_t *end_handle = nullptr;
+    };
+    TouchUi touch_ui() const { return TouchUi{bubble_, h_caret_, h_start_, h_end_}; }
+
 private:
+    enum class Touch { Off, Caret, Range };
+    enum class Role { Caret, Start, End };
+
+    static void handle_event_cb(lv_event_t *event);
+    static void bubble_button_cb(lv_event_t *event);
+    static void indev_press_cb(lv_event_t *event);
+    static void touch_timer_cb(lv_timer_t *timer);
+    static void copied_timer_cb(lv_timer_t *timer);
+
     static void box_event_cb(lv_event_t *event);
     static void eye_event_cb(lv_event_t *event);
     static void keyboard_event_cb(lv_event_t *event);
@@ -574,7 +618,24 @@ private:
     void insert(const char *utf8);
     void erase_before();
     void erase_after();
-    void move_cursor(int delta);
+    void move_cursor(int delta, bool extend);
+    void after_edit(); /* the text changed: show it and tell the page */
+    bool place_caret_at_tap(); /* false: the tap was not on the field */
+    std::size_t byte_at_x(int32_t x, bool nearest) const; /* the character boundary (nearest) or the character (floor) at screen x */
+    void select_word_at_tap();
+    /* the touch bubble and handles */
+    void touch_begin(Touch mode, bool bubble_open);
+    void touch_end(bool now); /* a key, Esc, the editing stopping: everything gone (now: deleted at once, else later) */
+    void touch_outside(); /* a press outside the field and the bubble: selection collapses, the touch UI goes */
+    void touch_sync();    /* the model changed (text, selection): handle kinds follow */
+    void touch_layout(bool force);
+    void touch_build_bubble();
+    void touch_drop_bubble();
+    void touch_make_handle(lv_obj_t *&handle, Role role);
+    void touch_action(int action);
+    void touch_handle_event(lv_event_t *event, Role role);
+    void touch_refresh_model(); /* cursor and highlight only (a handle drag) */
+    bool clipboard_has_text();
     void refresh();
     void style_editing();
     void focus_step(bool next);
@@ -589,8 +650,7 @@ private:
     lv_obj_t *area_ = nullptr; /* lv_textarea, display only (not clickable, not in a group) */
     lv_obj_t *eye_ = nullptr;
     lv_obj_t *eye_label_ = nullptr;
-    std::string text_;
-    std::size_t cursor_ = 0; /* byte offset in text_ */
+    text_edit::Buffer buf_; /* the text, the caret and the selection anchor (byte offsets) */
     bool editing_ = false;
     bool revealed_ = false;
     /* what editing replaced, restored when it stops */
@@ -598,6 +658,26 @@ private:
     int saved_intercept_ = 0;
     cp0_keyboard_text_hint_t saved_hint_ = KBD_TEXT_HINT_TEXT;
     lv_obj_t *key_screen_ = nullptr; /* the screen LV_EVENT_KEYBOARD is read on while editing */
+    /* touch bubble and handles */
+    Touch touch_ = Touch::Off;
+    bool bubble_open_ = false;
+    bool dragging_ = false;
+    bool drag_moved_ = false;
+    int drag_grab_dx_ = 0;
+    int drag_press_x_ = 0, drag_press_y_ = 0;
+    std::size_t drag_fixed_ = 0; /* a range handle: the other end, byte offset */
+    lv_obj_t *bubble_ = nullptr;
+    lv_obj_t *h_caret_ = nullptr;
+    lv_obj_t *h_start_ = nullptr;
+    lv_obj_t *h_end_ = nullptr;
+    lv_obj_t *copy_label_ = nullptr;
+    lv_timer_t *touch_timer_ = nullptr;
+    lv_timer_t *copied_timer_ = nullptr;
+    lv_indev_t *touch_indev_ = nullptr;
+    long long geom_key_[8] = {0, 0, 0, 0, 0, 0, 0, 0}; /* what the objects were last laid out for */
+    uint32_t last_tap_tick_ = 0;
+    int last_tap_x_ = 0;
+    bool have_tap_ = false;
 };
 
 /* ------------------------------------------------------------------ dialog (task 014 P3b) */

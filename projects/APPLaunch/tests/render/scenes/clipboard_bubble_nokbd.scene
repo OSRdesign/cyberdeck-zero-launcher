@@ -1,0 +1,60 @@
+# The touch clipboard bubble and handles of the shared TextField (docs/dev/clipboard.md, step 2) with a physical keyboard
+# present and so no on-screen keyboard (keyboards 1, APPLAUNCH_OSK auto): the bubble goes above the field when it fits,
+# else below the handles; a tap still shows nothing the keyboard would (expect_osk hidden stays true throughout);
+# a physical key puts the bubble away. Same geometry checks as clipboard_bubble. Review only.
+title text field: touch bubble without an on-screen keyboard
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+clipboard set "12345"
+fielddemo
+wait 300
+expect_osk hidden
+tapchar Name 4
+expect_caret Name 4
+expect_handles Name caret
+expect_bubble Name none
+shot nokbd_caret_handle
+taphandle Name caret
+expect_bubble Name "Select all|Paste"
+expect_osk hidden
+expect_editing Name on
+shot nokbd_bubble_below
+tapbubble Name "Select all"
+expect_selection Name 0 16
+expect_handles Name range
+expect_bubble Name "Cut|Copy|Paste"
+shot nokbd_range
+doubletapchar Name 9
+expect_selection Name 8 11
+expect_bubble Name "Cut|Copy|Paste|All"
+expect_osk hidden
+shot nokbd_word
+# a physical key: the bubble and the handles go, the selection stays for the keyboard to use
+key SHIFT+RIGHT
+expect_handles Name none
+expect_bubble Name none
+expect_selection Name 8 12
+# a field further down: room above the field
+key DOWN
+key DOWN
+wait 600
+tapchar Port 2
+expect_handles Port caret
+taphandle Port caret
+expect_bubble Port "Select all|Paste"
+expect_osk hidden
+shot nokbd_bubble_above
+tapbubble Port "Paste"
+# the clipboard text is cut to the field maximum (5 digits): one digit fits
+expect_field Port "80180"
+expect_handles Port caret
+expect_bubble Port none

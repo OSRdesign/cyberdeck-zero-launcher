@@ -1,0 +1,100 @@
+# The shared TextField with a physical keyboard (docs/dev/clipboard.md, P1): the selection (Shift+arrows, Home, End,
+# Ctrl+A), Ctrl+C / X / V and the Insert / Delete equivalents on the launcher's clipboard (the real launcher.sock protocol
+# on the other end: `clipboard server on`), typing and Backspace over a selection, Esc ending it. The field "Name" holds
+# "café €5 and more" (16 characters, bytes 2 and 3 wide among them): a byte offset that is not a character boundary would
+# show here as a broken text. The selection colour is checked on the drawn field (expect_selection). Review only.
+title text field: selection and clipboard keys
+review
+sizes 800x480 640x480 480x320
+env APPLAUNCH_DEV 0
+env APPLAUNCH_OSK auto
+keyboards 1
+apps Settings CLI SSH Calculator
+clock 20:30
+wifi 70
+bt on
+home
+clipboard server on
+fielddemo
+wait 300
+shot clip_start
+expect_caret Name 16
+expect_selection Name none
+# Shift+Left x3: the last three characters
+key SHIFT+LEFT
+key SHIFT+LEFT
+key SHIFT+LEFT
+expect_selection Name 13 16
+shot clip_shift_left
+# Ctrl+C copies the selection
+key CTRL+C
+clipboard expect "ore"
+# Shift+Home extends to the start (the anchor stays at the end); Left collapses to the start
+key SHIFT+HOME
+expect_selection Name 0 16
+shot clip_shift_home
+key LEFT
+expect_caret Name 0
+expect_selection Name none
+# Ctrl+V at the start
+key CTRL+V
+expect_field Name "orecafé €5 and more"
+expect_caret Name 3
+# Shift+Right x2 selects "ca"; Backspace deletes just the selection
+key SHIFT+RIGHT
+key SHIFT+RIGHT
+expect_selection Name 3 5
+key BACKSPACE
+expect_field Name "orefé €5 and more"
+expect_caret Name 3
+expect_selection Name none
+# Ctrl+A selects all, Ctrl+X cuts (the clipboard has it first), Ctrl+V brings it back
+key CTRL+A
+expect_selection Name 0 17
+shot clip_select_all
+key CTRL+X
+clipboard expect "orefé €5 and more"
+expect_field Name ""
+expect_selection Name none
+key CTRL+V
+expect_field Name "orefé €5 and more"
+expect_caret Name 17
+# typing over a selection replaces it
+key CTRL+A
+type z
+expect_field Name "z"
+# Delete with a selection deletes just the selection
+key CTRL+V
+expect_field Name "zorefé €5 and more"
+key SHIFT+HOME
+key DELETE
+expect_field Name ""
+# Shift+Insert pastes, Ctrl+Insert copies, Shift+Delete cuts
+clipboard set viaInsert
+key SHIFT+INSERT
+expect_field Name "viaInsert"
+clipboard set other
+key CTRL+A
+key CTRL+INSERT
+clipboard expect viaInsert
+clipboard set other
+key SHIFT+DELETE
+clipboard expect viaInsert
+expect_field Name ""
+# nothing selected: Ctrl+C copies the whole field, Ctrl+X does nothing
+key SHIFT+INSERT
+expect_field Name "viaInsert"
+key END
+clipboard set zzz
+key CTRL+C
+clipboard expect viaInsert
+clipboard set zzz
+key CTRL+X
+clipboard expect zzz
+expect_field Name "viaInsert"
+# Esc ends the editing and the selection with it
+key CTRL+A
+expect_selection Name 0 9
+key ESC
+expect_selection Name none
+shot clip_after_esc

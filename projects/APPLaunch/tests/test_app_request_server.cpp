@@ -5,6 +5,7 @@
 // limit, idle connections, stop and restart.
 #include "app_request_server.hpp"
 
+#include "app_request.hpp"
 #include "cp0_app_client.h"
 
 #include <cerrno>
@@ -203,6 +204,179 @@ int main()
     ::close(c);
     CHECK(app_request::start_server(config(path, 300))); // twice: does nothing
     app_request::stop_server();
+
+    // ---- the clipboard end to end: the real protocol and the real client on the real server (the framing of
+    // `clipboard set-len`), and the log
+    {
+        struct Quiet : app_request::Backend {
+            std::string hello(const app_request::Peer &) override { return "ok 1"; }
+            std::string caps() override { return "ok"; }
+            std::string beep(const std::string &) override { return "ok"; }
+            std::string toast(const std::string &) override { return "ok queued"; }
+            std::string volume(const std::string &, int) override { return "ok"; }
+            std::string brightness(const std::string &, int) override { return "ok"; }
+            std::string dim(bool, const app_request::Peer &) override { return "ok"; }
+            std::string screen(bool, const app_request::Peer &) override { return "ok"; }
+        };
+        static Quiet backend;
+        static app_request::RateLimiter limiter;
+        static long long fake_now = 1000000;
+        g_logs.clear();
+        app_request::ServerConfig cc;
+        cc.path = path;
+        cc.log = [](const std::string &s) { g_logs.push_back(s); };
+        cc.handler = [](const std::string &line, const app_request::Peer &peer) {
+            fake_now += 1000; // far apart: the 50 ms class limit is tested in test_app_request
+            return app_request::handle_line(line, peer, backend, limiter, fake_now,
+                                            [](const std::string &s) { g_logs.push_back(s); });
+        };
+        cc.frame = [](const std::string &line, size_t &bytes) { return app_request::payload_length(line, bytes); };
+        cc.payload_handler = [](const std::string &line, const std::string &payload, const app_request::Peer &peer) {
+            fake_now += 1000;
+            return app_request::handle_payload(line, payload, peer, backend, limiter, fake_now,
+                                               [](const std::string &s) { g_logs.push_back(s); });
+        };
+        CHECK(app_request::start_server(cc));
+
+        const std::string secret = "hunter2-SECRET-token";
+        char text[CP0_APP_CLIPBOARD_MAX + 1];
+        size_t n = 0;
+        // nothing yet: OK with an empty text (the clipboard is empty)
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && n == 0 && text[0] == '\0');
+        // short, one line: the one-line request
+        CHECK(cp0_app_clipboard_set(secret.c_str(), secret.size(), 0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && n == secret.size() &&
+              secret == text);
+        CHECK(cp0_app_client_call("clipboard get", reply, sizeof(reply), 0) == 0 && std::string(reply) == "ok " + secret);
+        // several lines and tabs: length-prefixed
+        const std::string multi = "line one\n\tline two \xc3\xa9\nline three\n";
+        CHECK(cp0_app_clipboard_set(multi.data(), multi.size(), 0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && std::string(text, n) == multi);
+        // a long single line (over 230 bytes): length-prefixed too
+        const std::string longline(231, 'l');
+        CHECK(cp0_app_clipboard_set(longline.data(), longline.size(), 0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && std::string(text, n) == longline);
+        // the largest: 4096 bytes, with newlines inside, round trip byte for byte
+        std::string big;
+        while (big.size() < CP0_APP_CLIPBOARD_MAX) big += (big.size() % 61 == 60) ? "\n" : "abcdefghij";
+        big.resize(CP0_APP_CLIPBOARD_MAX);
+        CHECK(cp0_app_clipboard_set(big.data(), big.size(), 0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && n == big.size() &&
+              std::string(text, n) == big);
+        // too big or empty: refused by the client, nothing sent, the text stays
+        CHECK(cp0_app_clipboard_set(big.data(), big.size() + 1, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_clipboard_set("", 0, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_clipboard_set(NULL, 3, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && n == big.size());
+        // refused by the launcher: a CR, a NUL, bad UTF-8 (both forms)
+        CHECK(cp0_app_clipboard_set("a\rb", 3, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_clipboard_set("a\0b", 3, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_clipboard_set("a\xff", 2, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && std::string(text, n) == big);
+        // a caller's buffer smaller than the text: cut at a character boundary, NUL-terminated
+        const std::string accents = "ab\xc3\xa9\xc3\xa9";
+        CHECK(cp0_app_clipboard_set(accents.data(), accents.size(), 0) == CP0_APP_CLIPBOARD_OK);
+        char small[5];
+        CHECK(cp0_app_clipboard_get(small, sizeof(small), &n, 0) == CP0_APP_CLIPBOARD_OK && n == 4 &&
+              std::string(small) == "ab\xc3\xa9");
+        // clear
+        CHECK(cp0_app_clipboard_clear(0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && n == 0);
+
+        // raw: the framing as a script would write it
+        int rc = raw_connect(path);
+        CHECK(rc >= 0);
+        const char one[] = "clipboard set-len 11\nhello\nworld\n";
+        CHECK(::send(rc, one, sizeof(one) - 1, 0) > 0);
+        CHECK(read_line(rc) == "ok 11");
+        // a payload that holds a request line is text, not a request; replies come in order on one connection
+        const char sneaky[] = "clipboard set-len 15\nclipboard clear\nxx\nclipboard get-len\n";
+        CHECK(::send(rc, sneaky, sizeof(sneaky) - 1, 0) > 0);
+        CHECK(read_line(rc) == "ok 15" && read_line(rc) == "err unknown"); // the "xx" after the payload is a request
+        CHECK(read_line(rc) == "ok 15" && read_line(rc) == "clipboard clear"); // and the payload was stored, not run
+        // a payload that arrives in pieces
+        CHECK(::send(rc, "clipboard set-len 7\nab", 22, 0) == 22);
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        CHECK(::send(rc, "cd\nef", 5, 0) == 5);
+        std::this_thread::sleep_for(std::chrono::milliseconds(60));
+        CHECK(::send(rc, "\n", 1, 0) == 1);
+        CHECK(read_line(rc) == "ok 7");
+        CHECK(::send(rc, "clipboard get-len\n", 18, 0) == 18);
+        CHECK(read_line(rc) == "ok 7" && read_line(rc) == "abcd" && read_line(rc) == "ef");
+        ::close(rc);
+
+        // a payload not ended by a newline: err bad, the connection closed (the framing is lost)
+        rc = raw_connect(path);
+        CHECK(::send(rc, "clipboard set-len 3\nabcd", 24, 0) == 24);
+        CHECK(read_line(rc) == "err bad" && closed_by_peer(rc));
+        ::close(rc);
+        // an announcement over 4096 or not a number: its reply, and closed
+        rc = raw_connect(path);
+        CHECK(::send(rc, "clipboard set-len 4097\n", 23, 0) == 23);
+        CHECK(read_line(rc) == "err size" && closed_by_peer(rc));
+        ::close(rc);
+        rc = raw_connect(path);
+        CHECK(::send(rc, "clipboard set-len lots\n", 23, 0) == 23);
+        CHECK(read_line(rc) == "err bad" && closed_by_peer(rc));
+        ::close(rc);
+        // a client that leaves in the middle of a payload costs nothing and stores nothing
+        CHECK(cp0_app_clipboard_set("kept", 4, 0) == CP0_APP_CLIPBOARD_OK);
+        rc = raw_connect(path);
+        CHECK(::send(rc, "clipboard set-len 100\nhalf", 26, 0) == 26);
+        ::close(rc);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && std::string(text, n) == "kept");
+        // a payload that never ends: the idle limit applies (here the server's default, so only check it stays alive)
+        // and a plain long line is still refused while no payload is awaited
+        rc = raw_connect(path);
+        std::string toolong(400, 'a');
+        CHECK(::send(rc, toolong.data(), toolong.size(), 0) > 0);
+        CHECK(read_line(rc) == "err bad" && closed_by_peer(rc));
+        ::close(rc);
+
+        // the log: requests are there as summaries, the text nowhere (the secret went through set, get, set-len, errors)
+        CHECK(cp0_app_clipboard_set(secret.c_str(), secret.size(), 0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_set((secret + "\n" + secret).c_str(), 2 * secret.size() + 1, 0) == CP0_APP_CLIPBOARD_OK);
+        CHECK(cp0_app_clipboard_set((secret + "\r").c_str(), secret.size() + 1, 0) == CP0_APP_CLIPBOARD_REFUSED);
+        CHECK(cp0_app_client_call(("clipboard set " + secret + "\x01").c_str(), reply, sizeof(reply), 0) == 1);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_OK && n == 2 * secret.size() + 1);
+        CHECK(cp0_app_clipboard_clear(0) == CP0_APP_CLIPBOARD_OK);
+        bool saw_request = false;
+        for (const std::string &l : g_logs) {
+            CHECK(l.find("hunter2") == std::string::npos && l.find("SECRET") == std::string::npos);
+            CHECK(l.find("kept") == std::string::npos && l.find("abcd") == std::string::npos);
+            saw_request = saw_request || l.find("clipboard set-len") != std::string::npos;
+        }
+        CHECK(saw_request);
+        app_request::stop_server();
+
+        // an older launcher (no clipboard verb, no framing): every form answers "err unknown"; the client says so
+        g_logs.clear();
+        app_request::ServerConfig old = config(path);
+        old.handler = [](const std::string &, const app_request::Peer &) { return std::string("err unknown"); };
+        CHECK(app_request::start_server(old));
+        CHECK(cp0_app_clipboard_set("x", 1, 0) == CP0_APP_CLIPBOARD_UNSUPPORTED);
+        CHECK(cp0_app_clipboard_set(multi.data(), multi.size(), 0) == CP0_APP_CLIPBOARD_UNSUPPORTED);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_UNSUPPORTED && n == 0 && text[0] == '\0');
+        CHECK(cp0_app_clipboard_clear(0) == CP0_APP_CLIPBOARD_UNSUPPORTED);
+        app_request::stop_server();
+        // no launcher at all: NOSERVICE at once, nothing printed
+        CHECK(cp0_app_clipboard_set("x", 1, 0) == CP0_APP_CLIPBOARD_NOSERVICE);
+        CHECK(cp0_app_clipboard_set(multi.data(), multi.size(), 0) == CP0_APP_CLIPBOARD_NOSERVICE);
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 0) == CP0_APP_CLIPBOARD_NOSERVICE && n == 0);
+        CHECK(cp0_app_clipboard_clear(0) == CP0_APP_CLIPBOARD_NOSERVICE);
+        // a launcher that is slow to answer: the short timeout gives up (the caller treats it as no clipboard)
+        app_request::ServerConfig slow = config(path);
+        slow.handler = [](const std::string &, const app_request::Peer &) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(400));
+            return std::string("ok 0");
+        };
+        CHECK(app_request::start_server(slow));
+        const auto t0 = std::chrono::steady_clock::now();
+        CHECK(cp0_app_clipboard_get(text, sizeof(text), &n, 100) == CP0_APP_CLIPBOARD_NOSERVICE);
+        const auto took = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
+        CHECK(took >= 90 && took < 300);
+        app_request::stop_server();
+    }
 
     // a path that cannot be used: no server, no crash
     CHECK(!app_request::start_server(config("")));

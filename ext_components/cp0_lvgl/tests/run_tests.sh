@@ -655,6 +655,11 @@ gzip -dc "$fx/mtrec-PI3A-20261020-002544.csv.gz" | "$binary" - 800x480 9/10 0
     "$root/src/cp0_app_client.c" \
     "$root/tests/test_app_client.c" -o "$binary"
 "$binary"
+# the shared TextField's text and selection model (cp0_ui_text_edit.hpp, header only): UTF-8 boundaries, the selection,
+# the maximum length, what a paste may carry
+"${CXX:-c++}" -std=c++17 -Wall -Wextra -Werror \
+    -I"$root/include" "$root/tests/test_ui_text_edit.cpp" -o "$binary"
+"$binary"
 
 # The renderer file needs FreeType's headers (apt: libfreetype-dev); without them: SKIP, unless CI=1
 ft_flags=$(pkg-config --cflags freetype2 2>/dev/null || true)

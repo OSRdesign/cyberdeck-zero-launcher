@@ -244,6 +244,34 @@ public:
 bool map_demo(const std::vector<std::string> &words, const std::string &dir, std::string *err);
 /* The demo's map widget, or nullptr (mapdemo tapctl / doubletap in harness_main.cpp tap it through the touch path). */
 void *map_demo_widget(); /* an lv_obj_t * */
+/* ---- the shared TextField, its selection and the clipboard service (harness_fields.cpp): "fielddemo", "clipboard ...",
+ * "tapchar", "expect_field", "expect_caret", "expect_selection" scene commands. */
+void field_demo_open();
+struct FieldState {
+    std::string text;
+    bool editing = false;
+    bool selecting = false;     /* the field's own model */
+    int caret = 0;              /* the text area's cursor, in characters */
+    int sel_start = -1, sel_end = -1; /* what the label draws as selected (characters; -1: no selection) */
+    int box_x1 = 0, box_y1 = 0, box_x2 = 0, box_y2 = 0;
+    int label_x1 = 0, label_y1 = 0, label_y2 = 0;
+    int span_x1 = 0, span_x2 = 0; /* the selected span in screen x */
+};
+bool field_state(const std::string &label, FieldState *out, std::string *err);
+/* a point just inside the left edge of character `index` of the field's text, on its line (screen coordinates) */
+bool field_char_point(const std::string &label, int index, int *x, int *y, std::string *err);
+/* the touch bubble and handles of a field (docs/dev/clipboard.md step 2). what: "bubble:TEXT" (the centre of that button),
+ * "caret" / "start" / "end" (the centre of that handle's drawn dot), "edge:caret|start|end" (the x of the caret or selection
+ * edge it holds). */
+bool touch_point(const std::string &label, const std::string &what, int *x, int *y, std::string *err);
+/* what: "none" (no bubble), "ITEM|ITEM" (the bubble's buttons, left to right, and its geometry), "handles none|caret|range"
+ * (which handles are shown, and their geometry). Geometry: inside the screen, under the header, above the keyboard, off the
+ * field, every touch area at least the TARGET token, the range handles apart. */
+bool touch_expect(const std::string &label, const std::string &what, const std::string &arg, std::string *err);
+bool field_editing(const std::string &label, bool *editing, std::string *err);
+bool clipboard_command(const std::vector<std::string> &words, std::string *err);
+void clipboard_reset(); /* stops the fake launcher side and removes its socket */
+
 class IgnoreNewThreads {
 public:
     IgnoreNewThreads();
